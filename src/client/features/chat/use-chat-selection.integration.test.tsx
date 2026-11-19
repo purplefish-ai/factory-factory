@@ -419,13 +419,17 @@ describe('session selection hydration and outbound settings', () => {
       data: 'text',
       contentType: 'text' as const,
     };
-    await act(() => {
-      harness.chat.setInputDraft('Original conversation draft');
-      harness.chat.setInputAttachments([attachment]);
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
+    vi.useFakeTimers();
+    try {
+      await act(() => {
+        harness.chat.setInputDraft('Original conversation draft');
+        harness.chat.setInputAttachments([attachment]);
+      });
+      // The draft write is debounced by 300 ms.
+      await act(() => vi.advanceTimersByTimeAsync(300));
+    } finally {
+      vi.useRealTimers();
+    }
     await harness.render('session-B');
     expect(harness.chat.inputDraft).toBe('');
     expect(harness.chat.inputAttachments).toEqual([]);

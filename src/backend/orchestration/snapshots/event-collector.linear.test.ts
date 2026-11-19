@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { PR_DETACHED, PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
 import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/services/workspace';
@@ -31,6 +32,14 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
   }
   const prSnapshotService = new EventEmitter();
   const markIssueCompleted = vi.fn().mockResolvedValue(true);
+  const signalIssueCompletion = () => {
+    const called = Promise.withResolvers<void>();
+    markIssueCompleted.mockImplementationOnce(() => {
+      called.resolve();
+      return Promise.resolve(true);
+    });
+    return called.promise;
+  };
   const getWorkspaceLinearContext = vi
     .fn()
     .mockResolvedValue({ apiKey: 'test-key', linearIssueId: 'issue-1' });
@@ -95,6 +104,7 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
     acceptMerge,
     emitMerge,
     markIssueCompleted,
+    signalIssueCompletion,
     getWorkspaceLinearContext,
     store,
     findById,
@@ -112,7 +122,7 @@ describe('Linear completion on PR merge', () => {
     try {
       acceptMerge();
       acceptMerge();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -123,7 +133,7 @@ describe('Linear completion on PR merge', () => {
     const { collector, acceptMerge, markIssueCompleted } = createHarness('MERGED');
     try {
       acceptMerge();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -136,12 +146,12 @@ describe('Linear completion on PR merge', () => {
     getWorkspaceLinearContext.mockResolvedValueOnce(null);
     try {
       acceptMerge();
-      await vi.waitFor(() => expect(getWorkspaceLinearContext).toHaveBeenCalledTimes(1));
+      await settleCompletions();
+      expect(getWorkspaceLinearContext).toHaveBeenCalledTimes(1);
       expect(markIssueCompleted).not.toHaveBeenCalled();
       acceptMerge();
-      await vi.waitFor(() =>
-        expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
-      );
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
     }
@@ -158,11 +168,13 @@ describe('Linear completion on PR merge', () => {
       }
       try {
         acceptMerge();
-        await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(1);
         acceptMerge();
-        await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
+        await settleCompletions();
+        expect(markIssueCompleted).toHaveBeenCalledTimes(2);
         acceptMerge();
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await settleCompletions();
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
       } finally {
         collector.stop();
@@ -180,14 +192,15 @@ describe('Linear completion on PR merge', () => {
     );
     try {
       acceptMerge();
-      await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       acceptMerge();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       resolve(true);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       acceptMerge();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     } finally {
       collector.stop();
@@ -198,11 +211,13 @@ describe('Linear completion on PR merge', () => {
     const { collector, acceptMerge, markIssueCompleted } = createHarness();
     try {
       acceptMerge();
-      await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       collector.stop();
       collector.start();
       acceptMerge();
-      await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
+      await settleCompletions();
+      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
       collector.stop();
     }
@@ -213,7 +228,7 @@ describe('Linear completion on PR merge', () => {
     try {
       acceptMerge(8);
       acceptMerge(8);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
       collector.stop();
@@ -239,6 +254,11 @@ it.each(['switch', 'reopen'] as const)(
       ratchetEnabled: true,
       prHasMergeConflict: false,
     });
+    const checkRequested = Promise.withResolvers<void>();
+    checkWorkspaceById.mockImplementationOnce(() => {
+      checkRequested.resolve();
+      return Promise.resolve(null);
+    });
     try {
       prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
         workspaceId: 'ws-1',
@@ -249,7 +269,8 @@ it.each(['switch', 'reopen'] as const)(
         prCiStatus: 'FAILURE',
         prReviewState: null,
       });
-      await vi.waitFor(() => expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1'));
+      await checkRequested.promise;
+      expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1');
       expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber, prState: 'OPEN' });
     } finally {
       collector.stop();
@@ -258,7 +279,8 @@ it.each(['switch', 'reopen'] as const)(
 );
 
 it('refreshes primary and aggregate facts without completing an issue for a merged sibling', async () => {
-  const { collector, emitMerge, markIssueCompleted, findById, store } = createHarness();
+  const { collector, emitMerge, markIssueCompleted, signalIssueCompletion, findById, store } =
+    createHarness();
   findById.mockResolvedValue({
     status: 'READY',
     prUrl: 'https://github.com/org/repo/pull/7',
@@ -298,10 +320,10 @@ it('refreshes primary and aggregate facts without completing an issue for a merg
       ratchetEnabled: true,
       prHasMergeConflict: false,
     });
+    const completionRequested = signalIssueCompletion();
     emitMerge(7, 'https://github.com/org/repo/pull/7', 'last-open-pr');
-    await vi.waitFor(() =>
-      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
-    );
+    await completionRequested;
+    expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
   } finally {
     collector.stop();
   }
@@ -334,8 +356,15 @@ it('keeps the authoritative primary when a second association is attached', asyn
 });
 
 it('completes an association-aware merge after its final open sibling is detached', async () => {
-  const { collector, emitMerge, markIssueCompleted, findById, store, prSnapshotService } =
-    createHarness();
+  const {
+    collector,
+    emitMerge,
+    markIssueCompleted,
+    signalIssueCompletion,
+    findById,
+    store,
+    prSnapshotService,
+  } = createHarness();
   const projection = {
     status: 'READY',
     prUrl: 'https://github.com/org/repo/pull/7',
@@ -351,10 +380,10 @@ it('completes an association-aware merge after its final open sibling is detache
     await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('SUCCESS'));
     expect(markIssueCompleted).not.toHaveBeenCalled();
     findById.mockResolvedValue({ ...projection, prState: 'MERGED', ratchetState: 'MERGED' });
+    const completionRequested = signalIssueCompletion();
     prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'open-sibling' });
-    await vi.waitFor(() =>
-      expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
-    );
+    await completionRequested;
+    expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     expect(store.getByWorkspaceId('ws-1')?.prState).toBe('MERGED');
   } finally {
     collector.stop();
@@ -391,6 +420,7 @@ it('shares PR and monitoring freshness without a broad workspace read or repeate
         resolveRead = resolve;
       })
     )
+    .mockResolvedValueOnce(projection)
     .mockResolvedValue(projection);
   checkWorkspaceById.mockImplementationOnce(() => {
     ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
@@ -408,7 +438,8 @@ it('shares PR and monitoring freshness without a broad workspace read or repeate
     ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
     expect(findRatchetProjection).toHaveBeenCalledTimes(1);
     resolveRead({ ...projection, prNumber: 99 });
-    await vi.waitFor(() => expect(findRatchetProjection).toHaveBeenCalledTimes(3));
+    await settleCompletions();
+    expect(findRatchetProjection).toHaveBeenCalledTimes(3);
     expect(store.getByWorkspaceId('ws-1')).toMatchObject({ prNumber: 8, prState: 'OPEN' });
     expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1');
     expect(markIssueCompleted).not.toHaveBeenCalled();
@@ -426,8 +457,14 @@ it('shares PR and monitoring freshness without a broad workspace read or repeate
 });
 
 it('uses the accepted association projection for Linear completion without another read', async () => {
-  const { collector, emitMerge, findRatchetProjection, findById, markIssueCompleted } =
-    createHarness();
+  const {
+    collector,
+    emitMerge,
+    findRatchetProjection,
+    findById,
+    markIssueCompleted,
+    signalIssueCompletion,
+  } = createHarness();
   findById.mockRejectedValue(new Error('broad workspace reads are forbidden'));
   findRatchetProjection.mockResolvedValue({
     status: 'READY',
@@ -441,8 +478,10 @@ it('uses the accepted association projection for Linear completion without anoth
     prHasMergeConflict: false,
   });
   try {
+    const completionRequested = signalIssueCompletion();
     emitMerge(7, 'https://github.com/org/repo/pull/7', 'selected');
-    await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
+    await completionRequested;
+    expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     expect(findRatchetProjection).toHaveBeenCalledTimes(1);
     expect(findById).not.toHaveBeenCalled();
   } finally {
@@ -493,7 +532,7 @@ it.each(['ARCHIVED', 'STOPPED'] as const)(
         ratchetEnabled: true,
         prHasMergeConflict: false,
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleCompletions();
       expect(checkWorkspaceById).not.toHaveBeenCalled();
       expect(markIssueCompleted).not.toHaveBeenCalled();
       expect(findRatchetProjection).toHaveBeenCalledTimes(1);
@@ -521,10 +560,10 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+// Drain the projection and completion promise continuations after releasing any
+// gates. Both are backed by in-memory mocks, with no I/O left to schedule work.
 async function settleCompletions() {
-  for (let i = 0; i < 12; i++) {
-    await Promise.resolve();
-  }
+  await nextTurn();
 }
 
 describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cleanup) => {

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
-import { useRef } from 'react';
+import { act, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -81,6 +81,16 @@ async function settleRouterNavigation() {
   }
 }
 
+async function settleRouteArchive(complete: () => void) {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  try {
+    // The fixture transport responds synchronously; act drains the resulting archive promises.
+    await act(async () => complete());
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
 function fixture(surface: 'command' | 'route' = 'command', availabilityFailure = false) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -96,6 +106,7 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
   queryClient.setQueryData(getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'query'), {
     projectId: 'proj-1',
   });
+  const firstRequestStarted = Promise.withResolvers<void>();
   const requests: {
     path: string;
     input: unknown;
@@ -118,6 +129,7 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
                 resolve: respond,
                 reject: (error) => observer.error(TRPCClientError.from(error)),
               });
+              firstRequestStarted.resolve();
             } else if (availabilityFailure && op.path === 'workspace.getAvailableIdes') {
               observer.error(TRPCClientError.from(new Error('IDE availability failed')));
             } else {
@@ -178,6 +190,7 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
     owner,
     token,
     requests,
+    firstRequestStarted: firstRequestStarted.promise,
     render,
     command: () => command,
     route: () => route,
@@ -504,7 +517,8 @@ describe('workspace detail archive caller', () => {
       const f = fixture('route');
       const onError = vi.fn();
       f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError });
-      await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+      await f.firstRequestStarted;
+      expect(f.requests).toHaveLength(1);
       f.render('ws-2');
       const failure =
         kind === 'ordinary'
@@ -516,9 +530,8 @@ describe('workspace detail archive caller', () => {
                 data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
               },
             });
-      f.requests[0]!.reject(failure);
-      await vi.waitFor(() => expect(f.queryClient.isMutating()).toBe(0));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleRouteArchive(() => f.requests[0]!.reject(failure));
+      expect(f.queryClient.isMutating()).toBe(0);
       if (kind === 'ordinary') {
         expect(toast.error).toHaveBeenCalledExactlyOnceWith('Archive failed after departure');
       } else {
@@ -655,14 +668,14 @@ describe('workspace detail archive caller', () => {
       const f = fixture('route');
       const success = vi.fn();
       f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success });
-      await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+      await f.firstRequestStarted;
+      expect(f.requests).toHaveLength(1);
       f.render('ws-2');
       if (selected === 'ws-1') {
         f.render('ws-1');
       }
-      f.requests[0]!.resolve({ id: 'ws-1' });
-      await vi.waitFor(() => expect(f.queryClient.isMutating()).toBe(0));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleRouteArchive(() => f.requests[0]!.resolve({ id: 'ws-1' }));
+      expect(f.queryClient.isMutating()).toBe(0);
       expect(f.location()).toBe('/detail');
       expect(success).not.toHaveBeenCalled();
       expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);

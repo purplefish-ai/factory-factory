@@ -77,6 +77,7 @@ describeRuleFixtures('no-unresolved-mock-target', {
     test('root-relative', "vi.mock('/src/backend/services/config.service-old');"),
     test('prisma', "vi.mock('@prisma-gen/missing');"),
     test('relative', "vi.mock('./not-here');"),
+    test('typed-relative', "vi.doMock(import('./not-here'));"),
     test('parent-relative', "vi.mock('../fixture/not-here');"),
     test('parent-directory', "vi.mock('../../not-here');"),
     // A file that exists under another name does not make the path resolve.

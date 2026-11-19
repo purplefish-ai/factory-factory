@@ -191,11 +191,12 @@ describe('Root import results', () => {
     await click('Download JSON');
     expect(JSON.parse(download.mock.calls[0]?.[0].data)).toEqual(result);
     expect(download.mock.calls[0]?.[0].fileName).toBe('factory-factory-import-result.json');
+    const appContent = document.getElementById('app-content')!;
+    const focusRestored = Promise.withResolvers<void>();
+    appContent.addEventListener('focus', () => focusRestored.resolve(), { once: true });
     await click('Dismiss');
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(document.activeElement).toBe(document.getElementById('app-content'));
+    await focusRestored.promise;
+    expect(document.activeElement).toBe(appContent);
   });
   it('publishes before a stalled refresh and keeps the result after refresh rejects without import failure', async () => {
     let rejectRefresh: (reason: Error) => void = () => undefined;

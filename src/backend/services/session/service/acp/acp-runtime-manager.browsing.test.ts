@@ -1,3 +1,4 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SUBAGENTS_LIST_METHOD, SUBAGENTS_READ_METHOD } from '@/shared/acp-protocol/subagents';
 import {
@@ -35,7 +36,11 @@ describe('AcpRuntimeManager', () => {
         agentCapabilities: Record<string, unknown>;
         agentInfo: { name: string };
       }>();
-      mockInitialize.mockReturnValueOnce(initialization.promise);
+      const initializing = Promise.withResolvers<void>();
+      mockInitialize.mockImplementationOnce(() => {
+        initializing.resolve();
+        return initialization.promise;
+      });
       const creation = manager.getOrCreateClient(
         'db-session-1',
         {
@@ -46,9 +51,8 @@ describe('AcpRuntimeManager', () => {
         defaultHandlers(),
         defaultContext()
       );
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
+      await initializing.promise;
+      expect(mockSpawn).toHaveBeenCalled();
       expect(manager.isBrowseOnlySession('db-session-1')).toBe(true);
       initialization.resolve({
         protocolVersion: 1,
@@ -153,9 +157,13 @@ describe('AcpRuntimeManager', () => {
     it('runtime exit event fences replacement creation until current exit handling settles', async () => {
       const firstChild = setupSuccessfulSpawn();
       const exitHandling = createDeferred<void>();
+      const exitDispatched = Promise.withResolvers<void>();
       const firstHandlers = {
         ...defaultHandlers(),
-        onRuntimeExit: vi.fn(() => exitHandling.promise),
+        onRuntimeExit: vi.fn(() => {
+          exitDispatched.resolve();
+          return exitHandling.promise;
+        }),
       };
       await manager.getOrCreateClient(
         'db-session-1',
@@ -166,9 +174,8 @@ describe('AcpRuntimeManager', () => {
       firstChild.exitCode = 1;
       firstChild.emit('exit', 1, null);
       firstChild.emit('exit', 1, null);
-      await vi.waitFor(() => {
-        expect(firstHandlers.onRuntimeExit).toHaveBeenCalledOnce();
-      });
+      await exitDispatched.promise;
+      expect(firstHandlers.onRuntimeExit).toHaveBeenCalledOnce();
       expect(firstHandlers.onRuntimeExit).toHaveBeenCalledWith({
         sessionId: 'db-session-1',
         exitCode: 1,
@@ -189,7 +196,9 @@ describe('AcpRuntimeManager', () => {
       void replacementPromise.then(() => {
         replacementSettled = true;
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      // Drain the creation queue's promise continuations while the exit handler is
+      // blocked. The process and provider are mocks with no I/O to spawn later.
+      await nextTurn();
       expect(replacementSettled).toBe(false);
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       expect(manager.getBrowseClient('db-session-1')).toBeUndefined();

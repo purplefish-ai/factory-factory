@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -56,6 +57,8 @@ function slackApi(response: unknown = { ok: true, url: socketUrl }) {
 }
 
 function recorder() {
+  const envelopeReceived = Promise.withResolvers<void>();
+  const disconnected = Promise.withResolvers<void>();
   const events: string[] = [];
   const hellos: unknown[] = [];
   const envelopes: Array<{ type: string; body: unknown }> = [];
@@ -69,13 +72,23 @@ function recorder() {
       events.push('envelope');
       envelopes.push({ type: value.type, body: value.body });
       ack = value.ack;
+      envelopeReceived.resolve();
       return Promise.resolve();
     },
     onDisconnected: () => {
       events.push('disconnected');
+      disconnected.resolve();
     },
   };
-  return { handlers, events, hellos, envelopes, ack: () => ack?.() };
+  return {
+    handlers,
+    events,
+    hellos,
+    envelopes,
+    ack: () => ack?.(),
+    envelopeReceived: envelopeReceived.promise,
+    disconnected: disconnected.promise,
+  };
 }
 
 beforeEach(async () => {
@@ -118,29 +131,37 @@ afterEach(async () => {
 });
 
 it('passes the hello frame through and acknowledges only when the listener does', async () => {
-  const { handlers, events, hellos, envelopes, ack } = recorder();
+  const { handlers, events, hellos, envelopes, ack, envelopeReceived } = recorder();
   const socket = createSlackSocket(APP_TOKEN, handlers, { fetch: slackApi() });
   await socket.start();
-  await vi.waitFor(() => expect(envelopes).toHaveLength(1));
+  await envelopeReceived;
+  expect(envelopes).toHaveLength(1);
   expect(hellos).toEqual([expect.objectContaining({ connection_info: { app_id: 'A1' } })]);
   expect(envelopes[0]).toMatchObject({ type: 'events_api', body: { event_id: 'Ev1' } });
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // The pong follows any acknowledgement already sent by the listener.
+  const peer = peers[0]!;
+  const pong = once(peer, 'pong');
+  peer.ping();
+  await pong;
   expect(received).toEqual([]);
+  const acknowledged = once(peer, 'message');
   await ack();
-  await vi.waitFor(() => expect(received).toHaveLength(1));
+  await acknowledged;
+  expect(received).toHaveLength(1);
   expect(JSON.parse(received[0] ?? '')).toEqual({ envelope_id: 'envelope-1', payload: {} });
   await socket.disconnect();
   expect(events).toEqual(['hello', 'envelope']);
 });
 
 it('reports a server-side close as a disconnect without reconnecting', async () => {
-  const { handlers, events } = recorder();
+  const { handlers, events, disconnected } = recorder();
   const fetch = slackApi();
   const socket = createSlackSocket(APP_TOKEN, handlers, { fetch });
   await socket.start();
   peers[0]?.close(1001, 'refresh_requested');
-  await vi.waitFor(() => expect(events).toContain('disconnected'));
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // On a server close, the SDK emits disconnected only when automatic reconnect is disabled.
+  await disconnected;
+  expect(events).toContain('disconnected');
   expect(fetch).toHaveBeenCalledOnce();
   expect(peers).toHaveLength(1);
   await socket.disconnect();
@@ -185,23 +206,30 @@ it('rejects start without retrying when Slack is unreachable', async () => {
 
 it('closes a socket that finishes connecting after it was disconnected', async () => {
   const { handlers, events } = recorder();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const requested = Promise.withResolvers<void>();
+  const responseReady = Promise.withResolvers<void>();
+  const peerClosed = Promise.withResolvers<void>();
+  const sendInitialFrames = onConnection;
+  onConnection = (peer) => {
+    peer.once('close', () => peerClosed.resolve());
+    sendInitialFrames(peer);
+  };
   const respond = slackApi();
   const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
-    await gate;
+    requested.resolve();
+    await responseReady.promise;
     return await respond(url, init);
   });
   const socket = createSlackSocket(APP_TOKEN, handlers, { fetch });
   const started = socket.start().catch(() => undefined);
-  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  await requested.promise;
+  expect(fetch).toHaveBeenCalledOnce();
   await socket.disconnect();
-  release();
+  responseReady.resolve();
   await started;
-  await vi.waitFor(() => expect(peers).toHaveLength(1));
-  await vi.waitFor(() => expect(peers[0]?.readyState).toBe(3));
+  await peerClosed.promise;
+  expect(peers).toHaveLength(1);
+  expect(peers[0]?.readyState).toBe(3);
   expect(received).toEqual([]);
   expect(events).toEqual([]);
 });

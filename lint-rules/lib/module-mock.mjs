@@ -1,4 +1,5 @@
 // Helpers for rules about `vi.mock` and `vi.doMock` targets.
+import { statSync } from 'node:fs';
 import { posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMember } from './ast.mjs';
@@ -14,7 +15,7 @@ export function isModuleMockCall(node) {
 }
 
 /** A string literal, or a template literal without substitutions. */
-export function literalValue(node) {
+function literalValue(node) {
   if (node?.type === 'Literal' && typeof node.value === 'string') {
     return node.value;
   }
@@ -22,6 +23,11 @@ export function literalValue(node) {
     return node.quasis[0].value.cooked;
   }
   return undefined;
+}
+
+/** The static target of a string or a type-checked `import('...')` mock. */
+export function moduleMockTarget(node) {
+  return literalValue(node?.type === 'ImportExpression' ? node.source : node);
 }
 
 /**
@@ -44,4 +50,53 @@ export function resolveRepositoryPath(specifier, filename) {
     return undefined;
   }
   return posix.normalize(resolved).replace(/\/$/, '');
+}
+
+// Mirrors Vite's default `resolve.extensions`; no project configuration overrides
+// it. They are appended to a target and tried as a directory's index file. A
+// target written with its full file name resolves whatever its extension.
+const RESOLVE_EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
+
+const kinds = new Map();
+
+/** `'file'`, `'directory'` or `'none'` for an absolute path, cached. */
+function kindOf(path) {
+  let kind = kinds.get(path);
+  if (kind === undefined) {
+    const stats = statSync(path, { throwIfNoEntry: false });
+    kind = stats?.isFile() ? 'file' : stats?.isDirectory() ? 'directory' : 'none';
+    kinds.set(path, kind);
+  }
+  return kind;
+}
+
+const isFile = (path) => kindOf(path) === 'file';
+
+/** Resolve an absolute repository path to the source file Vite would load. */
+export function resolveRepositoryModule(path) {
+  if (isFile(path)) {
+    return path;
+  }
+
+  const withExtension = RESOLVE_EXTENSIONS.map((extension) => path + extension).find(isFile);
+  if (withExtension !== undefined) {
+    return withExtension;
+  }
+
+  if (kindOf(path) === 'directory') {
+    const index = RESOLVE_EXTENSIONS.map((extension) => `${path}/index${extension}`).find(isFile);
+    if (index !== undefined) {
+      return index;
+    }
+  }
+
+  // TypeScript's ESM convention: a JavaScript specifier may name its TS source.
+  const sourceExtensions = path.endsWith('.js')
+    ? ['.ts', '.tsx']
+    : path.endsWith('.mjs')
+      ? ['.mts']
+      : [];
+  return sourceExtensions
+    .map((extension) => path.slice(0, path.lastIndexOf('.')) + extension)
+    .find(isFile);
 }

@@ -29,6 +29,10 @@ describeRuleFixtures('no-internal-module-mock', {
       file: 'src/backend/orchestration/relative.test.ts',
       source: "vi.mock('../services/workspace/resources/workspace.accessor', () => ({}));",
     },
+    {
+      file: 'src/backend/orchestration/typed.test.ts',
+      source: "vi.mock(import('../services/workspace/resources/workspace.accessor'));",
+    },
     // An inner barrel is internal: only the capsule's index.ts is public.
     {
       file: 'src/backend/orchestration/inner.test.ts',

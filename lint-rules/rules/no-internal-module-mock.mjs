@@ -11,7 +11,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
-import { isModuleMockCall, literalValue, resolveRepositoryPath } from '../lib/module-mock.mjs';
+import { isModuleMockCall, moduleMockTarget, resolveRepositoryPath } from '../lib/module-mock.mjs';
 import exceptions from './no-internal-module-mock.exceptions.json' with { type: 'json' };
 
 const SERVICES = 'src/backend/services';
@@ -64,7 +64,7 @@ export default {
         if (!isModuleMockCall(node)) {
           return;
         }
-        const specifier = literalValue(node.arguments[0]);
+        const specifier = moduleMockTarget(node.arguments[0]);
         const capsule = specifier === undefined ? undefined : internalTarget(specifier, filename);
         if (capsule) {
           context.report({

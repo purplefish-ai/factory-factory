@@ -429,16 +429,17 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     async (kind) => {
       const view = renderSurface(surface);
       await waitForCheck(() => expect(view.get().selected).toBe('a1'));
-      flushSync(() =>
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
         view.setRoster('a', [
           { id: 'a1', name: 'Chat 2', provider: 'CODEX', model: 'gpt-sol' },
           { id: 'a2', name: 'Chat 7', provider: 'CLAUDE', model: 'opus' },
-        ])
-      );
-      // Query cache notifications reach React on a later task.
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+        ]);
+        // React Query schedules cache notifications with setTimeout(0).
+        await act(() => vi.advanceTimersByTimeAsync(0));
+      } finally {
+        vi.useRealTimers();
+      }
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
       await waitForCheck(() => expect(view.pending).toHaveLength(1));
       const input = view.requests.find((r) => r.path === 'session.createAndStartSession')?.input;

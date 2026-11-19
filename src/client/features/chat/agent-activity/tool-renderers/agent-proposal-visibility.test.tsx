@@ -4,7 +4,7 @@ import { observable } from '@trpc/server/observable';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import type { ToolSequence } from '@/lib/chat-protocol';
@@ -28,6 +28,7 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
     },
   });
   let current = proposal;
+  const initialToasts = [...toast.getHistory()];
   const client = trpc.createClient({
     links: [
       () =>
@@ -80,7 +81,6 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         <trpc.Provider client={client} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ToolSequenceGroup sequence={sequence} />
-            <Toaster />
           </QueryClientProvider>
         </trpc.Provider>
       )
@@ -111,17 +111,15 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         },
       })),
     };
-    await act(async () => {
+    await act(() =>
       root.render(
         <trpc.Provider client={client} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <ToolSequenceGroup sequence={revised} />
-            <Toaster />
           </QueryClientProvider>
         </trpc.Provider>
-      );
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
+      )
+    );
     await vi.waitFor(() => expect(container.textContent).toContain('Load latest proposal'));
     await act(() =>
       [...container.querySelectorAll('button')]
@@ -131,19 +129,18 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
     expect(container.querySelector<HTMLTextAreaElement>('[aria-label="Instructions"]')?.value).toBe(
       'New conversational instructions.'
     );
-    await act(async () => {
+    await act(() =>
       container
         .querySelector('form')
-        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
     // The failure is reported once, inline beside the draft, not also as a toast.
     await vi.waitFor(() =>
       expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         'Could not save this automation.'
       )
     );
-    expect(document.querySelector('[data-sonner-toast]')).toBeNull();
+    expect(toast.getHistory()).toEqual(initialToasts);
   } finally {
     await act(() => root.unmount());
     queryClient.clear();

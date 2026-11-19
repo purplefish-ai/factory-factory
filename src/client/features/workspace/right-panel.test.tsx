@@ -240,13 +240,12 @@ describe('RightPanel Agents tab', () => {
 
   it('keeps restored terminal tabs while viewing Logs and reopens the selected terminal', async () => {
     render();
-    await act(async () => {
+    await act(() =>
       mocks.terminalOptions?.onTerminalList?.([
         { id: 'first', createdAt: '', outputBuffer: 'first output' },
         { id: 'second', createdAt: '', outputBuffer: 'second output' },
-      ]);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+      ])
+    );
     const button = (label: string) =>
       [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
     expect(button('Terminal 2')).toBeDefined();
@@ -277,12 +276,11 @@ describe('RightPanel Agents tab', () => {
         </WorkspacePanelProvider>
       )
     );
-    await act(async () => {
+    await act(() =>
       mocks.terminalOptions?.onTerminalList?.([
         { id: 'dev-server', createdAt: '', outputBuffer: 'ready\r\n' },
-      ]);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+      ])
+    );
     const button = (label: string) =>
       [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
     await act(async () => button('Terminal 1').click());
@@ -320,13 +318,12 @@ describe('RightPanel Agents tab', () => {
         </WorkspacePanelProvider>
       )
     );
-    await act(async () => {
+    await act(() =>
       mocks.terminalOptions?.onTerminalList?.([
         { id: 'first', createdAt: '', outputBuffer: 'first output' },
         { id: 'second', createdAt: '', outputBuffer: 'second output' },
-      ]);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+      ])
+    );
     const button = (label: string) =>
       [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
     await act(async () => button('Terminal 1').click());
@@ -355,10 +352,9 @@ describe('RightPanel Agents tab', () => {
     expect(mocks.createTerminal).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('Terminal 1');
     expect(container.textContent).not.toContain('No terminal open');
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[aria-label="Close Terminal 1"]')?.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    await act(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Close Terminal 1"]')?.click()
+    );
     expect(mocks.createTerminal).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain('Terminal 1');
     await act(async () =>

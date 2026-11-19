@@ -161,10 +161,7 @@ it('does not deliver slow chat reads into a newly selected session', async () =>
     await drag(container.querySelector('[aria-label="Conversation"]')!, 'drop', 'late-chat.png');
     await render('session-b');
     expect(finishRead).toBeDefined();
-    await act(async () => {
-      finishRead!();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    await act(async () => finishRead!());
     expect(container.querySelector('[aria-label="Conversation"]')?.textContent).not.toContain(
       'late-chat.png'
     );
@@ -192,10 +189,7 @@ it.each(['Send', 'Clear attachments'])(
         (item) => item.textContent === action
       )!;
       await act(() => button.click());
-      await act(async () => {
-        finishRead!();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await act(async () => finishRead!());
       expect(conversation.textContent).not.toContain('canceled.png');
     } finally {
       vi.restoreAllMocks();
@@ -217,10 +211,7 @@ it('retains both overlapping image drops when reads complete before React commit
     await drag(conversation, 'drop', 'first.png');
     await drag(conversation, 'drop', 'second.png');
     expect(finishReads).toHaveLength(2);
-    await act(async () => {
-      finishReads.forEach((finish) => finish());
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    await act(async () => finishReads.forEach((finish) => finish()));
     expect(conversation.textContent).toContain('first.png');
     expect(conversation.textContent).toContain('second.png');
     expect(sessionStorage.getItem('chat-attachments-session-a')).toContain('first.png');
