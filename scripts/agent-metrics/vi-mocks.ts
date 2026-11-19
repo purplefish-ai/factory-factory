@@ -89,17 +89,25 @@ function isViMock(callee: ts.Expression): boolean {
   );
 }
 
-/**
- * The first argument of each `vi.mock(...)` call expression: its text when it
- * is a string literal, otherwise `null`. Parsed without type checking.
- */
+function literalMockTarget(argument: ts.Expression | undefined): string | null {
+  if (
+    argument &&
+    ts.isCallExpression(argument) &&
+    argument.expression.kind === ts.SyntaxKind.ImportKeyword &&
+    argument.arguments.length === 1
+  ) {
+    argument = argument.arguments[0];
+  }
+  return argument && ts.isStringLiteralLike(argument) ? argument.text : null;
+}
+
+/** Reads literal string and typed import targets without type checking. */
 function viMockTargets(file: TreeFile): (string | null)[] {
   const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest);
   const targets: (string | null)[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && isViMock(node.expression)) {
-      const [first] = node.arguments;
-      targets.push(first !== undefined && ts.isStringLiteralLike(first) ? first.text : null);
+      targets.push(literalMockTarget(node.arguments[0]));
     }
     ts.forEachChild(node, visit);
   };

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FileLockMutex, FileLockTimeoutError } from './file-lock-mutex';
 
 async function exists(targetPath: string): Promise<boolean> {
@@ -71,7 +71,7 @@ describe('FileLockMutex', () => {
       maxStaleRetries: 0,
       staleThresholdMs: 10_000,
     });
-    // The window only bounds a broken lock; a working one acquires right after release.
+    // Keep the hard timeout bounded while allowing the filesystem to release the lock.
     const contender = new FileLockMutex({
       acquireTimeoutMs: 20,
       postTimeoutWaitMs: 3000,
@@ -81,16 +81,35 @@ describe('FileLockMutex', () => {
       staleThresholdMs: 10_000,
     });
 
+    vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const releaseHolder = await holder.acquire(lockPath);
-      const contending = contender.acquire(lockPath);
-      // Release only once the contender is past its acquire timeout.
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      await releaseHolder();
+      try {
+        const retryScheduled = Promise.withResolvers<void>();
+        const scheduleRetry = setTimeout;
+        using timer = vi
+          .spyOn(globalThis, 'setTimeout')
+          .mockImplementationOnce((callback, delay) => {
+            const retry = scheduleRetry(callback, delay);
+            retryScheduled.resolve();
+            return retry;
+          });
+        const contending = contender.acquire(lockPath);
+        // Move past the first deadline while the contender's exclusive file open is in flight.
+        vi.setSystemTime(Date.now() + 20);
+        await Promise.race([retryScheduled.promise, contending]);
+        expect(timer).toHaveBeenCalledWith(expect.any(Function), 5);
 
-      const releaseContender = await contending;
-      await releaseContender();
+        // The hard timeout can now expire normally if the contender gets stuck.
+        vi.useRealTimers();
+        await releaseHolder();
+        const releaseContender = await contending;
+        await releaseContender();
+      } finally {
+        await releaseHolder();
+      }
     } finally {
+      vi.useRealTimers();
       await fs.rm(baseDir, { recursive: true, force: true });
     }
   });

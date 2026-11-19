@@ -122,10 +122,7 @@ it.each([true, false])(
           : { cleared: false }
       );
       expect(finishRead).toBeDefined();
-      await act(async () => {
-        finishRead!();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await act(async () => finishRead!());
       expect(container.textContent).not.toContain('late.png');
     } finally {
       await act(() => root.unmount());

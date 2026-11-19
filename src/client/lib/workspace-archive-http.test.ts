@@ -17,7 +17,7 @@ const data = (name = 'HTTP') => ({
   ],
   reviewCount: 0,
 });
-function fixture(seed = true) {
+function fixture(seed = true, onRequest?: (count: number) => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
@@ -27,7 +27,11 @@ function fixture(seed = true) {
   const options = projectWorkspaceQueryOptions(
     client,
     'proj-1',
-    () => new Promise<ProjectWorkspaceCache>((resolve) => requests.push(resolve))
+    () =>
+      new Promise<ProjectWorkspaceCache>((resolve) => {
+        requests.push(resolve);
+        onRequest?.(requests.length);
+      })
   );
   if (seed) {
     client.setQueryData(options.queryKey, data());
@@ -93,22 +97,31 @@ describe('archive settlement HTTP provenance without a stream baseline', () => {
   });
 
   it('recovers a mounted empty bootstrap instead of succeeding with undefined or remaining stuck', async () => {
-    const f = fixture(false);
+    const repairStarted = Promise.withResolvers<void>();
+    const succeeded = Promise.withResolvers<void>();
+    const f = fixture(false, (count) => {
+      if (count === 2) {
+        repairStarted.resolve();
+      }
+    });
     const observer = new QueryObserver(f.client, f.options);
     const successes: (ProjectWorkspaceCache | undefined)[] = [];
     const unsubscribe = observer.subscribe((result) => {
       if (result.status === 'success') {
         successes.push(result.data);
+        succeeded.resolve();
       }
     });
     try {
-      await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+      expect(f.requests).toHaveLength(1);
       const operation = beginWorkspaceArchiveOperation(f.client, 'proj-1', ['ws-1']);
       operation.settle([]);
       f.requests[0]!(data('stale bootstrap'));
-      await vi.waitFor(() => expect(f.requests).toHaveLength(2));
+      await repairStarted.promise;
+      expect(f.requests).toHaveLength(2);
       f.requests[1]!({ workspaces: [data().workspaces[1]!], reviewCount: 0 });
-      await vi.waitFor(() => expect(observer.getCurrentResult().isSuccess).toBe(true));
+      await succeeded.promise;
+      expect(observer.getCurrentResult().isSuccess).toBe(true);
       expect(successes).not.toContain(undefined);
       expect(
         successes.every((result) => result?.workspaces.every((row) => row.id !== 'ws-1'))
@@ -142,13 +155,19 @@ describe('archive settlement HTTP provenance without a stream baseline', () => {
         resolveOld = resolve;
       });
       let calls = 0;
-      const observer = new QueryObserver(f.client, {
+      const repairStarted = Promise.withResolvers<void>();
+      const repairFinished = Promise.withResolvers<void>();
+      const options = {
         ...f.options,
         staleTime: 0,
         queryFn: () => {
           if (++calls !== 1) {
             return f.owner.fetch(
-              () => new Promise<ProjectWorkspaceCache>((resolve) => f.requests.push(resolve)),
+              () =>
+                new Promise<ProjectWorkspaceCache>((resolve) => {
+                  f.requests.push(resolve);
+                  repairStarted.resolve();
+                }),
               new AbortController().signal
             );
           }
@@ -158,24 +177,31 @@ describe('archive settlement HTTP provenance without a stream baseline', () => {
           void tagged.then(() =>
             queueMicrotask(() => {
               operation.settle([]);
-              void f.client.invalidateQueries({ queryKey: f.options.queryKey, exact: true });
+              void f.client
+                .invalidateQueries({ queryKey: f.options.queryKey, exact: true })
+                .then(repairFinished.resolve, repairFinished.reject);
             })
           );
           return tagged;
         },
-      });
+      };
+      // Own the original fetch promise so the assertion runs after its commit attempt.
+      const oldFetch = f.client.fetchQuery(options).catch(() => undefined);
+      const observer = new QueryObserver(f.client, options);
       const unsubscribe = observer.subscribe(() => undefined);
       try {
         resolveOld(data('old continuation'));
-        await vi.waitFor(() => expect(calls).toBe(2));
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await repairStarted.promise;
+        await oldFetch;
+        expect(calls).toBe(2);
         expect(f.rows()?.map((row) => row.id) ?? []).not.toContain('ws-1');
         expect(observer.getCurrentResult().fetchStatus).toBe('fetching');
         f.requests[0]!({
           workspaces: [projectSnapshotToWorkspace(entry({ workspaceId: 'newcomer' }))],
           reviewCount: 0,
         });
-        await vi.waitFor(() => expect(observer.getCurrentResult().fetchStatus).toBe('idle'));
+        await repairFinished.promise;
+        expect(observer.getCurrentResult().fetchStatus).toBe('idle');
         expect(f.rows()?.map((row) => row.id)).toEqual(['newcomer']);
         expect(observer.getCurrentResult().isSuccess).toBe(true);
       } finally {

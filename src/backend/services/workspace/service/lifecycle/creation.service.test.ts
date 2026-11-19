@@ -15,11 +15,11 @@ import { WorkspaceCreationService, type WorkspaceCreationSource } from './creati
 type Logger = ReturnType<typeof createLogger>;
 
 // Mock dependencies
-vi.mock('@/backend/services/workspace/resources/project.accessor');
-vi.mock('@/backend/services/workspace/resources/workspace.accessor');
-vi.mock('@/backend/services/settings');
+vi.mock(import('@/backend/services/workspace/resources/project.accessor'));
+vi.mock(import('@/backend/services/workspace/resources/workspace.accessor'));
+vi.mock(import('@/backend/services/settings'));
 vi.mock('@/backend/services/workspace/service/worktree/git-ops.service');
-vi.mock('@/backend/services/workspace/service/worktree/worktree-lifecycle.service');
+vi.mock(import('@/backend/services/workspace/service/worktree/worktree-lifecycle.service'));
 
 describe('WorkspaceCreationService', () => {
   let service: WorkspaceCreationService;

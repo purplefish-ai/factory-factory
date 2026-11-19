@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -98,7 +99,9 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     writeFileSync(
       worker,
       `import { renameSync, writeFileSync } from 'node:fs';
-       if (process.argv.includes('--stubborn')) process.on('SIGTERM', () => {});
+       if (process.argv.includes('--stubborn')) {
+         process.on('SIGTERM', () => console.log('worker received SIGTERM'));
+       }
        ${PUBLISH_WORKER_PID}
        setInterval(() => {}, 1000);`
     );
@@ -116,9 +119,16 @@ it.skipIf(process.platform === 'win32').each([false, true])(
       process.execPath,
       [join(root, 'bootstrap.mjs'), 'serve', ...(stubborn ? ['--stubborn'] : [])],
       {
-        stdio: 'ignore',
+        stdio: ['ignore', 'pipe', 'ignore'],
       }
     );
+    const receivedSignal = Promise.withResolvers<void>();
+    const output = createInterface({ input: child.stdout });
+    output.on('line', (line) => {
+      if (line === 'worker received SIGTERM') {
+        receivedSignal.resolve();
+      }
+    });
     const closed = new Promise((resolve) => child.once('exit', resolve));
     let workerPid: number | undefined;
     killAfterTest(() => child.pid);
@@ -131,7 +141,7 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     );
     child.kill('SIGTERM');
     if (stubborn) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await receivedSignal.promise;
       child.kill('SIGTERM');
     }
     await closed;

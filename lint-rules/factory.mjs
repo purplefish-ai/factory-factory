@@ -11,6 +11,7 @@ import noAwaitImport from './rules/no-await-import.mjs';
 import noDirectWebStorage from './rules/no-direct-web-storage.mjs';
 import noForwardRef from './rules/no-forward-ref.mjs';
 import noInternalModuleMock from './rules/no-internal-module-mock.mjs';
+import noMockTestSubject from './rules/no-mock-test-subject.mjs';
 import noNativeDialogs from './rules/no-native-dialogs.mjs';
 import noNextDirectives from './rules/no-next-directives.mjs';
 import noRawPaletteClasses from './rules/no-raw-palette-classes.mjs';
@@ -44,6 +45,7 @@ export default {
     'no-direct-web-storage': noDirectWebStorage,
     'no-forward-ref': noForwardRef,
     'no-internal-module-mock': noInternalModuleMock,
+    'no-mock-test-subject': noMockTestSubject,
     'no-native-dialogs': noNativeDialogs,
     'no-next-directives': noNextDirectives,
     'no-raw-palette-classes': noRawPaletteClasses,

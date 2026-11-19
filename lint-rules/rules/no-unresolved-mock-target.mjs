@@ -9,40 +9,12 @@
 // the repository does not use. Existence is cached for the life of the process, so the editor
 // language server needs a restart after a mocked file is created. Enabled for
 // test files and test support under src/, scripts/, electron/ and lint-rules/.
-import { statSync } from 'node:fs';
-import { isModuleMockCall, literalValue, resolveRepositoryPath } from '../lib/module-mock.mjs';
-
-// Mirrors Vite's default `resolve.extensions`; no project configuration overrides
-// it. They are appended to a target and tried as a directory's index file. A
-// target written with its full file name resolves whatever its extension.
-const RESOLVE_EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
-
-const kinds = new Map();
-
-/** `'file'`, `'directory'` or `'none'` for an absolute path, cached. */
-function kindOf(path) {
-  let kind = kinds.get(path);
-  if (kind === undefined) {
-    const stats = statSync(path, { throwIfNoEntry: false });
-    kind = stats?.isFile() ? 'file' : stats?.isDirectory() ? 'directory' : 'none';
-    kinds.set(path, kind);
-  }
-  return kind;
-}
-
-const isFile = (path) => kindOf(path) === 'file';
-
-/** Whether an absolute path names a module Vite would load. */
-function resolves(path) {
-  return (
-    isFile(path) ||
-    RESOLVE_EXTENSIONS.some((extension) => isFile(`${path}${extension}`)) ||
-    (kindOf(path) === 'directory' &&
-      RESOLVE_EXTENSIONS.some((extension) => isFile(`${path}/index${extension}`))) ||
-    // TypeScript's ESM convention: a `.js` specifier names the `.ts` source.
-    (path.endsWith('.js') && ['.ts', '.tsx'].some((ext) => isFile(`${path.slice(0, -3)}${ext}`)))
-  );
-}
+import {
+  isModuleMockCall,
+  moduleMockTarget,
+  resolveRepositoryModule,
+  resolveRepositoryPath,
+} from '../lib/module-mock.mjs';
 
 export default {
   meta: {
@@ -58,10 +30,10 @@ export default {
         if (!isModuleMockCall(node)) {
           return;
         }
-        const specifier = literalValue(node.arguments[0]);
+        const specifier = moduleMockTarget(node.arguments[0]);
         const path =
           specifier === undefined ? undefined : resolveRepositoryPath(specifier, filename);
-        if (path !== undefined && !resolves(path)) {
+        if (path !== undefined && resolveRepositoryModule(path) === undefined) {
           context.report({
             node: node.arguments[0],
             message: `\`${specifier}\` does not resolve to a module, so this mock replaces nothing. Point it at the module's current path.`,

@@ -104,6 +104,28 @@ streamed events re-render the chat and not the layout
 allowed. The admin override repeats the entry, because an override replaces the
 rule's options rather than merging them.
 
+## Module mocks
+
+Keep the implementation named by a co-located test real. The subject rule
+recognizes `.test` and `.integration.test` filenames, including tests of an
+`index` module. Use a real dependency when practical, a fake at its public
+boundary when needed, or an observation-only spy. The subject, capsule boundary
+and unresolved target rules check both string and typed Vitest mocks.
+
+To migrate one-argument mocks of repository modules, preview an explicit batch:
+
+```sh
+pnpm exec tsx scripts/codemods/typed-vitest-mocks.ts path/to/subject.test.ts
+```
+
+Rerun with `--write` to apply the listed changes, then run typecheck, the
+affected tests and `pnpm check`. Review any unused-code inventory changes
+introduced by the new module reference. The codemod leaves custom factories,
+package mocks and unresolved targets for manual review. It also respects the
+TypeScript configuration for explicit TypeScript file extensions. Vite-only
+`/src/` paths need a TypeScript-resolvable alias or relative path before
+conversion.
+
 ## Remaining Biome checks
 
 Biome remains a linter for CSS and checks without equivalent Oxlint coverage. It

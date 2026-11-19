@@ -88,13 +88,18 @@ describe('public native config readiness', () => {
       ];
       const responding = createDeferred<typeof h.handle.configOptions>();
       const rpc = kind === 'generic' ? h.runtime.setSessionMode : h.runtime.setConfigOption;
-      rpc.mockReturnValueOnce(responding.promise);
+      const called = Promise.withResolvers<void>();
+      rpc.mockImplementationOnce(() => {
+        called.resolve();
+        return responding.promise;
+      });
       const setting = (
         kind === 'generic'
           ? h.service.setSessionConfigOption('session', 'mode', 'read-only')
           : h.service.setSessionReasoningEffort('session', 'high')
       ).catch((error: unknown) => error);
-      await vi.waitFor(() => expect(rpc).toHaveBeenCalled());
+      await called.promise;
+      expect(rpc).toHaveBeenCalled();
       const replacement = createTestProcessHandle({ providerSessionId: 'replacement' });
       h.runtime.getClient.mockReturnValue(replacement);
       h.repository.getSessionById.mockResolvedValue({
@@ -122,18 +127,21 @@ describe('public native config readiness', () => {
     async (kind) => {
       const h = setup();
       const reading = createDeferred<typeof h.session>();
+      const startedReading = Promise.withResolvers<void>();
       if (kind === 'generic') {
         h.repository.getSessionById.mockResolvedValueOnce(h.session);
       }
-      h.repository.getSessionById.mockReturnValueOnce(reading.promise);
+      h.repository.getSessionById.mockImplementationOnce(() => {
+        startedReading.resolve();
+        return reading.promise;
+      });
       const setting = (
         kind === 'generic'
           ? h.service.setSessionConfigOption('session', 'mode', 'read-only')
           : h.service.setSessionReasoningEffort('session', 'high')
       ).catch((error: unknown) => error);
-      await vi.waitFor(() =>
-        expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 2 : 1)
-      );
+      await startedReading.promise;
+      expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 2 : 1);
       h.runtime.getClient.mockReturnValue(createTestProcessHandle({ providerSessionId: 'thread' }));
       reading.resolve(h.session);
       expect(await setting).toBeInstanceOf(Error);
@@ -147,21 +155,22 @@ describe('public native config readiness', () => {
     async (kind) => {
       const h = setup();
       const reading = createDeferred<typeof h.session>();
+      const startedReading = Promise.withResolvers<void>();
       if (kind === 'generic') {
         h.repository.getSessionById.mockResolvedValueOnce(h.session);
       }
-      h.repository.getSessionById
-        .mockResolvedValueOnce(h.session)
-        .mockReturnValueOnce(reading.promise);
+      h.repository.getSessionById.mockResolvedValueOnce(h.session).mockImplementationOnce(() => {
+        startedReading.resolve();
+        return reading.promise;
+      });
       h.repository.updateSession.mockRejectedValueOnce(new Error('Storage unavailable'));
       const setting = (
         kind === 'generic'
           ? h.service.setSessionConfigOption('session', 'mode', 'read-only')
           : h.service.setSessionReasoningEffort('session', 'high')
       ).catch((error: unknown) => error);
-      await vi.waitFor(() =>
-        expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 3 : 2)
-      );
+      await startedReading.promise;
+      expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 3 : 2);
       h.runtime.getClient.mockReturnValue(createTestProcessHandle({ providerSessionId: 'thread' }));
       reading.resolve(h.session);
       expect(await setting).toBeInstanceOf(Error);
@@ -240,8 +249,15 @@ describe('public native config readiness', () => {
   it('waits until startup configuration completes before applying a user choice', async () => {
     const h = setup();
     h.handle.deferPromptReadiness();
+    const waitingForConfiguration = Promise.withResolvers<void>();
+    const configurationReady = h.handle.configurationReady;
+    const readiness = vi.spyOn(h.handle, 'configurationReady', 'get').mockImplementationOnce(() => {
+      waitingForConfiguration.resolve();
+      return configurationReady;
+    });
     const setting = h.service.setSessionConfigOption('session', 'mode', 'read-only');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitingForConfiguration.promise;
+    readiness.mockRestore();
     expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
     h.handle.completeConfiguration();
     await setting;

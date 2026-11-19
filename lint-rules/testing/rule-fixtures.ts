@@ -16,7 +16,7 @@ export const ruleNames = Object.keys(plugin.rules);
  * Rules whose result depends on files outside the fixture. Other rules'
  * fixtures mock modules that do not exist, so these run only on their own.
  */
-const fileSystemRules = new Set(['no-unresolved-mock-target']);
+const fileSystemRules = new Set(['no-mock-test-subject', 'no-unresolved-mock-target']);
 
 export const oxlintReportSchema = z.object({
   diagnostics: z.array(

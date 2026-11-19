@@ -14,6 +14,7 @@ vi.mock('sonner', () => ({ toast: { error: errors } }));
 let container: HTMLDivElement;
 let root: Root;
 let attachments: MessageAttachment[];
+let attachmentsAdded: ReturnType<typeof Promise.withResolvers<void>>;
 let accepted: ReturnType<typeof vi.fn<() => void>>;
 const image = () => new File(['image data'], 'screenshot.png', { type: 'image/png' });
 
@@ -25,7 +26,10 @@ function render(identity = 'chat-a', disabled = false) {
         disabled={disabled}
         label="Drop images to attach to your message"
         onDropAccepted={accepted}
-        onAttachments={(added) => attachments.push(...added)}
+        onAttachments={(added) => {
+          attachments.push(...added);
+          attachmentsAdded.resolve();
+        }}
       >
         <textarea onDrop={() => attachments.push({ id: 'duplicate' } as MessageAttachment)} />
         <span>Transcript</span>
@@ -52,6 +56,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   attachments = [];
+  attachmentsAdded = Promise.withResolvers<void>();
   accepted = vi.fn();
   errors.mockClear();
 });
@@ -71,7 +76,8 @@ describe('ImageDropZone', () => {
     drag('drop', [image(), image()]);
     expect(accepted).toHaveBeenCalledOnce();
     expect(container.querySelector('[role="status"]')).toBeNull();
-    await vi.waitFor(() => expect(attachments).toHaveLength(2));
+    await attachmentsAdded.promise;
+    expect(attachments).toHaveLength(2);
     expect(attachments.map(({ name, data }) => ({ name, data }))).toEqual([
       { name: 'screenshot.png', data: 'aW1hZ2UgZGF0YQ==' },
       { name: 'screenshot.png', data: 'aW1hZ2UgZGF0YQ==' },
@@ -109,7 +115,8 @@ describe('ImageDropZone', () => {
     const oversized = image();
     Object.defineProperty(oversized, 'size', { value: MAX_IMAGE_SIZE + 1 });
     drag('drop', [oversized, image(), new File(['text'], 'notes.txt', { type: 'text/plain' })]);
-    await vi.waitFor(() => expect(attachments).toHaveLength(2));
+    await attachmentsAdded.promise;
+    expect(attachments).toHaveLength(2);
     expect(attachments[1]).toMatchObject({ name: 'notes.txt', data: 'text' });
     expect(errors).toHaveBeenCalledWith(expect.stringContaining('File too large'));
   });
@@ -132,10 +139,7 @@ describe('ImageDropZone', () => {
       for (const identity of identities) {
         await render(identity);
       }
-      await act(async () => {
-        finishRead!();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await act(async () => finishRead!());
       expect(attachments).toEqual([]);
     } finally {
       vi.restoreAllMocks();
@@ -155,10 +159,7 @@ describe('ImageDropZone', () => {
       drag('drop', [image()]);
       expect(finishRead).toBeDefined();
       await render('chat-a', true);
-      await act(async () => {
-        finishRead!();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+      await act(async () => finishRead!());
       expect(attachments).toHaveLength(1);
       expect(attachments[0]?.name).toBe('screenshot.png');
     } finally {

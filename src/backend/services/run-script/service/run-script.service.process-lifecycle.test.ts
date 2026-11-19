@@ -87,6 +87,7 @@ vi.mock('./run-script-config-persistence.service', () => ({
   },
 }));
 
+import { RunScriptExecution } from './run-script-execution';
 import { RunScriptService } from './run-script.service';
 
 class FakeChildProcess extends EventEmitter {
@@ -105,6 +106,15 @@ class FakeChildProcess extends EventEmitter {
     super();
     this.pid = pid;
   }
+}
+
+function signalPostRunSpawn(runChild: FakeChildProcess, postRunChild: FakeChildProcess) {
+  const spawned = Promise.withResolvers<void>();
+  mockSpawn.mockReturnValueOnce(runChild).mockImplementationOnce(() => {
+    spawned.resolve();
+    return postRunChild;
+  });
+  return spawned.promise;
 }
 
 const COMMANDS = {
@@ -155,7 +165,7 @@ describe('RunScriptService process lifecycle', () => {
     });
     const runChild = new FakeChildProcess(1001);
     const postRunChild = new FakeChildProcess(undefined);
-    mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(postRunChild);
+    const postRunSpawned = signalPostRunSpawn(runChild, postRunChild);
     mockFindById.mockResolvedValue({
       id: 'ws-1',
       worktreePath: '/tmp/ws-1',
@@ -166,7 +176,8 @@ describe('RunScriptService process lifecycle', () => {
     await expect(new RunScriptService().startRunScript('ws-1')).resolves.toMatchObject({
       success: true,
     });
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledTimes(2));
+    await postRunSpawned;
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
 
     expect(() =>
       postRunChild.emit('error', Object.assign(new Error('spawn bash EAGAIN'), { code: 'EAGAIN' }))
@@ -184,13 +195,11 @@ describe('RunScriptService process lifecycle', () => {
     const runChild = new FakeChildProcess(1001);
     const postRunChild = new FakeChildProcess(1002);
     const cleanupChild = new FakeChildProcess(1003);
-    mockSpawn
-      .mockReturnValueOnce(runChild)
-      .mockReturnValueOnce(postRunChild)
-      .mockImplementationOnce(() => {
-        queueMicrotask(() => cleanupChild.emit('exit', 0));
-        return cleanupChild;
-      });
+    const postRunSpawned = signalPostRunSpawn(runChild, postRunChild);
+    mockSpawn.mockImplementationOnce(() => {
+      queueMicrotask(() => cleanupChild.emit('exit', 0));
+      return cleanupChild;
+    });
     mockFindById.mockResolvedValue({
       id: 'ws-1',
       worktreePath: '/tmp/ws-1',
@@ -206,7 +215,8 @@ describe('RunScriptService process lifecycle', () => {
     try {
       const service = new RunScriptService();
       await expect(service.startRunScript('ws-1')).resolves.toMatchObject({ success: true });
-      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledTimes(2));
+      await postRunSpawned;
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
 
       mockFindById.mockResolvedValue({
         id: 'ws-1',
@@ -271,7 +281,7 @@ describe('RunScriptService process lifecycle', () => {
     });
     const runChild = new FakeChildProcess(1001);
     const postRunChild = new FakeChildProcess(1002);
-    mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(postRunChild);
+    const postRunSpawned = signalPostRunSpawn(runChild, postRunChild);
     mockFindById.mockResolvedValue({
       id: 'ws-1',
       worktreePath: '/tmp/ws-1',
@@ -280,7 +290,8 @@ describe('RunScriptService process lifecycle', () => {
     });
     const service = new RunScriptService();
     await expect(service.startRunScript('ws-1')).resolves.toMatchObject({ success: true });
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalledTimes(2));
+    await postRunSpawned;
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
 
     const truncated = Buffer.from('ready ➜');
     for (const stream of [runChild.stdout, runChild.stderr, postRunChild.stdout]) {
@@ -353,6 +364,7 @@ describe('RunScriptService process lifecycle', () => {
   // postRun spawned afterwards would run untracked until the server shuts down.
   it('does not spawn the postRun script after the run script was stopped', async () => {
     const service = new RunScriptService();
+    using startPostRun = vi.spyOn(RunScriptExecution.prototype, 'startPostRun');
     const commands = {
       runScriptCommand: 'pnpm dev --port {port}',
       runScriptPostRunCommand: 'pnpm watch:assets',
@@ -360,12 +372,12 @@ describe('RunScriptService process lifecycle', () => {
     };
     mockReconcileWorkspaceCommandCache.mockResolvedValue(commands);
     mockFindFreePort.mockResolvedValue(4100);
-    let resolveTunnel!: (url: string | null) => void;
-    mockEnsureTunnel.mockReturnValue(
-      new Promise<string | null>((resolve) => {
-        resolveTunnel = resolve;
-      })
-    );
+    const tunnelRequested = Promise.withResolvers<void>();
+    const tunnel = Promise.withResolvers<string | null>();
+    mockEnsureTunnel.mockImplementationOnce(() => {
+      tunnelRequested.resolve();
+      return tunnel.promise;
+    });
     const runChild = new FakeChildProcess(1001);
     const postRunChild = new FakeChildProcess(3003);
     mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(postRunChild);
@@ -379,7 +391,8 @@ describe('RunScriptService process lifecycle', () => {
     });
 
     const startPromise = service.startRunScript('ws-1');
-    await vi.waitFor(() => expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 4100));
+    await tunnelRequested.promise;
+    expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 4100);
 
     // User clicks Stop while the tunnel is still coming up.
     mockFindById.mockResolvedValue({
@@ -398,9 +411,9 @@ describe('RunScriptService process lifecycle', () => {
     );
     await expect(service.stopRunScript('ws-1')).resolves.toEqual({ success: true });
 
-    resolveTunnel('https://example.trycloudflare.com');
+    tunnel.resolve('https://example.trycloudflare.com');
     await startPromise;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.all(startPostRun.mock.results.map(({ value }) => value));
 
     // Only the (now stopped) run script should ever have been spawned.
     expect(mockSpawn).toHaveBeenCalledTimes(1);
@@ -410,6 +423,7 @@ describe('RunScriptService process lifecycle', () => {
   // postRun whose tunnel resolves inside that wait must not be spawned.
   it('does not spawn the postRun script while a stop waits for the run to exit', async () => {
     const service = new RunScriptService();
+    using startPostRun = vi.spyOn(RunScriptExecution.prototype, 'startPostRun');
     const commands = {
       runScriptCommand: 'pnpm dev --port {port}',
       runScriptPostRunCommand: 'pnpm watch:assets',
@@ -417,12 +431,12 @@ describe('RunScriptService process lifecycle', () => {
     };
     mockReconcileWorkspaceCommandCache.mockResolvedValue(commands);
     mockFindFreePort.mockResolvedValue(4100);
-    let resolveTunnel!: (url: string | null) => void;
-    mockEnsureTunnel.mockReturnValue(
-      new Promise<string | null>((resolve) => {
-        resolveTunnel = resolve;
-      })
-    );
+    const tunnelRequested = Promise.withResolvers<void>();
+    const tunnel = Promise.withResolvers<string | null>();
+    mockEnsureTunnel.mockImplementationOnce(() => {
+      tunnelRequested.resolve();
+      return tunnel.promise;
+    });
     const runChild = new FakeChildProcess(1001);
     mockSpawn.mockReturnValueOnce(runChild).mockReturnValueOnce(new FakeChildProcess(3003));
     mockFindById.mockResolvedValue({
@@ -435,7 +449,8 @@ describe('RunScriptService process lifecycle', () => {
     });
 
     const startPromise = service.startRunScript('ws-1');
-    await vi.waitFor(() => expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 4100));
+    await tunnelRequested.promise;
+    expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 4100);
 
     mockFindById.mockResolvedValue({
       id: 'ws-1',
@@ -446,17 +461,20 @@ describe('RunScriptService process lifecycle', () => {
       ...commands,
     });
     // SIGTERM is sent, but the run has not exited yet.
-    mockTreeKill.mockImplementation(
-      (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
+    const terminationRequested = Promise.withResolvers<void>();
+    mockTreeKill.mockImplementationOnce(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) => {
+        callback(null);
+        terminationRequested.resolve();
+      }
     );
     const stopPromise = service.stopRunScript('ws-1');
-    await vi.waitFor(() =>
-      expect(mockTreeKill).toHaveBeenCalledWith(1001, 'SIGTERM', expect.any(Function))
-    );
+    await terminationRequested.promise;
+    expect(mockTreeKill).toHaveBeenCalledWith(1001, 'SIGTERM', expect.any(Function));
 
-    resolveTunnel('https://example.trycloudflare.com');
+    tunnel.resolve('https://example.trycloudflare.com');
     await startPromise;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.all(startPostRun.mock.results.map(({ value }) => value));
 
     expect(mockSpawn).toHaveBeenCalledTimes(1);
 

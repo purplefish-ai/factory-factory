@@ -64,6 +64,29 @@ describe('vi.mock metrics', () => {
     });
   });
 
+  it('classifies typed and string mocks identically', () => {
+    const content = [
+      "vi.mock('./helper');",
+      "vi.mock('@/backend/services/session');",
+      "vi.mock('node:fs');",
+      'vi.mock(target);',
+      "vi.doMock('./ignored');",
+    ].join('\n');
+    const typedContent = [
+      "vi.mock(import('./helper'));",
+      "vi.mock(import('@/backend/services/session'));",
+      "vi.mock(import('node:fs'), () => ({}));",
+      'vi.mock(import(target));',
+      "vi.doMock(import('./ignored'));",
+    ].join('\n');
+    const path = 'src/test.test.ts';
+    const capsules = new Set(['session']);
+
+    expect(viMockCounts([{ path, content: typedContent }], capsules)).toEqual(
+      viMockCounts([{ path, content }], capsules)
+    );
+  });
+
   it('counts calls, not vi.mock text in strings, templates or comments', () => {
     const counts = viMockCounts(
       [
