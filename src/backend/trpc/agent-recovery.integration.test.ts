@@ -9,6 +9,7 @@ import {
   h,
   consumer,
   providers,
+  waitForProviders,
   launch,
   strictStop,
   recoveryWorktree,
@@ -236,7 +237,8 @@ it('retries the same run through HTTP and rejects the unchanged earlier target w
   expect((await h.read()).evidence?.resolution?.outcome).toEqual(initialOutcome);
   expect(result.attempt.messageId).not.toBe(h.attempt.messageId);
   expect(result.attempt.sendAttemptId).not.toBe(h.attempt.sendAttemptId);
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
+  expect(providers).toHaveLength(2);
   await providers[1]?.called;
   const after = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } });
   for (const key of [

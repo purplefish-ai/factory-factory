@@ -19,6 +19,7 @@ function exit(child: ChildProcess, code = 0, signal: NodeJS.Signals | null = nul
   child.emit('exit', child.exitCode, signal);
 }
 const onReady = vi.fn<() => Promise<void>>();
+let readinessReached: Promise<void>;
 const options = {
   projectRoot: '/project',
   env: { TEST_ENV: 'kept' },
@@ -39,7 +40,12 @@ beforeEach(() => {
     exit(pid === backend.pid ? backend : frontend, 0, 'SIGTERM');
     return Promise.resolve();
   });
-  onReady.mockResolvedValue();
+  const ready = Promise.withResolvers<void>();
+  readinessReached = ready.promise;
+  onReady.mockImplementation(() => {
+    ready.resolve();
+    return ready.promise;
+  });
   vi.spyOn(console, 'log').mockImplementation(() => {
     /* Keep expected startup logs quiet. */
   });
@@ -55,7 +61,7 @@ it.each([0, 2])(
   async (code) => {
     const session = runServeSession({ ...options, signal: new AbortController().signal });
     const failed = expect(session).rejects.toThrow(/Backend.*exited/);
-    await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+    await readinessReached;
     exit(backend, code);
     await failed;
     expect(treeKillAsync).toHaveBeenCalledExactlyOnceWith(4322, 'SIGTERM');
@@ -120,17 +126,21 @@ it('cleans up both children when readiness fails', async () => {
 });
 
 it('observes exits while the browser is still opening', async () => {
-  onReady.mockImplementation(
-    () =>
-      new Promise(() => {
-        /* Intentionally pending readiness/browser work. */
-      })
-  );
+  const browserOpening = Promise.withResolvers<void>();
+  const browserWork = Promise.withResolvers<void>();
+  onReady.mockImplementation(() => {
+    browserOpening.resolve();
+    return browserWork.promise;
+  });
   const session = runServeSession({ ...options, signal: new AbortController().signal });
   const failed = expect(session).rejects.toThrow(/Frontend.*exited/);
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+  await browserOpening.promise;
   exit(frontend);
-  await failed;
+  try {
+    await failed;
+  } finally {
+    browserWork.resolve();
+  }
   expect(treeKillAsync).toHaveBeenCalledExactlyOnceWith(4321, 'SIGTERM');
 });
 
@@ -168,7 +178,7 @@ it('bounds sibling cleanup after a crash and escalates a child that ignores SIGT
 it('preserves development commands, environment and readiness ports', async () => {
   const controller = new AbortController();
   const session = runServeSession({ ...options, signal: controller.signal });
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+  await readinessReached;
   expect(spawn).toHaveBeenNthCalledWith(
     1,
     '/project/node_modules/.bin/tsx',
@@ -208,7 +218,7 @@ it('preserves development commands, environment and readiness ports', async () =
 it('starts the compiled production server with static assets and one readiness check', async () => {
   const controller = new AbortController();
   const session = runServeSession({ ...options, dev: false, signal: controller.signal });
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+  await readinessReached;
   expect(spawn).toHaveBeenCalledExactlyOnceWith('node', ['/project/dist/src/backend/index.js'], {
     cwd: '/project',
     env: { TEST_ENV: 'kept', FRONTEND_STATIC_PATH: '/project/dist/client' },
@@ -260,7 +270,7 @@ it('exposes an IPC backend to the update supervisor and accepts its expected exi
     onBackend: connected,
     isExpectedBackendExit: () => expectedExit,
   });
-  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+  await readinessReached;
   expect(connected).toHaveBeenCalledWith(backend);
   expect(vi.mocked(spawn).mock.calls[0]?.[2]?.stdio).toEqual([
     'inherit',

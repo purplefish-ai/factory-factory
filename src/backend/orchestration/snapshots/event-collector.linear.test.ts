@@ -1,8 +1,12 @@
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { PR_DETACHED, PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED } from '@/backend/services/github';
-import { deriveWorkspaceFlowState, WorkspaceSnapshotStore } from '@/backend/services/workspace';
+import {
+  deriveWorkspaceFlowState,
+  SNAPSHOT_CHANGED,
+  WorkspaceSnapshotStore,
+} from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 
@@ -300,9 +304,11 @@ it('refreshes primary and aggregate facts without completing an issue for a merg
     },
   });
   try {
+    const projected = once(store, SNAPSHOT_CHANGED);
     emitMerge(8, 'https://github.com/org/repo/pull/8', 'merged-sibling');
     expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
-    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE'));
+    await projected;
+    expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE');
     expect(store.getByWorkspaceId('ws-1')).toMatchObject({
       prState: 'OPEN',
       prNumber: 7,
@@ -342,13 +348,15 @@ it('keeps the authoritative primary when a second association is attached', asyn
     prHasMergeConflict: false,
   });
   try {
+    const projected = once(store, SNAPSHOT_CHANGED);
     prSnapshotService.emit(PR_URL_ATTACHED, {
       workspaceId: 'ws-1',
       prId: 'new-sibling',
       prUrl: 'https://github.com/org/repo/pull/8',
     });
     expect(store.getByWorkspaceId('ws-1')?.prUrl).toBe('https://github.com/org/repo/pull/7');
-    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE'));
+    await projected;
+    expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('FAILURE');
     expect(store.getByWorkspaceId('ws-1')?.prNumber).toBe(7);
   } finally {
     collector.stop();
@@ -376,8 +384,10 @@ it('completes an association-aware merge after its final open sibling is detache
   };
   findById.mockResolvedValue({ ...projection, prState: 'OPEN', ratchetState: 'READY' });
   try {
+    const projected = once(store, SNAPSHOT_CHANGED);
     emitMerge(7, projection.prUrl, 'merged-association');
-    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('SUCCESS'));
+    await projected;
+    expect(store.getByWorkspaceId('ws-1')?.prCiStatus).toBe('SUCCESS');
     expect(markIssueCompleted).not.toHaveBeenCalled();
     findById.mockResolvedValue({ ...projection, prState: 'MERGED', ratchetState: 'MERGED' });
     const completionRequested = signalIssueCompletion();
@@ -446,8 +456,10 @@ it('shares PR and monitoring freshness without a broad workspace read or repeate
     expect(findById).not.toHaveBeenCalled();
 
     findRatchetProjection.mockResolvedValue({ ...projection, prNumber: 9, prState: 'MERGED' });
+    const projected = once(store, SNAPSHOT_CHANGED);
     ratchetService.emit('ratchet_dispatch_changed', { workspaceId: 'ws-1' });
-    await vi.waitFor(() => expect(store.getByWorkspaceId('ws-1')?.prState).toBe('MERGED'));
+    await projected;
+    expect(store.getByWorkspaceId('ws-1')?.prState).toBe('MERGED');
     expect(checkWorkspaceById).toHaveBeenCalledTimes(1);
     expect(markIssueCompleted).not.toHaveBeenCalled();
     expect(findRatchetProjection).toHaveBeenCalledTimes(4);

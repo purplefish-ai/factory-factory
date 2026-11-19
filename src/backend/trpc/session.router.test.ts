@@ -3,6 +3,7 @@ import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
+import { deferred } from '@/test-utils/deferred';
 import { SessionProvider } from '@prisma-gen/client';
 
 const mockSessionDataService = vi.hoisted(() => ({
@@ -131,12 +132,12 @@ describe('sessionRouter', () => {
   describe('sub-agent browsing', () => {
     it('waits for parent restoration before checking negotiated browse capability', async () => {
       const { caller, acpRuntimeManager, sessionLifecycleService } = createCaller();
-      let resolveRestoration!: (restored: boolean) => void;
-      sessionLifecycleService.ensureSubagentBrowseSession.mockReturnValueOnce(
-        new Promise<boolean>((resolve) => {
-          resolveRestoration = resolve;
-        })
-      );
+      const restorationStarted = deferred();
+      const restoration = deferred<boolean>();
+      sessionLifecycleService.ensureSubagentBrowseSession.mockImplementationOnce(() => {
+        restorationStarted.resolve();
+        return restoration.promise;
+      });
       acpRuntimeManager.getSubagentBrowseCapability.mockReturnValue({
         version: 1,
         list: true,
@@ -146,14 +147,11 @@ describe('sessionRouter', () => {
       acpRuntimeManager.listSubagents.mockResolvedValue({ subagents: [], nextCursor: null });
 
       const result = caller.listSubagents({ sessionId: 'session-1', limit: 50 });
-      await vi.waitFor(() => {
-        expect(sessionLifecycleService.ensureSubagentBrowseSession).toHaveBeenCalledWith(
-          'session-1'
-        );
-      });
+      await restorationStarted.promise;
+      expect(sessionLifecycleService.ensureSubagentBrowseSession).toHaveBeenCalledWith('session-1');
       expect(acpRuntimeManager.getSubagentBrowseCapability).not.toHaveBeenCalled();
 
-      resolveRestoration(true);
+      restoration.resolve(true);
       await expect(result).resolves.toEqual({
         supported: true,
         subagents: [],

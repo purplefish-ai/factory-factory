@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
+import { createDeferredCall } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -99,17 +100,15 @@ describe('SessionService steering conversion', () => {
 
   it('steers before the original prompt settles without resetting its turn tracking', async () => {
     const { service, runtime, processor, domain, completion } = harness();
-    let resolveOriginal!: (result: { stopReason: string }) => void;
-    const originalResponse = new Promise<{ stopReason: string }>((resolve) => {
-      resolveOriginal = resolve;
-    });
-    runtime.sendPrompt.mockReturnValueOnce(originalResponse);
+    const originalResponse = createDeferredCall<{ stopReason: string }>();
+    runtime.sendPrompt.mockImplementationOnce(originalResponse.run);
     let originalSettled = false;
     const original = service.sendSessionMessage('session', 'Original task').finally(() => {
       originalSettled = true;
     });
     try {
-      await vi.waitFor(() => expect(runtime.sendPrompt).toHaveBeenCalledOnce());
+      await originalResponse.entered;
+      expect(runtime.sendPrompt).toHaveBeenCalledOnce();
       await service.steerSessionMessage('session', 'Updated task');
 
       expect(originalSettled).toBe(false);
@@ -122,7 +121,7 @@ describe('SessionService steering conversion', () => {
       expect(domain.setRuntimeSnapshot).toHaveBeenCalledOnce();
       expect(completion.schedule).not.toHaveBeenCalled();
     } finally {
-      resolveOriginal({ stopReason: 'end_turn' });
+      originalResponse.resolve({ stopReason: 'end_turn' });
       await original;
     }
     expect(processor.finishPromptTurn).toHaveBeenCalledExactlyOnceWith('session');

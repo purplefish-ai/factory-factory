@@ -9,6 +9,7 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
 import { sendArmedWorkspaceMailBatch } from './session-mail-signal-dispatch';
@@ -176,6 +177,7 @@ it('keeps unsupported native mail steering queued and dispatches it at turn comp
     assertAllowed: () => undefined,
   });
   const signal = sessionDomainService.peekNextMessage('session')!;
+  const resume = vi.spyOn(h.dispatcher, 'tryDispatchNextMessage');
   await expect(h.dispatcher.steerWorkspaceMailSignal('session', signal.id)).rejects.toThrow(
     'adapter unsupported'
   );
@@ -183,7 +185,8 @@ it('keeps unsupported native mail steering queued and dispatches it at turn comp
   expect(h.notificationPort.settleWake).not.toHaveBeenCalled();
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
   await h.dispatcher.tryDispatchNextMessage('session');
-  await vi.waitFor(() => expect(h.sendSessionMessage).toHaveBeenCalledOnce());
+  await resume.mock.results[0]?.value;
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
   expect(h.notificationPort.settleWake).toHaveBeenCalledWith(h.wake);
 });
 
@@ -314,15 +317,20 @@ it('preserves replacement same-ID queued mail and transcript when the previous s
 
 it('arms a queued mail receipt durably before calling the provider', async () => {
   const h = mailHarness();
+  const quarantineStarted = deferred();
   const arming = deferred<boolean>();
-  h.notificationPort.quarantineWake.mockReturnValueOnce(arming.promise);
+  h.notificationPort.quarantineWake.mockImplementationOnce(() => {
+    quarantineStarted.resolve();
+    return arming.promise;
+  });
   await h.notifications.recoverPending({
     sessionId: 'session',
     workspaceId: 'workspace',
     assertAllowed: () => undefined,
   });
   const dispatch = h.dispatcher.tryDispatchNextMessage('session');
-  await vi.waitFor(() => expect(h.notificationPort.quarantineWake).toHaveBeenCalledOnce());
+  await quarantineStarted.promise;
+  expect(h.notificationPort.quarantineWake).toHaveBeenCalledOnce();
   expect(h.sendSessionMessage).not.toHaveBeenCalled();
   arming.resolve(true);
   await dispatch;
@@ -515,14 +523,6 @@ it.each([false, true])(
   }
 );
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
 it('preserves known-unsent provenance when the prompt batch contains no mail receipts', async () => {
   const h = mailHarness();
   const failure = new Error('authority changed without mail');
@@ -570,7 +570,9 @@ it('hands an idle native-steer fallback to ordinary dispatch without dropping it
 
 it('replays turn-completion recovery after the queued wake receipt and dispatch claim settle', async () => {
   const h = mailHarness();
-  const sending = deferred<void>();
+  const sendStarted = deferred();
+  const sending = deferred();
+  const settlementStarted = deferred();
   const settlement = deferred<boolean>();
   const nextWake = { ...h.wake, revision: 4, claimId: 'claim-new' };
   h.notificationPort.claimWake
@@ -578,15 +580,22 @@ it('replays turn-completion recovery after the queued wake receipt and dispatch 
     .mockResolvedValueOnce(h.wake)
     .mockResolvedValueOnce(nextWake)
     .mockResolvedValue(null);
-  h.sendSessionMessage.mockReturnValueOnce(sending.promise);
-  h.notificationPort.settleWake.mockReturnValueOnce(settlement.promise);
+  h.sendSessionMessage.mockImplementationOnce(() => {
+    sendStarted.resolve();
+    return sending.promise;
+  });
+  h.notificationPort.settleWake.mockImplementationOnce(() => {
+    settlementStarted.resolve();
+    return settlement.promise;
+  });
   await h.notifications.recoverPending({
     sessionId: 'session',
     workspaceId: 'workspace',
     assertAllowed: () => undefined,
   });
   const dispatch = h.dispatcher.tryDispatchNextMessage('session');
-  await vi.waitFor(() => expect(h.sendSessionMessage).toHaveBeenCalledOnce());
+  await sendStarted.promise;
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
   expect(
     await h.notifications.recoverPending({
       sessionId: 'session',
@@ -594,12 +603,13 @@ it('replays turn-completion recovery after the queued wake receipt and dispatch 
       assertAllowed: () => undefined,
     })
   ).toEqual({ dispatchableCount: 0 });
-  sending.resolve(undefined);
-  await vi.waitFor(() => expect(h.notificationPort.settleWake).toHaveBeenCalledOnce());
+  sending.resolve();
+  await settlementStarted.promise;
+  expect(h.notificationPort.settleWake).toHaveBeenCalledOnce();
   await h.dispatcher.tryDispatchNextMessage('session');
   settlement.resolve(true);
   await dispatch;
-  await vi.waitFor(() => expect(h.sendSessionMessage).toHaveBeenCalledTimes(2));
+  expect(h.sendSessionMessage).toHaveBeenCalledTimes(2);
   expect(h.sendSessionMessage.mock.calls[1]?.[1]).toContain('revision 4');
 });
 
@@ -784,7 +794,7 @@ it('recovers newer eligible mail after the late native receipt clears its prior 
     claimId: 'new-mail',
   });
   await h.steerSessionMessage.mock.calls[0]?.[2]?.onLateInjected?.();
-  await vi.waitFor(() => expect(h.sendSessionMessage).toHaveBeenCalledOnce());
+  expect(h.sendSessionMessage).toHaveBeenCalledOnce();
   expect(h.sendSessionMessage.mock.calls[0]?.[1]).toContain('revision 4');
 });
 
@@ -930,9 +940,7 @@ it('waits for timeout quarantine before recovering a racing late non-injection r
     AcpSteeringTimeoutError
   );
   await lateReceipt;
-  await vi.waitFor(() =>
-    expect(h.notificationPort.releaseWake).toHaveBeenCalledExactlyOnceWith(h.wake)
-  );
+  expect(h.notificationPort.releaseWake).toHaveBeenCalledExactlyOnceWith(h.wake);
   expect(h.notifications.isMailSignalQuarantined(signal.id)).toBe(false);
   expect(sessionDomainService.getQueueSnapshot('session')).toEqual([
     expect.objectContaining({ id: signal.id }),

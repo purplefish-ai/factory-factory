@@ -1,6 +1,7 @@
 import { setImmediate } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import type { ExecResult } from '@/backend/lib/shell';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { WorkspaceGitStateService } from './workspace-git-state.service';
 
 function deferred<T>() {
@@ -201,7 +202,8 @@ describe('WorkspaceGitStateService command scheduling', () => {
     const mergeBase = deferred<ExecResult>();
     const upstream = deferred<ExecResult>();
     const failure = new Error('status spawn failed');
-    const commands: string[][] = [];
+    const calls = createTestEventLog<string[]>();
+    const commands = calls.events;
     const pending: Array<() => void> = [];
     let failing = true;
     let active = 0;
@@ -212,7 +214,7 @@ describe('WorkspaceGitStateService command scheduling', () => {
         if (!failing) {
           return Promise.resolve(result(args));
         }
-        commands.push(args);
+        calls.record(args);
         active++;
         peak = Math.max(peak, active);
         const response = args.includes('status')
@@ -237,7 +239,8 @@ describe('WorkspaceGitStateService command scheduling', () => {
     });
     const rejected = expect(service.getSnapshot(input)).rejects.toBe(failure);
     try {
-      await vi.waitFor(() => expect(commands).toHaveLength(3));
+      await calls.waitForCount(3);
+      expect(commands).toHaveLength(3);
       status.reject(failure);
       await rejected;
       // Both sibling lookups are still pending when the caller receives its error.

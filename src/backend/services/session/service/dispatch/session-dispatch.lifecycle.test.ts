@@ -6,6 +6,7 @@ import {
 } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import { deferred } from '@/test-utils/deferred';
 
 const {
   mockSessionDomainService,
@@ -97,6 +98,17 @@ function createIdleClient() {
   return { sessionId: 's1' };
 }
 
+function observeInvocation<T>(result: Promise<T>) {
+  const started = deferred();
+  return {
+    started: started.promise,
+    call: () => {
+      started.resolve();
+      return result;
+    },
+  };
+}
+
 describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('fails fast when dispatch occurs before lifecycle configuration', async () => {
     await expect(createTestSessionDispatcher().tryDispatchNextMessage('s1')).rejects.toThrow(
@@ -177,26 +189,18 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
   it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
     mockSessionService.getSessionClient.mockReturnValue({});
-    let resolveSession!: (session: {
-      workspace: {
-        status: string;
-        worktreePath: string;
-        initErrorMessage: null;
-      };
-    }) => void;
-    mockSessionDataService.findAgentSessionById.mockReturnValue(
-      new Promise((resolve) => {
-        resolveSession = resolve;
-      })
-    );
+    const session = deferred<{
+      workspace: { status: string; worktreePath: string; initErrorMessage: null };
+    }>();
+    const lookup = observeInvocation(session.promise);
+    mockSessionDataService.findAgentSessionById.mockImplementationOnce(lookup.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
-    });
+    await lookup.started;
+    expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
-    resolveSession({
+    session.resolve({
       workspace: {
         status: 'READY',
         worktreePath: '/tmp/w1',
@@ -215,26 +219,18 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
     });
-    let resolveSession!: (session: {
-      workspace: {
-        status: string;
-        worktreePath: string;
-        initErrorMessage: null;
-      };
-    }) => void;
-    mockSessionDataService.findAgentSessionById.mockReturnValue(
-      new Promise((resolve) => {
-        resolveSession = resolve;
-      })
-    );
+    const session = deferred<{
+      workspace: { status: string; worktreePath: string; initErrorMessage: null };
+    }>();
+    const lookup = observeInvocation(session.promise);
+    mockSessionDataService.findAgentSessionById.mockImplementationOnce(lookup.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
-    });
+    await lookup.started;
+    expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
-    resolveSession({
+    session.resolve({
       workspace: {
         status: 'ARCHIVED',
         worktreePath: '/tmp/w1',
@@ -248,22 +244,19 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('fails a dequeued message for recovery when stop begins during dispatch configuration', async () => {
-    let resolveModelUpdate!: () => void;
-    const modelUpdate = new Promise<void>((resolve) => {
-      resolveModelUpdate = resolve;
-    });
+    const modelUpdate = deferred();
+    const configuring = observeInvocation(modelUpdate.promise);
     mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessageWithAttachment);
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessageWithAttachment);
     mockSessionService.getSessionClient.mockReturnValue({});
-    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+    mockSessionService.setSessionModel.mockImplementationOnce(configuring.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    });
+    await configuring.started;
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
-    resolveModelUpdate();
+    modelUpdate.resolve();
     await dispatchPromise;
 
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
@@ -282,15 +275,15 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     const modelUpdate = new Promise<void>((_resolve, reject) => {
       rejectModelUpdate = reject;
     });
+    const configuring = observeInvocation(modelUpdate);
     mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessageWithAttachment);
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessageWithAttachment);
     mockSessionService.getSessionClient.mockReturnValue({});
-    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+    mockSessionService.setSessionModel.mockImplementationOnce(configuring.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    });
+    await configuring.started;
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
     rejectModelUpdate(new Error('session stopped'));
@@ -307,25 +300,22 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   });
 
   it('fails a dequeued message for recovery when stop completes during configuration', async () => {
-    let resolveModelUpdate!: () => void;
-    const modelUpdate = new Promise<void>((resolve) => {
-      resolveModelUpdate = resolve;
-    });
+    const modelUpdate = deferred();
+    const configuring = observeInvocation(modelUpdate.promise);
     let stopGeneration = 0;
     mockSessionService.getGeneration.mockImplementation(() => stopGeneration);
     mockSessionService.hasStopSince.mockImplementation(
       (_sessionId: string, generation: number) => generation !== stopGeneration
     );
     mockSessionService.getSessionClient.mockReturnValue({});
-    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+    mockSessionService.setSessionModel.mockImplementationOnce(configuring.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    });
+    await configuring.started;
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
 
     stopGeneration += 1;
-    resolveModelUpdate();
+    modelUpdate.resolve();
     await dispatchPromise;
 
     expect(mockSessionService.isSessionStopping).toHaveReturnedWith(false);
@@ -345,23 +335,20 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       ...queuedMessage,
       id: 'workspace-notification-notif-parent',
     };
-    let resolveModelUpdate!: () => void;
-    const modelUpdate = new Promise<void>((resolve) => {
-      resolveModelUpdate = resolve;
-    });
+    const modelUpdate = deferred();
+    const configuring = observeInvocation(modelUpdate.promise);
     mockSessionDomainService.peekNextMessage.mockReturnValue(notificationMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(notificationMessage);
     mockSessionService.getSessionClient.mockReturnValue({});
-    mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
+    mockSessionService.setSessionModel.mockImplementationOnce(configuring.call);
     mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(true);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
-    });
+    await configuring.started;
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
-    resolveModelUpdate();
+    modelUpdate.resolve();
     await dispatchPromise;
 
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
@@ -374,19 +361,18 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('keeps a dispatched prompt when stopping interrupts the first turn', async () => {
     let rejectPrompt!: (error: Error) => void;
     mockSessionService.getSessionClient.mockReturnValue(createIdleClient());
-    mockSessionService.sendSessionMessage.mockReturnValue(
-      new Promise<void>((_resolve, reject) => {
-        rejectPrompt = reject;
-      })
-    );
-    const dispatch = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
-        's1',
-        queuedMessage,
-        0
-      );
+    const send = new Promise<void>((_resolve, reject) => {
+      rejectPrompt = reject;
     });
+    const sending = observeInvocation(send);
+    mockSessionService.sendSessionMessage.mockImplementationOnce(sending.call);
+    const dispatch = sessionDispatchService.tryDispatchNextMessage('s1');
+    await sending.started;
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
+      's1',
+      queuedMessage,
+      0
+    );
     mockSessionService.hasStopSince.mockReturnValue(true);
     rejectPrompt(new Error('Connection closed'));
     await dispatch;
@@ -589,9 +575,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
 
       await vi.advanceTimersByTimeAsync(1000);
-      await vi.waitFor(() => {
-        expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
-      });
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
     } finally {
       sessionDispatchService.resetDispatchState('s1');
       vi.useRealTimers();
@@ -616,17 +600,13 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
       await sessionDispatchService.tryDispatchNextMessage('s1');
       await vi.advanceTimersByTimeAsync(1000);
-      await vi.waitFor(() => {
-        expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1', 'send failed');
-      });
+      expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1', 'send failed');
 
       await sessionDispatchService.tryDispatchNextMessage('s1');
       expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(3);
 
       await vi.advanceTimersByTimeAsync(1000);
-      await vi.waitFor(() => {
-        expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(4);
-      });
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(4);
     } finally {
       sessionDispatchService.resetDispatchState('s1');
       vi.useRealTimers();
@@ -799,17 +779,14 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
 
-    let resolveSend: (() => void) | undefined;
-    const sendPromise = new Promise<void>((resolve) => {
-      resolveSend = resolve;
-    });
-    mockSessionService.sendSessionMessage.mockReturnValue(sendPromise);
+    const send = deferred();
+    const sending = observeInvocation(send.promise);
+    mockSessionService.sendSessionMessage.mockImplementationOnce(sending.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
 
-    await vi.waitFor(() => {
-      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    });
+    await sending.started;
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
 
     // The commit publishes its own targeted delta instead of a full snapshot.
     expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
@@ -827,7 +804,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       })
     );
 
-    resolveSend?.();
+    send.resolve();
     await dispatchPromise;
 
     expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
@@ -925,18 +902,15 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockImplementation(() => queue.shift());
     mockSessionDomainService.allocateOrder.mockReturnValueOnce(0).mockReturnValueOnce(1);
 
-    let resolveFirstSend: (() => void) | undefined;
-    const firstSendPromise = new Promise<void>((resolve) => {
-      resolveFirstSend = resolve;
-    });
+    const firstSend = deferred();
+    const sending = observeInvocation(firstSend.promise);
     mockSessionService.sendSessionMessage
-      .mockReturnValueOnce(firstSendPromise)
+      .mockImplementationOnce(sending.call)
       .mockResolvedValueOnce(undefined);
 
     const firstDispatch = sessionDispatchService.tryDispatchNextMessage('s1');
-    await vi.waitFor(() => {
-      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
-    });
+    await sending.started;
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
 
     queue.push(secondQueuedMessage);
     sessionDispatchService.resetDispatchState('s1');
@@ -944,7 +918,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
     expect(mockSessionService.sendSessionMessage).toHaveBeenNthCalledWith(2, 's1', 'after stop');
 
-    resolveFirstSend?.();
+    firstSend.resolve();
     await firstDispatch;
   });
 

@@ -5,6 +5,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { agentSourceCursorSchema, agentSourceHealthSchema } from '@/shared/agent-runtime';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import type { SlackSocketHandlers } from './slack-event-source';
 
 const logs = vi.hoisted(() => [] as unknown[][]);
@@ -31,7 +32,8 @@ let runtime: typeof import('../../index');
 let sourceAccessor: typeof import('../../resources/agent-source.accessor').agentSourceAccessor;
 let connectionId: string;
 let definitionId: string;
-let sockets: FakeSocket[];
+let socketLog = createTestEventLog<FakeSocket>();
+let sockets = socketLog.events;
 let credentials: { appToken: string; appId: string; workspaceId: string } | null;
 let enabled: boolean;
 let ingest: typeof import('../../index').ingestEvent;
@@ -98,7 +100,7 @@ function createSource(options: { connectTimeoutMs?: number } = {}) {
   return new runtime.SlackEventSource({
     createSocket: (appToken, handlers) => {
       const socket = new FakeSocket(appToken, handlers, autoHello);
-      sockets.push(socket);
+      socketLog.record(socket);
       return socket;
     },
     getAppCredentials: (id) =>
@@ -193,7 +195,8 @@ beforeEach(async () => {
       activationGeneration: 1,
     },
   });
-  sockets = [];
+  socketLog = createTestEventLog<FakeSocket>();
+  sockets = socketLog.events;
   logs.length = 0;
   autoHello = 'A1';
   enabled = true;
@@ -372,7 +375,8 @@ it.each([
 it('refuses a socket whose hello names another app', async () => {
   autoHello = null;
   const pending = source.reconcileConnections(signal);
-  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  await socketLog.waitForCount(1);
+  expect(sockets).toHaveLength(1);
   const socket = sockets[0] as FakeSocket;
   socket.hello('A-other');
   await pending;
@@ -389,7 +393,8 @@ it('refuses a socket whose hello names another app', async () => {
 it('refuses a hello without connection info', async () => {
   autoHello = null;
   const pending = source.reconcileConnections(signal);
-  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  await socketLog.waitForCount(1);
+  expect(sockets).toHaveLength(1);
   const socket = sockets[0] as FakeSocket;
   socket.handlers.onHello({ type: 'hello', num_connections: 1 });
   socket.hello('A1');
@@ -440,7 +445,8 @@ it('records a delivery gap on disconnect and closes it when the listener reconne
 it('treats a socket that closes before hello as a failed attempt and backs off', async () => {
   autoHello = null;
   const pending = source.reconcileConnections(signal);
-  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  await socketLog.waitForCount(1);
+  expect(sockets).toHaveLength(1);
   const socket = sockets[0] as FakeSocket;
   socket.drop();
   socket.fail(new Error('socket closed'));
@@ -528,7 +534,8 @@ it('leaves one live socket when a stalled connection attempt completes after its
 it('closes a socket whose connection attempt finishes after stop', async () => {
   autoHello = null;
   const pending = source.reconcileConnections(signal);
-  await vi.waitFor(() => expect(sockets).toHaveLength(1));
+  await socketLog.waitForCount(1);
+  expect(sockets).toHaveLength(1);
   await source.stop();
   const socket = sockets[0] as FakeSocket;
   expect(socket.disconnects).toBe(1);
@@ -701,7 +708,7 @@ it('waits for an envelope in flight on any connection before it records the stop
   source = new runtime.SlackEventSource({
     createSocket: (appToken, handlers) => {
       const socket = new FakeSocket(appToken, handlers, appToken === 'xapp-other' ? 'A2' : 'A1');
-      sockets.push(socket);
+      socketLog.record(socket);
       return socket;
     },
     getAppCredentials: (id) =>

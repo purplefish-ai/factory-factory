@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { makeCompleteWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import { KanbanProvider, useKanban, useKanbanActions } from './kanban-context';
 
@@ -41,6 +42,8 @@ interface MutationOptions {
   onError?: (error: ArchiveError) => void;
 }
 
+let archiveInputs = createTestEventLog<unknown>();
+
 const mocks = vi.hoisted(() => ({
   archiveError: undefined as ArchiveError | undefined,
   archiveResponse: undefined as Promise<unknown> | undefined,
@@ -56,7 +59,6 @@ const mocks = vi.hoisted(() => ({
   workspaceListInvalidateMock: vi.fn(),
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
-  archiveInputs: [] as unknown[],
   bulkArchiveInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
@@ -166,7 +168,7 @@ vi.mock('@/client/lib/trpc', () => ({
       archive: rejectingMutation(
         () => mocks.archiveError,
         () => mocks.archiveResponse,
-        (input) => mocks.archiveInputs.push(input)
+        (input) => archiveInputs.record(input)
       ),
       bulkArchive: rejectingMutation(
         () => mocks.bulkArchiveError,
@@ -243,7 +245,7 @@ beforeEach(() => {
   mocks.archiveError = undefined;
   mocks.archiveResponse = undefined;
   mocks.bulkArchiveError = undefined;
-  mocks.archiveInputs = [];
+  archiveInputs = createTestEventLog<unknown>();
   mocks.bulkArchiveInputs = [];
   mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
@@ -361,7 +363,7 @@ describe('KanbanProvider archive failure handling', () => {
     mocks.archiveError = undefined;
     await expectArchiveToResolve(() => context!.retryGitLockedArchives(true));
 
-    expect(mocks.archiveInputs.at(-1)).toEqual({
+    expect(archiveInputs.events.at(-1)).toEqual({
       id: 'workspace-1',
       removeGitIndexLock: true,
     });
@@ -557,13 +559,15 @@ describe('KanbanProvider archive failure handling', () => {
     });
     renderProvider();
     const first = context!.archiveWorkspace('workspace-1');
-    await vi.waitFor(() => expect(mocks.archiveInputs).toHaveLength(1));
+    await archiveInputs.waitForCount(1);
+    expect(archiveInputs.events).toHaveLength(1);
     rerenderProvider();
     mocks.archiveResponse = new Promise<void>((resolve) => {
       finishSecond = resolve;
     });
     const second = context!.archiveWorkspace('workspace-1');
-    await vi.waitFor(() => expect(mocks.archiveInputs).toHaveLength(2));
+    await archiveInputs.waitForCount(2);
+    expect(archiveInputs.events).toHaveLength(2);
     finishFirst();
     await first;
     rerenderProvider();

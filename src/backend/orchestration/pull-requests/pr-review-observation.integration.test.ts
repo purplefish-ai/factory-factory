@@ -10,6 +10,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import { deferred } from '@/test-utils/deferred';
 import type { PrismaClient } from '@prisma-gen/client';
 import type { PRObservationPorts } from './pr-observation-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
@@ -303,18 +304,18 @@ it('reads only core facts while monitoring is off and baselines reviews when it 
 
 it('rejects a core-only observation when monitoring turns on before it is accepted', async () => {
   const { target, ports } = await setup({ enabled: false });
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const readStarted = deferred();
+  const read = deferred();
   vi.mocked(githubCLIService.getPRStatusDetails).mockImplementationOnce(async () => {
-    await released;
+    readStarted.resolve();
+    await read.promise;
     return core;
   });
   const observing = observeMonitoredPR(ports, target, { force: true });
-  await vi.waitFor(() => expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledOnce());
+  await readStarted.promise;
+  expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledOnce();
   await setMonitoring(target.workspaceId, true);
-  release();
+  read.resolve();
   expect(await observing).toBe(false);
   expect(reviewReads()).toBe(0);
   expect(await workspacePrSnapshotService.find(target)).toMatchObject({ revision: 0 });

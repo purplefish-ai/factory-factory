@@ -19,6 +19,8 @@ import {
   type WebSocketTestServer,
   waitForWebSocketMessage,
 } from '@/backend/testing/websocket-test-utils';
+import { SnapshotServerMessageSchema } from '@/shared/workspace-snapshot';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   CIStatus,
@@ -287,25 +289,6 @@ function waitForSocketError(ws: WebSocket): Promise<Error> {
   });
 }
 
-async function connectAndCaptureMessages(url: string): Promise<{
-  messages: unknown[];
-  ws: WebSocket;
-}> {
-  const messages: unknown[] = [];
-  const ws = new WebSocket(url, { headers: { Origin: allowedOrigin } });
-  ws.on('message', (data) => {
-    const payload = Buffer.isBuffer(data) ? data.toString() : String(data);
-    messages.push(JSON.parse(payload));
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    ws.once('open', () => resolve());
-    ws.once('error', (error) => reject(error));
-  });
-
-  return { ws, messages };
-}
-
 describe('websocket integration', () => {
   it.each([
     {
@@ -505,19 +488,22 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/dev-logs');
     openServers.add(server);
 
-    const { ws, messages } = await connectAndCaptureMessages(
-      `ws://127.0.0.1:${server.port}/dev-logs?workspaceId=${workspaceId}`
-    );
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/dev-logs?workspaceId=${workspaceId}`, {
+      headers: { Origin: allowedOrigin },
+    });
     openSockets.add(ws);
 
-    await vi.waitFor(() => {
-      expect(messages).toContainEqual({ type: 'output', data: 'buffered logs\n', replay: true });
+    const outputSchema = z.object({ type: z.literal('output'), data: z.string() });
+    const isOutput = (message: unknown) => outputSchema.safeParse(message).success;
+    await expect(waitForWebSocketMessage(ws, 2000, isOutput)).resolves.toEqual({
+      type: 'output',
+      data: 'buffered logs\n',
+      replay: true,
     });
 
+    const liveOutput = waitForWebSocketMessage(ws, 2000, isOutput);
     runScriptService.emit(workspaceId, 'live logs\n');
-    await vi.waitFor(() => {
-      expect(messages).toContainEqual({ type: 'output', data: 'live logs\n' });
-    });
+    await expect(liveOutput).resolves.toEqual({ type: 'output', data: 'live logs\n' });
   });
 
   it('snapshots handler sends full snapshot and emits change/remove deltas', async () => {
@@ -579,21 +565,27 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/snapshots');
     openServers.add(server);
 
-    const { ws, messages } = await connectAndCaptureMessages(
-      `ws://127.0.0.1:${server.port}/snapshots?projectId=${projectId}`
-    );
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/snapshots?projectId=${projectId}`, {
+      headers: { Origin: allowedOrigin },
+    });
     openSockets.add(ws);
 
-    await vi.waitFor(() => {
-      expect(messages).toContainEqual(
-        expect.objectContaining({
-          type: 'snapshot_full',
-          projectId,
-          entries: expect.arrayContaining([expect.objectContaining({ workspaceId })]),
-        })
-      );
+    const fullSnapshot = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => SnapshotServerMessageSchema.safeParse(message).data?.type === 'snapshot_full'
+    );
+    await expect(fullSnapshot).resolves.toMatchObject({
+      type: 'snapshot_full',
+      projectId,
+      entries: expect.arrayContaining([expect.objectContaining({ workspaceId })]),
     });
 
+    const changedSnapshot = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => SnapshotServerMessageSchema.safeParse(message).data?.type === 'snapshot_changed'
+    );
     workspaceSnapshotStore.upsert(
       workspaceId,
       {
@@ -605,25 +597,19 @@ describe('websocket integration', () => {
       Date.now() + 1000
     );
 
-    await vi.waitFor(() => {
-      expect(messages).toContainEqual(
-        expect.objectContaining({
-          type: 'snapshot_changed',
-          workspaceId,
-          entry: expect.objectContaining({
-            prUrl: 'https://github.com/acme/repo/pull/123',
-          }),
-        })
-      );
+    await expect(changedSnapshot).resolves.toMatchObject({
+      type: 'snapshot_changed',
+      workspaceId,
+      entry: { prUrl: 'https://github.com/acme/repo/pull/123' },
     });
 
+    const removedSnapshot = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => SnapshotServerMessageSchema.safeParse(message).data?.type === 'snapshot_removed'
+    );
     workspaceSnapshotStore.remove(workspaceId);
-
-    await vi.waitFor(() => {
-      expect(messages).toContainEqual(
-        expect.objectContaining({ type: 'snapshot_removed', workspaceId })
-      );
-    });
+    await expect(removedSnapshot).resolves.toMatchObject({ type: 'snapshot_removed', workspaceId });
   });
 
   it('chat handler rejects invalid websocket payloads with error message', async () => {
@@ -685,17 +671,22 @@ describe('websocket integration', () => {
     );
     openSockets.add(ws);
 
+    const loadStarted = deferred();
+    const prepareLoad = vi.mocked(appContext.services.sessionLoadService.prepareLoad);
+    prepareLoad.mockImplementationOnce(() => {
+      loadStarted.resolve();
+      return Promise.resolve({ status: 'error', outcome: { replies: [] } });
+    });
     ws.send(JSON.stringify({ type: 'load_session' }));
 
-    await vi.waitFor(() => {
-      expect(appContext.services.sessionLoadService.prepareLoad).toHaveBeenCalledWith({
-        sessionId: 'integration-session',
-        loadRequestId: undefined,
-      });
-      expect(getChatConnectionRegistryForApplication(appContext).get('valid-dir')?.workingDir).toBe(
-        normalizedWorkingDir
-      );
+    await loadStarted.promise;
+    expect(prepareLoad).toHaveBeenCalledWith({
+      sessionId: 'integration-session',
+      loadRequestId: undefined,
     });
+    expect(getChatConnectionRegistryForApplication(appContext).get('valid-dir')?.workingDir).toBe(
+      normalizedWorkingDir
+    );
   });
 
   it('terminal create flow stores terminal sessions that can be queried by accessor', async () => {

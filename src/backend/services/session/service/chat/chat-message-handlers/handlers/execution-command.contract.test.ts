@@ -97,13 +97,7 @@ it('completes direct input while both provider turn and background resume are pe
     backgroundDelivery: { captureResumeGuard: () => guard, userResume },
   });
   try {
-    let completed = false;
-    const result = Promise.resolve(handler(context, { type: 'user_input', text: 'human' }));
-    void result.then(() => {
-      completed = true;
-    });
-    await vi.waitFor(() => expect(completed).toBe(true));
-    expect(await result).toEqual({ replies: [] });
+    expect(await handler(context, { type: 'user_input', text: 'human' })).toEqual({ replies: [] });
     expect(calls).toEqual(['send', 'resume']);
     expect(sendSessionMessage).toHaveBeenCalledWith('plain-session', 'human');
     expect(userResume).toHaveBeenCalledWith('plain-session', guard);

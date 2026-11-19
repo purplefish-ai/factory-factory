@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import type { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeManager } from './acp-runtime-manager';
 import {
@@ -37,7 +38,11 @@ describe('AcpRuntimeManager task status', () => {
     }>();
     const firstChild = createManagerTestHarness().setupSuccessfulSpawn({ loadSession: true });
     exitChildAfterSigterm(firstChild);
-    mockLoadSession.mockReturnValueOnce(staleLoad.promise);
+    const loading = deferred();
+    mockLoadSession.mockImplementationOnce(() => {
+      loading.resolve();
+      return staleLoad.promise;
+    });
     const firstHandlers = defaultHandlers();
     const firstCreation = manager
       .getOrCreateClient(
@@ -47,7 +52,8 @@ describe('AcpRuntimeManager task status', () => {
         defaultContext()
       )
       .catch((error: unknown) => error);
-    await expect.poll(() => mockLoadSession.mock.calls.length).toBe(1);
+    await loading.promise;
+    expect(mockLoadSession).toHaveBeenCalledOnce();
 
     await manager.stopClient('session-1');
     await expect(firstCreation).resolves.toMatchObject({

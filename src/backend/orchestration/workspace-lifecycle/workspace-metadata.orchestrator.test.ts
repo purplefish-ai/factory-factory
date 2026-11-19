@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { JobRunner } from '@/backend/services/job-runner.service';
+import { deferred } from '@/test-utils/deferred';
 import { WorkspaceMetadataOrchestrator } from './workspace-metadata.orchestrator';
 
 function setup() {
@@ -39,7 +40,15 @@ function setup() {
     service,
     dependencies,
     history,
-    result,
+    pauseGeneration: () => {
+      const started = deferred();
+      const generation = deferred<typeof result>();
+      dependencies.generate.mockImplementationOnce(() => {
+        started.resolve();
+        return generation.promise;
+      });
+      return { started: started.promise, finish: () => generation.resolve(result) };
+    },
     advance: (ms: number) => {
       now += ms;
     },
@@ -60,20 +69,15 @@ describe('workspace metadata orchestration', () => {
   });
 
   it('rejects in-flight initial metadata when another user notification arrives', async () => {
-    const { service, dependencies, history, result } = setup();
-    let resolve!: (value: typeof result) => void;
-    dependencies.generate.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const { service, dependencies, history, pauseGeneration } = setup();
+    const generation = pauseGeneration();
     await service.schedule('s', true);
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    await generation.started;
+    expect(dependencies.generate).toHaveBeenCalled();
     history.push({ type: 'user', content: 'A different objective', timestamp: '2' });
     await service.schedule('s', true);
-    resolve(result);
+    generation.finish();
     await work;
     expect(dependencies.accept).not.toHaveBeenCalled();
     expect(dependencies.publish).not.toHaveBeenCalled();
@@ -101,23 +105,18 @@ describe('workspace metadata orchestration', () => {
   });
 
   it('rejects results when provider recovery replaces the captured transcript', async () => {
-    const { service, dependencies, history, result } = setup();
-    let resolve!: (value: typeof result) => void;
-    dependencies.generate.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const { service, dependencies, history, pauseGeneration } = setup();
+    const generation = pauseGeneration();
     await service.schedule('s');
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    await generation.started;
+    expect(dependencies.generate).toHaveBeenCalled();
     history.splice(0, history.length, {
       type: 'user',
       content: 'A replacement conversation',
       timestamp: 'new',
     });
-    resolve(result);
+    generation.finish();
     await work;
     expect(dependencies.accept).not.toHaveBeenCalled();
   });
@@ -179,17 +178,12 @@ describe('workspace metadata orchestration', () => {
     expect(dependencies.accept).toHaveBeenCalledTimes(1);
   });
   it('invalidates an in-flight summary when a new user message arrives in another session', async () => {
-    const { service, dependencies, result } = setup();
-    let resolve!: (value: typeof result) => void;
-    dependencies.generate.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const { service, dependencies, pauseGeneration } = setup();
+    const generation = pauseGeneration();
     await service.schedule('s', true);
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    await generation.started;
+    expect(dependencies.generate).toHaveBeenCalled();
     dependencies.findSession.mockResolvedValue({
       id: 'other',
       workspaceId: 'w',
@@ -197,45 +191,45 @@ describe('workspace metadata orchestration', () => {
       codexAccountId: 'account',
     });
     await service.schedule('other', true);
-    resolve(result);
+    generation.finish();
     await work;
     expect(dependencies.accept).not.toHaveBeenCalled();
   });
 
   it('does not publish after a newer turn arrives while the database write is pending', async () => {
     const { service, dependencies, history } = setup();
-    let finish!: (value: { id: string; name: string; updatedAt: Date }) => void;
-    dependencies.accept.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          finish = done;
-        })
-    );
+    const writeStarted = deferred();
+    const write = deferred<{ id: string; name: string; updatedAt: Date }>();
+    dependencies.accept.mockImplementationOnce(() => {
+      writeStarted.resolve();
+      return write.promise;
+    });
     await service.schedule('s');
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.accept).toHaveBeenCalled());
+    await writeStarted.promise;
+    expect(dependencies.accept).toHaveBeenCalled();
     history.push({ type: 'user', content: 'New objective', timestamp: '2' });
     await service.schedule('s');
-    finish({ id: 'w', name: 'Login fix', updatedAt: new Date() });
+    write.resolve({ id: 'w', name: 'Login fix', updatedAt: new Date() });
     await work;
     expect(dependencies.publish).not.toHaveBeenCalled();
   });
 
   it('rechecks the call throttle for a replacement queued before inference started', async () => {
     const { service, dependencies, history } = setup();
-    let reserve!: (value: boolean) => void;
-    dependencies.reserve.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          reserve = done;
-        })
-    );
+    const reservationStarted = deferred();
+    const reservation = deferred<boolean>();
+    dependencies.reserve.mockImplementationOnce(() => {
+      reservationStarted.resolve();
+      return reservation.promise;
+    });
     await service.schedule('s');
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.reserve).toHaveBeenCalled());
+    await reservationStarted.promise;
+    expect(dependencies.reserve).toHaveBeenCalled();
     history.push({ type: 'user', content: 'A newer turn', timestamp: '2' });
     await service.schedule('s');
-    reserve(true);
+    reservation.resolve(true);
     await work;
     await service.run(signal());
     expect(dependencies.generate).toHaveBeenCalledTimes(1);
@@ -268,20 +262,15 @@ describe('workspace metadata orchestration', () => {
     expect(dependencies.generate).toHaveBeenCalledTimes(2);
   });
   it('rejects inference superseded by another completed turn', async () => {
-    const { service, dependencies, history, result, advance } = setup();
-    let resolve!: (value: typeof result) => void;
-    dependencies.generate.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const { service, dependencies, history, pauseGeneration, advance } = setup();
+    const generation = pauseGeneration();
     await service.schedule('s');
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalled());
+    await generation.started;
+    expect(dependencies.generate).toHaveBeenCalled();
     history.push({ type: 'user', content: 'Changed direction', timestamp: '2' });
     await service.schedule('s');
-    resolve(result);
+    generation.finish();
     await work;
     expect(dependencies.accept).not.toHaveBeenCalled();
     advance(120_000);
@@ -353,28 +342,23 @@ describe('workspace metadata orchestration', () => {
   );
 
   it('avoids redundant initial-message work without dropping a completed turn summary', async () => {
-    const { service, dependencies, history, result, advance } = setup();
+    const { service, dependencies, history, pauseGeneration, advance } = setup();
     await service.schedule('s', true);
     await service.run(signal());
     history.push({ type: 'user', content: 'New turn', timestamp: '2' });
     await service.schedule('s');
     advance(120_000);
-    let resolve!: (value: typeof result) => void;
-    dependencies.generate.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const generation = pauseGeneration();
     const work = service.run(signal());
-    await vi.waitFor(() => expect(dependencies.generate).toHaveBeenCalledTimes(2));
+    await generation.started;
+    expect(dependencies.generate).toHaveBeenCalledTimes(2);
     dependencies.history.mockClear();
     dependencies.findSession.mockClear();
     dependencies.accept.mockClear();
     await service.schedule('s', true);
     expect(dependencies.history).not.toHaveBeenCalled();
     expect(dependencies.findSession).not.toHaveBeenCalled();
-    resolve(result);
+    generation.finish();
     await work;
     expect(dependencies.accept).toHaveBeenCalledTimes(1);
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CodexModelCatalogService, SessionConfigService } from '@/backend/services/session';
 import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { userSettingsRouter } from './user-settings.trpc';
 
@@ -51,18 +52,18 @@ const models = [
 
 describe('shared Codex catalog consumers', () => {
   it('discovers once for concurrent Admin options and inactive chat capabilities', async () => {
-    let resolveDiscovery!: (value: typeof models) => void;
-    const fetchModels = vi.fn(
-      () =>
-        new Promise<typeof models>((resolve) => {
-          resolveDiscovery = resolve;
-        })
-    );
+    const discoveryStarted = deferred();
+    const discovery = deferred<typeof models>();
+    const fetchModels = vi.fn(() => {
+      discoveryStarted.resolve();
+      return discovery.promise;
+    });
     const { sessionConfig, admin } = createConsumers(fetchModels);
     const chatResult = sessionConfig.getChatBarCapabilities('session-codex');
     const adminResult = admin.getProviderOptions();
-    await vi.waitFor(() => expect(fetchModels).toHaveBeenCalledOnce());
-    resolveDiscovery(models);
+    await discoveryStarted.promise;
+    expect(fetchModels).toHaveBeenCalledOnce();
+    discovery.resolve(models);
     const [chat, options] = await Promise.all([chatResult, adminResult]);
 
     expect(chat.model).toMatchObject({

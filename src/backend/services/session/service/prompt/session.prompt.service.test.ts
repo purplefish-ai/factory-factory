@@ -8,6 +8,7 @@ import { createTestProcessHandle } from '@/backend/services/session/service/acp/
 import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionLifecycleEventService } from '@/backend/services/session/service/lifecycle/session-lifecycle-event.service';
+import { createDeferredCall } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionService } from './session.service';
 
@@ -410,12 +411,13 @@ describe('SessionService prompt coordination', () => {
   });
 
   it('does not dispatch after the lifecycle changes during the settings read', async () => {
-    const settings = createDeferred<never>();
-    vi.mocked(userSettingsService.get).mockClear().mockReturnValueOnce(settings.promise);
+    const settings = createDeferredCall<Awaited<ReturnType<typeof userSettingsService.get>>>();
+    vi.mocked(userSettingsService.get).mockClear().mockImplementationOnce(settings.run);
     const { service, runtimeManager, isGenerationCurrent } = createPromptService();
     const sending = service.sendSessionMessage('session-1', 'continue');
     const rejected = expect(sending).rejects.toThrow('Session lifecycle changed');
-    await vi.waitFor(() => expect(userSettingsService.get).toHaveBeenCalled());
+    await settings.entered;
+    expect(userSettingsService.get).toHaveBeenCalled();
     isGenerationCurrent.mockReturnValue(false);
     settings.resolve({ turnLimitMinutes: null } as never);
     await rejected;
@@ -548,11 +550,12 @@ describe('SessionService prompt coordination', () => {
       lifecycleStore,
       acpEventProcessor,
     } = createLifecyclePromptHarness();
-    const prompt = createDeferred<{ stopReason: string }>();
-    runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
+    const prompt = createDeferredCall<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockImplementation(prompt.run);
 
     const pending = service.sendSessionMessage('session-1', 'continue');
-    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce());
+    await prompt.entered;
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce();
     acpEventProcessor.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: { type: 'error', error: 'HTTP 529: Overloaded' },
@@ -560,13 +563,11 @@ describe('SessionService prompt coordination', () => {
     prompt.reject(new PromptTimeoutError('session-1', 14_400_000));
 
     await expect(pending).rejects.toThrow(PromptTimeoutError);
-    await vi.waitFor(() => {
-      expect(
-        sessionDomainService
-          .getTranscriptSnapshot('session-1')
-          .filter((entry) => entry.message?.type === 'session_lifecycle')
-      ).toHaveLength(1);
-    });
+    expect(
+      sessionDomainService
+        .getTranscriptSnapshot('session-1')
+        .filter((entry) => entry.message?.type === 'session_lifecycle')
+    ).toHaveLength(1);
     expect(lifecycleEvents).toHaveLength(1);
     expect(lifecycleStore.upsert).toHaveBeenCalledOnce();
     expect([...lifecycleEvents.values()][0]).toMatchObject({
@@ -578,11 +579,12 @@ describe('SessionService prompt coordination', () => {
   it('does not record an ACP busy-turn error before the matching rejection', async () => {
     const { service, runtimeManager, lifecycleEvents, lifecycleStore, acpEventProcessor } =
       createLifecyclePromptHarness();
-    const prompt = createDeferred<{ stopReason: string }>();
-    runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
+    const prompt = createDeferredCall<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockImplementation(prompt.run);
 
     const pending = service.sendSessionMessage('session-1', 'continue');
-    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce());
+    await prompt.entered;
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce();
     acpEventProcessor.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: { type: 'error', error: 'A turn is already in progress for this session' },
@@ -606,11 +608,12 @@ describe('SessionService prompt coordination', () => {
   ])('sanitizes ACP error details without interrupting a successful turn: %s', async (error) => {
     const { service, runtimeManager, sessionDomainService, lifecycleEvents, acpEventProcessor } =
       createLifecyclePromptHarness();
-    const prompt = createDeferred<{ stopReason: string }>();
-    runtimeManager.sendPrompt.mockReturnValue(prompt.promise);
+    const prompt = createDeferredCall<{ stopReason: string }>();
+    runtimeManager.sendPrompt.mockImplementation(prompt.run);
 
     const pending = service.sendSessionMessage('session-1', 'continue');
-    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce());
+    await prompt.entered;
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledOnce();
     acpEventProcessor.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: { type: 'error', error },
@@ -644,25 +647,25 @@ describe('SessionService prompt coordination', () => {
   });
 
   it('serializes concurrent Codex prompts without a deadline for the queued turn', async () => {
-    const { service, runtimeManager } = createPromptService();
-    const firstPrompt = createDeferred<{ stopReason: string }>();
-    const secondPrompt = createDeferred<{ stopReason: string }>();
+    const { service, runtimeManager, promptTurnCompletionService } = createPromptService();
+    const firstPrompt = createDeferredCall<{ stopReason: string }>();
+    const secondPrompt = createDeferredCall<{ stopReason: string }>();
     runtimeManager.sendPrompt
-      .mockImplementationOnce(() => firstPrompt.promise)
-      .mockImplementationOnce(() => secondPrompt.promise);
+      .mockImplementationOnce(firstPrompt.run)
+      .mockImplementationOnce(secondPrompt.run);
 
     const first = service.sendSessionMessage('session-1', 'first');
-    await Promise.resolve();
+    await firstPrompt.entered;
     const second = service.sendSessionMessage('session-1', 'second');
-    await Promise.resolve();
-
-    expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(1);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
     await expect(first).resolves.toBeUndefined();
-    await vi.waitFor(() => {
-      expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
-    });
+    await secondPrompt.entered;
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    expect(promptTurnCompletionService.schedule).toHaveBeenCalledExactlyOnceWith('session-1');
+    expect(promptTurnCompletionService.schedule.mock.invocationCallOrder[0]).toBeLessThan(
+      runtimeManager.sendPrompt.mock.invocationCallOrder[1]!
+    );
 
     expect(runtimeManager.sendPrompt).toHaveBeenNthCalledWith(
       2,
@@ -677,17 +680,16 @@ describe('SessionService prompt coordination', () => {
 
   it('does not serialize ACP prompts across sessions', async () => {
     const { service, runtimeManager } = createPromptService();
-    const firstPrompt = createDeferred<{ stopReason: string }>();
-    const secondPrompt = createDeferred<{ stopReason: string }>();
+    const firstPrompt = createDeferredCall<{ stopReason: string }>();
+    const secondPrompt = createDeferredCall<{ stopReason: string }>();
     runtimeManager.sendPrompt
-      .mockImplementationOnce(() => firstPrompt.promise)
-      .mockImplementationOnce(() => secondPrompt.promise);
+      .mockImplementationOnce(firstPrompt.run)
+      .mockImplementationOnce(secondPrompt.run);
 
     const first = service.sendSessionMessage('session-1', 'first');
     const second = service.sendSessionMessage('session-2', 'second');
-    await Promise.resolve();
-
-    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2));
+    await Promise.all([firstPrompt.entered, secondPrompt.entered]);
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
     secondPrompt.resolve({ stopReason: 'end_turn' });
@@ -696,20 +698,19 @@ describe('SessionService prompt coordination', () => {
 
   it('continues a session prompt queue after a prompt fails', async () => {
     const { service, runtimeManager } = createPromptService();
-    const firstPrompt = createDeferred<{ stopReason: string }>();
-    const secondPrompt = createDeferred<{ stopReason: string }>();
+    const firstPrompt = createDeferredCall<{ stopReason: string }>();
+    const secondPrompt = createDeferredCall<{ stopReason: string }>();
     runtimeManager.sendPrompt
-      .mockImplementationOnce(() => firstPrompt.promise)
-      .mockImplementationOnce(() => secondPrompt.promise);
+      .mockImplementationOnce(firstPrompt.run)
+      .mockImplementationOnce(secondPrompt.run);
 
     const first = service.sendSessionMessage('session-1', 'first');
     const second = service.sendSessionMessage('session-1', 'second');
 
     firstPrompt.reject(new Error('prompt failed'));
     await expect(first).rejects.toThrow('prompt failed');
-    await vi.waitFor(() => {
-      expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
-    });
+    await secondPrompt.entered;
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
 
     secondPrompt.resolve({ stopReason: 'end_turn' });
     await expect(second).resolves.toBeUndefined();

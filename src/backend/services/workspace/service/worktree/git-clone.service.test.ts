@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 const mockPathExists = vi.fn();
 const mockMkdir = vi.fn();
@@ -279,19 +280,30 @@ describe('GitCloneService.clone', () => {
     mockGitCommand.mockResolvedValue({ code: 128, stdout: '', stderr: '' });
   });
 
-  it('shares concurrent clones to the same normalized destination without removing the winner', async () => {
+  function pendingClone() {
     const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand
-      .mockImplementationOnce(() => completed.promise)
-      .mockResolvedValue({
-        code: 128,
-        stdout: '',
-        stderr: 'fatal: destination path already exists',
-      });
+    const invocations = createTestEventLog<void>();
+    return {
+      ...completed,
+      invocations,
+      run: () => {
+        invocations.record(undefined);
+        return completed.promise;
+      },
+    };
+  }
+
+  it('shares concurrent clones to the same normalized destination without removing the winner', async () => {
+    const completed = pendingClone();
+    mockExecCommand.mockImplementationOnce(completed.run).mockResolvedValue({
+      code: 128,
+      stdout: '',
+      stderr: 'fatal: destination path already exists',
+    });
     mockPathExists.mockResolvedValueOnce(false).mockResolvedValue(true);
     const first = gitCloneService.clone('source', '/tmp/repos/owner/repo');
     const second = gitCloneService.clone('source', '/tmp/repos/owner/./repo');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalled());
+    await completed.invocations.waitForCount(1);
     completed.resolve({ code: 0, stdout: '', stderr: 'Cloned' });
     expect(await Promise.all([first, second])).toEqual([
       { success: true, output: 'Cloned' },
@@ -302,10 +314,11 @@ describe('GitCloneService.clone', () => {
   });
 
   it('rejects a different source targeting an in-flight clone destination', async () => {
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand.mockImplementation(() => completed.promise);
+    const completed = pendingClone();
+    mockExecCommand.mockImplementation(completed.run);
     const first = gitCloneService.clone('https://github.com/owner/first', '/tmp/source-conflict');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    await completed.invocations.waitForCount(1);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
     const second = gitCloneService.clone('https://github.com/owner/second', '/tmp/source-conflict');
     completed.resolve({ code: 0, stdout: '', stderr: 'Cloned first repository' });
     expect(await second).toMatchObject({
@@ -322,14 +335,15 @@ describe('GitCloneService.clone', () => {
     'http://github.com/owner/repo/',
     'https://github.com/owner/repo.git',
   ])('shares an equivalent GitHub source spelled %s', async (url) => {
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand.mockImplementation(() => completed.promise);
+    const completed = pendingClone();
+    mockExecCommand.mockImplementation(completed.run);
     const first = gitCloneService.clone(
       'https://github.com/OWNER/REPO.git',
       '/tmp/equivalent-source'
     );
     const second = gitCloneService.clone(url, '/tmp/equivalent-source');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    await completed.invocations.waitForCount(1);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
     completed.resolve({ code: 0, stdout: '', stderr: '' });
     expect(await Promise.all([first, second])).toEqual([
       { success: true, output: '' },
@@ -339,11 +353,12 @@ describe('GitCloneService.clone', () => {
   });
 
   it('waits for an in-flight clone before inspecting its destination for another import', async () => {
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand.mockImplementation(() => completed.promise);
+    const completed = pendingClone();
+    mockExecCommand.mockImplementation(completed.run);
     mockReaddir.mockResolvedValue([]);
     const clone = gitCloneService.clone('source', '/repos/owner/repo');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    await completed.invocations.waitForCount(1);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
     mockPathExists.mockResolvedValue(true);
     const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO');
     await drainAsyncWork();
@@ -356,11 +371,12 @@ describe('GitCloneService.clone', () => {
   });
 
   it('clones different destinations concurrently', async () => {
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand.mockImplementation(() => completed.promise);
+    const completed = pendingClone();
+    mockExecCommand.mockImplementation(completed.run);
     const first = gitCloneService.clone('source-a', '/tmp/clone-a');
     const second = gitCloneService.clone('source-b', '/tmp/clone-b');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(2));
+    await completed.invocations.waitForCount(2);
+    expect(mockExecCommand).toHaveBeenCalledTimes(2);
     completed.resolve({ code: 0, stdout: '', stderr: '' });
     expect(await Promise.all([first, second])).toEqual([
       { success: true, output: '' },
@@ -371,16 +387,17 @@ describe('GitCloneService.clone', () => {
   it('waits for a clone that starts while the directory scan is pending', async () => {
     const scanEntered = createDeferred<void>();
     const scanBoundary = createDeferred<string[]>();
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
+    const completed = pendingClone();
     mockReaddir.mockResolvedValue([]).mockImplementationOnce(() => {
       scanEntered.resolve();
       return scanBoundary.promise;
     });
-    mockExecCommand.mockImplementation(() => completed.promise);
+    mockExecCommand.mockImplementation(completed.run);
     const scan = gitCloneService.getClonePath('/repos', 'OWNER', 'REPO');
     await scanEntered.promise;
     const clone = gitCloneService.clone('source', '/repos/owner/repo');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalledTimes(1));
+    await completed.invocations.waitForCount(1);
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
     mockPathExists.mockResolvedValue(true);
     let cloneCompleted = false;
     mockGitCommand.mockImplementation(async () => ({
@@ -399,11 +416,11 @@ describe('GitCloneService.clone', () => {
   });
 
   it('allows retry after a shared clone fails', async () => {
-    const completed = createDeferred<{ code: number; stdout: string; stderr: string }>();
-    mockExecCommand.mockImplementation(() => completed.promise);
+    const completed = pendingClone();
+    mockExecCommand.mockImplementation(completed.run);
     const first = gitCloneService.clone('source', '/tmp/retry-clone');
     const second = gitCloneService.clone('source', '/tmp/retry-clone');
-    await vi.waitFor(() => expect(mockExecCommand).toHaveBeenCalled());
+    await completed.invocations.waitForCount(1);
     completed.resolve({ code: 128, stdout: '', stderr: 'network failure' });
     expect(await Promise.all([first, second])).toEqual([
       { success: false, output: 'network failure', error: 'network failure' },

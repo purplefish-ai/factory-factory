@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
+import { createDeferredCall, createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
 vi.mock('@/backend/services/workspace', () => ({
@@ -18,31 +18,25 @@ it('rejects a second targeted interruption while the first reservation owns stop
     read: async () => null,
     recordStop: vi.fn(async () => undefined),
   };
-  const gate = createDeferred<{
+  const gate = createDeferredCall<{
     version: 1;
     cause: 'TIMEOUT';
     source: null;
     status: 'UNKNOWN';
     observedAt: string;
   }>();
-  const stopAndQuiesceObserved = vi.fn(() => gate.promise);
+  const stopAndQuiesceObserved = vi.fn(gate.run);
   const coordinator = new SessionTerminationCoordinator({
     ...base,
     eventAuthority: authority as never,
     runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
   });
   const first = coordinator.interruptEventInitial(base.session.id, 'TIMEOUT');
-  await vi.waitFor(() => expect(stopAndQuiesceObserved).toHaveBeenCalledOnce());
-  let rejected = false;
-  const second = coordinator
-    .interruptEventInitial(base.session.id, 'SHUTDOWN')
-    .catch((error: unknown) => {
-      rejected = true;
-      return error;
-    });
+  await gate.entered;
+  expect(stopAndQuiesceObserved).toHaveBeenCalledOnce();
+  const second = coordinator.interruptEventInitial(base.session.id, 'SHUTDOWN');
   try {
-    await vi.waitFor(() => expect(rejected).toBe(true));
-    expect(await second).toMatchObject({ message: 'Event stop confirmation is pending' });
+    await expect(second).rejects.toMatchObject({ message: 'Event stop confirmation is pending' });
     expect(base.lifecycleGate.isStopReserved(base.session.id)).toBe(true);
     expect(stopAndQuiesceObserved).toHaveBeenCalledOnce();
     expect(authority.recordStop).not.toHaveBeenCalled();
@@ -54,7 +48,7 @@ it('rejects a second targeted interruption while the first reservation owns stop
       status: 'UNKNOWN',
       observedAt: new Date().toISOString(),
     });
-    await Promise.all([first, second]);
+    await Promise.all([first, second.catch(() => undefined)]);
   }
   expect(authority.recordStop).toHaveBeenCalledOnce();
   expect(authority.recordStop).toHaveBeenCalledWith(

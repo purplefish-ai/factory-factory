@@ -303,7 +303,7 @@ describe('ACP runtime steering', () => {
       const child = handle.child as unknown as MockChildProcess;
       child.exitCode = 1;
       child.emit('exit', 1, null);
-      await vi.waitFor(() => expect(manager.getClient('session')).toBeUndefined());
+      expect(manager.getClient('session')).toBeUndefined();
       const replacementChild = setupSuccessfulSpawn();
       const replacement = await manager.getOrCreateClient(
         'session',

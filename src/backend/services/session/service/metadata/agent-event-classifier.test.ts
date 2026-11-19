@@ -7,6 +7,7 @@ import {
   AGENT_EVENT_CLASSIFICATION_PROMPT_VERSION,
 } from '@/backend/prompts/agent-event-classification';
 import type { AgentEventPayload } from '@/shared/agent-runtime';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { AgentEventClassificationError, classifyAgentEvent } from './agent-event-classifier';
 
 const mocks = vi.hoisted(() => ({
@@ -284,44 +285,47 @@ describe('classifyAgentEvent', () => {
   it('allows at most two concurrent provider calls', async () => {
     let active = 0;
     let peak = 0;
-    const releases: (() => void)[] = [];
+    const releases = createTestEventLog<() => void>();
     mocks.query.mockImplementation(() => ({
       async *[Symbol.asyncIterator]() {
         active++;
         peak = Math.max(peak, active);
-        await new Promise<void>((resolve) => releases.push(resolve));
+        await new Promise<void>((resolve) => releases.record(resolve));
         active--;
         yield success({ decision: 'skip', reason: 'x' });
       },
       close: vi.fn(),
     }));
     const calls = Promise.all([1, 2, 3, 4].map(() => classifyAgentEvent(input, signal())));
-    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    await releases.waitForCount(2);
+    expect(releases.events).toHaveLength(2);
     expect(mocks.query).toHaveBeenCalledTimes(2);
-    releases.splice(0).forEach((release) => release());
-    await vi.waitFor(() => expect(releases).toHaveLength(2));
-    releases.splice(0).forEach((release) => release());
+    releases.events.slice(0, 2).forEach((release) => release());
+    await releases.waitForCount(4);
+    expect(releases.events).toHaveLength(4);
+    releases.events.slice(2).forEach((release) => release());
     expect(await calls).toHaveLength(4);
     expect(peak).toBe(2);
   });
 
   it('stops waiting for a slot when the caller aborts', async () => {
-    const releases: (() => void)[] = [];
+    const releases = createTestEventLog<() => void>();
     mocks.query.mockImplementation(() => ({
       async *[Symbol.asyncIterator]() {
-        await new Promise<void>((resolve) => releases.push(resolve));
+        await new Promise<void>((resolve) => releases.record(resolve));
         yield success({ decision: 'skip', reason: 'x' });
       },
       close: vi.fn(),
     }));
     const busy = [classifyAgentEvent(input, signal()), classifyAgentEvent(input, signal())];
-    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    await releases.waitForCount(2);
+    expect(releases.events).toHaveLength(2);
     const controller = new AbortController();
     const waiting = classifyAgentEvent(input, controller.signal);
     controller.abort();
     await expect(waiting).rejects.toBeDefined();
     expect(mocks.query).toHaveBeenCalledTimes(2);
-    for (const release of releases) {
+    for (const release of releases.events) {
       release();
     }
     await Promise.all(busy);

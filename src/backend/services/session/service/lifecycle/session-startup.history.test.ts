@@ -18,7 +18,11 @@ import { buildTranscriptFromHistory } from '@/backend/services/session/service/s
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
-import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
+import {
+  createDeferred,
+  createDeferredCall,
+  createLifecycleHarness,
+} from './session-lifecycle.test-helpers';
 import {
   createSessionHistoryBarrier,
   prepareSessionHistoryForResume,
@@ -280,13 +284,14 @@ it('owns a late hydration rejection after adapter initialization has failed', as
 });
 
 it('does not resume a provider when stopped during concurrent history hydration', async () => {
-  const reading = createDeferred<unknown>();
-  loadHistory.mockReturnValue(reading.promise);
+  const reading = createDeferredCall<unknown>();
+  loadHistory.mockImplementation(reading.run);
   const { h, coordinator, domain } = setup();
   const startup = coordinator
     .getOrCreateSessionClient('session-1')
     .catch((error: unknown) => error);
-  await vi.waitFor(() => expect(loadHistory).toHaveBeenCalled());
+  await reading.entered;
+  expect(loadHistory).toHaveBeenCalled();
   const reservation = h.lifecycleGate.reserveStop('session-1');
   reading.resolve({ status: 'loaded', history, filePath: '/tmp/history.jsonl' });
   expect(await startup).toBeInstanceOf(SessionStartupCancelledError);
@@ -301,14 +306,19 @@ it('does not resume a provider when stopped during concurrent history hydration'
 });
 
 it('shares history preparation across concurrent startups and keeps fallback replay flowing', async () => {
-  const reading = createDeferred<unknown>();
-  loadHistory.mockReturnValue(reading.promise);
+  const reading = createDeferredCall<unknown>();
+  loadHistory.mockImplementation(reading.run);
   const { h, domain, processor, coordinator } = setup();
   const creating = createDeferred<typeof h.handle>();
-  let replayHandlers: AcpRuntimeEventHandlers | undefined;
+  const replayReady = createDeferred<AcpRuntimeEventHandlers>();
+  const secondCreationEntered = createDeferred<void>();
+  let creationCount = 0;
   h.runtimeManager.getOrCreateClient.mockImplementation(async (_id, options, handlers) => {
+    if (++creationCount === 2) {
+      secondCreationEntered.resolve();
+    }
     await options.beforeSessionCreation?.();
-    replayHandlers ??= handlers;
+    replayReady.resolve(handlers);
     return creating.promise.then((handle) => {
       h.runtimeManager.getClient.mockReturnValue(handle);
       return handle;
@@ -316,19 +326,20 @@ it('shares history preparation across concurrent startups and keeps fallback rep
   });
   const first = coordinator.getOrCreateSessionClient('session-1');
   const second = coordinator.getOrCreateSessionClient('session-1');
-  await vi.waitFor(() => expect(loadHistory).toHaveBeenCalled());
+  await reading.entered;
   expect(loadHistory).toHaveBeenCalledOnce();
   reading.resolve({ status: 'not_found' });
-  await vi.waitFor(() => expect(replayHandlers).toBeDefined());
-  replayHandlers!.onAcpEvent?.('session-1', {
+  const replayHandlers = await replayReady.promise;
+  replayHandlers.onAcpEvent?.('session-1', {
     type: 'acp_session_update',
     update: {
       sessionUpdate: 'user_message_chunk',
       content: { type: 'text', text: 'Initial prompt' },
     },
   });
-  await vi.waitFor(() => expect(h.runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2));
-  replayHandlers!.onAcpEvent?.('session-1', {
+  await secondCreationEntered.promise;
+  expect(h.runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2);
+  replayHandlers.onAcpEvent?.('session-1', {
     type: 'acp_session_update',
     update: {
       sessionUpdate: 'agent_message_chunk',

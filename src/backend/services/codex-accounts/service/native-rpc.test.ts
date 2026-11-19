@@ -56,11 +56,17 @@ it('passes the exact profile environment and always cleans up the owned native p
 it('sanitizes native process errors and cleans up cancellation', async () => {
   const controller = new AbortController();
   respond = false;
+  const spawned = Promise.withResolvers<void>();
+  mocks.spawn.mockImplementationOnce(() => {
+    spawned.resolve();
+    return child;
+  });
   const result = withNativeRpc(context, (rpc) => rpc.request('account/read'), {
     signal: controller.signal,
   });
   const rejected = expect(result).rejects.toThrow('Codex native account operation cancelled');
-  await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+  await spawned.promise;
+  expect(mocks.spawn).toHaveBeenCalledOnce();
   expect(child.stderr.listenerCount('error')).toBeGreaterThan(0);
   child.stderr.write('private credential');
   controller.abort();

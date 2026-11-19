@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecResult } from '@/backend/lib/shell';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import {
   getStats,
   WorkspaceGitStateService,
@@ -247,16 +248,18 @@ describe('WorkspaceGitStateService', () => {
   });
 
   it('starts a fresh calculation after the invalidated calculation settles', async () => {
-    const statusResolvers: Array<(value: ExecResult) => void> = [];
+    const statuses = createTestEventLog<(value: ExecResult) => void>();
+    const statusResolvers = statuses.events;
     runGit.mockImplementation((args) => {
       if (isStatusCommand(args)) {
-        return new Promise((resolve) => statusResolvers.push(resolve));
+        return new Promise((resolve) => statuses.record(resolve));
       }
       return Promise.resolve(defaultGitResult(args));
     });
 
     const first = service.getSnapshot(input);
-    await vi.waitFor(() => expect(statusResolvers).toHaveLength(1));
+    await statuses.waitForCount(1);
+    expect(statusResolvers).toHaveLength(1);
     service.invalidate(input.worktreePath);
 
     const second = service.getSnapshot(input);
@@ -265,7 +268,8 @@ describe('WorkspaceGitStateService', () => {
 
     statusResolvers[0]?.(defaultGitResult(['status']));
     await first;
-    await vi.waitFor(() => expect(statusResolvers).toHaveLength(2));
+    await statuses.waitForCount(2);
+    expect(statusResolvers).toHaveLength(2);
     statusResolvers[1]?.(defaultGitResult(['status']));
     await Promise.all([first, second]);
   });
@@ -281,16 +285,18 @@ describe('WorkspaceGitStateService', () => {
   });
 
   it('retains a removal fence until running work settles without launching retired refreshes', async () => {
-    const statusResolvers: Array<(value: ExecResult) => void> = [];
+    const statuses = createTestEventLog<(value: ExecResult) => void>();
+    const statusResolvers = statuses.events;
     runGit.mockImplementation((args) => {
       if (isStatusCommand(args)) {
-        return new Promise((resolve) => statusResolvers.push(resolve));
+        return new Promise((resolve) => statuses.record(resolve));
       }
       return Promise.resolve(defaultGitResult(args));
     });
 
     const first = service.getSnapshot(input);
-    await vi.waitFor(() => expect(statusResolvers).toHaveLength(1));
+    await statuses.waitForCount(1);
+    expect(statusResolvers).toHaveLength(1);
     service.remove(input.worktreePath);
     const second = service.getSnapshot(input);
     expect(statusResolvers).toHaveLength(1);

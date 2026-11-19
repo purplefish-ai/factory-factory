@@ -5,7 +5,7 @@ import { SessionDispatchService } from '@/backend/services/session/service/dispa
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { createTerminationHarness } from './session-lifecycle.test-helpers';
+import { createDeferredCall, createTerminationHarness } from './session-lifecycle.test-helpers';
 
 const SESSION_ID = 'session-1';
 
@@ -98,10 +98,12 @@ afterEach(() => {
 
 it('releases a dispatch claim stranded by a never-settling turn on a non-WebSocket stop', async () => {
   const { termination, dispatcher, sendSessionMessage } = stopHarness();
-  sendSessionMessage.mockReturnValueOnce(new Promise<void>(() => undefined));
+  const firstTurn = createDeferredCall<void>();
+  sendSessionMessage.mockImplementationOnce(firstTurn.run);
   enqueue('first');
   void dispatcher.tryDispatchNextMessage(SESSION_ID);
-  await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
+  await firstTurn.entered;
+  expect(sendSessionMessage).toHaveBeenCalledOnce();
 
   await termination.coordinator.stopSession(SESSION_ID, { reason: 'SYSTEM_STOP' });
 

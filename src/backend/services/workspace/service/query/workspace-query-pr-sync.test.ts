@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 const { mockFindById, mockFindByProject, mockRefreshWorkspace, mockWarn } = vi.hoisted(() => ({
   mockFindById: vi.fn(),
@@ -71,13 +72,16 @@ it('serializes overlapping manual syncs so only one reports the merge transition
   const blocked = new Promise<void>((resolve) => {
     finishRefresh = resolve;
   });
+  const refreshStarted = Promise.withResolvers<void>();
   mockRefreshWorkspace.mockImplementation(async () => {
+    refreshStarted.resolve();
     await blocked;
     state = 'MERGED';
     return { success: false, reason: 'fetch_failed' };
   });
   const first = workspaceQueryService.syncPRStatus('mixed');
-  await vi.waitFor(() => expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1));
+  await refreshStarted.promise;
+  expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
   const second = workspaceQueryService.syncPRStatus('mixed');
   finishRefresh();
   const results = await Promise.all([first, second]);
@@ -111,16 +115,17 @@ it('does not block another workspace while a manual sync is pending', async () =
   const blocked = new Promise<void>((resolve) => {
     finishRefresh = resolve;
   });
+  const refreshStarted = Promise.withResolvers<void>();
   mockRefreshWorkspace.mockImplementation(async (id: string) => {
     if (id === 'slow') {
+      refreshStarted.resolve();
       await blocked;
     }
     return { success: true };
   });
   const slow = workspaceQueryService.syncPRStatus('slow');
-  await vi.waitFor(() =>
-    expect(mockRefreshWorkspace).toHaveBeenCalledWith('slow', { force: false })
-  );
+  await refreshStarted.promise;
+  expect(mockRefreshWorkspace).toHaveBeenCalledWith('slow', { force: false });
   try {
     await expect(workspaceQueryService.syncPRStatus('other')).resolves.toMatchObject({
       success: true,
@@ -157,22 +162,22 @@ it('runs an explicit project sync while the automatic sweep is in flight', async
     resolveAutomatic = resolve;
   });
   mockFindByProject.mockResolvedValue([{ id: 'w', prs: [{ id: 'a' }] }]);
-  mockRefreshWorkspace.mockImplementation((_id: string, options: { force: boolean }) =>
-    options.force ? Promise.resolve({ success: true }) : automaticRefresh
-  );
+  const refreshes = createTestEventLog<boolean>();
+  mockRefreshWorkspace.mockImplementation((_id: string, options: { force: boolean }) => {
+    refreshes.record(options.force);
+    return options.force ? Promise.resolve({ success: true }) : automaticRefresh;
+  });
   try {
     await expect(workspaceQueryService.syncAllPRStatuses('p')).resolves.toEqual({ queued: 1 });
-    await vi.waitFor(() => {
-      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: false });
-    });
+    await refreshes.waitForCount(1);
+    expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: false });
     // A repeated automatic sweep is still deduplicated.
     await expect(workspaceQueryService.syncAllPRStatuses('p')).resolves.toEqual({ queued: 0 });
     await expect(workspaceQueryService.syncAllPRStatuses('p', { force: true })).resolves.toEqual({
       queued: 1,
     });
-    await vi.waitFor(() => {
-      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: true });
-    });
+    await refreshes.waitForCount(2);
+    expect(mockRefreshWorkspace).toHaveBeenCalledWith('w', { force: true });
     expect(mockRefreshWorkspace).toHaveBeenCalledTimes(2);
   } finally {
     resolveAutomatic?.({ success: true });

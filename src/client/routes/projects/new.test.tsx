@@ -347,12 +347,13 @@ it('forces CLI authentication refresh when the setup terminal closes', async () 
     expect(button).toBeDefined();
     flushSync(() => button?.click());
   };
+  const healthUpdated = Promise.withResolvers<void>();
+  setHealthData.mockImplementationOnce(() => healthUpdated.resolve());
   try {
     click('Open setup terminal');
     click('Close setup terminal');
-    await vi.waitFor(() =>
-      expect(setHealthData).toHaveBeenCalledWith({ forceRefresh: false }, { allHealthy: true })
-    );
+    await healthUpdated.promise;
+    expect(setHealthData).toHaveBeenCalledWith({ forceRefresh: false }, { allHealthy: true });
     expect(refreshHealthFetch).toHaveBeenCalledWith({ forceRefresh: true }, { staleTime: 0 });
   } finally {
     flushSync(() => root.unmount());

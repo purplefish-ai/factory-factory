@@ -65,13 +65,14 @@ describe('AgentErrorStrip', () => {
   });
 
   it('reports clipboard failures', async () => {
+    const toastShown = Promise.withResolvers<void>();
+    toastError.mockImplementationOnce(() => toastShown.resolve());
     flushSync(() => root.render(<AgentErrorStrip message="Request timed out" />));
 
     flushSync(() => button('Copy error')?.click());
 
-    await vi.waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("Couldn't copy to the clipboard.")
-    );
+    await toastShown.promise;
+    expect(toastError).toHaveBeenCalledWith("Couldn't copy to the clipboard.");
     expect(button('Copy error')).toBeDefined();
   });
 });

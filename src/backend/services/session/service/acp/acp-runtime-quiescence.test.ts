@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createDeferredCall } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { AcpRuntimeQuiescence } from './acp-runtime-quiescence';
 
 function createDeferred<T>(): {
@@ -224,8 +225,8 @@ describe('AcpRuntimeQuiescence', () => {
 it('serializes multiple observed waiters and preserves the active barrier for ordinary joiners', async () => {
   const q = new AcpRuntimeQuiescence({ stopClient: async () => undefined });
   const first = createDeferred<void>();
-  const second = createDeferred<void>();
-  const third = createDeferred<void>();
+  const second = createDeferredCall<void>();
+  const third = createDeferredCall<void>();
   const calls: string[] = [];
   const a = q.runObservedStop('s', async () => {
     calls.push('first');
@@ -236,7 +237,7 @@ it('serializes multiple observed waiters and preserves the active barrier for or
     's',
     async () => {
       calls.push('second');
-      await second.promise;
+      await second.run();
       return false;
     },
     () => {
@@ -245,17 +246,19 @@ it('serializes multiple observed waiters and preserves the active barrier for or
   );
   const c = q.runObservedStop('s', async () => {
     calls.push('third');
-    await third.promise;
+    await third.run();
     return true;
   });
   first.resolve();
   await a;
-  await vi.waitFor(() => expect(calls).toEqual(['first', 'second']));
+  await second.entered;
+  expect(calls).toEqual(['first', 'second']);
   const joined = expect(q.stopAndQuiesce('s')).rejects.toThrow('unconfirmed');
   second.resolve();
   await b;
   await joined;
-  await vi.waitFor(() => expect(calls).toEqual(['first', 'second', 'third']));
+  await third.entered;
+  expect(calls).toEqual(['first', 'second', 'third']);
   await expect(
     q.runClientCreationOperation('s', 'active', async () => undefined)
   ).rejects.toThrow();

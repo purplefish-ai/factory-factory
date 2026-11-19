@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDeferredCall } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
+import { deferred } from '@/test-utils/deferred';
 import type { CreateAcpClientParams } from './acp-client-factory';
 import type { AcpProcessHandle } from './acp-process-handle';
 import {
@@ -87,12 +89,13 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
 
   it('logs a deduplicated stop under the manager category', async () => {
     const handle = createTestProcessHandle();
-    markChildKilledOnSignal(mockChildOf(handle));
+    const { signaled } = markChildKilledOnSignal(mockChildOf(handle));
     const { supervisor } = createHarness(() => Promise.resolve(handle));
     await install(supervisor);
 
     const firstStop = supervisor.stopClient('session-1');
-    await vi.waitFor(() => expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM'));
+    await signaled;
+    expect(handle.child.kill).toHaveBeenCalledWith('SIGTERM');
     const duplicateStop = supervisor.stopClient('session-1');
 
     expect(duplicateStop).toBe(firstStop);
@@ -129,7 +132,7 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     expect(first.child.kill).toHaveBeenCalledTimes(1);
     expect(first.child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(createClient).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    expect(onRuntimeExit).toHaveBeenCalledOnce();
     expect(onRuntimeExit).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
@@ -202,9 +205,11 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     // Catches a final stop pass targeting replacement work while the original process remains live.
     const first = createTestProcessHandle();
     const firstChild = mockChildOf(first);
+    const firstStopAttempted = deferred();
     firstChild.kill = vi
       .fn()
       .mockImplementationOnce(() => {
+        firstStopAttempted.resolve();
         throw new Error('first signal failed');
       })
       .mockImplementation((signal?: string) => {
@@ -226,7 +231,8 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     });
 
     const stopping = supervisor.stopAndQuiesce('session-1');
-    await vi.waitFor(() => expect(first.child.kill).toHaveBeenCalledWith('SIGTERM'));
+    await firstStopAttempted.promise;
+    expect(first.child.kill).toHaveBeenCalledWith('SIGTERM');
     barrier.resolve(undefined);
     await expect(creation).resolves.toBe(first);
     await expect(stopping).resolves.toBeUndefined();
@@ -240,8 +246,8 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     // Catches a late factory result escaping both the initial stop and creation barrier.
     const handle = createTestProcessHandle();
     exitChildAfterSigterm(mockChildOf(handle));
-    const factoryCreation = createDeferred<AcpProcessHandle>();
-    const { supervisor } = createHarness(() => factoryCreation.promise);
+    const factoryCreation = createDeferredCall<AcpProcessHandle>();
+    const { supervisor } = createHarness(factoryCreation.run);
     const creation = supervisor.runClientCreationOperation('session-1', 'active', () =>
       supervisor.getOrCreateClient(
         'session-1',
@@ -250,7 +256,8 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
         defaultContext()
       )
     );
-    await vi.waitFor(() => expect(supervisor.getPendingClient('session-1')).toBeDefined());
+    await factoryCreation.entered;
+    expect(supervisor.getPendingClient('session-1')).toBeDefined();
 
     const firstStop = supervisor.stopAndQuiesce('session-1');
     const secondStop = supervisor.stopAndQuiesce('session-1');
@@ -479,13 +486,13 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
     exitChildAfterSigterm(mockChildOf(active));
     exitChildAfterSigterm(mockChildOf(browse));
     exitChildAfterSigterm(mockChildOf(pendingHandle));
-    const pending = createDeferred<AcpProcessHandle>();
+    const pending = createDeferredCall<AcpProcessHandle>();
     const barrier = createDeferred<void>();
     const { supervisor, createClient } = createHarness();
     createClient
       .mockResolvedValueOnce(active)
       .mockResolvedValueOnce(browse)
-      .mockReturnValueOnce(pending.promise);
+      .mockImplementationOnce(pending.run);
     await install(supervisor, 'active-session');
     await supervisor.getOrCreateClient(
       'browse-session',
@@ -499,7 +506,8 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
       defaultHandlers(),
       defaultContext()
     );
-    await vi.waitFor(() => expect(supervisor.getPendingClient('pending-session')).toBeDefined());
+    await pending.entered;
+    expect(supervisor.getPendingClient('pending-session')).toBeDefined();
     const barrierOnly = supervisor.runClientCreationOperation(
       'barrier-session',
       'browse',
@@ -527,15 +535,16 @@ describe('AcpRuntimeSupervisor termination and shutdown ownership', () => {
 
   it('returns after the pending-creation timeout and clears creation registries', async () => {
     // Catches shutdown hanging forever on an uncooperative factory promise.
-    const never = new Promise<AcpProcessHandle>(() => undefined);
-    const { supervisor } = createHarness(() => never);
+    const never = createDeferredCall<AcpProcessHandle>();
+    const { supervisor } = createHarness(never.run);
     void supervisor.getOrCreateClient(
       'pending-session',
       defaultOptions(),
       defaultHandlers(),
       defaultContext()
     );
-    await vi.waitFor(() => expect(supervisor.getPendingClient('pending-session')).toBeDefined());
+    await never.entered;
+    expect(supervisor.getPendingClient('pending-session')).toBeDefined();
     vi.useFakeTimers();
 
     const stopping = supervisor.stopAllClients(50);

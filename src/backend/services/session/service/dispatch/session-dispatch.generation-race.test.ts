@@ -4,6 +4,7 @@ import { sessionDataService } from '@/backend/services/session/service/data/sess
 import { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
 
@@ -23,14 +24,6 @@ function enqueue(id: string): QueuedMessage {
   };
   sessionDomainService.enqueue(SESSION_ID, message);
   return message;
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }
 
 /** A real lifecycle gate shared by dispatch and an unrelated startup caller. */
@@ -91,12 +84,20 @@ function raceHarness() {
   });
   // Hold the dispatch gate's session lookup so another caller can interleave.
   const lookup = deferred<unknown>();
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockReturnValueOnce(
-    unsafeCoerce(lookup.promise)
-  );
+  const lookupStarted = deferred();
+  vi.spyOn(sessionDataService, 'findAgentSessionById').mockImplementationOnce(() => {
+    lookupStarted.resolve();
+    return unsafeCoerce(lookup.promise);
+  });
   const releaseLookup = () =>
     lookup.resolve({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } });
-  return { gate, dispatcher, sendSessionMessage, releaseLookup };
+  return {
+    gate,
+    dispatcher,
+    sendSessionMessage,
+    lookupStarted: lookupStarted.promise,
+    releaseLookup,
+  };
 }
 
 afterEach(() => {
@@ -115,26 +116,26 @@ it.each([
 ] as const)(
   'dispatches a queued message when an unrelated startup lease %s mid-dispatch',
   async (_label, startup) => {
-    const { gate, dispatcher, sendSessionMessage, releaseLookup } = raceHarness();
+    const { gate, dispatcher, sendSessionMessage, lookupStarted, releaseLookup } = raceHarness();
     enqueue('hello');
 
     const dispatch = dispatcher.tryDispatchNextMessage(SESSION_ID);
-    await vi.waitFor(() => expect(sessionDataService.findAgentSessionById).toHaveBeenCalled());
+    await lookupStarted;
     await gate.runStartup(SESSION_ID, startup).catch(() => undefined);
     releaseLookup();
     await dispatch;
 
-    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledWith(SESSION_ID, 'hello'));
+    expect(sendSessionMessage).toHaveBeenCalledWith(SESSION_ID, 'hello');
     expect(sessionDomainService.getQueueLength(SESSION_ID)).toBe(0);
   }
 );
 
 it('still fences a dispatch that a stop overtakes mid-dispatch', async () => {
-  const { gate, dispatcher, sendSessionMessage, releaseLookup } = raceHarness();
+  const { gate, dispatcher, sendSessionMessage, lookupStarted, releaseLookup } = raceHarness();
   enqueue('hello');
 
   const dispatch = dispatcher.tryDispatchNextMessage(SESSION_ID);
-  await vi.waitFor(() => expect(sessionDataService.findAgentSessionById).toHaveBeenCalled());
+  await lookupStarted;
   gate.reserveStop(SESSION_ID)?.release();
   releaseLookup();
   await dispatch;

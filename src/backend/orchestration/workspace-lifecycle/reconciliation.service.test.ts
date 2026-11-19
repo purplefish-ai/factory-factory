@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 
 // Mock Prisma
 const mockFindMany = vi.fn();
@@ -247,12 +248,14 @@ describe('ReconciliationService', () => {
       project: { id: 'proj-1' },
     };
 
-    function deferred(): { promise: Promise<void>; resolve: () => void } {
-      let resolve!: () => void;
-      const promise = new Promise<void>((r) => {
-        resolve = r;
+    function pauseNextInitialization() {
+      const started = deferred();
+      const completion = deferred();
+      mockInitializeWorktree.mockImplementationOnce(() => {
+        started.resolve();
+        return completion.promise;
       });
-      return { promise, resolve };
+      return { started: started.promise, finish: completion.resolve };
     }
 
     beforeEach(() => {
@@ -272,46 +275,52 @@ describe('ReconciliationService', () => {
     });
 
     it('starts NEW workspace initialization without waiting for it', async () => {
-      const initialization = deferred();
+      const initialization = pauseNextInitialization();
       mockFindMany.mockResolvedValue([newWorkspace('ws-1'), staleWorkspace]);
-      mockInitializeWorktree.mockReturnValueOnce(initialization.promise);
 
       const result = reconciliationService.startNewWorkspaceInitialization();
 
       expect(result).toBeUndefined();
-      await vi.waitFor(() => expect(mockInitializeWorktree).toHaveBeenCalledTimes(1));
+      await initialization.started;
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
       expect(mockInitializeWorktree).toHaveBeenCalledWith('ws-1', { branchName: 'feature/ws-1' });
       // The startup pass leaves stale PROVISIONING rows to the inline recovery.
       expect(mockRecoverStaleProvisioningWorkspace).not.toHaveBeenCalled();
 
-      initialization.resolve();
+      initialization.finish();
       await reconciliationService.stopPeriodicCleanup();
     });
 
     it('initializes NEW workspaces one at a time', async () => {
-      const first = deferred();
+      const first = pauseNextInitialization();
       mockFindMany.mockResolvedValue([newWorkspace('ws-1'), newWorkspace('ws-2')]);
-      mockInitializeWorktree.mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+      mockInitializeWorktree.mockResolvedValue(undefined);
 
+      const secondStarted = deferred();
+      mockInitializeWorktree.mockImplementationOnce(() => {
+        secondStarted.resolve();
+        return Promise.resolve();
+      });
       reconciliationService.startNewWorkspaceInitialization();
-      await vi.waitFor(() => expect(mockInitializeWorktree).toHaveBeenCalledTimes(1));
-      await Promise.resolve();
+      await first.started;
       expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
 
-      first.resolve();
-      await vi.waitFor(() => expect(mockInitializeWorktree).toHaveBeenCalledTimes(2));
+      first.finish();
+      await secondStarted.promise;
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(2);
       expect(mockInitializeWorktree).toHaveBeenLastCalledWith('ws-2', {
         branchName: 'feature/ws-2',
       });
     });
 
     it('stopPeriodicCleanup drains startup initialization and skips remaining workspaces', async () => {
-      const first = deferred();
+      const first = pauseNextInitialization();
       mockFindMany.mockResolvedValue([newWorkspace('ws-1'), newWorkspace('ws-2')]);
-      mockInitializeWorktree.mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+      mockInitializeWorktree.mockResolvedValue(undefined);
 
       reconciliationService.startNewWorkspaceInitialization();
-      await vi.waitFor(() => expect(mockInitializeWorktree).toHaveBeenCalledTimes(1));
+      await first.started;
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
 
       let stopped = false;
       const stopPromise = reconciliationService.stopPeriodicCleanup().then(() => {
@@ -321,7 +330,7 @@ describe('ReconciliationService', () => {
       await Promise.resolve();
       expect(stopped).toBe(false);
 
-      first.resolve();
+      first.finish();
       await stopPromise;
       expect(stopped).toBe(true);
       expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
@@ -342,13 +351,14 @@ describe('ReconciliationService', () => {
       mockFindMany.mockResolvedValueOnce([newWorkspace('ws-1')]);
       mockInitializeWorktree.mockRejectedValueOnce(new Error('Git clone failed'));
 
+      const errorLogged = deferred();
+      mockLogger.error.mockImplementationOnce(() => errorLogged.resolve());
       reconciliationService.startNewWorkspaceInitialization();
-      await vi.waitFor(() =>
-        expect(mockLogger.error).toHaveBeenCalledWith(
-          'Failed to initialize workspace',
-          expect.objectContaining({ message: 'Git clone failed' }),
-          { workspaceId: 'ws-1' }
-        )
+      await errorLogged.promise;
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to initialize workspace',
+        expect.objectContaining({ message: 'Git clone failed' }),
+        { workspaceId: 'ws-1' }
       );
       await reconciliationService.stopPeriodicCleanup();
 
@@ -363,20 +373,26 @@ describe('ReconciliationService', () => {
     });
 
     it('holds periodic reconciliation until startup initialization settles', async () => {
-      const initialization = deferred();
+      const initialization = pauseNextInitialization();
       mockFindMany.mockResolvedValue([newWorkspace('ws-1')]);
-      mockInitializeWorktree.mockReturnValueOnce(initialization.promise);
       vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
-      const reconcileSpy = vi.spyOn(reconciliationService, 'reconcile');
+      const reconciliationStarted = deferred();
+      const reconcile = reconciliationService.reconcile.bind(reconciliationService);
+      const reconcileSpy = vi.spyOn(reconciliationService, 'reconcile').mockImplementation(() => {
+        reconciliationStarted.resolve();
+        return reconcile();
+      });
 
       reconciliationService.startNewWorkspaceInitialization();
-      await vi.waitFor(() => expect(mockInitializeWorktree).toHaveBeenCalledTimes(1));
+      await initialization.started;
+      expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
       await vi.advanceTimersToNextTimerAsync();
 
       expect(reconcileSpy).not.toHaveBeenCalled();
 
-      initialization.resolve();
-      await vi.waitFor(() => expect(reconcileSpy).toHaveBeenCalledTimes(1));
+      initialization.finish();
+      await reconciliationStarted.promise;
+      expect(reconcileSpy).toHaveBeenCalledTimes(1);
     });
   });
 

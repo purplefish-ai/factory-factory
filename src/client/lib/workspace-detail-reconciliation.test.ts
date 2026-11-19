@@ -10,6 +10,7 @@ import {
   workspaceDetailQueryOptions,
   workspaceDetailCacheOptions,
 } from '@/client/lib/workspace-cache-reconciler';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
@@ -296,11 +297,12 @@ describe('workspace detail HTTP/stream commit ownership', () => {
   it('retries an active initial detail if the project changes in the HTTP-resolution commit gap', async () => {
     const f = fixture();
     f.owner.retireConnection(f.token);
-    const requests: Array<(data: WorkspaceDetail) => void> = [];
+    const requestLog = createTestEventLog<(data: WorkspaceDetail) => void>();
+    const requests = requestLog.events;
     const options = workspaceDetailQueryOptions(
       f.client,
       'gap',
-      () => new Promise<WorkspaceDetail>((resolve) => requests.push(resolve))
+      () => new Promise<WorkspaceDetail>((resolve) => requestLog.record(resolve))
     );
     const observer = new QueryObserver(f.client, options);
     const results: Array<{ status: string; data: WorkspaceDetail | undefined }> = [];
@@ -311,7 +313,8 @@ describe('workspace detail HTTP/stream commit ownership', () => {
       requests[0]!(detail({ id: 'gap', worktreePath: '/old/gap' }));
       await Promise.resolve();
       f.owner.beginConnection();
-      await vi.waitFor(() => expect(requests).toHaveLength(2));
+      await requestLog.waitForCount(2);
+      expect(requests).toHaveLength(2);
       expect(f.client.getQueryData(options.queryKey)).toBeUndefined();
       expect(observer.getCurrentResult()).toMatchObject({ status: 'pending', isLoading: true });
       expect(results.some((result) => result.status === 'success')).toBe(false);
@@ -394,11 +397,12 @@ describe('workspace detail HTTP/stream commit ownership', () => {
     'protects a %s installed before deferred recovery',
     async (action) => {
       const f = fixture();
-      const requests: Array<(data: WorkspaceDetail) => void> = [];
+      const requestLog = createTestEventLog<(data: WorkspaceDetail) => void>();
+      const requests = requestLog.events;
       const initial = workspaceDetailQueryOptions(
         f.client,
         'recovery-race',
-        () => new Promise<WorkspaceDetail>((resolve) => requests.push(resolve))
+        () => new Promise<WorkspaceDetail>((resolve) => requestLog.record(resolve))
       );
       const share = workspaceDetailCacheOptions(f.client, 'recovery-race').structuralSharing;
       const key = initial.queryKey;
@@ -434,7 +438,8 @@ describe('workspace detail HTTP/stream commit ownership', () => {
         f.owner.beginConnection();
         requests[0]!(detail({ id: 'recovery-race', worktreePath: '/retired/response' }));
         if (action === 'fresh-write') {
-          await vi.waitFor(() => expect(requests).toHaveLength(2));
+          await requestLog.waitForCount(2);
+          expect(requests).toHaveLength(2);
           expect(f.client.getQueryData(key)).toMatchObject({ worktreePath: '/synchronous/write' });
           requests[1]!(detail({ id: 'recovery-race', worktreePath: '/fresh/retry' }));
           await vi.waitFor(() =>
@@ -454,9 +459,13 @@ describe('workspace detail HTTP/stream commit ownership', () => {
 
   it('preserves a new imperative fetch started by reset notifications on the same unobserved query', async () => {
     const f = fixture();
-    const requests: Array<{ resolve: (data: WorkspaceDetail) => void; signal: AbortSignal }> = [];
+    const requestLog = createTestEventLog<{
+      resolve: (data: WorkspaceDetail) => void;
+      signal: AbortSignal;
+    }>();
+    const requests = requestLog.events;
     const fetchDetail = (signal: AbortSignal) =>
-      new Promise<WorkspaceDetail>((resolve) => requests.push({ resolve, signal }));
+      new Promise<WorkspaceDetail>((resolve) => requestLog.record({ resolve, signal }));
     const initial = workspaceDetailQueryOptions(f.client, 'imperative', fetchDetail);
     const share = workspaceDetailCacheOptions(f.client, 'imperative').structuralSharing;
     let stop: () => void = () => undefined;
@@ -492,7 +501,8 @@ describe('workspace detail HTTP/stream commit ownership', () => {
       f.owner.retireConnection(f.token);
       f.owner.beginConnection();
       requests[0]!.resolve(detail({ id: 'imperative', worktreePath: '/retired' }));
-      await vi.waitFor(() => expect(requests).toHaveLength(2));
+      await requestLog.waitForCount(2);
+      expect(requests).toHaveLength(2);
       expect(requests[1]!.signal.aborted).toBe(false);
       expect(f.client.getQueryCache().find({ queryKey: initial.queryKey })).toBe(query);
       requests[1]!.resolve(detail({ id: 'imperative', worktreePath: '/fresh/imperative' }));

@@ -5,6 +5,7 @@ import {
   type IncomingHttpHeaders,
 } from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { proxyInternals } from './proxy';
 
 interface HttpResponse {
@@ -422,7 +423,17 @@ describe('proxy internals', () => {
 
   it('rejects in-flight login attempts once the IP is locked out', async () => {
     // The proxy checks the lock as soon as it receives each request.
+    const lockChecks = createTestEventLog<string>();
+    const { isLocked } = proxyInternals.BruteForceGuard.prototype;
     const isLockedSpy = vi.spyOn(proxyInternals.BruteForceGuard.prototype, 'isLocked');
+    isLockedSpy.mockImplementation(function (
+      this: InstanceType<typeof proxyInternals.BruteForceGuard>,
+      ip: string
+    ) {
+      const state = isLocked.call(this, ip);
+      lockChecks.record(ip);
+      return state;
+    });
     const authProxy = await proxyInternals.createAuthProxy({
       upstreamPort: 1,
       password: 'ABC123',
@@ -433,7 +444,8 @@ describe('proxy internals', () => {
     try {
       // Every request reaches the proxy before any body is sent.
       const pending = Array.from({ length: 8 }, () => openLoginRequest(authProxy.port, ip));
-      await vi.waitFor(() => expect(isLockedSpy).toHaveBeenCalledTimes(8));
+      await lockChecks.waitForCount(8);
+      expect(isLockedSpy).toHaveBeenCalledTimes(8);
 
       const statuses: number[] = [];
       for (const login of pending.slice(0, 7)) {

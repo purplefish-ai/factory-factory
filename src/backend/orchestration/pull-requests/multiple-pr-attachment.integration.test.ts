@@ -12,6 +12,7 @@ import {
 } from '@/backend/testing/integration-db';
 import type { PRObservation } from '@/shared/pr-monitoring';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import { deferred } from '@/test-utils/deferred';
 import type { PrismaClient } from '@prisma-gen/client';
 import type { PRObservationPorts } from './pr-observation-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
@@ -106,18 +107,17 @@ it('rejects a refresh started before detach and reattach', async () => {
     'multi',
     'https://github.com/other/repo/pull/8'
   );
-  let resolve!: (value: PRObservation) => void;
-  fetchObservation.mockImplementationOnce(
-    () =>
-      new Promise((done) => {
-        resolve = done;
-      })
-  );
+  const refreshStarted = deferred();
+  const observation = deferred<PRObservation>();
+  fetchObservation.mockImplementationOnce(() => {
+    refreshStarted.resolve();
+    return observation.promise;
+  });
   const refresh = prSnapshotService.refreshPR({ workspaceId: 'multi', prId: attached.prId });
-  await vi.waitFor(() => expect(resolve).toBeTypeOf('function'));
+  await refreshStarted.promise;
   await workspacePrSnapshotService.detach({ workspaceId: 'multi', prId: attached.prId });
   await workspacePrSnapshotService.attach('multi', 'https://github.com/other/repo/pull/8');
-  resolve({
+  observation.resolve({
     ...redObservation,
     url: 'https://github.com/other/repo/pull/8',
     repository: 'other/repo',

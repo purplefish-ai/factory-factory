@@ -83,6 +83,6 @@ it('starts rename after the menu closes so its focus return cannot dismiss the e
     item.textContent?.includes('Rename chat')
   )!;
   await act(() => rename.click());
-  await vi.waitFor(() => expect(onRename).toHaveBeenCalledOnce());
+  expect(onRename).toHaveBeenCalledOnce();
   expect(menuPresentOnRename).toBe(false);
 });

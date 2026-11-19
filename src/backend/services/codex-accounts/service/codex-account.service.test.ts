@@ -478,16 +478,19 @@ async function holdReadsDuringUnrelatedLogin(
     release = resolve;
   });
   const read = probe.getMockImplementation()!;
+  const readStarted = Promise.withResolvers<void>();
   probe.mockClear();
   probe.mockImplementation(async (context) => {
+    if (context.accountId === accountId) {
+      readStarted.resolve();
+    }
     await gate;
     return read(context);
   });
   return {
     async endLoginMidRead() {
-      await vi.waitFor(() =>
-        expect(probe).toHaveBeenCalledWith(expect.objectContaining({ accountId }))
-      );
+      await readStarted.promise;
+      expect(probe).toHaveBeenCalledWith(expect.objectContaining({ accountId }));
       expect((await service.cancelLogin(other.id)).status).toBe('cancelled');
       release();
     },

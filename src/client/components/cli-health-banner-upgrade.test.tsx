@@ -7,6 +7,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { CLIHealthBanner } from './cli-health-banner';
 
 it.each([false, true])(
@@ -30,16 +31,16 @@ it.each([false, true])(
       claude: { ...oldHealth.claude, version: '2.1.312', isOutdated: false },
     };
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const operations: string[] = [];
+    const operations = createTestEventLog<string>();
     const client = trpc.createClient({
       links: [
         () =>
           ({ op }) =>
             observable((observer) => {
-              operations.push(op.path);
+              operations.record(op.path);
               observer.next({
                 result: {
-                  data: operations.length === 1 || staleRefetch ? oldHealth : currentHealth,
+                  data: operations.events.length === 1 || staleRefetch ? oldHealth : currentHealth,
                 },
               });
               observer.complete();
@@ -66,14 +67,14 @@ it.each([false, true])(
       );
       expect(recheck).toBeDefined();
       flushSync(() => recheck?.click());
-      await vi.waitFor(() => expect(operations).toHaveLength(2));
+      await operations.waitForCount(2);
       await vi.waitFor(() =>
         expect(queryClient.getQueryData(queryKey)).toEqual(staleRefetch ? oldHealth : currentHealth)
       );
       expect(container.querySelector('[aria-label="Update Claude"]')).toBeNull();
       expect(container.querySelector('[aria-label="Updating Claude"]')).toBeNull();
       expect(container.textContent).toContain('GitHub sign-in required');
-      expect(operations).toEqual(['admin.checkCLIHealth', 'admin.checkCLIHealth']);
+      expect(operations.events).toEqual(['admin.checkCLIHealth', 'admin.checkCLIHealth']);
     } finally {
       flushSync(() => root.unmount());
       queryClient.clear();

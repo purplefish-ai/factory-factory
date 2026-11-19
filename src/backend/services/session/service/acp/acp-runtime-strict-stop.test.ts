@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { AcpClientFactory } from './acp-client-factory';
 import { AcpRuntimeManager } from './acp-runtime-manager';
 import {
@@ -189,10 +190,12 @@ it.skipIf(process.platform === 'win32')(
       }
       return true;
     });
+    const exitObserved = deferred();
     let cleanupCompletedAtObservation = false;
     const onRuntimeExit = vi.fn(() => {
       cleanupCompletedAtObservation =
         !live && signal.mock.calls.some(([pid, value]) => pid === -12_345 && value === 'SIGTERM');
+      exitObserved.resolve();
       return Promise.reject(new Error('durable observation unavailable'));
     });
     await manager.getOrCreateClient(
@@ -202,7 +205,8 @@ it.skipIf(process.platform === 'win32')(
       defaultContext()
     );
     handle.child.emit('exit', 1);
-    await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    await exitObserved.promise;
+    expect(onRuntimeExit).toHaveBeenCalledOnce();
     expect(cleanupCompletedAtObservation).toBe(true);
     expect(await manager.stopAndQuiesceObserved('exit', 'USER_STOP')).toMatchObject({
       status: 'LOCAL_RUNTIME_GROUP_STOPPED',

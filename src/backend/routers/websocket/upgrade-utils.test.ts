@@ -2,6 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { deferred } from '@/test-utils/deferred';
 import {
   createWebSocketUpgradeHandler,
   validateTrustedLocalWebSocketRequest,
@@ -469,25 +470,27 @@ describe('createWebSocketUpgradeHandler', () => {
   it('does not upgrade when authorize resolves null', async () => {
     const onOpen = vi.fn();
     const { wss } = createWss();
+    const authorization = deferred<null>();
 
     const handler = createWebSocketUpgradeHandler({
       connectionName: 'test WebSocket',
       configService: createConfigService(['http://localhost:3000']),
       logger: createFullLogger(),
-      authorize: () => Promise.resolve(null),
+      authorize: () => authorization.promise,
       onOpen,
     });
 
     invoke(handler, { wss });
-    await vi.waitFor(() => {
-      expect(onOpen).not.toHaveBeenCalled();
-    });
+    authorization.resolve(null);
+    await authorization.promise;
 
+    expect(onOpen).not.toHaveBeenCalled();
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
   it('passes the resolved authorize value to onOpen', async () => {
-    const onOpen = vi.fn();
+    const opened = deferred();
+    const onOpen = vi.fn(() => opened.resolve());
     const ws = { on: vi.fn() } as unknown as WebSocket;
     const { wss } = createWss(ws);
 
@@ -501,12 +504,11 @@ describe('createWebSocketUpgradeHandler', () => {
 
     invoke(handler, { wss });
 
-    await vi.waitFor(() => {
-      expect(onOpen).toHaveBeenCalledWith(
-        ws,
-        expect.objectContaining({ auth: { workingDir: '/tmp/worktree' } })
-      );
-    });
+    await opened.promise;
+    expect(onOpen).toHaveBeenCalledWith(
+      ws,
+      expect.objectContaining({ auth: { workingDir: '/tmp/worktree' } })
+    );
   });
 
   it('upgrades synchronously when authorize returns a plain value', () => {
@@ -562,11 +564,15 @@ describe('createWebSocketUpgradeHandler', () => {
       onOpen,
     });
 
+    const rejected = deferred();
+    vi.mocked(socket.write).mockImplementationOnce(() => {
+      rejected.resolve();
+      return true;
+    });
     invoke(handler, { socket, wss });
 
-    await vi.waitFor(() => {
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
-    });
+    await rejected.promise;
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to authorize test WebSocket upgrade',
       expect.objectContaining({ message: 'authorize hook returned undefined' })
@@ -628,11 +634,15 @@ describe('createWebSocketUpgradeHandler', () => {
       onOpen,
     });
 
+    const rejected = deferred();
+    vi.mocked(socket.write).mockImplementationOnce(() => {
+      rejected.resolve();
+      return true;
+    });
     invoke(handler, { socket, wss });
 
-    await vi.waitFor(() => {
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
-    });
+    await rejected.promise;
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Authorization failed'));
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to authorize test WebSocket upgrade',
       expect.any(Error)

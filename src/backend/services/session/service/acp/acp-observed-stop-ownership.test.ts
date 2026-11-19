@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { AcpObservedStop } from './acp-observed-stop';
 import * as groups from './acp-owned-group';
 import { createDeferred, createTestProcessHandle } from './acp-runtime-manager.test-helpers';
@@ -217,9 +218,14 @@ it('never reuses retained event stop after an ordinary runtime is registered and
 it('does not republish an old stop after ordinary replacement during physical cleanup', async () => {
   const h = setup();
   const physical = createDeferred<'LOCAL_RUNTIME_GROUP_STOPPED'>();
-  const called = vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockReturnValue(physical.promise);
+  const stopping = deferred();
+  const called = vi.spyOn(groups, 'stopOwnedRuntimeGroup').mockImplementation(() => {
+    stopping.resolve();
+    return physical.promise;
+  });
   const pending = h.stop.stopAndQuiesceObserved('s', 'USER_STOP', source);
-  await vi.waitFor(() => expect(called).toHaveBeenCalledOnce());
+  await stopping.promise;
+  expect(called).toHaveBeenCalledOnce();
   h.registerOrdinary();
   h.removeCurrent();
   physical.resolve('LOCAL_RUNTIME_GROUP_STOPPED');

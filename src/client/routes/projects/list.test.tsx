@@ -193,15 +193,16 @@ describe('ProjectsListPage archive confirmation', () => {
       queryFn: () => Promise.reject(new Error('Refresh failed')),
     });
     mocks.refetch.mockImplementation(observer.refetch);
+    const toastShown = Promise.withResolvers<void>();
+    mocks.toastError.mockImplementationOnce(() => toastShown.resolve());
     const { root } = renderPage();
     try {
       flushSync(() => mocks.archiveMutationOptions?.onSuccess?.());
-      await vi.waitFor(() => {
-        expect(mocks.toastError).toHaveBeenCalledWith(
-          "Couldn't refresh data.",
-          expect.objectContaining({ description: 'Refresh failed' })
-        );
-      });
+      await toastShown.promise;
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Couldn't refresh data.",
+        expect.objectContaining({ description: 'Refresh failed' })
+      );
     } finally {
       flushSync(() => root.unmount());
       client.clear();

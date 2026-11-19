@@ -13,6 +13,7 @@ import {
 } from '@/client/lib/snapshot-to-workspace';
 import { workspaceDetailQueryOptions } from '@/client/lib/workspace-cache-reconciler';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeWorkspaceSnapshotEntry as makeEntry } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
@@ -47,12 +48,13 @@ vi.mock('@tanstack/react-query', async (importOriginal) => ({
 const t = initTRPC.create({ transformer: superjson });
 const detail = (status: 'READY' | 'ARCHIVING' | 'ARCHIVED' = 'READY') =>
   projectSnapshotToWorkspace(makeEntry({ status }));
-const requests: ReturnType<typeof Promise.withResolvers<ReturnType<typeof detail>>>[] = [];
+type DetailRequest = ReturnType<typeof Promise.withResolvers<ReturnType<typeof detail>>>;
+let requests = createTestEventLog<DetailRequest>();
 const router = t.router({
   workspace: t.router({
     get: t.procedure.input(z.object({ id: z.string() })).query(async () => {
       const request = Promise.withResolvers<ReturnType<typeof detail>>();
-      requests.push(request);
+      requests.record(request);
       return await request.promise;
     }),
     listForProject: t.procedure.input(z.object({ projectId: z.string() })).query(() => ({
@@ -68,7 +70,7 @@ let queryClient: QueryClient;
 const unsubscribes: Array<() => void> = [];
 
 async function fixture(active = true) {
-  requests.length = 0;
+  requests = createTestEventLog<DetailRequest>();
   server = createHTTPServer({ router });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   const address = server.address();
@@ -111,7 +113,8 @@ function remove(workspaceId = 'ws-1') {
 }
 
 async function waitForRequests(count: number) {
-  await vi.waitFor(() => expect(requests).toHaveLength(count));
+  await requests.waitForCount(count);
+  expect(requests.events).toHaveLength(count);
 }
 
 afterEach(async () => {
@@ -119,7 +122,7 @@ afterEach(async () => {
     unsubscribe();
   }
   queryClient?.clear();
-  for (const request of requests) {
+  for (const request of requests.events) {
     request.resolve(detail('ARCHIVED'));
   }
   if (server) {
@@ -143,7 +146,11 @@ describe('snapshot live-membership removal with real detail queries', () => {
       workspaceId: 'ws-1',
       entry: makeEntry({ name: 'Newest stream name', runScriptStatus: 'RUNNING' }),
     });
-    requests[0]!.resolve({ ...detail(), name: 'Old HTTP name', worktreePath: '/ready/path' });
+    requests.events[0]!.resolve({
+      ...detail(),
+      name: 'Old HTTP name',
+      worktreePath: '/ready/path',
+    });
     await pending;
     expect(observer.getCurrentResult().data).toMatchObject({
       name: 'Newest stream name',
@@ -160,9 +167,9 @@ describe('snapshot live-membership removal with real detail queries', () => {
     channel.onDisconnected?.();
     expect(signals[0]?.aborted).toBe(true);
     await waitForRequests(2);
-    requests[1]!.resolve({ ...detail(), name: 'HTTP fallback' });
+    requests.events[1]!.resolve({ ...detail(), name: 'HTTP fallback' });
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.name).toBe('HTTP fallback'));
-    requests[0]!.resolve({ ...detail(), name: 'Retired HTTP' });
+    requests.events[0]!.resolve({ ...detail(), name: 'Retired HTTP' });
     await pending;
     expect(observer.getCurrentResult().data?.name).toBe('HTTP fallback');
   });
@@ -183,7 +190,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
       remove();
       expect(observer.getCurrentResult()).toMatchObject({ data: undefined, isPending: true });
       await waitForRequests(1);
-      requests[0]!.resolve(detail(status));
+      requests.events[0]!.resolve(detail(status));
       await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe(status));
     }
   );
@@ -197,9 +204,9 @@ describe('snapshot live-membership removal with real detail queries', () => {
     expect(signals[0]?.aborted).toBe(true);
     expect(observer.getCurrentResult().data).toBeUndefined();
     await waitForRequests(2);
-    requests[1]!.resolve(detail('ARCHIVED'));
+    requests.events[1]!.resolve(detail('ARCHIVED'));
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
-    requests[0]!.resolve(detail());
+    requests.events[0]!.resolve(detail());
     await previousFetch;
     expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED');
   });
@@ -210,7 +217,9 @@ describe('snapshot live-membership removal with real detail queries', () => {
     remove();
     expect(observer.getCurrentResult().data).toBeUndefined();
     await waitForRequests(1);
-    requests[0]!.reject(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
+    requests.events[0]!.reject(
+      new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' })
+    );
     await vi.waitFor(() => expect(observer.getCurrentResult().isError).toBe(true));
     expect(observer.getCurrentResult()).toMatchObject({
       data: undefined,
@@ -224,10 +233,10 @@ describe('snapshot live-membership removal with real detail queries', () => {
     remove();
     expect(utils.workspace.get.getData({ id: 'ws-1' })).toBeUndefined();
     expect(queryClient.getQueryState(queryKey)?.status).toBe('pending');
-    expect(requests).toHaveLength(0);
+    expect(requests.events).toHaveLength(0);
     unsubscribes.push(observer.subscribe(() => undefined));
     await waitForRequests(1);
-    requests[0]!.resolve(detail('ARCHIVED'));
+    requests.events[0]!.resolve(detail('ARCHIVED'));
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
   });
 
@@ -250,11 +259,11 @@ describe('snapshot live-membership removal with real detail queries', () => {
     remove();
     await waitForRequests(1);
     remove();
-    requests[0]!.resolve(detail('ARCHIVED'));
+    requests.events[0]!.resolve(detail('ARCHIVED'));
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
     remove();
     expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED');
-    expect(requests).toHaveLength(1);
+    expect(requests.events).toHaveLength(1);
     channel.onMessage!({ type: 'snapshot_changed', workspaceId: 'ws-1', entry: makeEntry() });
     expect(observer.getCurrentResult().data?.status).toBe('READY');
     remove();
@@ -269,7 +278,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
     expect(observer.getCurrentResult().data).toBeUndefined();
     expect(utils.workspace.listForProject.getData({ projectId: 'proj-1' })?.workspaces).toEqual([]);
     await waitForRequests(1);
-    requests[0]!.resolve(detail('ARCHIVED'));
+    requests.events[0]!.resolve(detail('ARCHIVED'));
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
   });
 
@@ -289,7 +298,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
       // A live summary cannot supply the missing DB-backed detail fields.
       expect(observer.getCurrentResult().data).toBeUndefined();
       await waitForRequests(2);
-      requests[1]!.resolve({ ...detail(), name: 'Restored', githubIssueNumber: 42 });
+      requests.events[1]!.resolve({ ...detail(), name: 'Restored', githubIssueNumber: 42 });
       await vi.waitFor(() =>
         expect(observer.getCurrentResult().data).toMatchObject({
           status: 'READY',
@@ -297,8 +306,8 @@ describe('snapshot live-membership removal with real detail queries', () => {
           githubIssueNumber: 42,
         })
       );
-      requests[0]!.resolve(detail('ARCHIVING'));
-      await requests[0]!.promise;
+      requests.events[0]!.resolve(detail('ARCHIVING'));
+      await requests.events[0]!.promise;
       expect(observer.getCurrentResult().data?.status).toBe('READY');
       remove();
       expect(observer.getCurrentResult().data).toBeUndefined();
@@ -316,7 +325,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
     channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
     expect(observer.getCurrentResult().data).toBeUndefined();
     await waitForRequests(1);
-    requests[0]!.resolve(detail('ARCHIVED'));
+    requests.events[0]!.resolve(detail('ARCHIVED'));
     await vi.waitFor(() => expect(observer.getCurrentResult().data?.status).toBe('ARCHIVED'));
   });
 
@@ -337,7 +346,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
     expect(utils.workspace.get.getData({ id: 'ws-1' })?.status).toBe('ARCHIVED');
     expect(utils.workspace.get.getData({ id: 'archiving' })?.status).toBe('ARCHIVING');
     expect(utils.workspace.get.getData({ id: 'other-project' })?.status).toBe('READY');
-    expect(requests).toHaveLength(0);
+    expect(requests.events).toHaveLength(0);
   });
 
   it('keeps inactive or absent reintroduced detail unfetched until opened', async () => {
@@ -355,7 +364,7 @@ describe('snapshot live-membership removal with real detail queries', () => {
     expect(queryClient.getQueryCache().findAll({ queryKey: [['workspace', 'get']] })).toHaveLength(
       1
     );
-    expect(requests).toHaveLength(0);
+    expect(requests.events).toHaveLength(0);
   });
 
   it('does not fabricate a missing detail when a full baseline introduces a workspace', async () => {

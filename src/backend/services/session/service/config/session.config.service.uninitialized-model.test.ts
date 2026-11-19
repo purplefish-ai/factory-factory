@@ -122,11 +122,15 @@ describe('inactive Codex model intent before first startup', () => {
     async (cached) => {
       const f = fixture(cached);
       const pending = createDeferred<ReturnType<typeof createTestProcessHandle>>();
-      f.runtime.getPendingClient.mockReturnValueOnce(pending.promise);
+      const awaitingStartup = createDeferred<void>();
+      f.runtime.getPendingClient.mockImplementationOnce(() => {
+        awaitingStartup.resolve();
+        return pending.promise;
+      });
       const setting = f.service
         .setSessionConfigOption('session', 'model', 'second')
         .catch((error: unknown) => error);
-      await vi.waitFor(() => expect(f.runtime.getPendingClient).toHaveBeenCalled());
+      await awaitingStartup.promise;
       expect(f.repository.updateSession).not.toHaveBeenCalled();
       pending.reject(new Error('Session startup cancelled'));
       expect(await setting).toBeUndefined();
@@ -188,9 +192,13 @@ describe('inactive Codex model intent before first startup', () => {
   it('routes a choice through the live runtime if startup completes during discovery', async () => {
     const f = fixture();
     const discovering = createDeferred<typeof f.models>();
-    f.catalog.getModels.mockReturnValue(discovering.promise);
+    const discoveryStarted = createDeferred<void>();
+    f.catalog.getModels.mockImplementation(() => {
+      discoveryStarted.resolve();
+      return discovering.promise;
+    });
     const setting = f.service.setSessionConfigOption('session', 'model', 'second');
-    await vi.waitFor(() => expect(f.catalog.getModels).toHaveBeenCalled());
+    await discoveryStarted.promise;
     const handle = createTestProcessHandle({ provider: 'CODEX', providerSessionId: 'thread' });
     handle.configOptions = [
       {

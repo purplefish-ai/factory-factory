@@ -600,6 +600,8 @@ describe('useChatInputActions keyboard shortcuts', () => {
 it('selects only images, preserves successful files and presents per-file errors', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   uploadErrors.mockClear();
+  const errorShown = Promise.withResolvers<void>();
+  uploadErrors.mockImplementationOnce(() => errorShown.resolve());
   const { root, container } = renderHarness({
     capabilities: claudeChatBarCapabilities(),
     onSettingsChange: vi.fn(),
@@ -613,7 +615,7 @@ it('selects only images, preserves successful files and presents per-file errors
   });
   await act(async () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    await vi.waitFor(() => expect(uploadErrors).toHaveBeenCalled());
+    await errorShown.promise;
   });
   expect(uploadErrors).toHaveBeenCalledWith(
     "Couldn't upload notes.md. Unsupported file type: text/plain"

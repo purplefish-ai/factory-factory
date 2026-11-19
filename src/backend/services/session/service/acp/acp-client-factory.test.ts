@@ -16,6 +16,7 @@ import {
 } from '@/backend/services/session/service/acp/acp-client-factory.test-harness';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpClientCallbacks } from './acp-connection';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
@@ -560,11 +561,16 @@ describe('AcpClientFactory', () => {
 
   it('classifies spawn errors and dispatches the runtime error before cleanup', async () => {
     const child = createMockChildProcess({ exitAfterSigterm: true });
-    mocks.spawn.mockReturnValue(child);
+    const spawned = deferred();
+    mocks.spawn.mockImplementation(() => {
+      spawned.resolve();
+      return child;
+    });
     mocks.initialize.mockReturnValue(new Promise(() => undefined));
     const handlers = defaultHandlers();
     const creation = new AcpClientFactory().createClient(createParams({ handlers }));
-    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledTimes(1));
+    await spawned.promise;
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
 
     child.emit('error', Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
 

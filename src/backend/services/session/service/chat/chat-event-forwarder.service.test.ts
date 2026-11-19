@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 
 const { mockSessionDataService, mockSessionEventBus, mockVoiceNarrationService } = vi.hoisted(
   () => ({
@@ -81,17 +82,18 @@ describe('chatEventForwarderService workspace notifications', () => {
   it('publishes the notification when no session has an active voice connection', async () => {
     mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([{ id: 'session-1' }]);
     mockVoiceNarrationService.hasActiveConnection.mockReturnValue(false);
+    const published = deferred();
+    mockSessionEventBus.publishToAllClients.mockImplementationOnce(() => published.resolve());
 
     handler(baseData());
 
-    await vi.waitFor(() => {
-      expect(mockSessionEventBus.publishToAllClients).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'workspace_notification_request',
-          workspaceId: 'workspace-1',
-        })
-      );
-    });
+    await published.promise;
+    expect(mockSessionEventBus.publishToAllClients).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'workspace_notification_request',
+        workspaceId: 'workspace-1',
+      })
+    );
   });
 
   it('suppresses the notification when a session has an active voice connection', async () => {
@@ -99,15 +101,19 @@ describe('chatEventForwarderService workspace notifications', () => {
       { id: 'session-1' },
       { id: 'session-2' },
     ]);
-    mockVoiceNarrationService.hasActiveConnection.mockImplementation(
-      (sessionId: string) => sessionId === 'session-2'
-    );
+    const checkedActiveSession = deferred();
+    mockVoiceNarrationService.hasActiveConnection.mockImplementation((sessionId: string) => {
+      if (sessionId === 'session-2') {
+        checkedActiveSession.resolve();
+        return true;
+      }
+      return false;
+    });
 
     handler(baseData());
 
-    await vi.waitFor(() => {
-      expect(mockVoiceNarrationService.hasActiveConnection).toHaveBeenCalledWith('session-2');
-    });
+    await checkedActiveSession.promise;
+    expect(mockVoiceNarrationService.hasActiveConnection).toHaveBeenCalledWith('session-2');
     expect(mockSessionEventBus.publishToAllClients).not.toHaveBeenCalled();
   });
 
@@ -116,11 +122,12 @@ describe('chatEventForwarderService workspace notifications', () => {
       new Error('db unavailable')
     );
 
+    const published = deferred();
+    mockSessionEventBus.publishToAllClients.mockImplementationOnce(() => published.resolve());
+
     handler(baseData());
 
-    await vi.waitFor(() => {
-      expect(mockSessionEventBus.publishToAllClients).toHaveBeenCalled();
-    });
+    await published.promise;
   });
 
   it('fails open and publishes when the session lookup stalls past the timeout', async () => {
@@ -140,17 +147,20 @@ describe('chatEventForwarderService workspace notifications', () => {
 
   it('keeps processing later notifications after an earlier publish fails', async () => {
     mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([]);
-    mockSessionEventBus.publishToAllClients.mockImplementationOnce(() => {
-      throw new Error('broadcast failed');
-    });
+    const secondPublished = deferred();
+    mockSessionEventBus.publishToAllClients
+      .mockImplementationOnce(() => {
+        throw new Error('broadcast failed');
+      })
+      .mockImplementationOnce(() => secondPublished.resolve());
 
     handler(baseData({ workspaceId: 'workspace-1' }));
     handler(baseData({ workspaceId: 'workspace-2' }));
 
-    await vi.waitFor(() => {
-      expect(mockSessionEventBus.publishToAllClients).toHaveBeenCalledWith(
-        expect.objectContaining({ workspaceId: 'workspace-2' })
-      );
-    });
+    await secondPublished.promise;
+    expect(mockSessionEventBus.publishToAllClients).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ workspaceId: 'workspace-2' })
+    );
   });
 });

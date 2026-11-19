@@ -5,6 +5,7 @@ import {
   WorkspaceSnapshotStore,
 } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { SnapshotReconciliationService } from './snapshot-reconciliation.orchestrator';
 
 type GitStats = NonNullable<SnapshotUpdateInput['gitStats']>;
@@ -244,6 +245,7 @@ it('keeps shutdown pending until streamed git work settles', async () => {
 it('publishes each git result as it settles and keeps accurate accounting', async () => {
   const first = deferred<GitStats>();
   const second = deferred<GitStats>();
+  const publications = createTestEventLog<void>();
   const upsert = vi.fn<
     (
       id: string,
@@ -251,7 +253,10 @@ it('publishes each git result as it settles and keeps accurate accounting', asyn
       source: string,
       timestamp: number
     ) => { accepted: boolean; changed: boolean; emitted: boolean }
-  >(() => ({ accepted: true, changed: true, emitted: true }));
+  >(() => {
+    publications.record();
+    return { accepted: true, changed: true, emitted: true };
+  });
   const store = {
     getAllWorkspaceIds: () => [],
     getByWorkspaceId: () => undefined,
@@ -267,15 +272,15 @@ it('publishes each git result as it settles and keeps accurate accounting', asyn
   );
 
   const reconciliation = service.reconcile();
-  await vi.waitFor(() => expect(upsert).toHaveBeenCalledTimes(2));
+  await publications.waitForCount(2);
+  expect(upsert).toHaveBeenCalledTimes(2);
   second.resolve({ total: 4, additions: 3, deletions: 1, hasUncommitted: true });
-  await vi.waitFor(() =>
-    expect(upsert).toHaveBeenCalledWith(
-      'ws-2',
-      { gitStats: { total: 4, additions: 3, deletions: 1, hasUncommitted: true } },
-      'reconciliation',
-      expect.any(Number)
-    )
+  await publications.waitForCount(3);
+  expect(upsert).toHaveBeenCalledWith(
+    'ws-2',
+    { gitStats: { total: 4, additions: 3, deletions: 1, hasUncommitted: true } },
+    'reconciliation',
+    expect.any(Number)
   );
   expect(upsert).toHaveBeenCalledTimes(3);
 

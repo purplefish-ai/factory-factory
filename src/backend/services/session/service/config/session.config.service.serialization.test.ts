@@ -146,8 +146,12 @@ describe('configuration transaction ordering', () => {
         : option
     );
     const plan = createDeferred<{ configOptions: SessionConfigOption[] }>();
+    const writingPlan = createDeferred<void>();
     f.rpc
-      .mockReturnValueOnce(plan.promise)
+      .mockImplementationOnce(() => {
+        writingPlan.resolve();
+        return plan.promise;
+      })
       .mockResolvedValueOnce({ configOptions: planning('first') })
       .mockResolvedValueOnce({ configOptions: planning('third') });
     const configuring = f.service.configureQueuedMessage('session', {
@@ -160,7 +164,7 @@ describe('configuration transaction ordering', () => {
       },
     });
     // Force the plan write to yield before the message's model write.
-    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalled());
+    await writingPlan.promise;
     const edit = f.service.setSessionConfigOption('session', 'model', 'third');
     plan.resolve({ configOptions: planning('first') });
     await Promise.all([configuring, edit]);
@@ -291,10 +295,16 @@ describe('configuration transaction ordering', () => {
     const f = fixture();
     const second = createDeferred<{ configOptions: SessionConfigOption[] }>();
     const third = createDeferred<{ configOptions: SessionConfigOption[] }>();
-    f.rpc.mockReturnValueOnce(second.promise).mockReturnValueOnce(third.promise);
+    const writingSecond = createDeferred<void>();
+    f.rpc
+      .mockImplementationOnce(() => {
+        writingSecond.resolve();
+        return second.promise;
+      })
+      .mockReturnValueOnce(third.promise);
     const selectingSecond = f.service.setSessionConfigOption('session', 'model', 'second');
     const selectingThird = f.service.setSessionConfigOption('session', 'model', 'third');
-    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalled());
+    await writingSecond.promise;
     third.resolve({ configOptions: options('third') });
     await Promise.resolve();
     await Promise.resolve();
@@ -310,13 +320,17 @@ describe('configuration transaction ordering', () => {
   it('waits for persistence and publication before sending the next configuration RPC', async () => {
     const f = fixture();
     const persisting = createDeferred<typeof f.session>();
-    f.repository.updateSession.mockReturnValueOnce(persisting.promise);
+    const persistenceStarted = createDeferred<void>();
+    f.repository.updateSession.mockImplementationOnce(() => {
+      persistenceStarted.resolve();
+      return persisting.promise;
+    });
     f.rpc
       .mockResolvedValueOnce({ configOptions: options('second') })
       .mockResolvedValueOnce({ configOptions: options('third') });
     const selectingSecond = f.service.setSessionConfigOption('session', 'model', 'second');
     const selectingThird = f.service.setSessionConfigOption('session', 'model', 'third');
-    await vi.waitFor(() => expect(f.repository.updateSession).toHaveBeenCalled());
+    await persistenceStarted.promise;
     expect(f.rpc).toHaveBeenCalledTimes(1);
     expect(f.emitted).toEqual([]);
     persisting.resolve(f.session);
@@ -334,11 +348,16 @@ describe('configuration transaction ordering', () => {
     });
     other.configOptions = options('first');
     f.handles.set('other', other);
+    const writingFirst = createDeferred<void>();
     f.rpc
-      .mockReturnValueOnce(stalled.promise)
+      .mockImplementationOnce(() => {
+        writingFirst.resolve();
+        return stalled.promise;
+      })
       .mockResolvedValueOnce({ configOptions: options('third') });
     const first = f.service.setSessionConfigOption('session', 'model', 'second');
-    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalledOnce());
+    await writingFirst.promise;
+    expect(f.rpc).toHaveBeenCalledOnce();
     await f.service.setSessionConfigOption('other', 'model', 'third');
     expect(other.configOptions.find((option) => option.id === 'model')?.currentValue).toBe('third');
     stalled.resolve({ configOptions: options('second') });
@@ -358,10 +377,16 @@ describe('configuration transaction ordering', () => {
     f.handle.configOptions = [...options('first'), reasoning('high')];
     const model = createDeferred<{ configOptions: SessionConfigOption[] }>();
     const effort = createDeferred<{ configOptions: SessionConfigOption[] }>();
-    f.rpc.mockReturnValueOnce(model.promise).mockReturnValueOnce(effort.promise);
+    const writingModel = createDeferred<void>();
+    f.rpc
+      .mockImplementationOnce(() => {
+        writingModel.resolve();
+        return model.promise;
+      })
+      .mockReturnValueOnce(effort.promise);
     const changingModel = f.service.setSessionConfigOption('session', 'model', 'second');
     const changingEffort = f.service.setSessionReasoningEffort('session', 'low');
-    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalled());
+    await writingModel.promise;
     effort.resolve({ configOptions: [...options('second'), reasoning('low')] });
     await Promise.resolve();
     model.resolve({ configOptions: [...options('second'), reasoning('high')] });
@@ -375,12 +400,17 @@ describe('configuration transaction ordering', () => {
   it.each(['stop', 'replacement'])('rejects queued edits after runtime %s', async (transition) => {
     const f = fixture();
     const first = createDeferred<{ configOptions: SessionConfigOption[] }>();
-    f.rpc.mockReturnValueOnce(first.promise);
+    const writingFirst = createDeferred<void>();
+    f.rpc.mockImplementationOnce(() => {
+      writingFirst.resolve();
+      return first.promise;
+    });
     const results = Promise.allSettled([
       f.service.setSessionConfigOption('session', 'model', 'second'),
       f.service.setSessionConfigOption('session', 'model', 'third'),
     ]);
-    await vi.waitFor(() => expect(f.rpc).toHaveBeenCalledOnce());
+    await writingFirst.promise;
+    expect(f.rpc).toHaveBeenCalledOnce();
     if (transition === 'stop') {
       f.runtime.isStopInProgress.mockReturnValue(true);
     } else {

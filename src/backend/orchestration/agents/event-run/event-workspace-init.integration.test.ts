@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 const scriptProcess = vi.hoisted(() => ({ spawn: vi.fn() }));
 vi.mock('node:child_process', async (importOriginal) => ({
@@ -328,19 +329,25 @@ it.skipIf(process.platform === 'win32')(
       join(worktreePath, 'factory-factory.json'),
       JSON.stringify({ scripts: { setup: 'printf script-started; exec sleep 30' } })
     );
+    const outputPersisted = deferred();
+    const owner = h.workspace.eventWorkspaceInitService;
+    const appendOutput = owner.appendOutput;
+    vi.spyOn(owner, 'appendOutput').mockImplementation(async (...args) => {
+      await appendOutput(...args);
+      outputPersisted.resolve();
+    });
     const cancel = new AbortController();
     const task = init(input(cancel.signal));
     try {
-      await vi.waitFor(async () => {
-        const status = await h.workspace.workspaceDataService.findInitStatus(
-          h.claim.reservedWorkspaceId
-        );
-        const workspace = await h.workspace.workspaceDataService.findById(
-          h.claim.reservedWorkspaceId
-        );
-        expect(status?.initOutput).toContain('script-started');
-        expect(workspace?.initScriptPid).toBeGreaterThan(1);
-      });
+      await outputPersisted.promise;
+      const status = await h.workspace.workspaceDataService.findInitStatus(
+        h.claim.reservedWorkspaceId
+      );
+      const workspace = await h.workspace.workspaceDataService.findById(
+        h.claim.reservedWorkspaceId
+      );
+      expect(status?.initOutput).toContain('script-started');
+      expect(workspace?.initScriptPid).toBeGreaterThan(1);
       cancel.abort();
       expect(await task).toMatchObject({ status: 'ABORTED', cleanup: 'CONFIRMED' });
       expect(
@@ -469,6 +476,7 @@ it('returns STALE when confirmed abort cleanup reaches the durable PID-clear fen
   });
   const owner = h.workspace.eventWorkspaceInitService;
   const writePid = owner.scriptPid;
+  const pidPersisted = deferred();
   const pidWrites = vi.spyOn(owner, 'scriptPid').mockImplementation(async (...args) => {
     if (args[2]) {
       await db.prisma.agentRun.update({
@@ -476,16 +484,18 @@ it('returns STALE when confirmed abort cleanup reaches the durable PID-clear fen
         data: { workerGeneration: { increment: 1 } },
       });
     }
-    return writePid(...args);
+    await writePid(...args);
+    if (!args[2]) {
+      pidPersisted.resolve();
+    }
   });
   const publication = vi.spyOn(owner, 'finish');
   const cancellation = new AbortController();
   const task = init(input(cancellation.signal));
   const workspace = () => h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId);
   try {
-    await vi.waitFor(async () =>
-      expect(await workspace()).toMatchObject({ status: 'PROVISIONING', initScriptPid: 12_345 })
-    );
+    await pidPersisted.promise;
+    expect(await workspace()).toMatchObject({ status: 'PROVISIONING', initScriptPid: 12_345 });
     cancellation.abort();
     await cleanup.entered;
     expect(pidWrites.mock.calls.filter((args) => args[2])).toHaveLength(0);

@@ -28,15 +28,18 @@ it('quietly skips stale recovery while update admission is closed', async () => 
 });
 
 it('keeps admission open until an already-admitted recovery finishes', async () => {
+  const cleanupStarted = deferred();
   const cleanup = deferred<boolean>();
-  vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockReturnValueOnce(
-    cleanup.promise
+  vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockImplementationOnce(
+    () => {
+      cleanupStarted.resolve();
+      return cleanup.promise;
+    }
   );
   const recovery = recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out');
-  await vi.waitFor(() =>
-    expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).toHaveBeenCalledWith(
-      WORKSPACE_ID
-    )
+  await cleanupStarted.promise;
+  expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).toHaveBeenCalledWith(
+    WORKSPACE_ID
   );
   expect(applicationUpdateAdmission.tryClose(() => false)).toBe(false);
   cleanup.resolve(true);

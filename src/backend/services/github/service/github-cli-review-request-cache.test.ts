@@ -1,7 +1,10 @@
-import { execFile } from 'node:child_process';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
+const { execFile } = vi.hoisted(() => ({
+  execFile: vi.fn<(...args: unknown[]) => Promise<{ stdout: string; stderr: string }>>(),
+}));
+// The fixture substitutes a promise-returning exec function after promisify.
+vi.mock('node:child_process', () => ({ execFile }));
 vi.mock('node:util', () => ({ promisify: (fn: unknown) => fn }));
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -61,10 +64,10 @@ afterEach(() => {
 });
 
 it('serves repeated polls from one search per repository until the entry is stale', async () => {
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockResolvedValueOnce(searchPage(5) as never)
-    .mockResolvedValueOnce(searchPage(9) as never);
+  execFile
+    .mockResolvedValueOnce(searchPage(1))
+    .mockResolvedValueOnce(searchPage(5))
+    .mockResolvedValueOnce(searchPage(9));
 
   expect(await numbers('o/r')).toEqual([1]);
   now = REVIEW_REQUEST_CACHE_TTL_MS - 1;
@@ -81,10 +84,8 @@ it('serves repeated polls from one search per repository until the entry is stal
 });
 
 it('returns the stale entry while one background search refreshes it', async () => {
-  const refreshed = deferred<unknown>();
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockReturnValueOnce(refreshed.promise as never);
+  const refreshed = deferred<ReturnType<typeof searchPage>>();
+  execFile.mockResolvedValueOnce(searchPage(1)).mockReturnValueOnce(refreshed.promise);
 
   await numbers('o/r');
   now = REVIEW_REQUEST_CACHE_TTL_MS;
@@ -98,24 +99,27 @@ it('returns the stale entry while one background search refreshes it', async () 
 });
 
 it('keeps the stale entry when a background search fails and retries on the next read', async () => {
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockRejectedValueOnce(new Error('boom'))
-    .mockResolvedValueOnce(searchPage(3) as never);
+  const refreshStarted = Promise.withResolvers<void>();
+  execFile
+    .mockResolvedValueOnce(searchPage(1))
+    .mockImplementationOnce(() => {
+      refreshStarted.resolve();
+      return Promise.reject(new Error('boom'));
+    })
+    .mockResolvedValueOnce(searchPage(3));
 
   await numbers('o/r');
   now = REVIEW_REQUEST_CACHE_TTL_MS;
   expect(await numbers('o/r')).toEqual([1]);
-  await vi.waitFor(() => expect(execFile).toHaveBeenCalledTimes(2));
+  await refreshStarted.promise;
+  expect(execFile).toHaveBeenCalledTimes(2);
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(await numbers('o/r')).toEqual([1]);
   await vi.waitFor(async () => expect(await numbers('o/r')).toEqual([3]));
 });
 
 it('searches again for an explicit refresh even when the entry is fresh', async () => {
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockResolvedValueOnce(searchPage(2) as never);
+  execFile.mockResolvedValueOnce(searchPage(1)).mockResolvedValueOnce(searchPage(2));
 
   await numbers('o/r');
   expect(await numbers('o/r', { forceRefresh: true })).toEqual([2]);
@@ -124,11 +128,11 @@ it('searches again for an explicit refresh even when the entry is fresh', async 
 });
 
 it('does not let an explicit refresh reuse a background search that was already running', async () => {
-  const running = deferred<unknown>();
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockReturnValueOnce(running.promise as never)
-    .mockResolvedValueOnce(searchPage(3) as never);
+  const running = deferred<ReturnType<typeof searchPage>>();
+  execFile
+    .mockResolvedValueOnce(searchPage(1))
+    .mockReturnValueOnce(running.promise)
+    .mockResolvedValueOnce(searchPage(3));
 
   await numbers('o/r');
   now = REVIEW_REQUEST_CACHE_TTL_MS;
@@ -144,14 +148,14 @@ it('does not let an explicit refresh reuse a background search that was already 
 });
 
 it('drops cached requests when gh reports the account is no longer authenticated', async () => {
-  vi.mocked(execFile)
-    .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' } as never)
-    .mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
-    .mockResolvedValueOnce(searchPage(1) as never)
+  execFile
+    .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' })
+    .mockResolvedValueOnce({ stdout: '', stderr: '' })
+    .mockResolvedValueOnce(searchPage(1))
     .mockRejectedValueOnce(
       Object.assign(new Error('Command failed'), { stderr: 'To get started, run: gh auth login' })
     )
-    .mockResolvedValueOnce(searchPage(4) as never);
+    .mockResolvedValueOnce(searchPage(4));
 
   await githubCLIService.checkHealth();
   await numbers('o/r');
@@ -161,12 +165,12 @@ it('drops cached requests when gh reports the account is no longer authenticated
 });
 
 it('drops cached requests after a submitted review, including searches already running', async () => {
-  const running = deferred<unknown>();
-  vi.mocked(execFile)
-    .mockResolvedValueOnce(searchPage(1) as never)
-    .mockReturnValueOnce(running.promise as never)
-    .mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
-    .mockResolvedValueOnce(searchPage(2) as never);
+  const running = deferred<ReturnType<typeof searchPage>>();
+  execFile
+    .mockResolvedValueOnce(searchPage(1))
+    .mockReturnValueOnce(running.promise)
+    .mockResolvedValueOnce({ stdout: '', stderr: '' })
+    .mockResolvedValueOnce(searchPage(2));
 
   await numbers('o/r');
   now = REVIEW_REQUEST_CACHE_TTL_MS;
@@ -177,8 +181,6 @@ it('drops cached requests after a submitted review, including searches already r
   running.resolve(searchPage(1));
   expect(await afterReview).toEqual([2]);
   expect(await numbers('o/r')).toEqual([2]);
-  expect(vi.mocked(execFile).mock.calls[2]?.[1]).toEqual(
-    expect.arrayContaining(['review', '--approve'])
-  );
+  expect(execFile.mock.calls[2]?.[1]).toEqual(expect.arrayContaining(['review', '--approve']));
   expect(execFile).toHaveBeenCalledTimes(4);
 });

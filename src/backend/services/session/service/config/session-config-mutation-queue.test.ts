@@ -18,6 +18,7 @@ it.each(['resolve', 'reject'] as const)(
     const { manager } = createManagerTestHarness();
     setupSuccessfulSpawn();
     const active = createDeferred<{ stopReason: 'end_turn' }>();
+    const editing = createDeferred<void>();
     const writing = createDeferred<void>();
     let model = 'first';
     const observed: string[] = [];
@@ -37,6 +38,7 @@ it.each(['resolve', 'reject'] as const)(
     const queue = new SessionConfigMutationQueue(manager, vi.fn());
     const edit = queue.run('session', async () => {
       model = 'second';
+      editing.resolve();
       await writing.promise;
     });
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -48,7 +50,8 @@ it.each(['resolve', 'reject'] as const)(
       active.reject(new Error('turn failed'));
     }
     await current;
-    await vi.waitFor(() => expect(model).toBe('second'));
+    await editing.promise;
+    expect(model).toBe('second');
     expect(observed).toEqual([]);
     writing.resolve();
     await Promise.all([edit, next]);
@@ -109,12 +112,17 @@ it.each([false, true])(
     );
     let fenced = !wait;
     handle.isPromptInFlight = wait;
-    const allowed = vi.fn(() => (fenced ? Promise.reject(new Error('fenced')) : Promise.resolve()));
+    const checkingFence = createDeferred<void>();
+    const allowed = vi.fn(() => {
+      checkingFence.resolve();
+      return fenced ? Promise.reject(new Error('fenced')) : Promise.resolve();
+    });
     const correction = vi.fn();
     const operation = vi.fn(async () => undefined);
     const queue = new SessionConfigMutationQueue(manager, correction, allowed);
     const pending = expect(queue.run('session', operation)).rejects.toThrow('fenced');
-    await vi.waitFor(() => expect(allowed).toHaveBeenCalledOnce());
+    await checkingFence.promise;
+    expect(allowed).toHaveBeenCalledOnce();
     fenced = true;
     handle.isPromptInFlight = false;
     await pending;

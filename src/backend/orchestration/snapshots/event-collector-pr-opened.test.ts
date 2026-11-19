@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { expect, it, vi } from 'vitest';
 import { PR_SNAPSHOT_UPDATED } from '@/backend/services/github';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createEventCollectorOrchestrator,
@@ -85,6 +86,8 @@ it('logs failed PR-open notification persistence with its workspace and PR ident
   const { collector, prEvents, notify, warn } = fixture();
   const error = new Error('database unavailable');
   notify.mockRejectedValueOnce(error);
+  const warningLogged = deferred();
+  warn.mockImplementationOnce(() => warningLogged.resolve());
   collector.start();
   try {
     prEvents.emit(PR_SNAPSHOT_UPDATED, {
@@ -93,13 +96,12 @@ it('logs failed PR-open notification persistence with its workspace and PR ident
       previousPrState: 'NONE',
       prState: 'OPEN',
     });
-    await vi.waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('Failed to persist PR-open lifecycle notification', {
-        workspaceId: 'w',
-        prId: 'first',
-        error: 'database unavailable',
-      })
-    );
+    await warningLogged.promise;
+    expect(warn).toHaveBeenCalledWith('Failed to persist PR-open lifecycle notification', {
+      workspaceId: 'w',
+      prId: 'first',
+      error: 'database unavailable',
+    });
   } finally {
     collector.stop();
   }

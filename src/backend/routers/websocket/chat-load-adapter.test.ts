@@ -5,6 +5,7 @@ import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionLoadService } from '@/backend/services/session';
 import { SessionEventBus } from '@/backend/services/session';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { ChatConnectionRegistry } from './chat-connection-registry';
 import { executeSessionLoad } from './chat-load-adapter';
 import * as replayFraming from './session-replay-framing';
@@ -296,7 +297,7 @@ describe('executeSessionLoad', () => {
       registry.broadcastToSession(sessionId, payload)
     );
     const connect = () => {
-      const frames: unknown[] = [];
+      const received = createTestEventLog<unknown>();
       const assembler = new SessionReplayAssembler();
       const ws = Object.assign(new EventEmitter(), {
         readyState: WS_READY_STATE.OPEN,
@@ -306,7 +307,7 @@ describe('executeSessionLoad', () => {
         send: (payload: string, callback: (error?: Error) => void) => {
           const value = assembler.accept(JSON.parse(payload));
           if (value !== null) {
-            frames.push(value);
+            received.record(value);
           }
           const bytes = Buffer.byteLength(payload);
           ws.bufferedAmount += bytes;
@@ -321,12 +322,13 @@ describe('executeSessionLoad', () => {
         dbSessionId: 's1',
         workingDir: null,
       });
-      return { ws, frames };
+      return { ws, received, frames: received.events };
     };
     const first = connect();
     registry.expectReplay(first.ws as unknown as WebSocket, 'first');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
-    await vi.waitFor(() => expect(first.frames).toHaveLength(3));
+    await first.received.waitForCount(3);
+    expect(first.frames).toHaveLength(3);
     expect(first.frames[0]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'first',
@@ -334,7 +336,8 @@ describe('executeSessionLoad', () => {
     });
     registry.expectReplay(first.ws as unknown as WebSocket, 'first');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
-    await vi.waitFor(() => expect(first.frames).toHaveLength(6));
+    await first.received.waitForCount(6);
+    expect(first.frames).toHaveLength(6);
     first.ws.bufferedAmount += 1024 * 1024;
     registry.broadcastToSession('s1', {
       type: 'session_delta',
@@ -344,7 +347,8 @@ describe('executeSessionLoad', () => {
     const second = connect();
     registry.expectReplay(second.ws as unknown as WebSocket, 'second');
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
-    await vi.waitFor(() => expect(second.frames).toHaveLength(3));
+    await second.received.waitForCount(3);
+    expect(second.frames).toHaveLength(3);
     expect(second.frames[0]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'second',

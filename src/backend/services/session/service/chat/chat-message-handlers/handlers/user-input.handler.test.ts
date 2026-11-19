@@ -5,15 +5,8 @@ import type {
 } from '@/backend/services/session/service/chat/session-command.types';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { ChatMessageSchema } from '@/shared/websocket';
+import { deferred } from '@/test-utils/deferred';
 import { createUserInputHandler } from './user-input.handler';
-
-function pendingInput() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 function createDeps(options?: { isSessionRunning?: boolean }) {
   const acpRuntimeManager: SessionCommandRuntimeManager = {
@@ -37,7 +30,8 @@ it('reports a late provider failure with original content after input submission
   });
   const deps = createDeps({ isSessionRunning: true });
   vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValue(providerTurn);
-  const onAsyncOutcome = vi.fn();
+  const reporting = deferred();
+  const onAsyncOutcome = vi.fn(() => reporting.resolve());
   const handler = createUserInputHandler(deps);
   const content = [
     { type: 'text', text: 'recover me' },
@@ -49,21 +43,20 @@ it('reports a late provider failure with original content after input submission
   expect(onAsyncOutcome).not.toHaveBeenCalled();
   const cause = new Error('provider disconnected');
   fail(cause);
-  await vi.waitFor(() =>
-    expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
-      replies: [
-        {
-          type: 'error',
-          error: {
-            kind: 'user_input_failed',
-            sessionId: 'session-1',
-            content,
-            cause,
-          },
+  await reporting.promise;
+  expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
+    replies: [
+      {
+        type: 'error',
+        error: {
+          kind: 'user_input_failed',
+          sessionId: 'session-1',
+          content,
+          cause,
         },
-      ],
-    })
-  );
+      },
+    ],
+  });
   expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
 });
 
@@ -74,7 +67,9 @@ it.each([false, true])(
     vi.mocked(deps.sessionService.sendSessionMessage).mockRejectedValue(
       new Error('provider failed')
     );
+    const reporting = deferred();
     const onAsyncOutcome = vi.fn(() => {
+      reporting.resolve();
       if (asyncFailure) {
         return Promise.reject(new Error('report failed'));
       }
@@ -89,7 +84,8 @@ it.each([false, true])(
         }
       )
     ).toEqual({ replies: [] });
-    await vi.waitFor(() => expect(onAsyncOutcome).toHaveBeenCalledOnce());
+    await reporting.promise;
+    expect(onAsyncOutcome).toHaveBeenCalledOnce();
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
   }
 );
@@ -169,7 +165,6 @@ describe('createUserInputHandler', () => {
     const deps = createDeps({ isSessionRunning: true });
     const handler = createUserInputHandler(deps);
     expect(await handler(context, { type: 'user_input', text: 'hello' })).toEqual({ replies: [] });
-    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-1', 'hello');
   });
 
@@ -180,7 +175,6 @@ describe('createUserInputHandler', () => {
     expect(
       await handler({ ...context, sessionId: 'session-2' }, { type: 'user_input', content })
     ).toEqual({ replies: [] });
-    await vi.waitFor(() => expect(deps.sessionService.sendSessionMessage).toHaveBeenCalled());
     expect(deps.sessionService.sendSessionMessage).toHaveBeenCalledWith('session-2', content);
   });
 
@@ -275,8 +269,8 @@ it('returns recoverable original content when human admission fails', async () =
 });
 
 it('serializes durable admission and submission without awaiting a full provider turn', async () => {
-  const admission = pendingInput();
-  const providerTurn = pendingInput();
+  const admission = deferred();
+  const providerTurn = deferred();
   const deps = createDeps({ isSessionRunning: true });
   vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValueOnce(providerTurn.promise);
   const humanMessageAccepted = vi
@@ -299,7 +293,7 @@ it('serializes durable admission and submission without awaiting a full provider
 });
 
 it('rejects inputs captured before stop even if the session is running again after admission', async () => {
-  const admission = pendingInput();
+  const admission = deferred();
   let current = true;
   const deps = createDeps({ isSessionRunning: true });
   const handler = createUserInputHandler({

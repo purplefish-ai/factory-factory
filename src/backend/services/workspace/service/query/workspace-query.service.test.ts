@@ -16,6 +16,7 @@ import {
   WorkspaceStatus,
   deriveWorkspaceSidebarStatus,
 } from '@/shared/core';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { workspaceQueryService } from './workspace-query.service';
 
 const mockFindByProjectIdWithSessions = vi.fn();
@@ -903,23 +904,16 @@ describe('WorkspaceQueryService', () => {
   });
 
   it('skips concurrent syncAllPRStatuses calls while the workspace lookup is pending', async () => {
-    let resolveLookup:
-      | ((
-          workspaces: Array<{
-            id: string;
-            prUrl: string | null;
-            prs: Array<{ id: string; url: string }>;
-          }>
-        ) => void)
-      | undefined;
-    const lookupPromise = new Promise<
-      Array<{ id: string; prUrl: string | null; prs: Array<{ id: string; url: string }> }>
-    >((resolve) => {
-      resolveLookup = resolve;
+    const lookup =
+      Promise.withResolvers<
+        Array<{ id: string; prUrl: string | null; prs: Array<{ id: string; url: string }> }>
+      >();
+    const refreshStarted = Promise.withResolvers<void>();
+    mockFindByProjectIdWithSessions.mockReturnValueOnce(lookup.promise);
+    mockRefreshWorkspace.mockImplementationOnce(() => {
+      refreshStarted.resolve();
+      return Promise.resolve({ success: true });
     });
-
-    mockFindByProjectIdWithSessions.mockReturnValueOnce(lookupPromise);
-    mockRefreshWorkspace.mockResolvedValueOnce({ success: true });
 
     const firstSync = workspaceQueryService.syncAllPRStatuses('p1');
     await Promise.resolve();
@@ -927,7 +921,7 @@ describe('WorkspaceQueryService', () => {
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 0 });
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledTimes(1);
 
-    resolveLookup?.([
+    lookup.resolve([
       {
         id: 'w1',
         prUrl: 'https://github.com/o/r/pull/1',
@@ -935,9 +929,8 @@ describe('WorkspaceQueryService', () => {
       },
     ]);
     await expect(firstSync).resolves.toEqual({ queued: 1 });
-    await vi.waitFor(() => {
-      expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
-    });
+    await refreshStarted.promise;
+    expect(mockRefreshWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it('runs syncAllPRStatuses independently for different projects', async () => {
@@ -953,23 +946,23 @@ describe('WorkspaceQueryService', () => {
         prUrl: `https://github.com/o/r/pull/${projectId === 'p1' ? '1' : '2'}`,
       },
     ]);
-    mockRefreshWorkspace.mockImplementation((workspaceId: string) =>
-      workspaceId === 'w1' ? firstRefresh : Promise.resolve({ success: true })
-    );
+    const refreshes = createTestEventLog<string>();
+    mockRefreshWorkspace.mockImplementation((workspaceId: string) => {
+      refreshes.record(workspaceId);
+      return workspaceId === 'w1' ? firstRefresh : Promise.resolve({ success: true });
+    });
 
     try {
       await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({ queued: 1 });
-      await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1', { force: false });
-      });
+      await refreshes.waitForCount(1);
+      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w1', { force: false });
 
       await expect(workspaceQueryService.syncAllPRStatuses('p2')).resolves.toEqual({ queued: 1 });
       expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('p2', {
         excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       });
-      await vi.waitFor(() => {
-        expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2', { force: false });
-      });
+      await refreshes.waitForCount(2);
+      expect(mockRefreshWorkspace).toHaveBeenCalledWith('w2', { force: false });
     } finally {
       resolveFirstRefresh?.({ success: true });
       await firstRefresh;

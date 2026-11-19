@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { deferred } from '@/test-utils/deferred';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -274,15 +275,12 @@ describe('load application history hydration', () => {
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
 
-    let resolveHistoryLoad:
-      | ((value: Awaited<ReturnType<typeof mocks.loadClaudeSessionHistory>>) => void)
-      | undefined;
-    const historyLoadPromise = new Promise<
-      Awaited<ReturnType<typeof mocks.loadClaudeSessionHistory>>
-    >((resolve) => {
-      resolveHistoryLoad = resolve;
+    const reading = deferred();
+    const historyLoad = deferred<Awaited<ReturnType<typeof mocks.loadClaudeSessionHistory>>>();
+    mocks.loadClaudeSessionHistory.mockImplementationOnce(() => {
+      reading.resolve();
+      return historyLoad.promise;
     });
-    mocks.loadClaudeSessionHistory.mockReturnValue(historyLoadPromise);
 
     const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
@@ -293,9 +291,8 @@ describe('load application history hydration', () => {
       message: { type: 'load_session' } as never,
     });
 
-    await vi.waitFor(() => {
-      expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1);
-    });
+    await reading.promise;
+    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1);
     mocks.getTranscriptSnapshot.mockReturnValue([
       {
         id: 'msg-during-load',
@@ -305,7 +302,7 @@ describe('load application history hydration', () => {
       },
     ]);
 
-    resolveHistoryLoad?.({
+    historyLoad.resolve({
       status: 'loaded',
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-race.jsonl',
       history: [
@@ -1149,15 +1146,12 @@ describe('load application history hydration', () => {
       }
     );
 
-    let resolveFirstLoad:
-      | ((value: Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>) => void)
-      | undefined;
-    const firstLoad = new Promise<Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>>(
-      (resolve) => {
-        resolveFirstLoad = resolve;
-      }
-    );
-    mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad);
+    const reading = deferred();
+    const firstLoad = deferred<typeof loadedHistory>();
+    mocks.loadCodexSessionHistory.mockImplementationOnce(() => {
+      reading.resolve();
+      return firstLoad.promise;
+    });
 
     const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
@@ -1167,20 +1161,20 @@ describe('load application history hydration', () => {
       sessionId: 'session-codex-concurrent',
       message: { type: 'load_session' } as never,
     });
+    await reading.promise;
+    const secondHydration = deferred();
+    mocks.getHistoryHydrationSource.mockImplementationOnce(() => {
+      secondHydration.resolve();
+      return historyHydrationSource;
+    });
     const secondHandle = handler({
       sessionId: 'session-codex-concurrent',
       message: { type: 'load_session' } as never,
     });
-
-    await vi.waitFor(() => {
-      expect(mocks.findById).toHaveBeenCalledTimes(2);
-      expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
-    });
-    // Both loads have reached hydration; the second joined the first read.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await secondHydration.promise;
+    expect(mocks.findById).toHaveBeenCalledTimes(2);
     expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
-
-    resolveFirstLoad?.(loadedHistory);
+    firstLoad.resolve(loadedHistory);
     await Promise.all([firstHandle, secondHandle]);
 
     expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);

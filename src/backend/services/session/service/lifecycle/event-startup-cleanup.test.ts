@@ -75,20 +75,11 @@ it.skipIf(process.platform === 'win32').each(['configuration', 'persistence'] as
         new Error('persistence failed')
       );
     }
-    const startup = authority
-      .runInitial(fence.attempt, (permit) =>
-        h.service.getOrCreateSessionClient(h.session.id, { eventInitial: permit })
-      )
-      .then(
-        () => 'unexpected success',
-        (error: unknown) => error
-      );
-    const result = await Promise.race([
-      startup,
-      new Promise<string>((resolve) => setTimeout(() => resolve('self-wait'), 150)),
-    ]);
-    expect(result).toBeInstanceOf(Error);
-    expect(result).toMatchObject({
+    const startup = authority.runInitial(fence.attempt, (permit) =>
+      h.service.getOrCreateSessionClient(h.session.id, { eventInitial: permit })
+    );
+    await expect(startup).rejects.toBeInstanceOf(Error);
+    await expect(startup).rejects.toMatchObject({
       message: boundary === 'configuration' ? 'configuration failed' : 'persistence failed',
     });
     expect(h.runtimeManager.getOrCreateClient).toHaveBeenCalledWith(

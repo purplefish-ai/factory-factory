@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import {
   type AcpRuntimeManager,
   createManagerTestHarness,
@@ -138,12 +139,15 @@ describe('AcpRuntimeManager', () => {
 
       await createTestClient(manager);
 
-      child.kill = vi.fn(() => true);
+      const signaled = deferred();
+      child.kill = vi.fn(() => {
+        signaled.resolve();
+        return true;
+      });
 
       const firstStop = manager.stopClient('session-1');
-      await vi.waitFor(() => {
-        expect(manager.isStopInProgress('session-1')).toBe(true);
-      });
+      await signaled.promise;
+      expect(manager.isStopInProgress('session-1')).toBe(true);
       let secondStopSettled = false;
       const secondStop = manager.stopClient('session-1').then(() => {
         secondStopSettled = true;
@@ -339,12 +343,11 @@ describe('AcpRuntimeManager', () => {
       await createTestClient(manager);
 
       // SIGTERM marks the old process as no longer running, but delay exit.
-      markChildKilledOnSignal(firstChild);
+      const { signaled } = markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
-      await vi.waitFor(() => {
-        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
-      });
+      await signaled;
+      expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
 
       await expect(createTestClient(manager)).rejects.toThrow('ACP session stop requested');
       expect(mockSpawn).toHaveBeenCalledOnce();
@@ -363,12 +366,11 @@ describe('AcpRuntimeManager', () => {
       await createTestClient(manager);
 
       // SIGTERM marks the old process as no longer running, but delay exit.
-      markChildKilledOnSignal(firstChild);
+      const { signaled } = markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
-      await vi.waitFor(() => {
-        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
-      });
+      await signaled;
+      expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
 
       const onRuntimeError = vi.fn();
       const handlers = { ...defaultHandlers(), onRuntimeError };
@@ -392,12 +394,11 @@ describe('AcpRuntimeManager', () => {
       await createTestClient(manager);
 
       // SIGTERM marks process as no longer running but delays exit event.
-      markChildKilledOnSignal(firstChild);
+      const { signaled } = markChildKilledOnSignal(firstChild);
 
       const stopPromise = manager.stopClient('session-1');
-      await vi.waitFor(() => {
-        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
-      });
+      await signaled;
+      expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
 
       const secondChild = createMockChildProcess();
       exitChildAfterSigterm(secondChild);
@@ -491,19 +492,19 @@ describe('AcpRuntimeManager', () => {
       const child = createMockChildProcess();
       exitChildAfterSigterm(child);
       mockSpawn.mockReturnValue(child);
-      mockInitialize.mockImplementation(
-        () =>
-          new Promise(() => {
-            // Keep creation pending until shutdown aborts it.
-          })
-      );
+      const initializing = deferred();
+      mockInitialize.mockImplementation(() => {
+        initializing.resolve();
+        return new Promise(() => {
+          // Keep creation pending until shutdown aborts it.
+        });
+      });
 
       const createPromise = createTestClient(manager);
       const createRejection = createPromise.catch((error: unknown) => error);
 
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalledTimes(1);
-      });
+      await initializing.promise;
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
 
       await manager.stopAllClients(50);
 
@@ -520,19 +521,19 @@ describe('AcpRuntimeManager', () => {
       const child = createMockChildProcess();
       exitChildAfterSigterm(child);
       mockSpawn.mockReturnValue(child);
-      mockInitialize.mockImplementation(
-        () =>
-          new Promise(() => {
-            // Keep the first creation holding the per-session lock.
-          })
-      );
+      const initializing = deferred();
+      mockInitialize.mockImplementation(() => {
+        initializing.resolve();
+        return new Promise(() => {
+          // Keep the first creation holding the per-session lock.
+        });
+      });
 
       const firstCreate = createTestClient(manager);
       const firstRejection = firstCreate.catch((error: unknown) => error);
 
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalledTimes(1);
-      });
+      await initializing.promise;
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
 
       const secondCreate = createTestClient(manager);
       const secondRejection = secondCreate.catch((error: unknown) => error);

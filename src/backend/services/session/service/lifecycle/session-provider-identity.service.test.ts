@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AcpProviderIdentityEvent } from '@/backend/services/session/service/acp';
-import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import type { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import { createDeferredCall } from './session-lifecycle.test-helpers';
 import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,
@@ -158,9 +158,9 @@ describe('provider identity lifecycle reconciliation', () => {
 
   it('refuses a stale incarnation before writing durable identity after archival', async () => {
     const h = harness();
-    const archival = createDeferred<void>();
+    const archival = createDeferredCall<void>();
     let stopped = false;
-    h.archive.persistClosedSession.mockImplementation(() => archival.promise);
+    h.archive.persistClosedSession.mockImplementation(archival.run);
     const repair = h.service.reconcile({
       ...h.event,
       assertCurrent() {
@@ -169,7 +169,8 @@ describe('provider identity lifecycle reconciliation', () => {
         }
       },
     });
-    await vi.waitFor(() => expect(h.archive.persistClosedSession).toHaveBeenCalledOnce());
+    await archival.entered;
+    expect(h.archive.persistClosedSession).toHaveBeenCalledOnce();
     stopped = true;
     archival.resolve(undefined);
     await expect(repair).rejects.toThrow('stale incarnation');

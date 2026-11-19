@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { ensureDedicatedPRRecipient } from '@/backend/orchestration/pull-requests/pr-dedicated-session.orchestrator';
 import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pull-requests/pr-monitoring-ports';
 import type { AgentSessionRecord } from '@/backend/services/session';
+import { deferred } from '@/test-utils/deferred';
 
 const target = { workspaceId: 'w', prId: 'a', bindingRevision: 4 };
 function harness() {
@@ -181,23 +182,20 @@ it('discards a completed bootstrap after a binding change', async () => {
 it('lets a current wake complete bootstrap when an earlier coalesced wake is cancelled', async () => {
   const h = harness();
   let firstCurrent = true;
-  let release!: () => void;
-  h.start.mockImplementation(
-    (_id, options) =>
-      new Promise<void>((resolve, reject) => {
-        release = () => {
-          void options.assertCurrent().then(() => {
-            h.session.providerSessionId = 'original';
-            resolve();
-          }, reject);
-        };
-      })
-  );
+  const startupEntered = deferred();
+  const startup = deferred();
+  h.start.mockImplementation(async (_id, options) => {
+    startupEntered.resolve();
+    await startup.promise;
+    await options.assertCurrent();
+    h.session.providerSessionId = 'original';
+  });
   const first = ensureDedicatedPRRecipient(target, h.services, () => firstCurrent);
-  await vi.waitFor(() => expect(h.start).toHaveBeenCalled());
+  await startupEntered.promise;
+  expect(h.start).toHaveBeenCalled();
   const second = ensureDedicatedPRRecipient(target, h.services, () => true);
   firstCurrent = false;
-  release();
+  startup.resolve();
   expect(await first).toBeNull();
   expect(await second).toMatchObject({ providerSessionId: 'original' });
   expect(h.start).toHaveBeenCalledTimes(1);

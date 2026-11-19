@@ -4,6 +4,7 @@ import {
   type RenamedWorkspace,
 } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import { SNAPSHOT_CHANGED, WorkspaceSnapshotStore } from '@/backend/services/workspace';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const stores: WorkspaceSnapshotStore[] = [];
@@ -50,17 +51,17 @@ afterEach(() => {
 describe('accepted workspace rename publication', () => {
   it('publishes only the confirmed name after persistence, synchronously before returning the canonical result', async () => {
     const f = fixture();
-    let resolve!: (workspace: RenamedWorkspace) => void;
-    f.rename.mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        })
-    );
+    const renameStarted = deferred();
+    const rename = deferred<RenamedWorkspace>();
+    f.rename.mockImplementationOnce(() => {
+      renameStarted.resolve();
+      return rename.promise;
+    });
     const result = f.renameWorkspace('workspace', 'Requested name');
     expect(f.changed).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(f.rename).toHaveBeenCalledTimes(1));
-    resolve(f.renamed);
+    await renameStarted.promise;
+    expect(f.rename).toHaveBeenCalledTimes(1);
+    rename.resolve(f.renamed);
     expect(await result).toEqual(f.renamed);
     expect(f.rename).toHaveBeenCalledExactlyOnceWith('workspace', 'Requested name');
     expect(f.store.getByWorkspaceId('workspace')).toMatchObject({
@@ -149,23 +150,23 @@ describe('accepted workspace rename publication', () => {
 
   it('serializes equal-ms renames and publishes each accepted write before starting the next', async () => {
     const f = fixture();
-    let finishFirst!: (workspace: RenamedWorkspace) => void;
-    f.rename.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishFirst = resolve;
-        })
-    );
+    const firstRenameStarted = deferred();
+    const firstRename = deferred<RenamedWorkspace>();
+    f.rename.mockImplementationOnce(() => {
+      firstRenameStarted.resolve();
+      return firstRename.promise;
+    });
     const first = f.renameWorkspace('workspace', 'First requested');
     const second = f.renameWorkspace('workspace', 'Second requested');
-    await vi.waitFor(() => expect(f.rename).toHaveBeenCalledTimes(1));
+    await firstRenameStarted.promise;
+    expect(f.rename).toHaveBeenCalledTimes(1);
     expect(f.useCase.pendingWorkspaceCount).toBe(1);
     const newer = { ...f.renamed, name: 'Second canonical', updatedAt: f.renamed.updatedAt };
     f.rename.mockImplementationOnce(() => {
       expect(f.store.getByWorkspaceId('workspace')?.name).toBe(f.renamed.name);
       return Promise.resolve(newer);
     });
-    finishFirst(f.renamed);
+    firstRename.resolve(f.renamed);
     await expect(first).resolves.toEqual(f.renamed);
     await expect(second).resolves.toEqual(newer);
     expect(f.store.getByWorkspaceId('workspace')?.name).toBe(newer.name);

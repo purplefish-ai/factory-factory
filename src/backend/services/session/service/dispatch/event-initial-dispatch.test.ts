@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { InitialDeliveryFence } from '@/shared/event-agent-delivery';
+import { deferred } from '@/test-utils/deferred';
 import { EventInitialDispatcher } from './event-initial-dispatch';
 const attempt = {
   runId: 'run',
@@ -32,10 +33,8 @@ it('dispatches the reserved initial turn alone while human input remains fenced 
     ambiguous: async () => undefined,
     stop: async () => undefined,
   });
-  let ready!: () => void;
-  const startup = new Promise<void>((resolve) => {
-    ready = resolve;
-  });
+  const starting = deferred();
+  const startup = deferred();
   const send = vi.fn(async (id, text, permit) => {
     expect(id).toBe('reserved');
     expect(text).toBe('frozen task');
@@ -48,7 +47,8 @@ it('dispatches the reserved initial turn alone while human input remains fenced 
     authority,
     start: async (id) => {
       expect(id).toBe('reserved');
-      await startup;
+      starting.resolve();
+      await startup.promise;
     },
     send,
     commit,
@@ -58,7 +58,8 @@ it('dispatches the reserved initial turn alone while human input remains fenced 
     text: 'frozen task',
     assertCurrent: () => undefined,
   });
-  await vi.waitFor(() => expect(authority.assertOrdinary('reserved')).rejects.toThrow());
+  await starting.promise;
+  await expect(authority.assertOrdinary('reserved')).rejects.toThrow();
   expect(send).not.toHaveBeenCalled();
   await expect(
     dispatcher.dispatch({
@@ -67,7 +68,7 @@ it('dispatches the reserved initial turn alone while human input remains fenced 
       assertCurrent: () => undefined,
     })
   ).rejects.toThrow();
-  ready();
+  startup.resolve();
   await pending;
   expect(send).toHaveBeenCalledTimes(1);
   expect(commit).toHaveBeenCalledWith(

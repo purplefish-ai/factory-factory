@@ -1,9 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { createLifecycleHarness } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
+import {
+  createDeferredCall,
+  createLifecycleHarness,
+} from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { AcpClientFactory } from './acp-client-factory';
 import { AcpRuntimeManager } from './acp-runtime-manager';
 import {
-  createDeferred,
   createTestProcessHandle,
   type MockChildProcess,
   defaultContext,
@@ -118,14 +120,13 @@ it('keeps a concurrent direct prompt behind explicit startup access enforcement'
   lifecycle.runtimeManager.getOrCreateClient.mockImplementation((...args) =>
     manager.getOrCreateClient(...args)
   );
-  const configuring = createDeferred<void>();
-  lifecycle.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(
-    configuring.promise
+  const configuring = createDeferredCall<void>();
+  lifecycle.sessionConfigService.applyConfiguredPermissionPreset.mockImplementationOnce(
+    configuring.run
   );
   const startup = lifecycle.service.startSession('session-1', { initialPrompt: '' });
-  await vi.waitFor(() =>
-    expect(lifecycle.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled()
-  );
+  await configuring.entered;
+  expect(lifecycle.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled();
   mockPrompt.mockResolvedValue({ stopReason: 'end_turn' });
   const prompt = manager.sendPrompt('session-1', [{ type: 'text', text: 'User message' }]);
   await Promise.resolve();
@@ -264,15 +265,14 @@ it('keeps prompts behind explicitly requested startup planning as well as native
   lifecycle.runtimeManager.getOrCreateClient.mockImplementation((...args) =>
     manager.getOrCreateClient(...args)
   );
-  const planning = createDeferred<void>();
-  lifecycle.sessionConfigService.applyStartupModePreset.mockReturnValueOnce(planning.promise);
+  const planning = createDeferredCall<void>();
+  lifecycle.sessionConfigService.applyStartupModePreset.mockImplementationOnce(planning.run);
   const startup = lifecycle.service.startSession('session-1', {
     initialPrompt: '',
     startupModePreset: 'plan',
   });
-  await vi.waitFor(() =>
-    expect(lifecycle.sessionConfigService.applyStartupModePreset).toHaveBeenCalled()
-  );
+  await planning.entered;
+  expect(lifecycle.sessionConfigService.applyStartupModePreset).toHaveBeenCalled();
   mockPrompt.mockResolvedValue({ stopReason: 'end_turn' });
   const prompt = manager.sendPrompt('session-1', []);
   await Promise.resolve();
@@ -292,16 +292,15 @@ it('rejects a concurrent prompt and stops the candidate when explicit startup ac
     manager.getOrCreateClient(...args)
   );
   lifecycle.runtimeManager.stopClient.mockImplementation((id) => manager.stopClient(id));
-  const configuring = createDeferred<void>();
-  lifecycle.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(
-    configuring.promise
+  const configuring = createDeferredCall<void>();
+  lifecycle.sessionConfigService.applyConfiguredPermissionPreset.mockImplementationOnce(
+    configuring.run
   );
   const startup = lifecycle.service
     .startSession('session-1', { initialPrompt: '' })
     .catch((error: unknown) => error);
-  await vi.waitFor(() =>
-    expect(lifecycle.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled()
-  );
+  await configuring.entered;
+  expect(lifecycle.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled();
   const prompt = manager.sendPrompt('session-1', []).catch((error: unknown) => error);
   configuring.reject(new Error('access rejected'));
   expect(await startup).toEqual(expect.objectContaining({ message: 'access rejected' }));
@@ -354,8 +353,8 @@ it('observes SENDING only after readiness and rejects configuration reintroduced
 it('does not treat generic or repeated provider activity as initial prompt acceptance or outcome', async () => {
   const { manager } = createManagerTestHarness();
   setupSuccessfulSpawn();
-  const response = createDeferred<{ stopReason: 'end_turn' }>();
-  mockPrompt.mockReturnValue(response.promise);
+  const response = createDeferredCall<{ stopReason: 'end_turn' }>();
+  mockPrompt.mockImplementation(response.run);
   await manager.getOrCreateClient(
     'session-1',
     defaultOptions(),
@@ -373,7 +372,8 @@ it('does not treat generic or repeated provider activity as initial prompt accep
       ambiguous: async () => undefined,
     }),
   });
-  await vi.waitFor(() => expect(mockPrompt).toHaveBeenCalledOnce());
+  await response.entered;
+  expect(mockPrompt).toHaveBeenCalledOnce();
   const activity = () =>
     factory.mock.calls[0]?.[0].handlers.onAcpEvent?.('session-1', {
       type: 'acp_session_update',

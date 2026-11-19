@@ -141,7 +141,7 @@ it('opens no Slack connection while the intake gate is off', async () => {
   const runtime = intake();
   runtime.start();
   await jobRunner.waitForCurrentRun('agent-slack-intake');
-  await vi.waitFor(() => expect(jobRunner.isRunning('agent-slack-intake')).toBe(true));
+  expect(jobRunner.isRunning('agent-slack-intake')).toBe(true);
   expect(sockets).toEqual([]);
   await runtime.stop();
 });

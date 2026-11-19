@@ -628,14 +628,14 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     const ports = createPRObservationPorts(graph);
     state.busy = true;
     await observeMonitoredPR(ports, target, { force: true });
-    await vi.waitFor(() => {
-      expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
-        workspaceId,
-        prId,
-        bindingRevision: 1,
-      });
-      expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith(sessionId);
+    expect(wake).toHaveBeenCalledOnce();
+    await wake.mock.results[0]?.value;
+    expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
+      workspaceId,
+      prId,
+      bindingRevision: 1,
     });
+    expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledWith(sessionId);
     const request = { workspaceId, prId, bindingRevision: 1 };
     expect(await preparePRDelivery({ sessionId, request }, delivery)).toMatchObject({
       status: 'blocked',
@@ -648,14 +648,15 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
 
+    const warningLogged = deferred<void>();
+    logger.warn.mockImplementationOnce(() => warningLogged.resolve());
     wake.mockRejectedValueOnce(new Error('Delivery temporarily unavailable'));
     fetch.mockResolvedValue({ ...redObservation, headSha: 'wake-failure' });
     expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
-    await vi.waitFor(() => {
-      expect(logger.warn).toHaveBeenCalledWith('PR delivery wake deferred after observation', {
-        workspaceId,
-        error: 'Delivery temporarily unavailable',
-      });
+    await warningLogged.promise;
+    expect(logger.warn).toHaveBeenCalledWith('PR delivery wake deferred after observation', {
+      workspaceId,
+      error: 'Delivery temporarily unavailable',
     });
     expect((await workspacePRMonitoringService.listPending(workspaceId))[0]).toMatchObject({
       state: 'PENDING',

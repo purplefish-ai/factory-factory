@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 // Mock dependencies before importing the service
 const mockExecFile = vi.fn();
@@ -146,12 +147,12 @@ describe('PR detail review fetch coordination', () => {
       baseRefName: 'main',
       mergeStateStatus: 'CLEAN',
     };
-    const releases: Array<() => void> = [];
+    const releases = createTestEventLog<() => void>();
     mockExecFile.mockImplementation((_command, args: string[]) =>
       args[0] === 'api'
         ? Promise.resolve({ stdout: '[[]]', stderr: '' })
         : new Promise((resolve) => {
-            releases.push(() => resolve({ stdout: JSON.stringify(prDetails), stderr: '' }));
+            releases.record(() => resolve({ stdout: JSON.stringify(prDetails), stderr: '' }));
           })
     );
 
@@ -159,18 +160,20 @@ describe('PR detail review fetch coordination', () => {
       const controller = new AbortController();
       return githubCLIService.getPRFullDetails('owner/repo', index + 1, controller.signal);
     });
-    await vi.waitFor(() => expect(mockExecFile).toHaveBeenCalledTimes(5));
+    await releases.waitForCount(5);
+    expect(mockExecFile).toHaveBeenCalledTimes(5);
 
     const queuedController = new AbortController();
     const abortReason = new Error('queued request cancelled');
     const queued = githubCLIService.getPRFullDetails('owner/repo', 99, queuedController.signal);
     queuedController.abort(abortReason);
-    releases.shift()?.();
+    const [firstRelease, ...remaining] = releases.events;
+    firstRelease?.();
 
     await expect(queued).rejects.toBe(abortReason);
     expect(mockExecFile.mock.calls.filter(([, args]) => args[0] === 'pr')).toHaveLength(5);
 
-    for (const release of releases) {
+    for (const release of remaining) {
       release();
     }
     await Promise.all(blockers);

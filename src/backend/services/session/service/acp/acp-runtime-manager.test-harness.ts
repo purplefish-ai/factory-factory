@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   mockNewSession: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
   mockPrompt: vi.fn(),
   mockCancel: vi.fn(),
-  mockSetSessionConfigOption: vi.fn(),
+  mockSetSessionConfigOption: vi.fn<(request: { configId: string; value: string }) => unknown>(),
   mockSetSessionMode: vi.fn(),
   mockExtMethod: vi.fn(),
   mockNdJsonStream: vi
@@ -32,8 +32,7 @@ export const mockLoadSession = mocks.mockLoadSession;
 export const mockNewSession = mocks.mockNewSession;
 export const mockPrompt: ReturnType<typeof vi.fn> = mocks.mockPrompt;
 export const mockCancel: ReturnType<typeof vi.fn> = mocks.mockCancel;
-export const mockSetSessionConfigOption: ReturnType<typeof vi.fn> =
-  mocks.mockSetSessionConfigOption;
+export const mockSetSessionConfigOption = mocks.mockSetSessionConfigOption;
 export const mockSetSessionMode: ReturnType<typeof vi.fn> = mocks.mockSetSessionMode;
 export const mockExtMethod: ReturnType<typeof vi.fn> = mocks.mockExtMethod;
 export const mockNdJsonStream: ReturnType<typeof vi.fn> = mocks.mockNdJsonStream;
