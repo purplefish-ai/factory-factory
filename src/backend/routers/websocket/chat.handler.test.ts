@@ -314,8 +314,13 @@ describe('createChatUpgradeHandler', () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
 
-    const { appContext, sessionLoadService, chatEventForwarderService, sessionFileLogger } =
-      createTestContext(tempRootDir);
+    const {
+      appContext,
+      sessionLoadService,
+      chatEventForwarderService,
+      sessionFileLogger,
+      sessionDomainService,
+    } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const ws = new MockWebSocket();
@@ -346,13 +351,16 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.get('conn-1')).toMatchObject({ dbSessionId: 'session-1' });
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(1);
 
-    const loadStarted = deferred();
-    vi.mocked(sessionLoadService.prepareLoad).mockImplementationOnce(() => {
-      loadStarted.resolve();
-      return Promise.resolve({ status: 'error', outcome: { replies: [] } });
+    vi.mocked(sessionLoadService.prepareLoad).mockResolvedValueOnce({
+      status: 'error',
+      outcome: { replies: [{ type: 'error', error: { kind: 'session_not_found' } }] },
     });
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
-    await loadStarted.promise;
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: 'error', message: 'Session not found' }),
+      expect.any(Function)
+    );
 
     expect(sessionLoadService.prepareLoad).toHaveBeenCalledWith({
       sessionId: 'session-1',
@@ -367,6 +375,9 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+    expect(sessionDomainService.clearSession).toHaveBeenCalledExactlyOnceWith('session-1', {
+      preserveRejections: true,
+    });
   });
 
   it.each([false, true])(
@@ -609,7 +620,7 @@ describe('createChatUpgradeHandler', () => {
     open(handlerA, wsA, 'conn-a', 'session-a');
     open(handlerB, wsB, 'conn-b', 'session-b');
     wsA.send.mockClear();
-    wsB.send.mockClear();
+    wsB.send.mockClear().mockImplementationOnce((payload) => wsB.sent.record(payload));
 
     eventBusB.publishToSession('session-b', {
       type: 'session_delta',
@@ -891,15 +902,13 @@ describe('createChatUpgradeHandler', () => {
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
+    const invalidMessage = { type: 'error', message: 'Invalid message format' };
+    ws.send.mockImplementationOnce((payload) => ws.sent.record(payload));
     ws.emit('message', '{invalid-json');
     await ws.sent.waitForCount(1);
-
-    ws.emit('message', JSON.stringify({ type: 'unknown_message_type' }));
-    await ws.sent.waitForCount(2);
-
-    expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Invalid message format' }),
+    expect(ws.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify(invalidMessage),
       expect.any(Function)
     );
     expect(sessionFileLogger.log).not.toHaveBeenCalledWith(
@@ -907,13 +916,30 @@ describe('createChatUpgradeHandler', () => {
       'OUT_TO_CLIENT',
       expect.anything()
     );
-    for (const [, flushed] of ws.send.mock.calls) {
-      flushed?.();
-    }
-    expect(sessionFileLogger.log).toHaveBeenCalledWith('session-1', 'OUT_TO_CLIENT', {
-      type: 'error',
-      message: 'Invalid message format',
-    });
+    ws.send.mock.calls[0]?.[1]?.();
+    expect(sessionFileLogger.log).toHaveBeenCalledWith(
+      'session-1',
+      'OUT_TO_CLIENT',
+      invalidMessage
+    );
+
+    const flushed = deferred();
+    vi.mocked(sessionFileLogger.log)
+      .mockClear()
+      .mockImplementationOnce(() => flushed.resolve());
+    ws.emit('message', JSON.stringify({ type: 'unknown_message_type' }));
+    await flushed.promise;
+    expect(ws.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify(invalidMessage),
+      expect.any(Function)
+    );
+    expect(sessionFileLogger.log).toHaveBeenCalledWith(
+      'session-1',
+      'OUT_TO_CLIENT',
+      invalidMessage
+    );
+    expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
 
     ws.emit('error', new Error('socket failed'));
     expect(logger.error).toHaveBeenCalledWith('Chat WebSocket error', expect.any(Error));

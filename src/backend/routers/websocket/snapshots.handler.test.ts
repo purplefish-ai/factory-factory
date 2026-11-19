@@ -237,6 +237,11 @@ describe('createSnapshotsUpgradeHandler', () => {
   it('accepts a large full snapshot, retires on accumulated deltas and reconnects from current state', async () => {
     const { store, handler, ws, finishSeed } = createPendingBaseline();
     const largeName = 'x'.repeat(2 * 1024 * 1024);
+    // Keep the full frame buffered while subsequent deltas arrive.
+    ws.send.mockImplementationOnce((payload) => {
+      ws.bufferedAmount = Buffer.byteLength(payload);
+      ws.sent.record(payload);
+    });
     store.upsert('ws-1', { projectId: 'proj-1', name: largeName, status: 'READY' }, 'test', 100);
     finishSeed();
     await ws.sent.waitForCount(1);
@@ -245,7 +250,6 @@ describe('createSnapshotsUpgradeHandler', () => {
       entries: [expect.objectContaining({ name: largeName })],
     });
     expect(ws.close).not.toHaveBeenCalled();
-    ws.bufferedAmount = Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '');
     store.upsert('ws-1', { name: 'Current' }, 'test', 200);
     expect(ws.send).toHaveBeenCalledTimes(2);
     ws.bufferedAmount += 1024 * 1024;

@@ -7,8 +7,11 @@ export class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
   bufferedAmount = 0;
   readonly sent = createTestEventLog<string>();
-  send = vi.fn((payload: string, _callback?: (error?: Error) => void) => {
+  send = vi.fn((payload: string, callback?: (error?: Error) => void) => {
     this.sent.record(payload);
+    if (callback) {
+      queueMicrotask(callback);
+    }
   });
   close = vi.fn<(code?: number, reason?: string) => void>();
   terminate = vi.fn<() => void>();

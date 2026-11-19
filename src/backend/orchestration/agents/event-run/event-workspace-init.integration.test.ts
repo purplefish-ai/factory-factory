@@ -16,6 +16,7 @@ import {
   boundary,
   createEventDeliveryFixture,
   releaseEventBoundaries,
+  waitForLaunchEvent,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
 import {
   createIntegrationDatabase,
@@ -339,7 +340,7 @@ it.skipIf(process.platform === 'win32')(
     const cancel = new AbortController();
     const task = init(input(cancel.signal));
     try {
-      await outputPersisted.promise;
+      await waitForLaunchEvent(outputPersisted.promise, 'setup output to be persisted', task);
       const status = await h.workspace.workspaceDataService.findInitStatus(
         h.claim.reservedWorkspaceId
       );

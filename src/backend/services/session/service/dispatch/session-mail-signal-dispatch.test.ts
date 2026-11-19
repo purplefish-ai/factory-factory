@@ -931,6 +931,13 @@ it('waits for timeout quarantine before recovering a racing late non-injection r
   const signal = sessionDomainService.peekNextMessage('session')!;
   const recovered = { ...h.wake, claimId: 'racing-late-recovery' };
   h.notificationPort.claimWake.mockResolvedValueOnce(recovered);
+  const redispatched = Promise.withResolvers<void>();
+  const tryDispatch = h.dispatcher.tryDispatchNextMessage.bind(h.dispatcher);
+  vi.spyOn(h.dispatcher, 'tryDispatchNextMessage').mockImplementationOnce((...args) => {
+    const dispatch = tryDispatch(...args);
+    redispatched.resolve(dispatch);
+    return dispatch;
+  });
   let lateReceipt: Promise<void> | undefined;
   h.steerSessionMessage.mockImplementationOnce((_id, _content, options) => {
     lateReceipt = options?.onLateNotInjected?.();
@@ -939,7 +946,7 @@ it('waits for timeout quarantine before recovering a racing late non-injection r
   await expect(h.dispatcher.steerWorkspaceMailSignal('session', signal.id)).rejects.toBeInstanceOf(
     AcpSteeringTimeoutError
   );
-  await lateReceipt;
+  await Promise.all([lateReceipt, redispatched.promise]);
   expect(h.notificationPort.releaseWake).toHaveBeenCalledExactlyOnceWith(h.wake);
   expect(h.notifications.isMailSignalQuarantined(signal.id)).toBe(false);
   expect(sessionDomainService.getQueueSnapshot('session')).toEqual([
