@@ -6,7 +6,7 @@ import * as ownedProcessGroup from '@/backend/lib/owned-process-group';
 const spawn = vi.hoisted(() => vi.fn());
 vi.mock('node:child_process', () => ({ spawn }));
 import { executeEventStartupScript } from './event-startup-script';
-function setup() {
+function setup(persistPid?: (pid: number) => Promise<void>) {
   const child = Object.assign(new EventEmitter(), {
     pid: 4321,
     exitCode: null,
@@ -15,17 +15,21 @@ function setup() {
     stderr: new PassThrough(),
     kill: vi.fn(),
   });
-  spawn.mockReturnValue(child);
+  spawn.mockClear().mockReturnValue(child);
+  const pidWriteStarted = Promise.withResolvers<number>();
   const controller = new AbortController();
   const ports = {
     signal: controller.signal,
     physicalStage: vi.fn(),
     assertCurrent: vi.fn(async () => undefined),
-    appendOutput: vi.fn(async () => undefined),
-    setPid: vi.fn(async () => undefined),
+    appendOutput: vi.fn<(text: string) => Promise<void>>(async () => undefined),
+    setPid: vi.fn((pid: number) => {
+      pidWriteStarted.resolve(pid);
+      return persistPid?.(pid) ?? Promise.resolve();
+    }),
     clearPid: vi.fn(async () => undefined),
   };
-  return { child, controller, ports };
+  return { child, controller, ports, pidWriteStarted: pidWriteStarted.promise };
 }
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,7 +56,7 @@ it.skipIf(process.platform === 'win32')(
       timeoutMs: 1000,
       ...h.ports,
     }).catch((error: unknown) => error);
-    await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+    expect(await h.pidWriteStarted).toBe(4321);
     h.child.stdout.write('setup output');
     h.controller.abort();
     expect(await task).toMatchObject({ kind: 'ABORTED', cleanup: 'CONFIRMED' });
@@ -84,21 +88,21 @@ it('returns UNKNOWN on timeout when cleanup cannot prove process disappearance',
   }
 });
 it('retains the original PID while cleanup is pending and after UNKNOWN without a null write', async () => {
-  const h = setup();
   let storedPid: number | null = null;
   const history: Array<number | null> = [];
-  let release!: () => void;
-  const cleanup = new Promise<'UNKNOWN'>((resolve) => {
-    release = () => resolve('UNKNOWN');
+  const h = setup((pid) => {
+    storedPid = pid;
+    history.push(pid);
+    return Promise.resolve();
   });
-  const stop = vi.spyOn(ownedProcessGroup, 'stopOwnedProcessGroup').mockReturnValue(cleanup);
+  const cleanup = Promise.withResolvers<'UNKNOWN'>();
+  const stopRequested = Promise.withResolvers<void>();
+  const stop = vi.spyOn(ownedProcessGroup, 'stopOwnedProcessGroup').mockImplementation(() => {
+    stopRequested.resolve();
+    return cleanup.promise;
+  });
   const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
-  });
-  h.ports.setPid.mockImplementation(() => {
-    storedPid = h.child.pid;
-    history.push(storedPid);
-    return Promise.resolve(undefined);
   });
   h.ports.clearPid.mockImplementation(() => {
     storedPid = null;
@@ -118,13 +122,16 @@ it('retains the original PID while cleanup is pending and after UNKNOWN without 
       return result;
     });
   try {
-    await vi.waitFor(() => expect(storedPid).toBe(4321));
+    expect(await h.pidWriteStarted).toBe(4321);
     h.controller.abort();
-    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    await stopRequested.promise;
+    // Let queued shutdown continuations run while process-group cleanup is gated.
+    await nextTurn();
+    expect(stop).toHaveBeenCalledOnce();
     expect(settled).toBe(false);
     expect(storedPid).toBe(4321);
     expect(history).toEqual([4321]);
-    release();
+    cleanup.resolve('UNKNOWN');
     expect(await task).toMatchObject({ cleanup: 'UNKNOWN' });
     expect(storedPid).toBe(4321);
     expect(history).toEqual([4321]);
@@ -132,14 +139,13 @@ it('retains the original PID while cleanup is pending and after UNKNOWN without 
     expect(signals).not.toHaveBeenCalled();
   } finally {
     h.controller.abort();
-    release();
+    cleanup.resolve('UNKNOWN');
     await task;
   }
 });
 
 it('does not spawn when the current claim check fails', async () => {
   const h = setup();
-  spawn.mockClear();
   h.ports.assertCurrent.mockRejectedValue(new Error('stale claim'));
   await expect(
     executeEventStartupScript({ cwd: '/test', args: ['-c', 'task'], timeoutMs: 100, ...h.ports })
@@ -188,7 +194,7 @@ it.skipIf(process.platform === 'win32')(
       timeoutMs: 1000,
       ...h.ports,
     }).catch((error: unknown) => error);
-    await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+    expect(await h.pidWriteStarted).toBe(4321);
     h.child.stdout.write('write fails');
     expect(await task).toMatchObject({ kind: 'FAILED', cleanup: 'CONFIRMED' });
     expect(h.ports.clearPid).toHaveBeenCalledWith(4321);
@@ -205,7 +211,7 @@ it('treats an externally signalled setup exit as failure, not an ordinary nonzer
     timeoutMs: 1000,
     ...h.ports,
   }).catch((error: unknown) => error);
-  await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+  expect(await h.pidWriteStarted).toBe(4321);
   h.child.emit('exit', null, 'SIGTERM');
   h.child.emit('close', null, 'SIGTERM');
   expect(await task).toMatchObject({ kind: 'FAILED' });
@@ -213,13 +219,16 @@ it('treats an externally signalled setup exit as failure, not an ordinary nonzer
 it.each(['output', 'pid'] as const)(
   'keeps cancellation owned while %s persistence drains after foreground close',
   async (phase) => {
-    const h = setup();
-    let release!: () => void;
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const pending = Promise.withResolvers<void>();
+    const h = setup(phase === 'pid' ? () => pending.promise : undefined);
     const write = phase === 'output' ? h.ports.appendOutput : h.ports.setPid;
-    write.mockImplementation(() => pending.then(() => undefined));
+    const outputWriteStarted = Promise.withResolvers<string>();
+    if (phase === 'output') {
+      h.ports.appendOutput.mockImplementation((text) => {
+        outputWriteStarted.resolve(text);
+        return pending.promise;
+      });
+    }
     const signals = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('unconfirmed'), { code: 'EPERM' });
     });
@@ -236,26 +245,26 @@ it.each(['output', 'pid'] as const)(
         return result;
       });
     try {
-      await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+      expect(await h.pidWriteStarted).toBe(4321);
       if (phase === 'output') {
         h.child.stdout.write('pending output');
-        await vi.waitFor(() => expect(write).toHaveBeenCalled());
+        expect(await outputWriteStarted.promise).toBe('pending output');
       }
       h.child.emit('exit', 0, null);
       h.child.emit('close', 0, null);
-      await vi.waitFor(() => expect(write).toHaveBeenCalled());
+      expect(write).toHaveBeenCalled();
       h.controller.abort();
       await nextTurn();
       expect(done).toBe(false);
       expect(h.ports.physicalStage).toHaveBeenLastCalledWith(false);
-      release();
+      pending.resolve();
       expect(await task).toMatchObject({ kind: 'ABORTED', cleanup: 'UNKNOWN' });
       if (process.platform !== 'win32') {
         expect(signals).toHaveBeenCalledWith(-4321, 0);
       }
       expect(h.child.kill).toHaveBeenCalledWith('SIGKILL');
     } finally {
-      release();
+      pending.resolve();
       await task;
     }
   }
@@ -312,7 +321,7 @@ it('decodes UTF-8 split across chunks and flushes partial output on stream end',
     timeoutMs: 10_000,
     ...h.ports,
   });
-  await vi.waitFor(() => expect(h.ports.setPid).toHaveBeenCalledWith(4321));
+  expect(await h.pidWriteStarted).toBe(4321);
   const line = Buffer.from('✓ installed\n');
   const truncated = Buffer.from('warn é');
   h.child.stdout.emit('data', line.subarray(0, 1));
@@ -341,7 +350,8 @@ it("runs event setup scripts without Factory Factory's own runtime env", async (
       timeoutMs: 10_000,
       ...h.ports,
     });
-    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    expect(await h.pidWriteStarted).toBe(4321);
+    expect(spawn).toHaveBeenCalledOnce();
     h.child.emit('close', 0, null);
     await expect(task).resolves.toEqual({ success: true });
   } finally {

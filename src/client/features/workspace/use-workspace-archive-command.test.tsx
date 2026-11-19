@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
-import { act, useRef } from 'react';
+import { act, useLayoutEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -25,7 +25,10 @@ import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snap
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 const roots: Root[] = [];
 const clients: QueryClient[] = [];
+const subscriptions: (() => void)[] = [];
+const ideAvailabilityKey = getQueryKey(trpc.workspace.getAvailableIdes, undefined, 'query');
 afterEach(() => {
+  subscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
   roots.splice(0).forEach((root) => flushSync(() => root.unmount()));
   clients.splice(0).forEach((client) => client.clear());
   vi.restoreAllMocks();
@@ -70,22 +73,16 @@ function RouteProbe({
     slug: 'project',
     archivePending: route.archiveWorkspace.isPending,
   });
-  onResult(route);
+  useLayoutEffect(() => {
+    onResult(route);
+  }, [onResult, route]);
   return null;
 }
 
-/** Router navigation commits a few tasks after the effect that requested it. */
-async function settleRouterNavigation() {
-  for (let task = 0; task < 10; task++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-async function settleRouteArchive(complete: () => void) {
+async function commitReactUpdate<T>(update: () => T | Promise<T>): Promise<T> {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   try {
-    // The fixture transport responds synchronously; act drains the resulting archive promises.
-    await act(async () => complete());
+    return await act(async () => update());
   } finally {
     vi.unstubAllGlobals();
   }
@@ -106,13 +103,36 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
   queryClient.setQueryData(getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'query'), {
     projectId: 'proj-1',
   });
-  const firstRequestStarted = Promise.withResolvers<void>();
+  const availabilityFailed = Promise.withResolvers<void>();
+  if (availabilityFailure) {
+    const queryCache = queryClient.getQueryCache();
+    const unsubscribe = queryCache.subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        event.action.type === 'error' &&
+        event.query === queryCache.find({ queryKey: ideAvailabilityKey, exact: true })
+      ) {
+        availabilityFailed.resolve();
+        unsubscribe();
+      }
+    });
+    subscriptions.push(unsubscribe);
+  }
+  const requestWaiters = new Map<number, () => void>();
   const requests: {
     path: string;
     input: unknown;
     resolve: (data: unknown) => void;
     reject: (error: Error) => void;
   }[] = [];
+  const waitForRequests = async (count = 1) => {
+    if (requests.length < count) {
+      const started = Promise.withResolvers<void>();
+      requestWaiters.set(count, started.resolve);
+      await started.promise;
+    }
+    expect(requests).toHaveLength(count);
+  };
   const client = trpc.createClient({
     links: [
       () =>
@@ -129,7 +149,8 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
                 resolve: respond,
                 reject: (error) => observer.error(TRPCClientError.from(error)),
               });
-              firstRequestStarted.resolve();
+              requestWaiters.get(requests.length)?.();
+              requestWaiters.delete(requests.length);
             } else if (availabilityFailure && op.path === 'workspace.getAvailableIdes') {
               observer.error(TRPCClientError.from(new Error('IDE availability failed')));
             } else {
@@ -141,6 +162,7 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
   let command!: ReturnType<typeof useWorkspaceArchiveCommand>;
   let route!: ReturnType<typeof useSessionManagement>;
   let location = '';
+  const availabilityRendered = Promise.withResolvers<void>();
   const locked = vi.fn();
   const root = createRoot(document.createElement('div'));
   roots.push(root);
@@ -172,6 +194,9 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
                         locked={locked}
                         onResult={(value) => {
                           route = value;
+                          if (value.availableIdes.length > 0) {
+                            availabilityRendered.resolve();
+                          }
                         }}
                       />
                     }
@@ -190,8 +215,19 @@ function fixture(surface: 'command' | 'route' = 'command', availabilityFailure =
     owner,
     token,
     requests,
-    firstRequestStarted: firstRequestStarted.promise,
+    waitForRequests,
+    availabilityFailed: availabilityFailed.promise,
+    availabilityRendered: availabilityRendered.promise,
     render,
+    startRouteArchive: async (
+      input: Parameters<typeof route.archiveWorkspace.mutate>[0],
+      options?: Parameters<typeof route.archiveWorkspace.mutate>[1]
+    ) => {
+      await commitReactUpdate(async () => {
+        route.archiveWorkspace.mutate(input, options);
+        await waitForRequests();
+      });
+    },
     command: () => command,
     route: () => route,
     location: () => location,
@@ -204,7 +240,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
   it('omits removeGitIndexLock from the default single archive payload', async () => {
     const f = fixture();
     const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     expect(f.requests[0]?.input).toEqual({ id: 'ws-1' });
     f.requests[0]!.resolve({ id: 'ws-1' });
     await run;
@@ -214,7 +250,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const f = fixture();
     const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
     const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     f.requests[0]!.resolve({ id: 'ws-1' });
     await run;
 
@@ -236,37 +272,49 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
           : f.command().archiveColumn({ projectId: 'proj-1', ids: [id], kanbanColumn: 'WAITING' });
       const pending = () =>
         kind === 'single' ? f.command().isArchiving : f.command().isBulkArchiving;
-      const older = execute('ws-1');
-      const newer = execute('ws-2');
-      await vi.waitFor(() => expect(f.requests).toHaveLength(2));
-      await vi.waitFor(() => expect(pending()).toBe(true));
-      f.requests[1]!.resolve(kind === 'single' ? { id: 'ws-2' } : { results: [] });
-      await newer;
-      await vi.waitFor(() => expect(f.queryClient.isMutating()).toBe(1));
-      f.render();
+      const { older, newer } = await commitReactUpdate(async () => {
+        const older = execute('ws-1');
+        const newer = execute('ws-2');
+        await f.waitForRequests(2);
+        return { older, newer };
+      });
       expect(pending()).toBe(true);
-      f.requests[0]!.resolve(kind === 'single' ? { id: 'ws-1' } : { results: [] });
-      await older;
-      await vi.waitFor(() => expect(pending()).toBe(false));
+      await commitReactUpdate(async () => {
+        f.requests[1]!.resolve(kind === 'single' ? { id: 'ws-2' } : { results: [] });
+        await newer;
+      });
+      expect(f.queryClient.isMutating()).toBe(1);
+      expect(pending()).toBe(true);
+      await commitReactUpdate(async () => {
+        f.requests[0]!.resolve(kind === 'single' ? { id: 'ws-1' } : { results: [] });
+        await older;
+      });
+      expect(pending()).toBe(false);
     }
   );
 
   it('keeps execution pending until its post-mutation repairs settle', async () => {
     const f = fixture();
-    let finishRepair!: () => void;
-    const repair = new Promise<void>((resolve) => {
-      finishRepair = resolve;
+    const repairStarted = Promise.withResolvers<void>();
+    const repair = Promise.withResolvers<void>();
+    vi.spyOn(f.queryClient, 'invalidateQueries').mockImplementation(() => {
+      repairStarted.resolve();
+      return repair.promise;
     });
-    vi.spyOn(f.queryClient, 'invalidateQueries').mockReturnValue(repair);
-    const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
-    f.requests[0]!.resolve({ id: 'ws-1' });
-    await vi.waitFor(() => expect(f.queryClient.isMutating()).toBe(0));
-    f.render();
+    const { run } = await commitReactUpdate(async () => {
+      const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
+      await f.waitForRequests();
+      f.requests[0]!.resolve({ id: 'ws-1' });
+      await repairStarted.promise;
+      return { run };
+    });
+    expect(f.queryClient.isMutating()).toBe(0);
     expect(f.command().isArchiving).toBe(true);
-    finishRepair();
-    await run;
-    await vi.waitFor(() => expect(f.command().isArchiving).toBe(false));
+    await commitReactUpdate(async () => {
+      repair.resolve();
+      await run;
+    });
+    expect(f.command().isArchiving).toBe(false);
   });
 
   it('restores only failed bulk IDs from the latest stream while preserving the bulk endpoint', async () => {
@@ -274,7 +322,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const run = f
       .command()
       .archiveColumn({ projectId: 'proj-1', ids: ['ws-1', 'ws-2'], kanbanColumn: 'WAITING' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     expect(f.requests[0]?.path).toBe('workspace.bulkArchive');
     expect(f.requests[0]?.input).toEqual({ projectId: 'proj-1', kanbanColumn: 'WAITING' });
     f.owner.apply(f.token, {
@@ -315,7 +363,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const run = f
       .command()
       .archiveColumn({ projectId: 'proj-1', ids: ['ws-1'], kanbanColumn: 'WAITING' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     f.requests[0]!.resolve({
       results: [
         {
@@ -345,7 +393,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const ids = ['ws-1'];
     const run = f.command().archiveColumn({ projectId: 'proj-1', ids, kanbanColumn: 'WAITING' });
     ids.push('ws-2');
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
     f.requests[0]!.resolve({ results: [] });
     await expect(run).resolves.toEqual([{ id: 'ws-1', success: true }]);
@@ -357,7 +405,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const run = f
       .command()
       .archiveWorkspace({ projectId: 'proj-1', id: 'ws-1', removeGitIndexLock: true });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     expect(f.requests[0]?.input).toEqual({ id: 'ws-1', removeGitIndexLock: true });
     f.requests[0]!.resolve({ id: 'ws-1' });
     await expect(run).resolves.toEqual([{ id: 'ws-1', success: true }]);
@@ -368,7 +416,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const f = fixture();
     const first = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
     const second = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(2));
+    await f.waitForRequests(2);
     f.owner.retireConnection(f.token);
     const token = f.owner.beginConnection();
     f.owner.apply(token, {
@@ -392,7 +440,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
       const f = fixture();
       const first = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
       const second = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-      await vi.waitFor(() => expect(f.requests).toHaveLength(2));
+      await f.waitForRequests(2);
       f.requests[0]!.resolve({ id: 'ws-1' });
       await first;
       if (source === 'stream') {
@@ -423,7 +471,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const run = f
       .command()
       .archiveColumn({ projectId: 'proj-1', ids: ['ws-2'], kanbanColumn: 'WAITING' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     f.requests[0]!.resolve({
       results: [
         { id: 'ws-1', success: true },
@@ -441,7 +489,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     const bulk = f
       .command()
       .archiveColumn({ projectId: 'proj-1', ids: ['ws-2'], kanbanColumn: 'WAITING' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(2));
+    await f.waitForRequests(2);
     f.requests[1]!.resolve({
       results: [
         { id: 'ws-1', success: true },
@@ -484,7 +532,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
       entry: entry({ name: 'accepted during HTTP' }),
     });
     const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.waitForRequests();
     await fetch;
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
     f.requests[0]!.reject(new Error('archive failed'));
@@ -496,18 +544,22 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
 describe('workspace detail archive caller', () => {
   it('navigates and invokes success after archive even when follow-up refresh fails', async () => {
     const f = fixture('route');
-    const success = vi.fn();
+    const completed = Promise.withResolvers<void>();
+    const success = vi.fn(() => completed.resolve());
     const error = vi.fn();
     vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
-    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success, onError: error });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    await f.startRouteArchive({ id: 'ws-1' }, { onSuccess: success, onError: error });
     // Success navigation unmounts the detail route, so check IDE state while it is live.
+    await f.availabilityRendered;
     expect(f.route().availableIdes).toEqual([{ id: 'code', name: 'VS Code' }]);
     expect(f.route().preferredIde).toBe('code');
-    f.requests[0]!.resolve({ id: 'ws-1' });
-    await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
+    await commitReactUpdate(async () => {
+      f.requests[0]!.resolve({ id: 'ws-1' });
+      await completed.promise;
+    });
+    expect(success).toHaveBeenCalledOnce();
     expect(error).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+    expect(f.location()).toBe('/projects/project/workspaces');
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
   });
 
@@ -516,9 +568,7 @@ describe('workspace detail archive caller', () => {
     async (kind) => {
       const f = fixture('route');
       const onError = vi.fn();
-      f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError });
-      await f.firstRequestStarted;
-      expect(f.requests).toHaveLength(1);
+      await f.startRouteArchive({ id: 'ws-1' }, { onError });
       f.render('ws-2');
       const failure =
         kind === 'ordinary'
@@ -530,8 +580,9 @@ describe('workspace detail archive caller', () => {
                 data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
               },
             });
-      await settleRouteArchive(() => f.requests[0]!.reject(failure));
+      await commitReactUpdate(() => f.requests[0]!.reject(failure));
       expect(f.queryClient.isMutating()).toBe(0);
+      expect(f.route().archiveWorkspace.isPending).toBe(false);
       if (kind === 'ordinary') {
         expect(toast.error).toHaveBeenCalledExactlyOnceWith('Archive failed after departure');
       } else {
@@ -545,29 +596,31 @@ describe('workspace detail archive caller', () => {
 
   it('retains the pre-existing silent availability fallback and mutation-only IDE error feedback', async () => {
     const f = fixture('route', true);
-    await vi.waitFor(() =>
-      expect(
-        f.queryClient.getQueryState(
-          getQueryKey(trpc.workspace.getAvailableIdes, undefined, 'query')
-        )?.status
-      ).toBe('error')
-    );
+    await f.availabilityFailed;
+    expect(f.queryClient.getQueryState(ideAvailabilityKey)?.status).toBe('error');
+    await commitReactUpdate(() => f.render());
     expect(f.route().availableIdes).toEqual([]);
     expect(f.route().preferredIde).toBe('cursor');
     expect(toast.error).not.toHaveBeenCalled();
+    const errorShown = Promise.withResolvers<void>();
+    vi.mocked(toast.error).mockImplementationOnce(() => {
+      errorShown.resolve();
+      return 0;
+    });
     f.route().openInIde.mutate({ id: 'ws-1' });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
-    f.requests[0]!.reject(new Error('IDE launch failed'));
-    await vi.waitFor(() =>
-      expect(toast.error).toHaveBeenCalledExactlyOnceWith('IDE launch failed')
-    );
+    await f.waitForRequests();
+    await commitReactUpdate(async () => {
+      f.requests[0]!.reject(new Error('IDE launch failed'));
+      await errorShown.promise;
+    });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith('IDE launch failed');
   });
 
   it('offers route lock recovery after restoring the failed row from the latest accepted base', async () => {
     const f = fixture('route');
-    const error = vi.fn();
-    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: error });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    const failed = Promise.withResolvers<void>();
+    const error = vi.fn(() => failed.resolve());
+    await f.startRouteArchive({ id: 'ws-1' }, { onError: error });
     f.owner.apply(f.token, {
       type: 'snapshot_changed',
       workspaceId: 'ws-1',
@@ -580,8 +633,11 @@ describe('workspace detail archive caller', () => {
         data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
       },
     });
-    f.requests[0]!.reject(locked);
-    await vi.waitFor(() => expect(f.locked).toHaveBeenCalledOnce());
+    await commitReactUpdate(async () => {
+      f.requests[0]!.reject(locked);
+      await failed.promise;
+    });
+    expect(f.locked).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledWith(locked);
     expect(f.location()).toBe('/detail');
     expect(f.rows()[0]?.name).toBe('latest failed route');
@@ -589,13 +645,12 @@ describe('workspace detail archive caller', () => {
 
   it('stays on detail while its own archive is pending so a lock failure opens recovery', async () => {
     const f = fixture('route');
-    const error = vi.fn();
-    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: error });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    const failed = Promise.withResolvers<void>();
+    const error = vi.fn(() => failed.resolve());
+    await f.startRouteArchive({ id: 'ws-1' }, { onError: error });
     expect(f.route().archiveWorkspace.isPending).toBe(true);
     // The server persists and broadcasts ARCHIVING before doing the archive work.
-    f.render('ws-1', 'ARCHIVING');
-    await settleRouterNavigation();
+    await commitReactUpdate(() => f.render('ws-1', 'ARCHIVING'));
     expect(f.location()).toBe('/detail');
     // The server rolls the status back before rejecting with the lock error.
     f.render('ws-1', 'READY');
@@ -606,8 +661,11 @@ describe('workspace detail archive caller', () => {
         data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
       },
     });
-    f.requests[0]!.reject(locked);
-    await vi.waitFor(() => expect(f.locked).toHaveBeenCalledOnce());
+    await commitReactUpdate(async () => {
+      f.requests[0]!.reject(locked);
+      await failed.promise;
+    });
+    expect(f.locked).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledWith(locked);
     expect(toast.error).not.toHaveBeenCalled();
     expect(f.location()).toBe('/detail');
@@ -616,49 +674,51 @@ describe('workspace detail archive caller', () => {
   it('keeps lock recovery mounted when the failed archive refresh leaves ARCHIVING cached', async () => {
     const f = fixture('route');
     vi.spyOn(f.queryClient, 'invalidateQueries').mockRejectedValue(new Error('refresh failed'));
-    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onError: vi.fn() });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
-    f.render('ws-1', 'ARCHIVING');
-    await settleRouterNavigation();
-    f.requests[0]!.reject(
-      TRPCClientError.from({
-        error: {
-          message: 'Git locked',
-          code: -32_603,
-          data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
-        },
-      })
-    );
-    await vi.waitFor(() => expect(f.route().archiveWorkspace.isPending).toBe(false));
+    const failed = Promise.withResolvers<void>();
+    await f.startRouteArchive({ id: 'ws-1' }, { onError: () => failed.resolve() });
+    await commitReactUpdate(() => f.render('ws-1', 'ARCHIVING'));
+    await commitReactUpdate(async () => {
+      f.requests[0]!.reject(
+        TRPCClientError.from({
+          error: {
+            message: 'Git locked',
+            code: -32_603,
+            data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
+          },
+        })
+      );
+      await failed.promise;
+    });
+    expect(f.route().archiveWorkspace.isPending).toBe(false);
     expect(f.locked).toHaveBeenCalledOnce();
-    await settleRouterNavigation();
     expect(f.location()).toBe('/detail');
     // Once a fresh status arrives, a later archive from another surface redirects again.
-    f.render('ws-1', 'READY');
-    await settleRouterNavigation();
-    f.render('ws-1', 'ARCHIVING');
-    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+    await commitReactUpdate(() => f.render('ws-1', 'READY'));
+    await commitReactUpdate(() => f.render('ws-1', 'ARCHIVING'));
+    expect(f.location()).toBe('/projects/project/workspaces');
   });
 
   it('navigates once its own pending archive succeeds while ARCHIVED is already visible', async () => {
     const f = fixture('route');
-    const success = vi.fn();
-    f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success });
-    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
-    f.render('ws-1', 'ARCHIVED');
-    await settleRouterNavigation();
+    const completed = Promise.withResolvers<void>();
+    const success = vi.fn(() => completed.resolve());
+    await f.startRouteArchive({ id: 'ws-1' }, { onSuccess: success });
+    await commitReactUpdate(() => f.render('ws-1', 'ARCHIVED'));
     expect(f.location()).toBe('/detail');
-    f.requests[0]!.resolve({ id: 'ws-1' });
-    await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
-    await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+    await commitReactUpdate(async () => {
+      f.requests[0]!.resolve({ id: 'ws-1' });
+      await completed.promise;
+    });
+    expect(success).toHaveBeenCalledOnce();
+    expect(f.location()).toBe('/projects/project/workspaces');
   });
 
   it.each(['ARCHIVING', 'ARCHIVED'] as const)(
     'redirects when %s comes from another archive surface',
     async (status) => {
       const f = fixture('route');
-      f.render('ws-1', status);
-      await vi.waitFor(() => expect(f.location()).toBe('/projects/project/workspaces'));
+      await commitReactUpdate(() => f.render('ws-1', status));
+      expect(f.location()).toBe('/projects/project/workspaces');
     }
   );
 
@@ -667,15 +727,14 @@ describe('workspace detail archive caller', () => {
     async (selected) => {
       const f = fixture('route');
       const success = vi.fn();
-      f.route().archiveWorkspace.mutate({ id: 'ws-1' }, { onSuccess: success });
-      await f.firstRequestStarted;
-      expect(f.requests).toHaveLength(1);
+      await f.startRouteArchive({ id: 'ws-1' }, { onSuccess: success });
       f.render('ws-2');
       if (selected === 'ws-1') {
         f.render('ws-1');
       }
-      await settleRouteArchive(() => f.requests[0]!.resolve({ id: 'ws-1' }));
+      await commitReactUpdate(() => f.requests[0]!.resolve({ id: 'ws-1' }));
       expect(f.queryClient.isMutating()).toBe(0);
+      expect(f.route().archiveWorkspace.isPending).toBe(false);
       expect(f.location()).toBe('/detail');
       expect(success).not.toHaveBeenCalled();
       expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);

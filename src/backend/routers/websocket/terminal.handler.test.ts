@@ -45,9 +45,17 @@ vi.mock('@/backend/services/workspace', async (importOriginal) => {
 class MockWebSocket extends EventEmitter {
   readyState = WS_READY_STATE.OPEN;
   bufferedAmount = 0;
-  send = vi.fn();
+  send = vi.fn((message: string) => {
+    this.emit('sent', message);
+  });
   close = vi.fn();
   terminate = vi.fn();
+
+  nextMessage(): Promise<string> {
+    const message = Promise.withResolvers<string>();
+    this.once('sent', message.resolve);
+    return message.promise;
+  }
 }
 
 function createLogger() {
@@ -302,7 +310,8 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
 
     const request = createRequest();
-    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const response = Promise.withResolvers<string>();
+    const socket = { write: vi.fn(response.resolve), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
     handler(
@@ -314,12 +323,9 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
-    });
-    expect(socket.write).toHaveBeenCalledWith(
-      expect.stringContaining('Workspace not found or has no worktree')
-    );
+    const rejection = await response.promise;
+    expect(rejection).toContain('400 Bad Request');
+    expect(rejection).toContain('Workspace not found or has no worktree');
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(terminalService.getTerminalsForWorkspace).not.toHaveBeenCalled();
   });
@@ -403,14 +409,14 @@ describe('createTerminalUpgradeHandler', () => {
     const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const terminalLists = Promise.all([ws1.nextMessage(), ws2.nextMessage()]);
     const url = new URL(`http://localhost/terminal?workspaceId=${workspaceId}`);
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(2);
-    });
+    await terminalLists;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(2);
 
     const listeners = outputListeners.get(terminalId);
     expect(listeners?.size).toBe(2);
@@ -459,6 +465,7 @@ describe('createTerminalUpgradeHandler', () => {
     const ws = new MockWebSocket();
     const handler = createTerminalUpgradeHandler(appContext);
 
+    const terminalList = ws.nextMessage();
     handler(
       createRequest(),
       { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
@@ -468,9 +475,8 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(outputListeners.get(terminalId)?.size).toBe(1);
-    });
+    await terminalList;
+    expect(outputListeners.get(terminalId)?.size).toBe(1);
     const listener = Array.from(outputListeners.get(terminalId) ?? [])[0];
     if (!listener) {
       throw new Error('Expected terminal output listener');
@@ -516,6 +522,7 @@ describe('createTerminalUpgradeHandler', () => {
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
+    const terminalList = ws.nextMessage();
     handler(
       request,
       socket,
@@ -525,16 +532,15 @@ describe('createTerminalUpgradeHandler', () => {
       wsAliveMap
     );
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
-    });
+    await terminalList;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
 
     expect(ws.send).toHaveBeenCalledExactlyOnceWith(
       JSON.stringify({ type: 'terminal_list', terminals: [] })
     );
+    const created = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'create', cols: 120, rows: 40 }));
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(await created).toBe(JSON.stringify({ type: 'created', terminalId: 'terminal-1' }));
 
     expect(terminalService.createTerminal).toHaveBeenCalledWith({
       workspaceId,
@@ -546,11 +552,6 @@ describe('createTerminalUpgradeHandler', () => {
       workspaceId,
       name: 'terminal-1',
       pid: 4321,
-    });
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'created', terminalId: 'terminal-1' })
-      );
     });
 
     ws.emit(
@@ -621,6 +622,7 @@ describe('createTerminalUpgradeHandler', () => {
     const ws = new MockWebSocket();
     const handler = createTerminalUpgradeHandler(appContext);
 
+    const terminalList = ws.nextMessage();
     handler(
       createRequest(),
       { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
@@ -630,16 +632,19 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(exitListeners.get(terminalId)?.size).toBe(1);
-    });
+    await terminalList;
+    expect(exitListeners.get(terminalId)?.size).toBe(1);
 
+    const pidReleased = Promise.withResolvers<void>();
+    mockClearTerminalPid.mockImplementationOnce(() => {
+      pidReleased.resolve();
+      return pidReleased.promise;
+    });
     ws.emit('message', JSON.stringify({ type: 'destroy', terminalId }));
 
-    await vi.waitFor(() => {
-      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, terminalId);
-      expect(mockClearTerminalPid).toHaveBeenCalledWith(workspaceId, terminalId);
-    });
+    await pidReleased.promise;
+    expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, terminalId);
+    expect(mockClearTerminalPid).toHaveBeenCalledWith(workspaceId, terminalId);
     expect(outputListeners.get(terminalId)?.size).toBe(0);
     expect(exitListeners.get(terminalId)?.size).toBe(0);
   });
@@ -667,6 +672,7 @@ describe('createTerminalUpgradeHandler', () => {
     const wss = createWss(ws);
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
+    const terminalList = ws.nextMessage();
     handler(
       createRequest(),
       socket,
@@ -676,22 +682,19 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
-    });
+    await terminalList;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
 
+    const created = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'create', requestId: 'request-1' }));
-
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'created',
-          terminalId: 'terminal-1',
-          requestId: 'request-1',
-          outputBuffer: 'early prompt $ ',
-        })
-      );
-    });
+    expect(await created).toBe(
+      JSON.stringify({
+        type: 'created',
+        terminalId: 'terminal-1',
+        requestId: 'request-1',
+        outputBuffer: 'early prompt $ ',
+      })
+    );
 
     // The buffer snapshot must be taken before the live output listener
     // attaches so bytes emitted during the DB write are not duplicated.
@@ -711,22 +714,20 @@ describe('createTerminalUpgradeHandler', () => {
 
     const { terminalService } = createTerminalService();
     type CreateResult = { terminalId: string; pid: number };
-    let resolveFirst: ((value: CreateResult | PromiseLike<CreateResult>) => void) | undefined;
-    let resolveSecond: ((value: CreateResult | PromiseLike<CreateResult>) => void) | undefined;
+    const firstCreate = Promise.withResolvers<CreateResult>();
+    const secondCreate = Promise.withResolvers<CreateResult>();
+    const firstStarted = Promise.withResolvers<void>();
+    const secondStarted = Promise.withResolvers<void>();
 
     terminalService.createTerminal
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveFirst = resolve;
-          })
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecond = resolve;
-          })
-      );
+      .mockImplementationOnce(() => {
+        firstStarted.resolve();
+        return firstCreate.promise;
+      })
+      .mockImplementationOnce(() => {
+        secondStarted.resolve();
+        return secondCreate.promise;
+      });
 
     const logger = createLogger();
     const appContext = {
@@ -747,6 +748,7 @@ describe('createTerminalUpgradeHandler', () => {
     const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
+    const terminalList = ws.nextMessage();
     handler(
       request,
       socket,
@@ -756,9 +758,8 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
-    });
+    await terminalList;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
 
     ws.emit(
       'message',
@@ -769,32 +770,27 @@ describe('createTerminalUpgradeHandler', () => {
       JSON.stringify({ type: 'create', requestId: 'request-2', cols: 80, rows: 24 })
     );
 
-    await vi.waitFor(() => {
-      expect(resolveFirst).toBeDefined();
-      expect(resolveSecond).toBeDefined();
-    });
+    await Promise.all([firstStarted.promise, secondStarted.promise]);
 
-    resolveSecond?.({ terminalId: 'terminal-2', pid: 4322 });
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'created',
-          terminalId: 'terminal-2',
-          requestId: 'request-2',
-        })
-      );
-    });
+    const secondResponse = ws.nextMessage();
+    secondCreate.resolve({ terminalId: 'terminal-2', pid: 4322 });
+    expect(await secondResponse).toBe(
+      JSON.stringify({
+        type: 'created',
+        terminalId: 'terminal-2',
+        requestId: 'request-2',
+      })
+    );
 
-    resolveFirst?.({ terminalId: 'terminal-1', pid: 4321 });
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'created',
-          terminalId: 'terminal-1',
-          requestId: 'request-1',
-        })
-      );
-    });
+    const firstResponse = ws.nextMessage();
+    firstCreate.resolve({ terminalId: 'terminal-1', pid: 4321 });
+    expect(await firstResponse).toBe(
+      JSON.stringify({
+        type: 'created',
+        terminalId: 'terminal-1',
+        requestId: 'request-1',
+      })
+    );
   });
 
   it('retries clearing the persisted pid when terminal exit cleanup transiently fails', async () => {
@@ -828,6 +824,7 @@ describe('createTerminalUpgradeHandler', () => {
     const ws = new MockWebSocket();
     const wss = createWss(ws);
 
+    const terminalList = ws.nextMessage();
     handler(
       createRequest(),
       { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex,
@@ -837,17 +834,20 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(exitListeners.get(terminalId)?.size).toBe(1);
-    });
+    await terminalList;
+    expect(exitListeners.get(terminalId)?.size).toBe(1);
 
-    for (const callback of exitListeners.get(terminalId) ?? []) {
-      callback(0);
+    vi.useFakeTimers();
+    try {
+      for (const callback of exitListeners.get(terminalId) ?? []) {
+        callback(0);
+      }
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
     }
 
-    await vi.waitFor(() => {
-      expect(mockClearTerminalPid).toHaveBeenCalledTimes(2);
-    });
+    expect(mockClearTerminalPid).toHaveBeenCalledTimes(2);
     expect(mockClearTerminalPid).toHaveBeenNthCalledWith(1, workspaceId, terminalId);
     expect(mockClearTerminalPid).toHaveBeenNthCalledWith(2, workspaceId, terminalId);
     expect(logger.warn).not.toHaveBeenCalledWith('Failed to clear terminal PID', expect.anything());
@@ -894,6 +894,7 @@ describe('createTerminalUpgradeHandler', () => {
     const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
+    const terminalList = ws.nextMessage();
     handler(
       request,
       socket,
@@ -903,29 +904,27 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
-    });
+    await terminalList;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
 
+    const response = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
+    expect(await response).toBe(
+      JSON.stringify({ type: 'error', message: 'Operation failed: database locked' })
+    );
 
-    await vi.waitFor(() => {
-      expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
-        workspaceId,
-        name: 'terminal-1',
-        pid: 4321,
-      });
-      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
+    expect(terminalSessionService.registerSession).toHaveBeenCalledWith({
+      workspaceId,
+      name: 'terminal-1',
+      pid: 4321,
     });
+    expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
 
     expect(terminalInstances.size).toBe(0);
     expect(terminalService.onOutput).not.toHaveBeenCalled();
     expect(terminalService.onExit).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalledWith(
       JSON.stringify({ type: 'created', terminalId: 'terminal-1' })
-    );
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Operation failed: database locked' })
     );
   });
 
@@ -957,6 +956,7 @@ describe('createTerminalUpgradeHandler', () => {
     const request = createRequest();
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
+    const terminalList = ws.nextMessage();
     handler(
       request,
       socket,
@@ -966,29 +966,25 @@ describe('createTerminalUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
 
-    await vi.waitFor(() => {
-      expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
-    });
+    await terminalList;
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
 
+    const invalidJson = ws.nextMessage();
     ws.emit('message', '{invalid-json');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(ws.send).toHaveBeenCalledWith(
+    expect(await invalidJson).toBe(
       JSON.stringify({ type: 'error', message: 'Invalid message format' })
     );
 
+    const invalidType = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'unsupported_type' }));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(ws.send).toHaveBeenCalledWith(
+    expect(await invalidType).toBe(
       JSON.stringify({ type: 'error', message: 'Invalid message format' })
     );
 
     vi.mocked(workspaceDataService.findById).mockResolvedValueOnce(null as never);
+    const missingWorkspace = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'create' }));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(ws.send).toHaveBeenCalledWith(
+    expect(await missingWorkspace).toBe(
       JSON.stringify({ type: 'error', message: 'Workspace not found or has no worktree' })
     );
 
@@ -998,13 +994,10 @@ describe('createTerminalUpgradeHandler', () => {
       worktreePath: '/tmp/worktree',
     } as never);
     terminalService.createTerminal.mockRejectedValueOnce(new Error('creation failed'));
+    const creationFailed = ws.nextMessage();
     ws.emit('message', JSON.stringify({ type: 'create', cols: 10, rows: 10 }));
-    await Promise.resolve();
-    await Promise.resolve();
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: 'error', message: 'Operation failed: creation failed' })
-      );
-    });
+    expect(await creationFailed).toBe(
+      JSON.stringify({ type: 'error', message: 'Operation failed: creation failed' })
+    );
   });
 });
