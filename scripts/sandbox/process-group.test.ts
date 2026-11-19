@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import {
   collectGroupProcesses,
@@ -63,13 +64,14 @@ describe('process identity', () => {
     const entry = 'BASE_DIR=/tmp/ff-sandbox/sb-environment test';
     const env = { PATH: process.env.PATH, BASE_DIR: '/tmp/ff-sandbox/sb-environment test' };
     // Bounded, like every helper process (an interrupted run leaves none behind).
-    const live = spawn(process.execPath, ['-e', `setTimeout(() => {}, ${HELPER_LIFETIME_MS})`], {
-      env,
-    });
+    const live = spawn(
+      process.execPath,
+      ['-e', `process.send('ready'); setTimeout(() => {}, ${HELPER_LIFETIME_MS})`],
+      { env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] }
+    );
     const gone = spawn(process.execPath, ['-e', ''], { env });
     try {
-      await new Promise((resolve) => gone.once('exit', resolve));
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await Promise.all([once(live, 'message'), once(gone, 'exit')]);
       const livePid = live.pid ?? 0;
       const gonePid = gone.pid ?? 0;
       expect(realSystem.processesWithEnvironment(entry, [livePid, gonePid])).toEqual([livePid]);

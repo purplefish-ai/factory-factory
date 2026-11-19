@@ -23,11 +23,16 @@ const unauthenticatedGitHubHealth: GitHubHealth = {
 };
 
 function createCheckCLIHealthUtils(current: CLIHealth | undefined) {
+  const cacheWritten = Promise.withResolvers<void>();
+  const cacheInvalidated = Promise.withResolvers<void>();
   const setData: CheckCLIHealthUtils['setData'] = vi.fn((_input, updater) => {
     current = updater(current);
+    if (current !== undefined) {
+      cacheWritten.resolve();
+    }
   });
   const fetchMock = vi.fn(async () => healthyCLIHealth);
-  const invalidateMock = vi.fn(async () => undefined);
+  const invalidateMock = vi.fn(async () => cacheInvalidated.resolve());
   const checkCLIHealth: CheckCLIHealthUtils = {
     setData,
     fetch: fetchMock,
@@ -39,6 +44,8 @@ function createCheckCLIHealthUtils(current: CLIHealth | undefined) {
     getCurrent: () => current,
     fetch: fetchMock,
     invalidate: invalidateMock,
+    cacheWritten: cacheWritten.promise,
+    cacheInvalidated: cacheInvalidated.promise,
   };
 }
 
@@ -72,10 +79,12 @@ describe('syncGitHubCLIHealth', () => {
   });
 
   it('force-refreshes full CLI health before writing when the cache is missing', async () => {
-    const { checkCLIHealth, getCurrent, fetch } = createCheckCLIHealthUtils(undefined);
+    const { checkCLIHealth, getCurrent, fetch, cacheWritten } =
+      createCheckCLIHealthUtils(undefined);
 
     syncGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith({ forceRefresh: true }));
+    await cacheWritten;
+    expect(fetch).toHaveBeenCalledWith({ forceRefresh: true });
 
     expect(getCurrent()).toEqual({
       ...healthyCLIHealth,
@@ -85,11 +94,13 @@ describe('syncGitHubCLIHealth', () => {
   });
 
   it('invalidates the health query when the fallback refresh fails', async () => {
-    const { checkCLIHealth, fetch, getCurrent, invalidate } = createCheckCLIHealthUtils(undefined);
+    const { checkCLIHealth, fetch, getCurrent, invalidate, cacheInvalidated } =
+      createCheckCLIHealthUtils(undefined);
     fetch.mockRejectedValueOnce(new Error('failed'));
 
     syncGitHubCLIHealth(checkCLIHealth, unauthenticatedGitHubHealth);
-    await vi.waitFor(() => expect(invalidate).toHaveBeenCalled());
+    await cacheInvalidated;
+    expect(invalidate).toHaveBeenCalled();
 
     expect(getCurrent()).toEqual({
       claude: { isInstalled: true, isAuthenticated: true },

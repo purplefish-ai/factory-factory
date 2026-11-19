@@ -1,3 +1,6 @@
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FactoryReleaseChecker, isNewerRelease } from './factory-update';
 
@@ -22,26 +25,42 @@ it.each([
   expect(isNewerRelease(current, latest)).toBe(expected);
 });
 
+async function startRegistry(version: string) {
+  const requests: { url: string | undefined; accept: string | undefined }[] = [];
+  const server = createServer((request, response) => {
+    requests.push({ url: request.url, accept: request.headers.accept });
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ version }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  return {
+    requests,
+    url: `http://127.0.0.1:${address.port}`,
+    [Symbol.asyncDispose]: () => server[Symbol.asyncDispose](),
+  };
+}
+
 it('asks the registry it is given', async () => {
-  const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version: '0.6.0' }))));
-  vi.stubGlobal('fetch', fetcher);
-  await new FactoryReleaseChecker().getLatestVersion(undefined, 'http://127.0.0.1:4873');
-  expect(fetcher).toHaveBeenCalledWith(
-    'http://127.0.0.1:4873/factory-factory/latest',
-    expect.anything()
-  );
+  await using registry = await startRegistry('0.6.0');
+
+  expect(await new FactoryReleaseChecker().getLatestVersion(undefined, registry.url)).toBe('0.6.0');
+  expect(registry.requests).toEqual([
+    { url: '/factory-factory/latest', accept: 'application/json' },
+  ]);
 });
 
 it('does not reuse a cached version from another registry', async () => {
-  const fetcher = vi
-    .fn()
-    .mockResolvedValueOnce(new Response(JSON.stringify({ version: '0.6.0' })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ version: '0.7.0' })));
-  vi.stubGlobal('fetch', fetcher);
+  await using first = await startRegistry('0.6.0');
+  await using second = await startRegistry('0.7.0');
+
   const checker = new FactoryReleaseChecker();
-  expect(await checker.getLatestVersion(undefined, 'https://registry.npmjs.org')).toBe('0.6.0');
-  expect(await checker.getLatestVersion(undefined, 'http://127.0.0.1:4873')).toBe('0.7.0');
-  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(await checker.getLatestVersion(undefined, first.url)).toBe('0.6.0');
+  expect(await checker.getLatestVersion(undefined, second.url)).toBe('0.7.0');
+  expect(first.requests).toHaveLength(1);
+  expect(second.requests).toHaveLength(1);
 });
 
 it('coalesces requests and caches registry responses for an hour', async () => {
