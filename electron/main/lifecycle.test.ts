@@ -1,7 +1,14 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import type { ElectronLifecycleDependencies } from './lifecycle.js';
 import { createTestLifecycle, deferred, FakeBrowserWindow } from './lifecycle.test-support.js';
 import { LOADING_PAGE_URL } from './loading-page.js';
+
+function nextAppQuit(app: ElectronLifecycleDependencies['app']): Promise<void> {
+  const quit = deferred<void>();
+  vi.mocked(app.quit).mockImplementationOnce(quit.resolve);
+  return quit.promise;
+}
 
 describe('electron lifecycle coordination', () => {
   it('applies shell bounds before creating the window and registers persistence', async () => {
@@ -255,23 +262,31 @@ describe('window shown while the backend starts', () => {
     async ({ platform, quitCalls }) => {
       const { serverManager, rejectStart } = gatedServerManager();
       const { lifecycle, app, dialog } = createTestLifecycle({ serverManager, platform });
+      const stopGate = deferred<void>();
+      serverManager.stop.mockReturnValueOnce(stopGate.promise);
       FakeBrowserWindow.onAllWindowsClosed = () => lifecycle.handleWindowAllClosed();
 
-      const createPromise = lifecycle.createWindow();
-      rejectStart(new Error('migration failed'));
+      try {
+        const createPromise = lifecycle.createWindow();
+        rejectStart(new Error('migration failed'));
 
-      await expect(createPromise).resolves.toBeNull();
-      const window = FakeBrowserWindow.instances[0];
-      expect(window?.destroy).toHaveBeenCalledTimes(1);
-      expect(window?.loadURL).not.toHaveBeenCalledWith('http://localhost:3001');
-      expect(FakeBrowserWindow.getAllWindows()).toHaveLength(0);
-      // Destroying the last window requests a stop; that must not hide the error.
-      expect(dialog.showErrorBox).toHaveBeenCalledWith(
-        'Startup Error',
-        expect.stringContaining('migration failed')
-      );
-      // The startup error quits everywhere; closing the window also quits off macOS.
-      await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1 + quitCalls));
+        await expect(createPromise).resolves.toBeNull();
+        const window = FakeBrowserWindow.instances[0];
+        expect(window?.destroy).toHaveBeenCalledTimes(1);
+        expect(window?.loadURL).not.toHaveBeenCalledWith('http://localhost:3001');
+        expect(FakeBrowserWindow.getAllWindows()).toHaveLength(0);
+        // Destroying the last window requests a stop; that must not hide the error.
+        expect(dialog.showErrorBox).toHaveBeenCalledWith(
+          'Startup Error',
+          expect.stringContaining('migration failed')
+        );
+        expect(app.quit).toHaveBeenCalledTimes(1);
+      } finally {
+        stopGate.resolve();
+        // Window-close shutdown only queues promise continuations once the fake stop settles.
+        await nextTurn();
+      }
+      expect(app.quit).toHaveBeenCalledTimes(1 + quitCalls);
     }
   );
 
@@ -283,6 +298,7 @@ describe('window shown while the backend starts', () => {
     async ({ platform, quitCalls }) => {
       const { serverManager } = gatedServerManager();
       const { lifecycle, app, dialog } = createTestLifecycle({ serverManager, platform });
+      const lastWindowQuit = quitCalls > 0 ? nextAppQuit(app) : null;
       FakeBrowserWindow.onAllWindowsClosed = () => lifecycle.handleWindowAllClosed();
 
       const createPromise = lifecycle.createWindow();
@@ -292,7 +308,10 @@ describe('window shown while the backend starts', () => {
       expect(serverManager.stop).toHaveBeenCalledTimes(1);
       expect(dialog.showErrorBox).not.toHaveBeenCalled();
       expect(FakeBrowserWindow.instances[0]?.loadURL).toHaveBeenCalledTimes(1);
-      await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(quitCalls));
+      if (lastWindowQuit !== null) {
+        await lastWindowQuit;
+      }
+      expect(app.quit).toHaveBeenCalledTimes(quitCalls);
     }
   );
 
@@ -341,6 +360,7 @@ describe('electron quit handling', () => {
       stop: vi.fn(() => stopGate.promise),
     };
     const { lifecycle, app } = createTestLifecycle({ serverManager });
+    const didQuit = nextAppQuit(app);
 
     const firstQuit = preventableEvent();
     lifecycle.handleBeforeQuit(firstQuit);
@@ -353,7 +373,8 @@ describe('electron quit handling', () => {
     expect(app.quit).not.toHaveBeenCalled();
 
     stopGate.resolve();
-    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    await didQuit;
+    expect(app.quit).toHaveBeenCalledTimes(1);
 
     const finalQuit = preventableEvent();
     lifecycle.handleBeforeQuit(finalQuit);
@@ -367,10 +388,12 @@ describe('electron quit handling', () => {
       stop: vi.fn().mockRejectedValue(new Error('stop failed')),
     };
     const { lifecycle, app } = createTestLifecycle({ serverManager });
+    const didQuit = nextAppQuit(app);
 
     lifecycle.handleBeforeQuit(preventableEvent());
 
-    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    await didQuit;
+    expect(app.quit).toHaveBeenCalledTimes(1);
   });
 
   it('does not report a startup error when quitting cancels a starting backend', async () => {
@@ -388,14 +411,16 @@ describe('electron quit handling', () => {
       }),
     };
     const { lifecycle, app, dialog } = createTestLifecycle({ serverManager });
+    const didQuit = nextAppQuit(app);
 
     const createPromise = lifecycle.createWindow();
-    await vi.waitFor(() => expect(serverManager.start).toHaveBeenCalled());
+    expect(serverManager.start).toHaveBeenCalled();
     lifecycle.handleBeforeQuit(preventableEvent());
 
     await expect(createPromise).resolves.toBeNull();
     expect(dialog.showErrorBox).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    await didQuit;
+    expect(app.quit).toHaveBeenCalledTimes(1);
   });
 
   it('does not start a new backend when activated while quitting', async () => {
@@ -405,6 +430,7 @@ describe('electron quit handling', () => {
       stop: vi.fn(() => stopGate.promise),
     };
     const { lifecycle, app } = createTestLifecycle({ serverManager });
+    const didQuit = nextAppQuit(app);
 
     // macOS: no window is open; the Dock icon is clicked while the quit stops the backend.
     lifecycle.handleBeforeQuit(preventableEvent());
@@ -412,7 +438,8 @@ describe('electron quit handling', () => {
     stopGate.resolve();
     await activatePromise;
 
-    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    await didQuit;
+    expect(app.quit).toHaveBeenCalledTimes(1);
     expect(serverManager.start).not.toHaveBeenCalled();
     expect(FakeBrowserWindow.instances).toHaveLength(0);
   });
@@ -424,6 +451,7 @@ describe('electron quit handling', () => {
       stop: vi.fn(() => stopGate.promise),
     };
     const { lifecycle, app } = createTestLifecycle({ serverManager });
+    const didQuit = nextAppQuit(app);
 
     lifecycle.handleWindowAllClosed();
     const activatePromise = lifecycle.handleActivate();
@@ -431,7 +459,8 @@ describe('electron quit handling', () => {
     stopGate.resolve();
 
     await expect(activatePromise).resolves.toBeUndefined();
-    await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+    await didQuit;
+    expect(app.quit).toHaveBeenCalledTimes(1);
     expect(serverManager.stop).toHaveBeenCalledTimes(1);
     expect(serverManager.start).not.toHaveBeenCalled();
     expect(FakeBrowserWindow.instances).toHaveLength(0);
@@ -518,26 +547,28 @@ describe('unexpected backend exit', () => {
   ] as const)(
     'does not report a startup error when closing the window cancels a restart ($platform)',
     async ({ platform, quitCalls }) => {
-      let rejectRestart!: (error: Error) => void;
+      const restart = Promise.withResolvers<string>();
+      const restartStarted = deferred<void>();
       const serverManager = {
         start: vi
           .fn()
           .mockResolvedValueOnce('http://localhost:3001')
-          .mockReturnValueOnce(
-            new Promise<string>((_resolve, reject) => {
-              rejectRestart = reject;
-            })
-          ),
+          .mockImplementationOnce(() => {
+            restartStarted.resolve();
+            return restart.promise;
+          }),
         stop: vi.fn(() => {
-          rejectRestart(new Error('Backend startup was cancelled by a stop request'));
+          restart.reject(new Error('Backend startup was cancelled by a stop request'));
           return Promise.resolve();
         }),
       };
       const { lifecycle, dialog, app } = createTestLifecycle({ serverManager, platform });
+      const lastWindowQuit = quitCalls > 0 ? nextAppQuit(app) : null;
       await lifecycle.createWindow();
 
       const exitHandled = lifecycle.handleBackendExit({ code: 1 });
-      await vi.waitFor(() => expect(serverManager.start).toHaveBeenCalledTimes(2));
+      await restartStarted.promise;
+      expect(serverManager.start).toHaveBeenCalledTimes(2);
       // While the restarted backend is starting, the user closes the window.
       FakeBrowserWindow.instances[0]?.close();
       lifecycle.handleWindowAllClosed();
@@ -546,24 +577,32 @@ describe('unexpected backend exit', () => {
       expect(serverManager.stop).toHaveBeenCalledTimes(1);
       expect(dialog.showErrorBox).not.toHaveBeenCalled();
       // Only closing the last window quits, and only off macOS.
-      await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(quitCalls));
+      if (lastWindowQuit !== null) {
+        await lastWindowQuit;
+      }
+      expect(app.quit).toHaveBeenCalledTimes(quitCalls);
     }
   );
 
   it('prompts again when the restarted backend crashes during restart', async () => {
     const restartGate = deferred<string>();
+    const restartStarted = deferred<void>();
     const serverManager = {
       start: vi
         .fn()
         .mockResolvedValueOnce('http://localhost:3001')
-        .mockReturnValueOnce(restartGate.promise),
+        .mockImplementationOnce(() => {
+          restartStarted.resolve();
+          return restartGate.promise;
+        }),
       stop: vi.fn().mockResolvedValue(undefined),
     };
     const { lifecycle, dialog } = createTestLifecycle({ serverManager });
     await lifecycle.createWindow();
 
     const firstExit = lifecycle.handleBackendExit({ code: 1 });
-    await vi.waitFor(() => expect(serverManager.start).toHaveBeenCalledTimes(2));
+    await restartStarted.promise;
+    expect(serverManager.start).toHaveBeenCalledTimes(2);
     vi.mocked(dialog.showMessageBox).mockResolvedValueOnce({ response: 1, checkboxChecked: false });
     await lifecycle.handleBackendExit({ code: 2 });
 
@@ -843,10 +882,13 @@ describe('links leaving the app window', () => {
   it('logs a failure to open a link without logging the URL', async () => {
     const { window, shell, logger } = await createAppWindow();
     const url = 'https://example.com/?token=secret';
+    const errorLogged = deferred<void>();
+    vi.mocked(logger.error).mockImplementationOnce(() => errorLogged.resolve());
     vi.mocked(shell.openExternal).mockRejectedValueOnce(new Error(`No handler for ${url}`));
 
     window.windowOpenHandler?.({ url });
-    await vi.waitFor(() => expect(logger.error).toHaveBeenCalled());
+    await errorLogged.promise;
+    expect(logger.error).toHaveBeenCalled();
 
     const logged = vi.mocked(logger.error).mock.calls.flat().map(String).join('\n');
     expect(logged).toContain('No handler for <url>');

@@ -6,16 +6,6 @@ import {
   type UtilityBackendMessage,
 } from './electron-utility-backend';
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
 function createHarness(overrides: Partial<ElectronUtilityBackendDependencies> = {}) {
   const port = new EventEmitter();
   const posted: UtilityBackendMessage[] = [];
@@ -24,7 +14,8 @@ function createHarness(overrides: Partial<ElectronUtilityBackendDependencies> = 
       port.on(event, listener),
     postMessage: (message: UtilityBackendMessage) => posted.push(message),
   };
-  const exit = vi.fn();
+  const exited = Promise.withResolvers<number>();
+  const exit = vi.fn((code: number) => exited.resolve(code));
   const processEvents = Object.assign(new EventEmitter(), { exit });
   const fakeProcess = processEvents;
   const server = {
@@ -40,7 +31,7 @@ function createHarness(overrides: Partial<ElectronUtilityBackendDependencies> = 
     ...overrides,
   };
   const send = (data: unknown) => port.emit('message', { data });
-  return { deps, exit, posted, processEvents, send, server };
+  return { deps, exit, exited: exited.promise, posted, processEvents, send, server };
 }
 
 describe('runElectronUtilityBackend', () => {
@@ -67,7 +58,7 @@ describe('runElectronUtilityBackend', () => {
   });
 
   it('waits for an asynchronous backup and migration before composing the server', async () => {
-    const migration = deferred<void>();
+    const migration = Promise.withResolvers<void>();
     const harness = createHarness({ migrate: vi.fn(() => migration.promise) });
 
     const running = runElectronUtilityBackend(harness.deps);
@@ -113,7 +104,7 @@ describe('runElectronUtilityBackend', () => {
     await runElectronUtilityBackend(harness.deps);
 
     expect(harness.posted[0]).toMatchObject({ type: 'error' });
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(1));
+    expect(await harness.exited).toBe(1);
   });
 
   it('stops the server and exits cleanly on a shutdown message', async () => {
@@ -122,7 +113,7 @@ describe('runElectronUtilityBackend', () => {
 
     harness.send({ type: 'shutdown' });
     harness.send({ type: 'shutdown' });
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(0));
+    expect(await harness.exited).toBe(0);
 
     expect(harness.server.stop).toHaveBeenCalledTimes(1);
   });
@@ -134,7 +125,7 @@ describe('runElectronUtilityBackend', () => {
 
     harness.send({ type: 'shutdown' });
 
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(1));
+    expect(await harness.exited).toBe(1);
   });
 
   it('ignores unknown messages', async () => {
@@ -149,17 +140,21 @@ describe('runElectronUtilityBackend', () => {
   });
 
   it('lets a shutdown during startup exit cleanly instead of reporting an error', async () => {
-    const started = deferred<string>();
+    const started = Promise.withResolvers<string>();
+    const startRequested = Promise.withResolvers<void>();
     const harness = createHarness();
-    harness.server.start.mockReturnValue(started.promise);
+    harness.server.start.mockImplementation(() => {
+      startRequested.resolve();
+      return started.promise;
+    });
     const run = runElectronUtilityBackend(harness.deps);
-    await vi.waitFor(() => expect(harness.server.start).toHaveBeenCalled());
+    await startRequested.promise;
 
     harness.send({ type: 'shutdown' });
     started.reject(new Error('Server has already been stopped'));
     await run;
 
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(0));
+    expect(await harness.exited).toBe(0);
     expect(harness.posted).toEqual([]);
     expect(harness.exit).not.toHaveBeenCalledWith(1);
   });
@@ -170,7 +165,7 @@ describe('runElectronUtilityBackend', () => {
 
     harness.processEvents.emit('SIGTERM');
 
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(0));
+    expect(await harness.exited).toBe(0);
     expect(harness.server.stop).toHaveBeenCalled();
   });
 
@@ -180,18 +175,18 @@ describe('runElectronUtilityBackend', () => {
 
     harness.processEvents.emit('uncaughtException', new Error('boom'));
 
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(1));
+    expect(await harness.exited).toBe(1);
     expect(harness.server.stop).toHaveBeenCalled();
   });
 
   it('exits on a fatal error before the server exists', async () => {
-    const created = deferred<never>();
+    const created = Promise.withResolvers<never>();
     const harness = createHarness({ createServer: vi.fn(() => created.promise) });
     void runElectronUtilityBackend(harness.deps);
 
     harness.processEvents.emit('unhandledRejection', new Error('early'));
 
-    await vi.waitFor(() => expect(harness.exit).toHaveBeenCalledWith(1));
+    expect(await harness.exited).toBe(1);
     expect(harness.server.stop).not.toHaveBeenCalled();
   });
 });
