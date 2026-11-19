@@ -1,3 +1,4 @@
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import type { ElectronLifecycleDependencies } from './lifecycle.js';
 import { createTestLifecycle, deferred, FakeBrowserWindow } from './lifecycle.test-support.js';
@@ -261,27 +262,29 @@ describe('window shown while the backend starts', () => {
     async ({ platform, quitCalls }) => {
       const { serverManager, rejectStart } = gatedServerManager();
       const { lifecycle, app, dialog } = createTestLifecycle({ serverManager, platform });
-      const startupErrorQuit = nextAppQuit(app);
-      const lastWindowQuit = quitCalls > 0 ? nextAppQuit(app) : null;
+      const stopGate = deferred<void>();
+      serverManager.stop.mockReturnValueOnce(stopGate.promise);
       FakeBrowserWindow.onAllWindowsClosed = () => lifecycle.handleWindowAllClosed();
 
-      const createPromise = lifecycle.createWindow();
-      rejectStart(new Error('migration failed'));
+      try {
+        const createPromise = lifecycle.createWindow();
+        rejectStart(new Error('migration failed'));
 
-      await expect(createPromise).resolves.toBeNull();
-      const window = FakeBrowserWindow.instances[0];
-      expect(window?.destroy).toHaveBeenCalledTimes(1);
-      expect(window?.loadURL).not.toHaveBeenCalledWith('http://localhost:3001');
-      expect(FakeBrowserWindow.getAllWindows()).toHaveLength(0);
-      // Destroying the last window requests a stop; that must not hide the error.
-      expect(dialog.showErrorBox).toHaveBeenCalledWith(
-        'Startup Error',
-        expect.stringContaining('migration failed')
-      );
-      // The startup error quits everywhere; closing the window also quits off macOS.
-      await startupErrorQuit;
-      if (lastWindowQuit !== null) {
-        await lastWindowQuit;
+        await expect(createPromise).resolves.toBeNull();
+        const window = FakeBrowserWindow.instances[0];
+        expect(window?.destroy).toHaveBeenCalledTimes(1);
+        expect(window?.loadURL).not.toHaveBeenCalledWith('http://localhost:3001');
+        expect(FakeBrowserWindow.getAllWindows()).toHaveLength(0);
+        // Destroying the last window requests a stop; that must not hide the error.
+        expect(dialog.showErrorBox).toHaveBeenCalledWith(
+          'Startup Error',
+          expect.stringContaining('migration failed')
+        );
+        expect(app.quit).toHaveBeenCalledTimes(1);
+      } finally {
+        stopGate.resolve();
+        // Window-close shutdown only queues promise continuations once the fake stop settles.
+        await nextTurn();
       }
       expect(app.quit).toHaveBeenCalledTimes(1 + quitCalls);
     }
