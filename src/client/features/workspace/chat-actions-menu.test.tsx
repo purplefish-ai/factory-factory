@@ -74,15 +74,15 @@ it.each([{ chatLabel: null }, { chatLabel: 'Chat 1', disabled: true }])(
 );
 
 it('starts rename after the menu closes so its focus return cannot dismiss the editor', async () => {
-  let menuPresentOnRename = true;
+  const renameStarted = Promise.withResolvers<boolean>();
   const onRename = vi.fn(() => {
-    menuPresentOnRename = Boolean(document.querySelector('[role="menu"]'));
+    renameStarted.resolve(Boolean(document.querySelector('[role="menu"]')));
   });
   await openMenu({ chatLabel: 'Chat 1', onRename });
   const rename = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
     item.textContent?.includes('Rename chat')
   )!;
   await act(() => rename.click());
+  expect(await renameStarted.promise).toBe(false);
   expect(onRename).toHaveBeenCalledOnce();
-  expect(menuPresentOnRename).toBe(false);
 });
