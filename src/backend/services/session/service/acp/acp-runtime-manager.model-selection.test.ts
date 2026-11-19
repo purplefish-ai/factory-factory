@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import {
   createManagerTestHarness,
   mockNewSession,
@@ -173,11 +174,13 @@ describe('saved startup model versus native ACP default', () => {
       child.emit('exit', 0);
       return true;
     });
-    mockSetSessionConfigOption.mockReturnValue(
-      new Promise(() => {
+    const configuring = deferred();
+    mockSetSessionConfigOption.mockImplementation(() => {
+      configuring.resolve();
+      return new Promise(() => {
         /* Simulate an adapter that never confirms its model. */
-      })
-    );
+      });
+    });
     const creation = manager
       .getOrCreateClient(
         'session-1',
@@ -186,7 +189,8 @@ describe('saved startup model versus native ACP default', () => {
         defaultContext()
       )
       .catch((error: unknown) => error);
-    await vi.waitFor(() => expect(mockSetSessionConfigOption).toHaveBeenCalled());
+    await configuring.promise;
+    expect(mockSetSessionConfigOption).toHaveBeenCalled();
     await manager.stopClient('session-1');
     expect(await creation).toBeInstanceOf(Error);
     expect(manager.getClient('session-1')).toBeUndefined();

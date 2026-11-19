@@ -1,4 +1,3 @@
-import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,18 +11,13 @@ import {
   sessionEventBus,
 } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { disposeChatTransportForApplication } from './chat-connection-registry';
 import { createChatRouterServices } from './chat-message-router.test-helpers';
 import { createChatUpgradeHandler } from './chat.handler';
+import { MockWebSocket } from './mock-websocket.test-helpers';
 
-class Socket extends EventEmitter {
-  readyState: number = WS_READY_STATE.OPEN;
-  bufferedAmount = 0;
-  terminate = vi.fn();
-  send = vi.fn();
-  close = vi.fn();
-}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;
@@ -80,6 +74,13 @@ function setup() {
     getCachedCommands: async () => [],
     tryDispatchNextMessage: ports.dispatch.tryDispatchNextMessage,
   });
+  const completingLoads = createTestEventLog<Promise<void>>();
+  const completeLoad = load.completeLoad.bind(load);
+  vi.spyOn(load, 'completeLoad').mockImplementation((prepared) => {
+    const completion = completeLoad(prepared);
+    completingLoads.record(completion);
+    return completion;
+  });
   const app = unsafeCoerce<AppContext>({
     services: {
       sessionCommandFactories: ports.factories,
@@ -109,7 +110,7 @@ function setup() {
   applications.push(app);
   const handler = createChatUpgradeHandler(app);
   const connect = (id: string) => {
-    const ws = new Socket();
+    const ws = new MockWebSocket();
     const wss = unsafeCoerce<WebSocketServer>({
       handleUpgrade: (
         _req: IncomingMessage,
@@ -131,9 +132,9 @@ function setup() {
     );
     return ws;
   };
-  return { app, domain, ports, hydrate, capabilities, findSession, connect };
+  return { app, domain, ports, hydrate, capabilities, findSession, connect, completingLoads };
 }
-function frames(ws: Socket) {
+function frames(ws: MockWebSocket) {
   return ws.send.mock.calls.map(([payload]) => JSON.parse(payload));
 }
 
@@ -141,12 +142,17 @@ describe('load-session through the actual chat transport', () => {
   it('broadcasts replay/runtime before pending configuration and activates initial text after all load updates', async () => {
     const test = setup();
     const config = deferred<typeof EMPTY_CHAT_BAR_CAPABILITIES>();
-    test.capabilities.mockReturnValue(config.promise);
+    const configurationStarted = deferred<void>();
+    test.capabilities.mockImplementation(() => {
+      configurationStarted.resolve();
+      return config.promise;
+    });
     test.domain.storeInitialMessage('s1', 'Start once');
     const requester = test.connect('requester');
     const viewer = test.connect('viewer');
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'load-1' }));
-    await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(2));
+    await configurationStarted.promise;
+    expect(requester.send).toHaveBeenCalledTimes(2);
     expect(frames(requester)).toEqual([
       {
         type: 'session_replay_batch',
@@ -159,9 +165,9 @@ describe('load-session through the actual chat transport', () => {
     expect(test.ports.startup.getOrCreateSessionClient).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
     config.resolve(EMPTY_CHAT_BAR_CAPABILITIES);
-    await vi.waitFor(() =>
-      expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith('s1')
-    );
+    await test.completingLoads.waitForCount(1);
+    await test.completingLoads.events[0];
+    expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith('s1');
     expect(
       frames(requester)
         .slice(2, 5)
@@ -180,12 +186,12 @@ describe('load-session through the actual chat transport', () => {
     const test = setup();
     const requester = test.connect('requester');
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'passive' }));
-    await vi.waitFor(() =>
-      expect(frames(requester).at(-1)).toMatchObject({
-        type: 'session_delta',
-        data: { type: 'slash_commands' },
-      })
-    );
+    await test.completingLoads.waitForCount(1);
+    await test.completingLoads.events[0];
+    expect(frames(requester).at(-1)).toMatchObject({
+      type: 'session_delta',
+      data: { type: 'slash_commands' },
+    });
     expect(test.ports.startup.getOrCreateSessionClient).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
@@ -196,9 +202,8 @@ describe('load-session through the actual chat transport', () => {
     const requester = test.connect('requester');
     const viewer = test.connect('viewer');
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'failed' }));
-    await vi.waitFor(() =>
-      expect(frames(requester)).toEqual([{ type: 'error', message: 'Invalid message format' }])
-    );
+    await requester.sent.waitForCount(1);
+    expect(frames(requester)).toEqual([{ type: 'error', message: 'Invalid message format' }]);
     expect(viewer.send).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
@@ -209,9 +214,8 @@ describe('load-session through the actual chat transport', () => {
     const requester = test.connect('requester');
     const viewer = test.connect('viewer');
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'missing' }));
-    await vi.waitFor(() =>
-      expect(frames(requester)).toEqual([{ type: 'error', message: 'Session not found' }])
-    );
+    await requester.sent.waitForCount(1);
+    expect(frames(requester)).toEqual([{ type: 'error', message: 'Session not found' }]);
     expect(viewer.send).not.toHaveBeenCalled();
     expect(test.hydrate).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
@@ -230,9 +234,9 @@ describe('load-session through the actual chat transport', () => {
       'message',
       JSON.stringify({ type: 'load_session', loadRequestId: 'disconnected' })
     );
-    await vi.waitFor(() =>
-      expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith('s1')
-    );
+    await test.completingLoads.waitForCount(1);
+    await test.completingLoads.events[0];
+    expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith('s1');
     expect(frames(viewer)[0]).toMatchObject({
       type: 'session_replay_batch',
       loadRequestId: 'disconnected',
@@ -247,18 +251,27 @@ describe('load-session through the actual chat transport', () => {
   it('retains disconnected state until failed hydration settles, then cleans up', async () => {
     const test = setup();
     const history = deferred<void>();
-    test.hydrate.mockReturnValue(history.promise);
-    const clear = vi.spyOn(test.domain, 'clearSession');
+    const hydrationStarted = deferred<void>();
+    test.hydrate.mockImplementation(() => {
+      hydrationStarted.resolve();
+      return history.promise;
+    });
+    const sessionCleared = deferred<void>();
+    const clearSession = test.domain.clearSession.bind(test.domain);
+    const clear = vi.spyOn(test.domain, 'clearSession').mockImplementation((...args) => {
+      clearSession(...args);
+      sessionCleared.resolve();
+    });
     const requester = test.connect('requester');
     requester.emit('message', JSON.stringify({ type: 'load_session' }));
-    await vi.waitFor(() => expect(test.hydrate).toHaveBeenCalled());
+    await hydrationStarted.promise;
+    expect(test.hydrate).toHaveBeenCalled();
     requester.readyState = WS_READY_STATE.CLOSED;
     requester.emit('close');
     expect(clear).not.toHaveBeenCalled();
     history.reject(new Error('history unavailable'));
-    await vi.waitFor(() =>
-      expect(clear).toHaveBeenCalledExactlyOnceWith('s1', { preserveRejections: true })
-    );
+    await sessionCleared.promise;
+    expect(clear).toHaveBeenCalledExactlyOnceWith('s1', { preserveRejections: true });
     expect(requester.send).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
@@ -266,20 +279,24 @@ describe('load-session through the actual chat transport', () => {
   it('correlates concurrent replay loads and consumes initial text only once', async () => {
     const test = setup();
     const firstConfig = deferred<typeof EMPTY_CHAT_BAR_CAPABILITIES>();
-    test.capabilities.mockReturnValueOnce(firstConfig.promise);
+    const firstConfigurationStarted = deferred<void>();
+    test.capabilities.mockImplementationOnce(() => {
+      firstConfigurationStarted.resolve();
+      return firstConfig.promise;
+    });
     test.domain.storeInitialMessage('s1', 'Start once');
     const requester = test.connect('requester');
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'first' }));
-    await vi.waitFor(() => expect(test.capabilities).toHaveBeenCalledTimes(1));
+    await firstConfigurationStarted.promise;
+    expect(test.capabilities).toHaveBeenCalledTimes(1);
     requester.emit('message', JSON.stringify({ type: 'load_session', loadRequestId: 'second' }));
-    await vi.waitFor(() =>
-      expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledTimes(1)
-    );
+    await test.completingLoads.waitForCount(2);
+    await test.completingLoads.events[1];
+    expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
     firstConfig.resolve(EMPTY_CHAT_BAR_CAPABILITIES);
-    await vi.waitFor(() =>
-      expect(
-        frames(requester).filter((frame) => frame.data?.type === 'slash_commands')
-      ).toHaveLength(2)
+    await test.completingLoads.events[0];
+    expect(frames(requester).filter((frame) => frame.data?.type === 'slash_commands')).toHaveLength(
+      2
     );
     expect(
       frames(requester)

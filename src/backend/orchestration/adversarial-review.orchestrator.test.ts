@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { deferred } from '@/test-utils/deferred';
 
 // --- Module mocks (before imports) ---
 
@@ -105,6 +106,17 @@ function mockOpenPrWorkspace() {
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('factory-factory[bot]');
   vi.mocked(getPRHeadCommitSha).mockResolvedValue(HEAD_SHA);
   vi.mocked(sessionLifecycleService.stopSession).mockResolvedValue(undefined);
+}
+
+async function triggerAndWaitForReviewCleanup(workspaceId: string) {
+  const sessionStopped = deferred();
+  vi.mocked(sessionLifecycleService.stopSession).mockImplementationOnce(() => {
+    sessionStopped.resolve();
+    return Promise.resolve();
+  });
+  await triggerAdversarialReview(workspaceId);
+  await sessionStopped.promise;
+  expect(sessionLifecycleService.stopSession).toHaveBeenCalled();
 }
 
 describe('triggerAdversarialReview', () => {
@@ -268,8 +280,7 @@ describe('triggerAdversarialReview', () => {
     vi.mocked(gitOpsService.hasCommit).mockResolvedValue(true);
     vi.mocked(gitOpsService.deletePrivateRef).mockResolvedValue(undefined);
 
-    await triggerAdversarialReview(WORKSPACE_ID);
-    await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+    await triggerAndWaitForReviewCleanup(WORKSPACE_ID);
 
     expect(gitOpsService.fetchPullRequestHead).toHaveBeenCalledWith(
       '/tmp/worktree',
@@ -325,8 +336,7 @@ describe('triggerAdversarialReview', () => {
         .mockResolvedValueOnce(NEXT_SHA)
         .mockResolvedValue(NEXT_SHA);
 
-      await triggerAdversarialReview(WORKSPACE_ID);
-      await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+      await triggerAndWaitForReviewCleanup(WORKSPACE_ID);
 
       expect(githubCLIService.getPRDiff).toHaveBeenCalledTimes(2);
       expect(vi.mocked(sessionService.sendSessionMessage).mock.calls[0]?.[1]).toContain(NEXT_SHA);
@@ -339,8 +349,7 @@ describe('triggerAdversarialReview', () => {
         .mockReset()
         .mockImplementation(() => Promise.resolve(String(++sha).padStart(40, '0')));
 
-      await triggerAdversarialReview(WORKSPACE_ID);
-      await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+      await triggerAndWaitForReviewCleanup(WORKSPACE_ID);
 
       expect(githubCLIService.getPRDiff).toHaveBeenCalledTimes(3);
       expect(sessionService.sendSessionMessage).not.toHaveBeenCalled();

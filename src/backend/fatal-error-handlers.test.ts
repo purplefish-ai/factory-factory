@@ -163,11 +163,12 @@ describe('backend fatal error handlers', () => {
   it('supports injected loggers that only expose error()', async () => {
     const logger = { error: vi.fn() };
     const server = { stop: vi.fn().mockResolvedValue(undefined) };
-    const process = Object.assign(new EventEmitter(), { exit: vi.fn() });
+    const exited = Promise.withResolvers<number>();
+    const process = Object.assign(new EventEmitter(), { exit: vi.fn(exited.resolve) });
     registerFatalErrorHandlers({ logger, process, server });
     process.emit('uncaughtException', new Error('original failure'));
     process.emit('uncaughtException', new Error('write EPIPE'));
-    await vi.waitFor(() => expect(process.exit).toHaveBeenCalledWith(1));
+    expect(await exited.promise).toBe(1);
     expect(logger.error).toHaveBeenCalledTimes(1);
   });
 

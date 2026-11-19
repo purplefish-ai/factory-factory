@@ -18,6 +18,7 @@ import {
 } from '@/backend/testing/integration-db';
 import type { PRObservation } from '@/shared/pr-monitoring';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { PrismaClient } from '@prisma-gen/client';
 import type { PRObservationPorts } from './pr-observation-ports';
@@ -270,7 +271,12 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
       prMonitoring: { create: { enabled: true } },
     },
   });
-  const notifyParent = vi.fn(fireLifecycleNotification);
+  const notificationWrites = createTestEventLog<ReturnType<typeof fireLifecycleNotification>>();
+  const notifyParent = vi.fn((...args: Parameters<typeof fireLifecycleNotification>) => {
+    const persistence = fireLifecycleNotification(...args);
+    notificationWrites.record(persistence);
+    return persistence;
+  });
   const collector = createEventCollectorOrchestrator(
     unsafeCoerce<EventCollectorDependencies>({
       createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -295,10 +301,10 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
     fetchObservation.mockResolvedValueOnce(facts(previousPrUrl));
     const first = await prSnapshotService.attachAndRefreshPR(workspaceId, previousPrUrl);
     expect(first.success).toBe(true);
-    await vi.waitFor(async () =>
-      expect(
-        await db.prisma.workspaceNotification.count({ where: { workspaceId: 'parent' } })
-      ).toBe(1)
+    await notificationWrites.waitForCount(1);
+    await notificationWrites.events[0];
+    expect(await db.prisma.workspaceNotification.count({ where: { workspaceId: 'parent' } })).toBe(
+      1
     );
     const firstPR = await db.prisma.workspacePR.findUniqueOrThrow({
       where: { workspaceId_url: { workspaceId, url: previousPrUrl } },
@@ -307,10 +313,10 @@ it('persists one parent notification per accepted NONE-to-OPEN association and n
     await prSnapshotService.refreshPR({ workspaceId, prId: firstPR.id });
     fetchObservation.mockResolvedValueOnce(facts(nextPrUrl));
     expect((await prSnapshotService.attachAndRefreshPR(workspaceId, nextPrUrl)).success).toBe(true);
-    await vi.waitFor(async () =>
-      expect(
-        await db.prisma.workspaceNotification.count({ where: { workspaceId: 'parent' } })
-      ).toBe(2)
+    await notificationWrites.waitForCount(2);
+    await notificationWrites.events[1];
+    expect(await db.prisma.workspaceNotification.count({ where: { workspaceId: 'parent' } })).toBe(
+      2
     );
     const thirdUrl = 'https://github.com/org/repo/pull/3';
     const third = await workspacePrSnapshotService.attach(workspaceId, thirdUrl);

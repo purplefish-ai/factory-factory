@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDeferredCall } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
+import { deferred } from '@/test-utils/deferred';
 import type { CreateAcpClientParams } from './acp-client-factory';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { wireAcpRuntimeErrorHandler } from './acp-runtime-error-handler';
@@ -127,10 +129,10 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     // Catches a global lock or duplicate same-session factory invocation.
     const firstHandle = createTestProcessHandle({ providerSessionId: 'provider-1' });
     const secondHandle = createTestProcessHandle({ providerSessionId: 'provider-2' });
-    const firstCreation = createDeferred<AcpProcessHandle>();
-    const secondCreation = createDeferred<AcpProcessHandle>();
+    const firstCreation = createDeferredCall<AcpProcessHandle>();
+    const secondCreation = createDeferredCall<AcpProcessHandle>();
     const { supervisor, createClient } = createHarness((params) =>
-      params.sessionId === 'session-1' ? firstCreation.promise : secondCreation.promise
+      (params.sessionId === 'session-1' ? firstCreation : secondCreation).run()
     );
 
     const first = supervisor.getOrCreateClient(
@@ -152,7 +154,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       defaultContext()
     );
 
-    await vi.waitFor(() => expect(createClient).toHaveBeenCalledTimes(2));
+    await Promise.all([firstCreation.entered, secondCreation.entered]);
+    expect(createClient).toHaveBeenCalledTimes(2);
     expect(supervisor.getPendingClient('session-1')).toBeDefined();
     expect(supervisor.getPendingClient('session-2')).toBeDefined();
 
@@ -175,7 +178,11 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
   it('promotes a browse runtime to active without replacing its incarnation', async () => {
     // Catches browse-only state or metadata remaining stale after active reuse.
     const handle = createTestProcessHandle();
-    const onRuntimeExit = vi.fn(() => Promise.resolve());
+    const exitObserved = deferred();
+    const onRuntimeExit = vi.fn(() => {
+      exitObserved.resolve();
+      return Promise.resolve();
+    });
     const { supervisor, createClient } = createHarness(() => Promise.resolve(handle));
 
     const browse = await supervisor.getOrCreateClient(
@@ -204,7 +211,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     mockChildOf(handle).exitCode = 1;
     handle.child.emit('exit', 1, null);
-    await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    await exitObserved.promise;
+    expect(onRuntimeExit).toHaveBeenCalledOnce();
     expect(onRuntimeExit).toHaveBeenCalledWith(
       expect.objectContaining({ purpose: 'active', managed: false })
     );
@@ -291,8 +299,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     // Catches a replacement overtaking lifecycle reconciliation for the prior incarnation.
     const firstHandle = createTestProcessHandle({ providerSessionId: 'provider-old' });
     const replacementHandle = createTestProcessHandle({ providerSessionId: 'provider-new' });
-    const exitCallback = createDeferred<void>();
-    const onRuntimeExit = vi.fn(() => exitCallback.promise);
+    const exitCallback = createDeferredCall<void>();
+    const onRuntimeExit = vi.fn(exitCallback.run);
     const { supervisor, createClient } = createHarness();
     createClient.mockResolvedValueOnce(firstHandle).mockResolvedValueOnce(replacementHandle);
     await supervisor.getOrCreateClient(
@@ -304,7 +312,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     mockChildOf(firstHandle).exitCode = 7;
     firstHandle.child.emit('exit', 7, null);
-    await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    await exitCallback.entered;
+    expect(onRuntimeExit).toHaveBeenCalledOnce();
     const replacement = supervisor.getOrCreateClient(
       'session-1',
       defaultOptions(),
@@ -338,7 +347,7 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     );
     mockChildOf(firstHandle).exitCode = 1;
     firstHandle.child.emit('exit', 1, null);
-    await vi.waitFor(() => expect(supervisor.getInstalledHandle('session-1')).toBeUndefined());
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
 
     const replacement = supervisor.getOrCreateClient(
       'session-1',
@@ -359,7 +368,7 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     // Catches a deadlock when an exit callback recursively waits on its own exit fence.
     const firstHandle = createTestProcessHandle();
     const replacementHandle = createTestProcessHandle();
-    let reentrantError: unknown;
+    const reentrantResult = deferred<unknown>();
     const { supervisor, createClient } = createHarness();
     createClient.mockResolvedValueOnce(firstHandle).mockResolvedValueOnce(replacementHandle);
     const onRuntimeExit = vi.fn(async () => {
@@ -370,8 +379,9 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
           defaultHandlers(),
           defaultContext()
         );
+        reentrantResult.resolve(undefined);
       } catch (error) {
-        reentrantError = error;
+        reentrantResult.resolve(error);
       }
     });
     await supervisor.getOrCreateClient(
@@ -383,7 +393,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     mockChildOf(firstHandle).exitCode = 1;
     firstHandle.child.emit('exit', 1, null);
-    await vi.waitFor(() => expect(onRuntimeExit).toHaveBeenCalledOnce());
+    const reentrantError = await reentrantResult.promise;
+    expect(onRuntimeExit).toHaveBeenCalledOnce();
     expect(reentrantError).toMatchObject({
       message: 'Cannot create ACP client for session session-1 from its runtime exit handler',
     });
@@ -404,16 +415,16 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
     const secondHandle = createTestProcessHandle();
     const { supervisor, createClient } = createHarness();
     createClient.mockResolvedValueOnce(firstHandle).mockResolvedValueOnce(secondHandle);
-    const onRuntimeExit = vi.fn(() =>
-      supervisor
-        .getOrCreateClient(
-          'session-2',
-          { ...defaultOptions(), sessionId: 'session-2' },
-          defaultHandlers(),
-          defaultContext()
-        )
-        .then(() => undefined)
-    );
+    const created = deferred<AcpProcessHandle>();
+    const onRuntimeExit = vi.fn(async () => {
+      const handle = await supervisor.getOrCreateClient(
+        'session-2',
+        { ...defaultOptions(), sessionId: 'session-2' },
+        defaultHandlers(),
+        defaultContext()
+      );
+      created.resolve(handle);
+    });
     await supervisor.getOrCreateClient(
       'session-1',
       defaultOptions(),
@@ -423,7 +434,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     mockChildOf(firstHandle).exitCode = 1;
     firstHandle.child.emit('exit', 1, null);
-    await vi.waitFor(() => expect(supervisor.getClient('session-2')).toBe(secondHandle));
+    expect(await created.promise).toBe(secondHandle);
+    expect(supervisor.getClient('session-2')).toBe(secondHandle);
     expect(createClient).toHaveBeenCalledTimes(2);
   });
 
@@ -452,7 +464,7 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
 
     mockChildOf(handle).exitCode = 1;
     handle.child.emit('exit', 1, null);
-    await vi.waitFor(() => expect(supervisor.getInstalledHandle('session-1')).toBeUndefined());
+    expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
     expect(params?.shouldDispatchRuntimeError(handle.child)).toBe(false);
   });
 
@@ -463,11 +475,10 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       const handle = createTestProcessHandle();
       exitChildAfterSigterm(mockChildOf(handle));
       const factoryResult = createDeferred<AcpProcessHandle>();
-      let factoryParams: CreateAcpClientParams | undefined;
+      const factoryStarted = deferred<CreateAcpClientParams>();
       const onRuntimeError = vi.fn();
       const handlers = { ...defaultHandlers(), onRuntimeError };
       const { supervisor } = createHarness((params) => {
-        factoryParams = params;
         wireAcpRuntimeErrorHandler(
           handle.child,
           params.sessionId,
@@ -475,6 +486,7 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
           params.metadata,
           () => params.shouldDispatchRuntimeError(handle.child)
         );
+        factoryStarted.resolve(params);
         return factoryResult.promise;
       });
       const creation = supervisor.getOrCreateClient(
@@ -483,7 +495,7 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         handlers,
         defaultContext()
       );
-      await vi.waitFor(() => expect(factoryParams).toBeDefined());
+      const factoryParams = await factoryStarted.promise;
 
       const terminating =
         termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
@@ -495,9 +507,6 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       );
       await terminating;
 
-      if (!factoryParams) {
-        throw new Error('Factory parameters were not captured');
-      }
       expect(factoryParams.shouldDispatchRuntimeError(handle.child)).toBe(false);
       handle.child.emit('error', new Error(`late ${termination} cleanup error`));
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -511,8 +520,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       // Catches creation fulfilling with a handle killed while its final callback was pending.
       const handle = createTestProcessHandle();
       exitChildAfterSigterm(mockChildOf(handle));
-      const notification = createDeferred<void>();
-      const onSessionId = vi.fn(() => notification.promise);
+      const notification = createDeferredCall<void>();
+      const onSessionId = vi.fn(notification.run);
       const { supervisor } = createHarness(() => Promise.resolve(handle));
       const creation = supervisor.getOrCreateClient(
         'session-1',
@@ -520,7 +529,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         { ...defaultHandlers(), onSessionId },
         defaultContext()
       );
-      await vi.waitFor(() => expect(onSessionId).toHaveBeenCalledOnce());
+      await notification.entered;
+      expect(onSessionId).toHaveBeenCalledOnce();
       expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
 
       const terminating =
@@ -574,15 +584,14 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
             : { kind: 'new' },
       });
       exitChildAfterSigterm(mockChildOf(handle));
-      const gate = createDeferred<void>();
-      let params: CreateAcpClientParams | undefined;
+      const gate = createDeferredCall<void>();
+      const factoryStarted = deferred<CreateAcpClientParams>();
       const onAcpEvent = vi.fn();
       const commit = vi.fn();
-      let rolloverWaiting = false;
       const { supervisor, createClient } = createHarness(async (factoryParams) => {
-        params = factoryParams;
+        factoryStarted.resolve(factoryParams);
         if (phase === 'factory') {
-          await gate.promise;
+          await gate.run();
         }
         return handle;
       });
@@ -592,37 +601,32 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         {
           onAcpEvent,
           onProviderIdentityRollover: async (event) => {
-            rolloverWaiting = true;
-            await gate.promise;
+            await gate.run();
             event.assertCurrent();
             commit();
           },
           onSessionId: async () => {
             if (phase === 'notification') {
-              await gate.promise;
+              await gate.run();
             }
           },
         },
         defaultContext()
       );
       const rejection = expect(creation).rejects.toThrow('ACP startup event buffer exceeded');
-      await vi.waitFor(() => {
-        expect(params).toBeDefined();
-        if (phase === 'notification') {
-          expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
-        }
-        if (phase === 'rollover') {
-          expect(rolloverWaiting).toBe(true);
-        }
-      });
+      const params = await factoryStarted.promise;
+      await gate.entered;
+      if (phase === 'notification') {
+        expect(supervisor.getInstalledHandle('session-1')).toBe(handle);
+      }
       for (let i = 0; i < 20_000; i++) {
-        params?.handlers.onAcpEvent?.('session-1', {
+        params.handlers.onAcpEvent?.('session-1', {
           type: 'acp_task_status_changed',
           active: true,
         });
       }
       if (phase === 'factory') {
-        await expect(params?.stopSignal.promise).rejects.toThrow(
+        await expect(params.stopSignal.promise).rejects.toThrow(
           'ACP startup event buffer exceeded'
         );
       }
@@ -677,10 +681,10 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         reason: 'load_failed',
       },
     });
-    const reconciliation = createDeferred<void>();
+    const reconciliation = createDeferredCall<void>();
     const onProviderIdentityRollover = vi.fn<
       NonNullable<AcpRuntimeEventHandlers['onProviderIdentityRollover']>
-    >(() => reconciliation.promise);
+    >(reconciliation.run);
     const onAcpEvent = vi.fn();
     const { supervisor } = createHarness((params) => {
       params.handlers.onAcpEvent?.('session-1', { type: 'acp_task_status_changed', active: true });
@@ -696,7 +700,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       },
       defaultContext()
     );
-    await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+    await reconciliation.entered;
+    expect(onProviderIdentityRollover).toHaveBeenCalledOnce();
     expect(supervisor.getClient('session-1')).toBeUndefined();
     expect(supervisor.getInstalledHandle('session-1')).toBeUndefined();
     reconciliation.resolve(undefined);
@@ -718,10 +723,10 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         },
       });
       exitChildAfterSigterm(mockChildOf(handle));
-      const reconciliation = createDeferred<void>();
+      const reconciliation = createDeferredCall<void>();
       const onProviderIdentityRollover = vi.fn<
         NonNullable<AcpRuntimeEventHandlers['onProviderIdentityRollover']>
-      >(() => reconciliation.promise);
+      >(reconciliation.run);
       const { supervisor, createClient } = createHarness(async () => handle);
       const creation = supervisor.getOrCreateClient(
         'session-1',
@@ -730,7 +735,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         defaultContext()
       );
       const result = creation.catch((error: unknown) => error);
-      await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+      await reconciliation.entered;
+      expect(onProviderIdentityRollover).toHaveBeenCalledOnce();
       const event = onProviderIdentityRollover.mock.calls[0]?.[0];
       const stopping =
         termination === 'stop' ? supervisor.stopClient('session-1') : supervisor.stopAllClients(50);
@@ -763,8 +769,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
         reason: 'load_failed',
       },
     });
-    const reconciliation = createDeferred<void>();
-    const onProviderIdentityRollover = vi.fn(() => reconciliation.promise);
+    const reconciliation = createDeferredCall<void>();
+    const onProviderIdentityRollover = vi.fn(reconciliation.run);
     const { supervisor, createClient } = createHarness(async () => handle);
     const creation = supervisor.getOrCreateClient(
       'session-1',
@@ -773,7 +779,8 @@ describe('AcpRuntimeSupervisor creation and exit ownership', () => {
       defaultContext()
     );
     const result = creation.catch((error: unknown) => error);
-    await vi.waitFor(() => expect(onProviderIdentityRollover).toHaveBeenCalledOnce());
+    await reconciliation.entered;
+    expect(onProviderIdentityRollover).toHaveBeenCalledOnce();
     const child = mockChildOf(handle);
     child.signalCode = 'SIGKILL';
     child.emit('exit', null, 'SIGKILL');

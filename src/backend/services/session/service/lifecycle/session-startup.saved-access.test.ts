@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { configOptions } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
+import { createDeferredCall, createLifecycleHarness } from './session-lifecycle.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },
@@ -53,7 +53,7 @@ it.each(['start', 'acquire'] as const)(
 
 it('stops a shared non-review candidate whose native access enforcement fails', async () => {
   const h = createLifecycleHarness();
-  const applying = createDeferred<void>();
+  const applying = createDeferredCall<void>();
   h.runtimeManager.runClientCreationOperation.mockImplementation((_id, _purpose, operation) =>
     operation({ isOnlyOperation: () => false })
   );
@@ -62,13 +62,12 @@ it('stops a shared non-review candidate whose native access enforcement fails', 
     h.runtimeManager.getClient.mockReturnValue(h.handle);
     return Promise.resolve(h.handle);
   });
-  h.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(applying.promise);
+  h.sessionConfigService.applyConfiguredPermissionPreset.mockImplementationOnce(applying.run);
   const started = h.service
     .startSession(h.session.id, { initialPrompt: '' })
     .catch((error: unknown) => error);
-  await vi.waitFor(() =>
-    expect(h.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled()
-  );
+  await applying.entered;
+  expect(h.sessionConfigService.applyConfiguredPermissionPreset).toHaveBeenCalled();
   await h.service.getOrCreateSessionClient(h.session.id);
   applying.reject(new Error('access rejected'));
   expect(await started).toEqual(expect.objectContaining({ message: 'access rejected' }));
@@ -80,7 +79,7 @@ it('stops a shared non-review candidate whose native access enforcement fails', 
 it('does not stop or clear a replacement after failed candidate cleanup finishes late', async () => {
   const h = createLifecycleHarness();
   const replacement = createLifecycleHarness().handle;
-  const stopping = createDeferred<void>();
+  const stopping = createDeferredCall<void>();
   h.runtimeManager.getOrCreateClient.mockImplementation((_id, _options, handlers) => {
     handlers.onRuntimeCreated?.(h.handle);
     h.runtimeManager.getClient.mockReturnValue(h.handle);
@@ -89,9 +88,10 @@ it('does not stop or clear a replacement after failed candidate cleanup finishes
   h.sessionConfigService.applyConfiguredPermissionPreset.mockRejectedValueOnce(
     new Error('access rejected')
   );
-  h.runtimeManager.stopClient.mockReturnValueOnce(stopping.promise);
+  h.runtimeManager.stopClient.mockImplementationOnce(stopping.run);
   const outcome = h.service.getOrCreateSessionClient(h.session.id).catch((error: unknown) => error);
-  await vi.waitFor(() => expect(h.runtimeManager.stopClient).toHaveBeenCalledOnce());
+  await stopping.entered;
+  expect(h.runtimeManager.stopClient).toHaveBeenCalledOnce();
   h.runtimeManager.getClient.mockReturnValue(replacement);
   const snapshots = h.sessionDomainService.setRuntimeSnapshot.mock.calls.length;
   stopping.resolve();

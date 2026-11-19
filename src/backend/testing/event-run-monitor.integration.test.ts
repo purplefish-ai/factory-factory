@@ -532,9 +532,14 @@ it('preserves an ordinary follow-up during cleanup of a cancelled initial outcom
   provider.response.resolve({ stopReason: 'cancelled' });
   await launch;
   const reply = deferred<{ stopReason: 'end_turn' }>();
-  provider.connection.prompt.mockImplementationOnce(async () => reply.promise);
+  const promptStarted = Promise.withResolvers<void>();
+  provider.connection.prompt.mockImplementationOnce(() => {
+    promptStarted.resolve();
+    return reply.promise;
+  });
   const human = h.session.sessionService.sendSessionMessage(h.attempt.sessionId, 'Human follow-up');
-  await vi.waitFor(() => expect(provider.connection.prompt).toHaveBeenCalledTimes(2));
+  await promptStarted.promise;
+  expect(provider.connection.prompt).toHaveBeenCalledTimes(2);
   try {
     expect(await observe(h.claim)).toBe('HELD');
     expect(provider.child.kill).not.toHaveBeenCalled();

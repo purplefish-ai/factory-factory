@@ -82,7 +82,11 @@ describe('query-core structuralSharing commit contract', () => {
 
   it('commits with the options from the latest fetch or observer of the key', async () => {
     const { client, queryKey } = fixture();
-    const reconciled = vi.fn((_previous: unknown, next: unknown) => next);
+    const firstCommit = Promise.withResolvers<void>();
+    const reconciled = vi.fn((_previous: unknown, next: unknown) => {
+      firstCommit.resolve();
+      return next;
+    });
     const plain = vi.fn((_previous: unknown, next: unknown) => next);
     const observer = new QueryObserver(client, {
       queryKey,
@@ -91,7 +95,8 @@ describe('query-core structuralSharing commit contract', () => {
       staleTime: Number.POSITIVE_INFINITY,
     });
     cleanup.push(observer.subscribe(() => undefined));
-    await vi.waitFor(() => expect(reconciled).toHaveBeenCalledOnce());
+    await firstCommit.promise;
+    expect(reconciled).toHaveBeenCalledOnce();
 
     // A plain fetch of the same key installs its own options for its commit...
     await client.query({ queryKey, queryFn: () => ({ name: 'plain' }), structuralSharing: plain });

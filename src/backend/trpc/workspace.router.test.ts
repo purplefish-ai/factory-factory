@@ -5,6 +5,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
+import { deferred } from '@/test-utils/deferred';
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
@@ -849,9 +850,13 @@ describe('workspaceCoreRouter', () => {
   );
 
   it('cleans up on delete and delegates summary procedures', async () => {
-    const worktreeCleanup = createDeferredPromise<void>();
+    const cleanupStarted = deferred();
+    const worktreeCleanup = deferred();
     mockWorkspaceDataService.delete.mockResolvedValue({ deleted: true });
-    mockCleanupWorkspaceWorktree.mockReturnValue(worktreeCleanup.promise);
+    mockCleanupWorkspaceWorktree.mockImplementation(() => {
+      cleanupStarted.resolve();
+      return worktreeCleanup.promise;
+    });
     mockWorkspaceQueryService.refreshFactoryConfigs.mockResolvedValue({ refreshed: 3 });
     mockWorkspaceQueryService.getFactoryConfig.mockResolvedValue({ scripts: { run: 'pnpm dev' } });
     mockWorkspaceQueryService.syncPRStatus.mockResolvedValue({ synced: true });
@@ -869,7 +874,8 @@ describe('workspaceCoreRouter', () => {
 
     const deletion = caller.delete({ id: 'w1' });
     try {
-      await vi.waitFor(() => expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledOnce());
+      await cleanupStarted.promise;
+      expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledOnce();
       expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
     } finally {
       worktreeCleanup.resolve();
@@ -987,13 +993,3 @@ describe('workspaceCoreRouter', () => {
     expect(mockWorkspaceDataService.delete).not.toHaveBeenCalled();
   });
 });
-
-function createDeferredPromise<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}

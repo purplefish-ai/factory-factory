@@ -87,17 +87,15 @@ describe('WorkspaceDetailPage', () => {
     await act(() => {
       root.render(createElement(RouterProvider, { router }));
     });
-    await vi.waitFor(() => {
-      expect(mocks.readSubagentTranscript).toHaveBeenCalledWith(
-        {
-          sessionId: 'session-first',
-          subagentId: 'child-first',
-          cursor: null,
-          limit: 10,
-        },
-        expect.any(Object)
-      );
-    });
+    expect(mocks.readSubagentTranscript).toHaveBeenCalledWith(
+      {
+        sessionId: 'session-first',
+        subagentId: 'child-first',
+        cursor: null,
+        limit: 10,
+      },
+      expect.any(Object)
+    );
 
     mocks.readSubagentTranscript.mockClear();
     await act(async () => {

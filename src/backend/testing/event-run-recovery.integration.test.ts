@@ -471,9 +471,14 @@ it('does not stop an active ordinary human follow-up', async () => {
   provider.response.resolve({ stopReason: 'end_turn' });
   await consumer.drain();
   const reply = deferred<{ stopReason: 'end_turn' }>();
-  provider.connection.prompt.mockImplementationOnce(async () => reply.promise);
+  const promptStarted = Promise.withResolvers<void>();
+  provider.connection.prompt.mockImplementationOnce(() => {
+    promptStarted.resolve();
+    return reply.promise;
+  });
   const human = h.session.sessionService.sendSessionMessage(h.attempt.sessionId, 'Human follow-up');
-  await vi.waitFor(() => expect(provider.connection.prompt).toHaveBeenCalledTimes(2));
+  await promptStarted.promise;
+  expect(provider.connection.prompt).toHaveBeenCalledTimes(2);
   try {
     await strictStop();
     expect(
@@ -598,10 +603,19 @@ it('fences in-flight maintenance without aborting into a second untargeted stop'
   });
   const maintenance = consumer.maintain(new AbortController().signal);
   await gate.entered;
+  const cancelStarted = Promise.withResolvers<void>();
+  const cancelInitial = h.session.eventSessionAuthority.cancelInitial.bind(
+    h.session.eventSessionAuthority
+  );
   const cancel = vi.spyOn(h.session.eventSessionAuthority, 'cancelInitial');
+  cancel.mockImplementation((...args) => {
+    cancelStarted.resolve();
+    return cancelInitial(...args);
+  });
   const stops = vi.spyOn(h.owner.agentInitialDelivery, 'stop');
   const recovery = consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' });
-  await vi.waitFor(() => expect(cancel).toHaveBeenCalled());
+  await cancelStarted.promise;
+  expect(cancel).toHaveBeenCalled();
   gate.release();
   expect(await recovery).toMatchObject({ status: 'RETRIED' });
   await maintenance;

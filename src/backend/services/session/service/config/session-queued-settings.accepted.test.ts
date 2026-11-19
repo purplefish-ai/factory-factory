@@ -122,9 +122,13 @@ describe('accepted queued settings survive runtime changes', () => {
   it('does not retain an unfinished edit rejected by runtime replacement', async () => {
     const h = setupAuthority();
     const writing = createDeferred<{ configOptions: ReturnType<typeof configOptions> }>();
-    h.connection.setSessionConfigOption.mockReturnValueOnce(writing.promise);
+    const writingStarted = createDeferred<void>();
+    h.connection.setSessionConfigOption.mockImplementationOnce(() => {
+      writingStarted.resolve();
+      return writing.promise;
+    });
     const edit = h.service.setSessionConfigOption('session', 'model', 'second');
-    await vi.waitFor(() => expect(h.connection.setSessionConfigOption).toHaveBeenCalled());
+    await writingStarted.promise;
     h.runtime.getClient.mockReturnValue(createTestProcessHandle());
     writing.resolve({ configOptions: configOptions('second') });
     await expect(edit).rejects.toThrow('Session runtime changed');

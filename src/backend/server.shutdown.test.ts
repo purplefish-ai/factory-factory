@@ -52,7 +52,12 @@ function createTestHarness() {
   const services = Object.assign(harness.services, {
     applicationUpdateService: { stop: vi.fn(async () => undefined) },
   });
-  return { ...harness, services };
+  const rateLimiterStopped = deferred();
+  services.rateLimiter.stop.mockImplementationOnce(() => {
+    rateLimiterStopped.resolve();
+    return Promise.resolve(undefined);
+  });
+  return { ...harness, services, rateLimiterStopped: rateLimiterStopped.promise };
 }
 
 type Harness = ReturnType<typeof createTestHarness>;
@@ -105,7 +110,8 @@ describe('server background job shutdown', () => {
         harness.services.agentRuntime.stop.mock.invocationCallOrder[0] ?? 0
       );
     }
-    await vi.waitFor(() => expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce());
+    await harness.rateLimiterStopped;
+    expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
     for (const drain of drains) {
@@ -178,7 +184,8 @@ describe('server background job shutdown', () => {
     const server = createTestServer(harness.application);
 
     const stopping = server.stop();
-    await vi.waitFor(() => expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce());
+    await harness.rateLimiterStopped;
+    expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
     // Settle in reverse so the last drain to finish is the first one signalled.
     const [first, ...rest] = drains;
     for (const drain of rest.reverse()) {
@@ -264,15 +271,21 @@ describe('server background job shutdown', () => {
     const harness = createTestHarness();
     const prSync = deferred<undefined>();
     const snapshots = deferred<undefined>();
+    const eventCollectorStopped = deferred();
+    harness.lifecycle.eventCollector.stop.mockImplementationOnce(() =>
+      eventCollectorStopped.resolve()
+    );
     vi.mocked(harness.services.schedulerService.stop).mockReturnValueOnce(prSync.promise);
     vi.mocked(harness.lifecycle.snapshotReconciliation.stop).mockReturnValueOnce(snapshots.promise);
     const server = createTestServer(harness.application);
 
     const stopping = server.stop();
-    await vi.waitFor(() => expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce());
+    await harness.rateLimiterStopped;
+    expect(harness.services.rateLimiter.stop).toHaveBeenCalledOnce();
     expect(harness.lifecycle.eventCollector.stop).not.toHaveBeenCalled();
     prSync.resolve(undefined);
-    await vi.waitFor(() => expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce());
+    await eventCollectorStopped.promise;
+    expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(harness.services.workspaceGitStateService.stop).not.toHaveBeenCalled();
     snapshots.resolve(undefined);
     await stopping;

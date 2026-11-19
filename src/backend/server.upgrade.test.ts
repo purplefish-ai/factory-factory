@@ -92,18 +92,6 @@ async function closeNetServer(server: NetServer): Promise<void> {
   });
 }
 
-async function waitForHttpServerToListen(server: ReturnType<typeof createServer>): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.getHttpServer().listening) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
-  throw new Error('Expected HTTP server to start listening');
-}
-
 async function occupyConsecutivePorts(
   count: number
 ): Promise<{ startPort: number; servers: NetServer[] }> {
@@ -476,9 +464,8 @@ describe('server websocket upgrade routing', () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const server = createTestServer(harness.application, 0);
     try {
-      const started = server.start();
-      await vi.waitFor(() => expect(writeSpy).toHaveBeenCalledWith('BACKEND_PORT:0\n'));
-      await started;
+      await server.start();
+      expect(writeSpy).toHaveBeenCalledWith('BACKEND_PORT:0\n');
       expect((await request(server.getHttpServer()).get('/health')).status).toBe(200);
 
       const socket = { destroy: vi.fn(), write: vi.fn() };
@@ -505,17 +492,18 @@ describe('server websocket upgrade routing', () => {
       await recovery;
       return { archived: [], failed: [] };
     });
+    const agentRuntimeStopped = deferred();
+    harness.services.agentRuntime.stop.mockImplementationOnce(() => {
+      agentRuntimeStopped.resolve();
+      return Promise.resolve(undefined);
+    });
     const server = createTestServer(harness.application, 0);
     try {
-      let ready = false;
-      const started = server.start().then(() => {
-        ready = true;
-      });
-      await vi.waitFor(() => expect(ready).toBe(true));
-      await started;
+      await server.start();
 
       const stopped = server.stop();
-      await vi.waitFor(() => expect(harness.services.agentRuntime.stop).toHaveBeenCalledOnce());
+      await agentRuntimeStopped.promise;
+      expect(harness.services.agentRuntime.stop).toHaveBeenCalledOnce();
       expect(harness.services.sessionLifecycleService.stopAllClients).not.toHaveBeenCalled();
       expect(harness.services.runScriptService.cleanup).not.toHaveBeenCalled();
       expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
@@ -542,7 +530,7 @@ describe('server websocket upgrade routing', () => {
     const server = createTestServer(harness.application, 0);
     const startPromise = server.start();
     await reconciliationStarted.promise;
-    await waitForHttpServerToListen(server);
+    expect(server.getHttpServer().listening).toBe(true);
 
     const response = await request(server.getHttpServer()).get('/health');
     const socket = {
@@ -739,23 +727,21 @@ describe('server websocket upgrade routing', () => {
 
   it('waits for run-script cleanup before disconnecting the database', async () => {
     const harness = createTestHarness();
-    let finishRunScriptCleanup!: () => void;
-    const runScriptCleanupCanFinish = new Promise<void>((resolve) => {
-      finishRunScriptCleanup = resolve;
+    const runScriptCleanupStarted = deferred();
+    const runScriptCleanup = deferred();
+    vi.mocked(harness.services.runScriptService.cleanup).mockImplementationOnce(() => {
+      runScriptCleanupStarted.resolve();
+      return runScriptCleanup.promise;
     });
-    vi.mocked(harness.services.runScriptService.cleanup).mockReturnValueOnce(
-      runScriptCleanupCanFinish
-    );
     const server = createTestServer(harness.application);
 
     const stopPromise = server.stop();
 
-    await vi.waitFor(() => {
-      expect(harness.services.runScriptService.cleanup).toHaveBeenCalledOnce();
-    });
+    await runScriptCleanupStarted.promise;
+    expect(harness.services.runScriptService.cleanup).toHaveBeenCalledOnce();
     expect(harness.lifecycle.database.$disconnect).not.toHaveBeenCalled();
 
-    finishRunScriptCleanup();
+    runScriptCleanup.resolve();
     await stopPromise;
 
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
@@ -777,13 +763,17 @@ describe('server websocket upgrade routing', () => {
     const { application, lifecycle, services } = createTestHarness();
     const { promise: drained, resolve: drain } = deferred<undefined>();
     vi.mocked(services.reconciliationService.stopPeriodicCleanup).mockReturnValueOnce(drained);
+    const clientsStopped = deferred();
+    services.sessionLifecycleService.stopAllClients.mockImplementationOnce(() => {
+      clientsStopped.resolve();
+      return Promise.resolve(undefined);
+    });
     const server = createTestServer(application, 0);
     vi.mocked(services.ratchetService.start).mockImplementationOnce(() => void server.stop());
     const starting = server.start();
     starting.catch(() => undefined);
-    await vi.waitFor(() =>
-      expect(services.sessionLifecycleService.stopAllClients).toHaveBeenCalledOnce()
-    );
+    await clientsStopped.promise;
+    expect(services.sessionLifecycleService.stopAllClients).toHaveBeenCalledOnce();
     expect(services.reconciliationService.stopPeriodicCleanup).toHaveBeenCalledOnce();
     expect(
       services.reconciliationService.stopPeriodicCleanup.mock.invocationCallOrder[0] ?? 0

@@ -132,10 +132,10 @@ describe('SessionLifecycleMessageRenderer', () => {
 
     const copyButton = row?.querySelector<HTMLButtonElement>('button[aria-label="Copy error"]');
     flushSync(() => copyButton?.click());
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(longError));
     await vi.waitFor(() =>
       expect(row?.querySelector('button[aria-label="Error copied"]')).not.toBeNull()
     );
+    expect(writeText).toHaveBeenCalledWith(longError);
     expect(row?.querySelector('[role="status"]')?.textContent).toBe(
       'Error copied to the clipboard'
     );

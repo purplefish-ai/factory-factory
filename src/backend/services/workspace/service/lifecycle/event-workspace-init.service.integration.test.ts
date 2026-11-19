@@ -123,6 +123,8 @@ it('isolates each notification subscriber after current READY validation', async
 });
 
 it('consumes an asynchronous observer rejection without exposing its detail or delaying later observers', async () => {
+  const warned = Promise.withResolvers<void>();
+  warning.mockImplementationOnce(() => warned.resolve());
   const rejection = Promise.reject(new Error('private asynchronous subscriber detail'));
   // The test owns this rejection even during the RED run; production must attach its own handler.
   void rejection.catch(() => undefined);
@@ -135,7 +137,8 @@ it('consumes an asynchronous observer rejection without exposing its detail or d
   await expect(
     h.workspace.eventWorkspaceInitService.finish(h.claim, 'READY')
   ).resolves.toMatchObject({ status: 'READY' });
-  await vi.waitFor(() => expect(warning).toHaveBeenCalledOnce());
+  await warned.promise;
+  expect(warning).toHaveBeenCalledOnce();
   expect(warning).toHaveBeenCalledWith('Event workspace notification subscriber failed', {
     workspaceId: h.claim.reservedWorkspaceId,
   });

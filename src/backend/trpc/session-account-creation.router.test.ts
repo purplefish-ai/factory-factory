@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { sessionRouter } from './session.trpc';
 import type { RequestTrustInfo } from './trpc';
@@ -73,17 +74,17 @@ describe('account-bound session creation trust', () => {
 it('counts pending session inserts and rejects new session creation while preparing an update', async () => {
   const { caller, create } = setup({ isLocal: true, remoteAddress: '127.0.0.1' });
   const input = { workspaceId: 'w', workflow: 'followup' };
-  let finish!: (value: unknown) => void;
-  create.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      })
-  );
+  const insertStarted = deferred();
+  const insert = deferred<unknown>();
+  create.mockImplementationOnce(() => {
+    insertStarted.resolve();
+    return insert.promise;
+  });
   const creating = caller.createSession(input);
-  await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+  await insertStarted.promise;
+  expect(create).toHaveBeenCalledOnce();
   expect(applicationUpdateAdmission.tryClose(() => false)).toBe(false);
-  finish({ outcome: 'created', session: { id: 'created' } });
+  insert.resolve({ outcome: 'created', session: { id: 'created' } });
   await creating;
   expect(applicationUpdateAdmission.tryClose(() => false)).toBe(true);
   try {

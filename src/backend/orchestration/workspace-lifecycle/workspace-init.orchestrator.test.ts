@@ -24,6 +24,7 @@ import {
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   clearWorkspaceInitOrchestratorStateForTests,
@@ -39,16 +40,6 @@ import {
 } from './workspace-init.test-harness';
 
 const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
-
-function createDeferredPromise<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
 
 describe('initializeWorkspaceWorktree', () => {
   beforeEach(() => {
@@ -81,13 +72,16 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('skips stale recovery while initialization is active', async () => {
       setupHappyPath();
-      const factoryConfig = createDeferredPromise<null>();
-      vi.mocked(FactoryConfigService.readConfig).mockReturnValue(factoryConfig.promise);
+      const configReadStarted = deferred();
+      const factoryConfig = deferred<null>();
+      vi.mocked(FactoryConfigService.readConfig).mockImplementationOnce(() => {
+        configReadStarted.resolve();
+        return factoryConfig.promise;
+      });
 
       const initialization = initializeWorkspaceWorktree(WORKSPACE_ID);
-      await vi.waitFor(() => {
-        expect(gitOpsService.createWorktree).toHaveBeenCalledTimes(1);
-      });
+      await configReadStarted.promise;
+      expect(gitOpsService.createWorktree).toHaveBeenCalledTimes(1);
 
       const recovery = recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out');
       await expect(recovery).resolves.toBe(false);
@@ -102,17 +96,20 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('finishes stale cleanup and failure transition before a retry can start', async () => {
       setupHappyPath();
-      const cleanup = createDeferredPromise<boolean>();
-      vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockReturnValue(
-        cleanup.promise
+      const recoveryStarted = deferred();
+      const cleanup = deferred<boolean>();
+      vi.mocked(worktreeLifecycleService.prepareStaleProvisioningRecovery).mockImplementationOnce(
+        () => {
+          recoveryStarted.resolve();
+          return cleanup.promise;
+        }
       );
 
       const recovery = recoverStaleProvisioningWorkspace(WORKSPACE_ID, 'Provisioning timed out');
-      await vi.waitFor(() => {
-        expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).toHaveBeenCalledWith(
-          WORKSPACE_ID
-        );
-      });
+      await recoveryStarted.promise;
+      expect(worktreeLifecycleService.prepareStaleProvisioningRecovery).toHaveBeenCalledWith(
+        WORKSPACE_ID
+      );
 
       const retry = initializeWorkspaceWorktree(WORKSPACE_ID);
       await Promise.resolve();
@@ -334,25 +331,23 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('clears the persisted terminal pid when the terminal exits during session persistence', async () => {
       setupHappyPath();
-      const createTerminalSessionDeferred = createDeferredPromise<unknown>();
-      let exitListener: ((exitCode: number) => void) | undefined;
+      const createTerminalSessionDeferred = deferred<unknown>();
+      const exitListenerRegistered = deferred<(exitCode: number) => void>();
 
       vi.mocked(terminalSessionService.registerSession).mockImplementation(
         () => createTerminalSessionDeferred.promise as never
       );
       vi.mocked(terminalService.onExit).mockImplementation((_, listener) => {
-        exitListener = listener;
+        exitListenerRegistered.resolve(listener);
         return vi.fn();
       });
 
       const initializationPromise = initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      await vi.waitFor(() => {
-        expect(exitListener).toBeDefined();
-      });
+      const exitListener = await exitListenerRegistered.promise;
       expect(exitListener).toBeDefined();
 
-      exitListener?.(0);
+      exitListener(0);
       expect(terminalSessionService.releaseSessionPid).not.toHaveBeenCalled();
 
       createTerminalSessionDeferred.resolve(unsafeCoerce({}));
@@ -1356,7 +1351,7 @@ describe('initializeWorkspaceWorktree', () => {
 
     it('finishes stale cleanup before a retry can recreate the worktree', async () => {
       const workspace = setupHappyPath();
-      const cleanupSafetyCheck = createDeferredPromise<void>();
+      const cleanupSafetyCheck = deferred<void>();
       const sideEffects: string[] = [];
       let status: 'FAILED' | 'PROVISIONING' = 'PROVISIONING';
 
@@ -1391,15 +1386,16 @@ describe('initializeWorkspaceWorktree', () => {
         sideEffects.push('remove');
         return Promise.resolve();
       });
-      vi.mocked(assertWorktreePathSafe).mockImplementationOnce(() => cleanupSafetyCheck.promise);
+      const cleanupStarted = deferred();
+      vi.mocked(assertWorktreePathSafe).mockImplementationOnce(() => {
+        cleanupStarted.resolve();
+        return cleanupSafetyCheck.promise;
+      });
 
       const failedInitialization = initializeWorkspaceWorktree(WORKSPACE_ID);
-      await vi.waitFor(() => {
-        expect(sideEffects).toEqual(['create']);
-      });
-      await vi.waitFor(() => {
-        expect(workspaceStateMachine.markFailed).toHaveBeenCalledTimes(1);
-      });
+      await cleanupStarted.promise;
+      expect(sideEffects).toEqual(['create']);
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledTimes(1);
 
       const retryInitialization = initializeWorkspaceWorktree(WORKSPACE_ID);
       for (let index = 0; index < 10; index += 1) {

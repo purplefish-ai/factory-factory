@@ -70,12 +70,15 @@ it('rechecks local capacity after committed adoption returns', async () => {
     invalid: [],
     nextCursor: null,
   });
+  const adoptionStarted = deferred<void>();
   ports.adopt.mockImplementationOnce(async () => {
+    adoptionStarted.resolve();
     await pending.promise;
     return snapshot(adopted);
   });
   const maintenance = consumer.maintain(new AbortController().signal);
-  await vi.waitFor(() => expect(ports.adopt).toHaveBeenCalledOnce());
+  await adoptionStarted.promise;
+  expect(ports.adopt).toHaveBeenCalledOnce();
   await consumer.consumeClaim(claim('concurrent'), new AbortController().signal);
   await consumer.drain();
   ports.read.mockClear();
@@ -90,9 +93,14 @@ it('rechecks local capacity after committed adoption returns', async () => {
 it('releases local capacity when a launch succeeds after maintenance revoked it', async () => {
   const consumer = createEventRunConsumer();
   const pending = deferred<void>();
-  ports.launch.mockReturnValueOnce(pending.promise);
+  const launchStarted = deferred<void>();
+  ports.launch.mockImplementationOnce(() => {
+    launchStarted.resolve();
+    return pending.promise;
+  });
   await consumer.consumeClaim(claim('late'), new AbortController().signal);
-  await vi.waitFor(() => expect(ports.launch).toHaveBeenCalledOnce());
+  await launchStarted.promise;
+  expect(ports.launch).toHaveBeenCalledOnce();
   ports.renew.mockRejectedValueOnce(new Error('Lease lost'));
   await consumer.maintain(new AbortController().signal);
   expect(consumer.canClaim()).toBe(false);
@@ -108,12 +116,15 @@ it('does not let a late revoked observer remove a replacement local owner', asyn
   await consumer.consumeClaim(first, new AbortController().signal);
   await consumer.drain();
   const pending = deferred<void>();
+  const observationStarted = deferred<void>();
   ports.observe.mockImplementationOnce(async () => {
+    observationStarted.resolve();
     await pending.promise;
     return 'SETTLED';
   });
   const maintenance = consumer.maintain(new AbortController().signal);
-  await vi.waitFor(() => expect(ports.observe).toHaveBeenCalledOnce());
+  await observationStarted.promise;
+  expect(ports.observe).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(5001);
   await maintenance;
   expect(consumer.canClaim()).toBe(true);

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 const { execute, logger } = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -181,18 +182,19 @@ it('shares a bounded network cooldown across PRs and resumes reads after it expi
 });
 
 it('rechecks network backoff before spawning reads already waiting for a process slot', async () => {
-  const pending: Array<(error: Error) => void> = [];
+  const started = createTestEventLog<(error: Error) => void>();
   execute.mockImplementation(() =>
-    pending.length >= 5
+    started.events.length >= 5
       ? Promise.reject(offline)
-      : new Promise((_resolve, reject) => pending.push(reject))
+      : new Promise((_resolve, reject) => started.record(reject))
   );
   const requests = Array.from({ length: 8 }, (_, index) =>
     githubCLIService.getPRStatusDetails('org/repo', index + 1, new AbortController().signal)
   );
   const settled = Promise.allSettled(requests);
-  await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(5));
-  for (const reject of pending) {
+  await started.waitForCount(5);
+  expect(execute).toHaveBeenCalledTimes(5);
+  for (const reject of started.events) {
     reject(offline);
   }
   expect(await settled).toEqual(
@@ -206,18 +208,19 @@ it('rechecks network backoff before spawning reads already waiting for a process
 
 it('rechecks the rate limit before spawning reads already waiting for a process slot', async () => {
   const rateLimited = new Error('HTTP 429 rate limit exceeded');
-  const pending: Array<(error: Error) => void> = [];
+  const started = createTestEventLog<(error: Error) => void>();
   execute.mockImplementation(() =>
-    pending.length >= 5
+    started.events.length >= 5
       ? Promise.reject(rateLimited)
-      : new Promise((_resolve, reject) => pending.push(reject))
+      : new Promise((_resolve, reject) => started.record(reject))
   );
   const requests = Array.from({ length: 8 }, (_, index) =>
     githubCLIService.getPRStatusDetails('org/repo', index + 1, new AbortController().signal)
   );
   const settled = Promise.allSettled(requests);
-  await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(5));
-  for (const reject of pending) {
+  await started.waitForCount(5);
+  expect(execute).toHaveBeenCalledTimes(5);
+  for (const reject of started.events) {
     reject(rateLimited);
   }
   const results = await settled;

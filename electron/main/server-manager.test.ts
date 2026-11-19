@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '../../src/test-utils/test-event-log.js';
 
 const { appGetPathMock } = vi.hoisted(() => ({
   appGetPathMock: vi.fn(),
@@ -36,7 +37,8 @@ class FakeChild extends EventEmitter implements BackendChildProcess {
   readonly pid: number | undefined = FakeChild.nextPid++;
   readonly stdout = new PassThrough();
   readonly stderr = new PassThrough();
-  readonly postMessage = vi.fn();
+  readonly messages = createTestEventLog<unknown>();
+  readonly postMessage = vi.fn((message: unknown) => this.messages.record(message));
   readonly kill = vi.fn(() => true);
 
   ready(url = 'http://localhost:4311'): void {
@@ -65,10 +67,10 @@ function restoreResourcesPath(): void {
 }
 
 function createManager(options: Omit<ServerManagerOptions, 'utilityProcess'> = {}) {
-  const children: FakeChild[] = [];
+  const spawned = createTestEventLog<FakeChild>();
   const fork = vi.fn<UtilityProcessFactory['fork']>(() => {
     const child = new FakeChild();
-    children.push(child);
+    spawned.record(child);
     return child;
   });
   const killProcess = vi.fn<(pid: number, signal: NodeJS.Signals) => void>();
@@ -81,10 +83,10 @@ function createManager(options: Omit<ServerManagerOptions, 'utilityProcess'> = {
   });
   // Children only exist after start() reaches fork(), which follows a lock await.
   const child = async (index = 0): Promise<FakeChild> => {
-    await vi.waitFor(() => expect(children[index]).toBeDefined());
-    return children[index] as FakeChild;
+    await spawned.waitForCount(index + 1);
+    return spawned.events[index]!;
   };
-  return { manager, fork, killProcess, logger, children, child };
+  return { manager, fork, killProcess, logger, children: spawned.events, child };
 }
 
 async function startManager(harness: ReturnType<typeof createManager>, url?: string) {
@@ -212,15 +214,17 @@ describe('ServerManager startup', () => {
     const harness = createManager();
     const { child } = await startManager(harness);
 
+    const lines = createTestEventLog<string>();
+    harness.logger.log.mockImplementation((message: string) => lines.record(message));
+    harness.logger.error.mockImplementation((message: string) => lines.record(message));
     child.stdout.write('first line\nsecond ');
     child.stdout.write('line\n');
     child.stderr.write('warning\n');
 
-    await vi.waitFor(() => {
-      expect(harness.logger.log).toHaveBeenCalledWith('[backend] first line');
-      expect(harness.logger.log).toHaveBeenCalledWith('[backend] second line');
-      expect(harness.logger.error).toHaveBeenCalledWith('[backend] warning');
-    });
+    await lines.waitForCount(3);
+    expect(harness.logger.log).toHaveBeenCalledWith('[backend] first line');
+    expect(harness.logger.log).toHaveBeenCalledWith('[backend] second line');
+    expect(harness.logger.error).toHaveBeenCalledWith('[backend] warning');
   });
 });
 
@@ -230,7 +234,8 @@ describe('ServerManager shutdown', () => {
     const { child } = await startManager(harness);
 
     const stopPromise = harness.manager.stop();
-    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalledWith({ type: 'shutdown' }));
+    await child.messages.waitForCount(1);
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'shutdown' });
     let stopped = false;
     void stopPromise.then(() => {
       stopped = true;
@@ -261,7 +266,7 @@ describe('ServerManager shutdown', () => {
     const { child } = await startManager(harness);
 
     const stopPromise = harness.manager.stop();
-    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalled());
+    await child.messages.waitForCount(1);
     child.exit(1);
 
     await expect(stopPromise).rejects.toThrow('exited with code 1 during shutdown');
@@ -342,7 +347,7 @@ describe('ServerManager unexpected exits', () => {
 
     const { child } = await startManager(harness);
     const stopPromise = harness.manager.stop();
-    await vi.waitFor(() => expect(child.postMessage).toHaveBeenCalled());
+    await child.messages.waitForCount(1);
     child.exit(0);
     await stopPromise;
 
@@ -395,7 +400,7 @@ describe('ServerManager lifecycle locking', () => {
 
     const stopPromise = harness.manager.stop();
     const restartPromise = harness.manager.start();
-    await vi.waitFor(() => expect(first.postMessage).toHaveBeenCalled());
+    await first.messages.waitForCount(1);
     expect(harness.fork).toHaveBeenCalledTimes(1);
 
     first.exit(0);

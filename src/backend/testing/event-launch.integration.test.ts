@@ -18,21 +18,29 @@ import {
   deferred,
   releaseEventBoundaries,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
-import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
+import {
+  eventProviderCollection,
+  fakeEventProvider,
+} from '@/backend/orchestration/testing/event-provider.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
-const providers = new Map<string, ReturnType<typeof fakeEventProvider>>();
+let providerCollection: ReturnType<typeof eventProviderCollection>;
+let providers: ReturnType<typeof eventProviderCollection>['providers'];
+const getProvider = (sessionId: string) =>
+  providers.findLast((provider) => provider.options.sessionId === sessionId);
 const tasks: Promise<unknown>[] = [];
 const execFileAsync = promisify(execFile);
 beforeEach(async () => {
   db = await createIntegrationDatabase();
-  providers.clear();
+  providerCollection = eventProviderCollection();
+  providers = providerCollection.providers;
   scriptProcess.spawn.mockReset();
   const nativeProcess =
     await vi.importActual<typeof import('node:child_process')>('node:child_process');
@@ -67,7 +75,7 @@ beforeEach(async () => {
         },
         new AcpNativeSessionTracker()
       );
-      providers.set(options.sessionId, provider);
+      providerCollection.add(provider);
       return provider.handle;
     }
   );
@@ -97,7 +105,7 @@ beforeEach(async () => {
 afterEach(async () => {
   try {
     releaseEventBoundaries();
-    for (const provider of providers.values()) {
+    for (const provider of providers) {
       provider.response.resolve({ stopReason: 'end_turn' });
     }
     await Promise.allSettled(tasks);
@@ -121,8 +129,8 @@ it.each([false, true])(
     const task = launch.launchEventRun(h.claim, new AbortController().signal);
     tasks.push(task);
     void task.catch(() => undefined);
-    await vi.waitFor(() => expect(providers.size).toBe(1));
-    const provider = providers.get(h.attempt.sessionId)!;
+    await providerCollection.waitForProviders(1, task);
+    const provider = getProvider(h.attempt.sessionId)!;
     await provider.called;
     if (shell) {
       provider.update({
@@ -176,8 +184,8 @@ it('hands four independent committed claims off without waiting for turns and de
   }
   await createEventAdmissionFixture(db);
   expect(await h.owner.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'CAPACITY' });
-  await vi.waitFor(() => expect(providers.size).toBe(4));
-  for (const provider of providers.values()) {
+  await providerCollection.waitForProviders(4);
+  for (const provider of providers) {
     await provider.called;
     provider.response.resolve({ stopReason: 'end_turn' });
   }
@@ -242,14 +250,14 @@ it.each(['workspace', 'session', 'link'] as const)(
     await launchEventRun(h.claim, cancellation.signal);
     expect(spy).toHaveBeenCalledOnce();
     spy.mockRestore();
-    expect(providers.size).toBe(0);
+    expect(providers.length).toBe(0);
     expect(h.workspace.gitOpsService.createWorktree).not.toHaveBeenCalled();
     const [recovered] = await h.owner.eventRunLaunch.recover([], 4);
     expect(recovered?.claim.reservedWorkspaceId).toBe(h.claim.reservedWorkspaceId);
     const task = launchEventRun(recovered!.claim, new AbortController().signal);
     tasks.push(task);
-    await vi.waitFor(() => expect(providers.size).toBe(1));
-    const provider = providers.get(h.claim.reservedSessionId)!;
+    await providerCollection.waitForProviders(1, task);
+    const provider = getProvider(h.claim.reservedSessionId)!;
     await provider.called;
     provider.response.resolve({ stopReason: 'end_turn' });
     await task;
@@ -301,7 +309,7 @@ it('holds preparation capacity when an owned Git cleanup loses its canonical bas
   });
   expect(await h.owner.eventRunLaunch.recover([], 4)).toEqual([]);
   expect(await h.read()).toMatchObject({ state: 'PENDING' });
-  expect(providers.size).toBe(0);
+  expect(providers.length).toBe(0);
 });
 
 it('does not reset the original setup deadline on a safe retry', async () => {
@@ -323,9 +331,9 @@ it('does not reset the original setup deadline on a safe retry', async () => {
   // Resolve a wrong implementation's prompt so this regression fails without hanging teardown.
   await vi.waitFor(async () => {
     const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
-    expect(run.status === 'FAILED' || providers.size > 0).toBe(true);
+    expect(run.status === 'FAILED' || providers.length > 0).toBe(true);
   });
-  for (const provider of providers.values()) {
+  for (const provider of providers) {
     provider.response.resolve({ stopReason: 'end_turn' });
   }
   await task;
@@ -375,8 +383,8 @@ it('holds the selected Codex reservation through freeze and session creation and
   const recovered = (await codex.owner.eventRunLaunch.recover([h.claim.runId], 4))[0]!;
   const task = launchEventRun(recovered.claim, new AbortController().signal);
   tasks.push(task);
-  await vi.waitFor(() => expect(providers.has(codex.claim.reservedSessionId)).toBe(true));
-  const provider = providers.get(codex.claim.reservedSessionId)!;
+  await providerCollection.waitForProviders(1, task);
+  const provider = getProvider(codex.claim.reservedSessionId)!;
   await provider.called;
   expect(provider.options.codexAccountContext?.accountId).toBe('event-test-account');
   expect(provider.handle.configOptions).toEqual(
@@ -402,8 +410,8 @@ it('uses the current authorized attempt message while retaining original run pro
   >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const task = launchEventRun(claim, new AbortController().signal);
   tasks.push(task);
-  await vi.waitFor(() => expect(providers.size).toBe(1));
-  const provider = providers.get(claim.reservedSessionId)!;
+  await providerCollection.waitForProviders(1, task);
+  const provider = getProvider(claim.reservedSessionId)!;
   await provider.called;
   expect(await h.read()).toMatchObject({
     state: 'SENDING',
@@ -436,13 +444,13 @@ it('fences invocation when lease renewal fails during the committed SENDING obse
   await consumer.maintain(new AbortController().signal);
   gate.release();
   await consumer.drain();
-  expect(providers.get(h.claim.reservedSessionId)!.connection.prompt).not.toHaveBeenCalled();
+  expect(getProvider(h.claim.reservedSessionId)!.connection.prompt).not.toHaveBeenCalled();
   // The expired owner cannot relabel its committed uncertainty or stop a runtime.
   const fence = await h.read();
   expect(fence.state).toBe('SENDING');
   expect(fence.evidence?.stop).toBeUndefined();
   expect(fence.evidence?.outcome).toBeUndefined();
-  expect(providers.get(h.claim.reservedSessionId)!.child.kill).not.toHaveBeenCalled();
+  expect(getProvider(h.claim.reservedSessionId)!.child.kill).not.toHaveBeenCalled();
   expect(
     await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } })
   ).toMatchObject({ status: 'RUNNING' });
@@ -572,7 +580,7 @@ it.each([
     } else {
       expect(run.nextAttemptAt).toBeNull();
     }
-    expect(providers.size).toBe(0);
+    expect(providers.length).toBe(0);
   }
 );
 
@@ -637,7 +645,7 @@ it('honors typed transient Retry-After from setup without resetting identity or 
   expect(run.nextAttemptAt!.getTime()).toBeGreaterThanOrEqual(before + 90_000);
   expect(await db.prisma.workspace.count()).toBe(1);
   expect(await db.prisma.agentSession.count()).toBe(1);
-  expect(providers.size).toBe(0);
+  expect(providers.length).toBe(0);
 });
 
 it.each(['stall', 'reject'] as const)(
@@ -649,9 +657,11 @@ it.each(['stall', 'reject'] as const)(
       new Error('Initial owner read failed')
     );
     const dispose = h.owner.eventRunLaunch.dispose;
+    const disposing = createTestEventLog<string>();
     const dispositions = vi
       .spyOn(h.owner.eventRunLaunch, 'dispose')
       .mockImplementation(async (...args) => {
+        disposing.record(args[0].runId);
         if (args[0].runId === h.claim.runId) {
           if (mode === 'reject') {
             throw new Error('Disposition unavailable');
@@ -679,7 +689,8 @@ it.each(['stall', 'reject'] as const)(
       }
     );
     try {
-      await vi.waitFor(() => expect(dispositions).toHaveBeenCalledTimes(2));
+      await disposing.waitForCount(2);
+      expect(dispositions).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(5000);
       expect(stopped).toBe(true);
       expect(stopError).toBeUndefined();
@@ -696,7 +707,7 @@ it.each(['stall', 'reject'] as const)(
         launchPhase: 'NEEDS_ATTENTION',
         reasonCode: 'PREPARATION_CLEANUP_UNCERTAIN',
       });
-      expect(providers.size).toBe(0);
+      expect(providers.length).toBe(0);
     } finally {
       gate.release();
       vi.useRealTimers();
@@ -826,7 +837,7 @@ it('directly joins pending Git before allowing shutdown to finish', async () => 
     await stopping;
     await consumer.drain();
   }
-  expect(providers.size).toBe(0);
+  expect(providers.length).toBe(0);
 });
 
 it.each(['before Git', 'after Git'] as const)(
@@ -866,7 +877,7 @@ it.each(['before Git', 'after Git'] as const)(
       await consumer.drain();
       expect(finish).not.toHaveBeenCalled();
       expect(disposition).not.toHaveBeenCalled();
-      expect(providers.size).toBe(0);
+      expect(providers.length).toBe(0);
       expect(h.workspace.gitOpsService.createWorktree).toHaveBeenCalledTimes(
         position === 'before Git' ? 0 : 1
       );
@@ -885,8 +896,8 @@ it('interrupts a stalled prompt as SHUTDOWN with uncertainty and no ordinary lif
   >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await vi.waitFor(() => expect(providers.size).toBe(1));
-  const provider = providers.get(h.attempt.sessionId)!;
+  await providerCollection.waitForProviders(1);
+  const provider = getProvider(h.attempt.sessionId)!;
   await provider.called;
   await consumer.stop();
   const stopped = await h.read();

@@ -24,6 +24,7 @@ import {
 import { useWorkspaceData } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useWorkspaceInitStatus } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
@@ -44,7 +45,7 @@ let initStatus: {
   initOutput: string;
   retryAvailability?: { status: 'AVAILABLE' };
 } = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
-const requests: Array<(data: WorkspaceDetail) => void> = [];
+let requests = createTestEventLog<(data: WorkspaceDetail) => void>();
 const detailKey = getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'query');
 function fetched(overrides: Partial<WorkspaceDetail> = {}) {
   return unsafeCoerce<WorkspaceDetail>({
@@ -71,7 +72,7 @@ function Harness() {
   return null;
 }
 function fixture(seed?: WorkspaceDetail) {
-  requests.length = 0;
+  requests = createTestEventLog<(data: WorkspaceDetail) => void>();
   initStatus = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
@@ -90,7 +91,7 @@ function fixture(seed?: WorkspaceDetail) {
             };
             switch (op.path) {
               case 'workspace.get':
-                requests.push(respond);
+                requests.record(respond);
                 break;
               case 'workspace.getInitStatus':
                 respond(initStatus);
@@ -131,7 +132,8 @@ afterEach(async () => {
 describe('workspace detail route hydration', () => {
   it('retains loading until full HTTP detail arrives and overlays accepted stream fields', async () => {
     fixture();
-    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await requests.waitForCount(1);
+    expect(requests.events).toHaveLength(1);
     channel.onMessage!({
       type: 'snapshot_full',
       projectId: 'proj-1',
@@ -139,7 +141,7 @@ describe('workspace detail route hydration', () => {
     });
     expect(latest.workspace).toBeUndefined();
     expect(latest.workspaceLoading).toBe(true);
-    requests[0]!(fetched({ name: 'Old HTTP' }));
+    requests.events[0]!(fetched({ name: 'Old HTTP' }));
     await vi.waitFor(() =>
       expect(latest.workspace).toMatchObject({
         name: 'Stream',
@@ -155,7 +157,8 @@ describe('workspace detail route hydration', () => {
 
   it('disconnects only its pending owned detail while other projects and unassociated detail keep loading', async () => {
     fixture();
-    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await requests.waitForCount(1);
+    expect(requests.events).toHaveLength(1);
     channel.onConnected?.();
     channel.onMessage!({ type: 'snapshot_full', projectId: 'proj-1', entries: [entry()] });
     const b = getProjectWorkspaceCacheReconciler(queryClient, 'proj-2');
@@ -189,8 +192,9 @@ describe('workspace detail route hydration', () => {
       expect(signals['ws-b']).toHaveLength(1);
       expect(signals['ws-c']).toHaveLength(1);
       expect(invalidate).toHaveBeenCalledTimes(2);
-      await vi.waitFor(() => expect(requests).toHaveLength(2));
-      requests[1]!(fetched({ name: 'A fallback' }));
+      await requests.waitForCount(2);
+      expect(requests.events).toHaveLength(2);
+      requests.events[1]!(fetched({ name: 'A fallback' }));
       await vi.waitFor(() => expect(latest.workspace?.name).toBe('A fallback'));
       complete['ws-b']!(fetched({ id: 'ws-b', projectId: 'proj-2', worktreePath: '/project-b' }));
       complete['ws-c']!(
@@ -207,16 +211,20 @@ describe('workspace detail route hydration', () => {
 
   it('retries an active unassociated direct detail when its eventual project generation has retired', async () => {
     fixture();
-    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await requests.waitForCount(1);
+    expect(requests.events).toHaveLength(1);
     channel.onConnected?.();
     channel.onDisconnected?.();
-    expect(requests).toHaveLength(1);
-    requests[0]!(fetched({ worktreePath: '/retired/direct-link' }));
-    await vi.waitFor(() => expect(requests).toHaveLength(2));
+    expect(requests.events).toHaveLength(1);
+    requests.events[0]!(fetched({ worktreePath: '/retired/direct-link' }));
+    await requests.waitForCount(2);
+    expect(requests.events).toHaveLength(2);
     expect(latest.workspace).toBeUndefined();
     expect(latest.workspaceLoading).toBe(true);
     expect(queryClient.getQueryState(detailKey)?.status).toBe('pending');
-    requests[1]!(fetched({ name: 'Current direct link', worktreePath: '/current/direct-link' }));
+    requests.events[1]!(
+      fetched({ name: 'Current direct link', worktreePath: '/current/direct-link' })
+    );
     await vi.waitFor(() =>
       expect(latest.workspace).toMatchObject({
         name: 'Current direct link',
@@ -253,8 +261,8 @@ describe('workspace detail route hydration', () => {
       retryAvailability: { status: 'AVAILABLE' },
     };
     await queryClient.invalidateQueries({ queryKey: initKey, exact: true });
-    await vi.waitFor(() => expect(requests.length).toBeGreaterThan(0));
-    for (const resolve of requests) {
+    await requests.waitForCount(1);
+    for (const resolve of requests.events) {
       resolve(fetched({ status: 'PROVISIONING', name: 'Old HTTP' }));
     }
     await vi.waitFor(() =>

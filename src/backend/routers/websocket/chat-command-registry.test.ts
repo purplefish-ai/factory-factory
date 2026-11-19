@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sessionCommandFactories } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { deferred } from '@/test-utils/deferred';
 import { createChatCommandRegistry } from './chat-message-router';
 import { createChatRouterServices } from './chat-message-router.test-helpers';
 
@@ -20,7 +21,8 @@ it('returns later provider failure to the per-request outcome callback', async (
     { type: 'text', text: 'original text' },
     { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
   ];
-  const onAsyncOutcome = vi.fn();
+  const outcomeReported = deferred();
+  const onAsyncOutcome = vi.fn(() => outcomeReported.resolve());
   expect(
     await registry.user_input(
       { sessionId: 'recovery-session', workingDir: '/tmp', onAsyncOutcome },
@@ -30,16 +32,15 @@ it('returns later provider failure to the per-request outcome callback', async (
   expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
   const cause = new Error('provider disconnected');
   fail(cause);
-  await vi.waitFor(() =>
-    expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
-      replies: [
-        {
-          type: 'error',
-          error: { kind: 'user_input_failed', sessionId: 'recovery-session', content, cause },
-        },
-      ],
-    })
-  );
+  await outcomeReported.promise;
+  expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
+    replies: [
+      {
+        type: 'error',
+        error: { kind: 'user_input_failed', sessionId: 'recovery-session', content, cause },
+      },
+    ],
+  });
   expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
   expect(sendSessionMessage).toHaveBeenCalledTimes(1);
 });

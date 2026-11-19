@@ -881,16 +881,12 @@ describe('SnapshotReconciliationService', () => {
   });
 
   describe('lifecycle (start/stop)', () => {
-    it('runs initial reconciliation immediately on start()', async () => {
+    it('runs initial reconciliation immediately on start()', () => {
       mockFindAllNonArchived.mockResolvedValue([]);
 
       service.start();
 
-      // Wait for the initial reconcile to complete
-      // Use a small delay to let the promise settle
-      await vi.waitFor(() => {
-        expect(mockFindAllNonArchived).toHaveBeenCalledTimes(1);
-      });
+      expect(mockFindAllNonArchived).toHaveBeenCalledTimes(1);
     });
 
     it('does not start a second reconciliation while one is still running', async () => {
@@ -915,10 +911,8 @@ describe('SnapshotReconciliationService', () => {
 
       // Clean up
       resolveReconcile!();
-      await vi.waitFor(() => {
-        // Wait for promise to settle
-        expect(mockFindAllNonArchived).toHaveBeenCalledTimes(1);
-      });
+      await service.stop();
+      expect(mockFindAllNonArchived).toHaveBeenCalledTimes(1);
 
       vi.useRealTimers();
     });

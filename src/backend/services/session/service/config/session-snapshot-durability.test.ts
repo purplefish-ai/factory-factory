@@ -60,11 +60,13 @@ function fixture() {
     }),
   });
   let failures = 0;
+  const failedWrite = vi.fn();
   const accessor = {
     findById: vi.fn(() => Promise.resolve(structuredClone(row))),
     updateIfProviderIdentity: vi.fn((_id: string, expected: typeof row, update: object) => {
       if (failures > 0) {
         failures--;
+        failedWrite();
         return Promise.reject(new Error('Storage unavailable'));
       }
       if (
@@ -114,6 +116,7 @@ function fixture() {
     repository,
     service,
     final,
+    failedWrite,
     get row() {
       return row;
     },
@@ -210,9 +213,14 @@ describe('durable final launch snapshot with production repository CAS', () => {
   it('keeps native update failures best-effort and releases the following final commit', async () => {
     const f = fixture();
     f.failWrites(2);
+    const retryFailed = createDeferred<void>();
+    f.failedWrite
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(retryFailed.resolve);
     f.install();
     f.service.applyConfigOptionsUpdateDelta('session-1', f.handle, options('low'));
-    await vi.waitFor(() => expect(f.accessor.updateIfProviderIdentity).toHaveBeenCalledTimes(2));
+    await retryFailed.promise;
+    expect(f.accessor.updateIfProviderIdentity).toHaveBeenCalledTimes(2);
     await f.final();
     expect(f.accessor.updateIfProviderIdentity).toHaveBeenCalledTimes(3);
     expect(readSessionLaunchSettings(f.row.providerMetadata)?.applied).toBe(true);
@@ -227,13 +235,17 @@ describe('durable final launch snapshot with production repository CAS', () => {
   it('obsoletes an earlier blocked native observation while the current final snapshot commits', async () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
-    f.accessor.findById.mockReturnValueOnce(reading.promise);
+    const readingStarted = createDeferred<void>();
+    f.accessor.findById.mockImplementationOnce(() => {
+      readingStarted.resolve();
+      return reading.promise;
+    });
     const native = f.service.persistAcpConfigSnapshot('session-1', {
       provider: 'CODEX',
       providerSessionId: 'thread',
       configOptions: options('low'),
     });
-    await vi.waitFor(() => expect(f.accessor.findById).toHaveBeenCalled());
+    await readingStarted.promise;
     let finished = false;
     const final = f.final().then(() => {
       finished = true;
@@ -255,12 +267,15 @@ describe('durable final launch snapshot with production repository CAS', () => {
   it('lets current final startup persistence commit while obsolete native repository I/O remains blocked', async () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
-    f.accessor.findById
-      .mockResolvedValueOnce(structuredClone(f.row))
-      .mockReturnValueOnce(reading.promise);
+    const readingStarted = createDeferred<void>();
+    f.accessor.findById.mockResolvedValueOnce(structuredClone(f.row)).mockImplementationOnce(() => {
+      readingStarted.resolve();
+      return reading.promise;
+    });
     f.install();
     f.service.applyConfigOptionsUpdateDelta('session-1', f.handle, options('low'));
-    await vi.waitFor(() => expect(f.accessor.findById).toHaveBeenCalledTimes(2));
+    await readingStarted.promise;
+    expect(f.accessor.findById).toHaveBeenCalledTimes(2);
     let finished = false;
     const final = f.final().then(() => {
       finished = true;

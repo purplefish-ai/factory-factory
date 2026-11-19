@@ -268,6 +268,20 @@ export function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
+export function createDeferredCall<T>() {
+  const result = createDeferred<T>();
+  const entered = createDeferred<void>();
+  return {
+    entered: entered.promise,
+    run() {
+      entered.resolve();
+      return result.promise;
+    },
+    resolve: result.resolve,
+    reject: result.reject,
+  };
+}
+
 export function createTerminationHarness(
   overrides: TerminationHarnessOverrides = {}
 ): TerminationHarness {
@@ -898,6 +912,22 @@ export function createLifecycleHarness(
 
 export function mockActivePromptClient(runtimeManager: AcpRuntimeManager) {
   vi.mocked(runtimeManager.getClient).mockReturnValue(unsafeCoerce({ supportsImages: () => true }));
+}
+
+// The prompt submits to the serializer synchronously after this lookup.
+export function nextPromptClientLookup(runtimeManager: AcpRuntimeManager): Promise<void> {
+  const getClient = vi.mocked(runtimeManager.getClient);
+  const lookup = getClient.getMockImplementation();
+  if (!lookup) {
+    throw new Error('Expected a mocked prompt client lookup');
+  }
+  const entered = createDeferred<void>();
+  getClient.mockImplementationOnce((id) => {
+    const client = lookup(id);
+    entered.resolve();
+    return client;
+  });
+  return entered.promise;
 }
 
 export const activeRuntime = {

@@ -66,10 +66,10 @@ describe('RatchetProjectionWorker', () => {
     });
 
     worker.request('ws-retry');
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1000);
 
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(read).toHaveBeenCalledTimes(2);
     expect(publish).toHaveBeenCalledWith(
       'ws-retry',
       expect.objectContaining({ prMonitoring: expect.objectContaining({ pauseReason: null }) }),
@@ -81,7 +81,7 @@ describe('RatchetProjectionWorker', () => {
     read.mockRejectedValue(new Error('read failed'));
 
     worker.request('ws-persistent-failure');
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(999);
     expect(read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -111,10 +111,9 @@ describe('RatchetProjectionWorker', () => {
     });
 
     worker.request('ws-concurrent-invalidation');
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledTimes(1);
     worker.request('ws-concurrent-invalidation');
     pendingRead.reject(new Error('read failed'));
-    await Promise.resolve();
 
     await vi.advanceTimersByTimeAsync(999);
     expect(read).toHaveBeenCalledTimes(1);
@@ -126,7 +125,7 @@ describe('RatchetProjectionWorker', () => {
     read.mockRejectedValue(new Error('read failed'));
 
     worker.request('ws-invalidation-stream');
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledTimes(1);
     worker.request('ws-invalidation-stream');
     await vi.advanceTimersByTimeAsync(1000);
     expect(read).toHaveBeenCalledTimes(2);
@@ -143,8 +142,11 @@ describe('RatchetProjectionWorker', () => {
     read.mockRejectedValue(new Error('read failed'));
 
     worker.request('ws-stop-retry');
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
     worker.stop();
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(120_000);
 
     expect(read).toHaveBeenCalledTimes(1);

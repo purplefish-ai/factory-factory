@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { expect, it, vi } from 'vitest';
 import { actFlushSync } from '@/test-utils/react-act';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
 import {
   backendActivate,
@@ -117,8 +118,10 @@ it('offers the same explicit creation choices after the menu closes', async () =
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const onCreate = vi.fn(() => {
+  const opened = createTestEventLog<string>();
+  const onCreate = vi.fn((kind: string) => {
     expect(document.querySelector('[role="menu"]')).toBeNull();
+    opened.record(kind);
   });
   actFlushSync(() =>
     root.render(
@@ -145,9 +148,8 @@ it('offers the same explicit creation choices after the menu closes', async () =
       ]);
       expect(onCreate).toHaveBeenCalledTimes(index);
       actFlushSync(() => items[index]?.click());
-      await vi.waitFor(() =>
-        expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event')
-      );
+      await opened.waitForCount(index + 1);
+      expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event');
     }
   } finally {
     actFlushSync(() => root.unmount());

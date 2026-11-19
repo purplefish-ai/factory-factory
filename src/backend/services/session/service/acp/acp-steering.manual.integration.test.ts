@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { AcpRuntimeManager } from './acp-runtime-manager';
 
 const runBothProviders = process.env.RUN_REAL_AGENT_STEERING_TESTS === '1';
@@ -15,7 +16,7 @@ describeLive('Live agent steering', () => {
       const manager = new AcpRuntimeManager();
       const sessionId = `manual-steering-${Date.now()}`;
       const chunks: string[] = [];
-      let toolStarted = false;
+      const toolStarted = deferred();
       let settled = false;
       try {
         const handle = await manager.getOrCreateClient(
@@ -31,7 +32,7 @@ describeLive('Live agent steering', () => {
                 return;
               }
               if (event.update.sessionUpdate === 'tool_call') {
-                toolStarted = true;
+                toolStarted.resolve();
               }
               if (
                 event.update.sessionUpdate === 'agent_message_chunk' &&
@@ -59,9 +60,12 @@ describeLive('Live agent steering', () => {
           .finally(() => {
             settled = true;
           });
-        void original.catch(() => undefined);
-        // Observe a real tool event rather than relying on an arbitrary delivery delay.
-        await vi.waitFor(() => expect(toolStarted).toBe(true), { timeout: 60_000 });
+        await Promise.race([
+          toolStarted.promise,
+          original.then(() => {
+            throw new Error('Original prompt finished before the tool started');
+          }),
+        ]);
         expect(settled).toBe(false);
         await expect(
           manager.steerSession(sessionId, [

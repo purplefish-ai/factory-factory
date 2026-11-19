@@ -12,7 +12,9 @@ vi.mock('node:module', async (importOriginal) => {
     },
   };
 });
+import { once } from 'node:events';
 import { mkdir, stat, access, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
@@ -25,6 +27,8 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { deferred } from '@/test-utils/deferred';
+
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let init: typeof import('./workspace-init.orchestrator');
@@ -192,12 +196,36 @@ it.each(['preflight', 'running'] as const)(
           h.workspace.workspaceRunScriptService.clearInitScriptPid(...args),
       },
     });
+    await writeFile(
+      join(path, 'startup.cjs'),
+      `
+      const socket = require('node:net').createConnection(Number(process.argv[2]), '127.0.0.1');
+      socket.once('connect', () => {
+        require('node:fs').writeFileSync('started', '');
+        socket.write('started');
+      });
+      socket.once('end', () => console.log('stale-output'));
+      socket.resume();
+    `
+    );
+    const scriptStarted = deferred();
+    const releaseScript = deferred();
+    const gate = createServer((socket) => {
+      socket.once('data', () => scriptStarted.resolve());
+      void releaseScript.promise.then(() => socket.end());
+    });
+    gate.listen(0, '127.0.0.1');
+    await once(gate, 'listening');
+    const address = gate.address();
+    if (!address || typeof address === 'string') {
+      gate.close();
+      throw new Error('Expected a TCP address for the startup script gate');
+    }
     const task = startupScriptService.runStartupScript(
       { ...source, worktreePath: path },
       {
         ...source.project,
-        startupScriptCommand:
-          'touch started; while [ ! -f released ]; do sleep 0.02; done; echo stale-output',
+        startupScriptCommand: `node startup.cjs ${address.port}`,
         startupScriptTimeout: 15,
       },
       { guard, deferStateTransition: true }
@@ -212,12 +240,7 @@ it.each(['preflight', 'running'] as const)(
       if (stage === 'preflight') {
         await preflight.entered;
       } else {
-        await vi.waitFor(
-          async () => {
-            await access(join(path, 'started'));
-          },
-          { timeout: 5000 }
-        );
+        await scriptStarted.promise;
       }
       await replace();
       await db.prisma.workspace.update({
@@ -227,7 +250,11 @@ it.each(['preflight', 'running'] as const)(
       expect(drained).toBe(false);
     } finally {
       preflight.release();
-      await writeFile(join(path, 'released'), '');
+      releaseScript.resolve();
+      await result;
+      await new Promise<void>((resolve, reject) => {
+        gate.close((error) => (error ? reject(error) : resolve()));
+      });
     }
     expect(await result).toMatchObject({ name: 'WorkspaceInitFenceError' });
     if (stage === 'preflight') {

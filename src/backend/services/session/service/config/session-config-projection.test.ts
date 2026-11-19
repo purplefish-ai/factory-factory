@@ -135,22 +135,55 @@ function setup() {
     },
   };
 }
-function prepareCatalogAtPhase(test: ReturnType<typeof setup>, stage: string, fails: boolean) {
-  const catalog = stage === 'catalog' ? deferred<ModelCatalog>() : null;
-  if (fails) {
-    test.fetchModels.mockRejectedValue(new Error('catalog unavailable'));
+function blockCatalog(test: ReturnType<typeof setup>, result: Promise<ModelCatalog>) {
+  const discovering = deferred<void>();
+  test.fetchModels.mockImplementationOnce(() => {
+    discovering.resolve();
+    return result;
+  });
+  return discovering.promise;
+}
+
+function pauseProjection(
+  test: ReturnType<typeof setup>,
+  session: ReturnType<typeof row>,
+  stage: 'initial read' | 'catalog' | 'latest read',
+  catalogFails: boolean
+) {
+  test.repository.getSessionById.mockResolvedValue(session);
+  const catalogError = new Error('catalog unavailable');
+  if (catalogFails) {
+    test.fetchModels.mockRejectedValue(catalogError);
   } else {
     test.fetchModels.mockResolvedValue([catalogModel]);
   }
-  if (catalog) {
-    test.fetchModels.mockReturnValueOnce(catalog.promise);
+  if (stage === 'catalog') {
+    const catalog = deferred<ModelCatalog>();
+    const discovering = blockCatalog(test, catalog.promise);
+    return {
+      async reached() {
+        await discovering;
+        expect(test.fetchModels).toHaveBeenCalledOnce();
+      },
+      release: () =>
+        catalogFails ? catalog.reject(catalogError) : catalog.resolve([catalogModel]),
+    };
   }
-  return () => {
-    if (fails) {
-      catalog?.reject(new Error('catalog unavailable'));
-    } else {
-      catalog?.resolve([catalogModel]);
-    }
+  const blocked = deferred<typeof session>();
+  const reading = deferred<void>();
+  if (stage === 'latest read') {
+    test.repository.getSessionById.mockResolvedValueOnce(session);
+  }
+  test.repository.getSessionById.mockImplementationOnce(() => {
+    reading.resolve();
+    return blocked.promise;
+  });
+  return {
+    async reached() {
+      await reading.promise;
+      expect(test.repository.getSessionById).toHaveBeenCalledTimes(stage === 'latest read' ? 2 : 1);
+    },
+    release: () => blocked.resolve(session),
   };
 }
 const prepared = {
@@ -464,32 +497,15 @@ describe('load configuration projection', () => {
         },
       };
       const metadataBefore = JSON.stringify(session.providerMetadata);
-      test.repository.getSessionById.mockResolvedValue(session);
-      const blocked = deferred<typeof session>();
-      const finishCatalog = prepareCatalogAtPhase(test, stage, catalogFails);
-      if (stage === 'initial read') {
-        test.repository.getSessionById.mockReturnValueOnce(blocked.promise);
-      }
-      if (stage === 'latest read') {
-        test.repository.getSessionById
-          .mockResolvedValueOnce(session)
-          .mockReturnValueOnce(blocked.promise);
-      }
+      const paused = pauseProjection(test, session, stage, catalogFails);
       const reading = test.config.getSessionConfigProjection('session');
-      await vi.waitFor(() =>
-        expect(
-          stage === 'catalog'
-            ? test.fetchModels.mock.calls.length
-            : test.repository.getSessionById.mock.calls.length
-        ).toBe(stage === 'latest read' ? 2 : 1)
-      );
+      await paused.reached();
       if (confirmed) {
         pending.confirm();
       } else {
         pending.reject();
       }
-      blocked.resolve(session);
-      finishCatalog();
+      paused.release();
       const projection = ready(await reading);
       expect(projection.capabilities.model.selected).toBe(confirmed ? 'live' : 'stored');
       if (confirmed) {
@@ -511,9 +527,10 @@ describe('load configuration projection', () => {
   it('uses the latest stored options and observed model after catalog lookup', async () => {
     const test = setup();
     const catalog = deferred<[]>();
-    test.fetchModels.mockReturnValueOnce(catalog.promise);
+    const discovering = blockCatalog(test, catalog.promise);
     const reading = test.config.getSessionConfigProjection('session');
-    await vi.waitFor(() => expect(test.fetchModels).toHaveBeenCalledTimes(1));
+    await discovering;
+    expect(test.fetchModels).toHaveBeenCalledTimes(1);
     const newer = row('CODEX', [
       { id: 'other', name: 'Other', type: 'boolean', currentValue: true },
     ]);
@@ -602,12 +619,13 @@ describe('load configuration projection', () => {
   it('coalesces concurrent successful catalog discovery and keeps cached reads passive', async () => {
     const test = setup();
     const discovery = deferred<ModelCatalog>();
-    test.fetchModels.mockReturnValueOnce(discovery.promise);
+    const discovering = blockCatalog(test, discovery.promise);
     const reads = [
       test.config.getSessionConfigProjection('session'),
       test.config.getSessionConfigProjection('session'),
     ];
-    await vi.waitFor(() => expect(test.fetchModels).toHaveBeenCalledTimes(1));
+    await discovering;
+    expect(test.fetchModels).toHaveBeenCalledTimes(1);
     discovery.resolve([catalogModel]);
     await Promise.all(reads);
     await test.config.getSessionConfigProjection('session');
@@ -688,9 +706,10 @@ describe('load configuration projection', () => {
     async (reasoningEffort) => {
       const test = setup();
       const catalog = deferred<ModelCatalog>();
-      test.fetchModels.mockReturnValueOnce(catalog.promise);
+      const discovering = blockCatalog(test, catalog.promise);
       const reading = test.config.getSessionConfigProjection('session');
-      await vi.waitFor(() => expect(test.fetchModels).toHaveBeenCalledTimes(1));
+      await discovering;
+      expect(test.fetchModels).toHaveBeenCalledTimes(1);
       const nativeOptions: SessionConfigOption[] = [
         ...options('newer'),
         {

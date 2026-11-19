@@ -68,13 +68,16 @@ export function exitChildWithCode(child: MockChildProcess): void {
   });
 }
 
-export function markChildKilledOnSignal(child: MockChildProcess): void {
+export function markChildKilledOnSignal(child: MockChildProcess) {
+  const signaled = Promise.withResolvers<string>();
   child.kill = vi.fn((signal?: string) => {
     if (signal) {
       child.killed = true;
+      signaled.resolve(signal);
     }
     return true;
   });
+  return { signaled: signaled.promise };
 }
 
 export function createTestProcessHandle(params?: {

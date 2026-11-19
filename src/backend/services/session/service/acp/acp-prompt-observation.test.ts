@@ -1,3 +1,4 @@
+import { deferred } from '@/test-utils/deferred';
 const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
 import { expect, it, vi } from 'vitest';
@@ -62,20 +63,20 @@ it('rechecks the attempt after the durable write and never sends stale work', as
 });
 it('awaits durable terminal outcome before prompt completion', async () => {
   const h = harness();
-  let release!: () => void;
-  h.observation.outcome.mockImplementation(
-    () =>
-      new Promise<void>((resolve) => {
-        release = resolve;
-      })
-  );
+  const outcome = deferred();
+  const started = deferred();
+  h.observation.outcome.mockImplementation(() => {
+    started.resolve();
+    return outcome.promise;
+  });
   let done = false;
   const pending = h.send().then(() => {
     done = true;
   });
-  await vi.waitFor(() => expect(h.calls).toEqual(['sending', 'provider']));
+  await started.promise;
+  expect(h.calls).toEqual(['sending', 'provider']);
   expect(done).toBe(false);
-  release();
+  outcome.resolve();
   await pending;
   expect(done).toBe(true);
 });
@@ -101,18 +102,17 @@ it('records terminal provider failure as sanitized outcome before throwing', asy
 });
 it('soft cancel during durable beforeSend prevents the later provider invocation', async () => {
   const h = harness();
-  let release!: () => void;
-  h.observation.beforeSend.mockImplementation(
-    () =>
-      new Promise<void>((resolve) => {
-        release = resolve;
-      })
-  );
+  const beforeSend = deferred();
+  const started = deferred();
+  h.observation.beforeSend.mockImplementation(() => {
+    started.resolve();
+    return beforeSend.promise;
+  });
   const pending = h.send();
   const rejected = expect(pending).rejects.toThrow('cancelled before send');
-  await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+  await started.promise;
   expect(await h.controller.cancelPrompt('session', h.handle)).toBe(true);
-  release();
+  beforeSend.resolve();
   await rejected;
   expect(h.handle.connection.prompt).not.toHaveBeenCalled();
   expect(h.observation.ambiguous).toHaveBeenCalledOnce();

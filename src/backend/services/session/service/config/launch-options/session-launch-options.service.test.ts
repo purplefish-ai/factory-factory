@@ -104,15 +104,21 @@ describe('selected-model launch discovery', () => {
   });
   it('bounds simultaneous probes and releases admission after their lifetimes drain', async () => {
     const pending = createDeferred<SessionLaunchOptions>();
-    const fetchOptions = vi.fn().mockReturnValue(pending.promise);
+    const probes = Array.from({ length: 8 }, () => createDeferred<void>());
+    const fetchOptions = vi.fn(({ model }: { model?: string }) => {
+      const index = Number(model?.slice('model-'.length));
+      probes[index]?.resolve();
+      return pending.promise;
+    });
     const service = new SessionLaunchOptionsService({
       fetchOptions: drainedFetch(fetchOptions),
       getSettings: vi.fn().mockResolvedValue({}),
     });
-    const running = Array.from({ length: 8 }, (_, index) =>
+    const running = probes.map((_, index) =>
       service.getOptions({ provider: 'CODEX', model: `model-${index}` })
     );
-    await vi.waitFor(() => expect(fetchOptions).toHaveBeenCalledTimes(8));
+    await Promise.all(probes.map((probe) => probe.promise));
+    expect(fetchOptions).toHaveBeenCalledTimes(8);
     await expect(service.getOptions({ provider: 'CODEX', model: 'extra' })).rejects.toThrow('busy');
     pending.resolve(native('CODEX', 'model'));
     await Promise.all(running);
@@ -177,9 +183,8 @@ describe('selected-model launch discovery', () => {
     );
     expect(fetchOptions).toHaveBeenCalledTimes(129);
     undrained.resolve();
-    await vi.waitFor(async () => {
-      await service.getOptions({ provider: 'CODEX', model: 'model-0' });
-    });
+    await undrained.promise;
+    await service.getOptions({ provider: 'CODEX', model: 'model-0' });
     expect(fetchOptions).toHaveBeenCalledTimes(130);
   });
 });

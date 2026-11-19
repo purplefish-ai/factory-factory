@@ -7,6 +7,7 @@ import {
   type WorkspaceLaunchPorts,
   type WorkspaceLaunchSource,
 } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const sources = [
@@ -207,13 +208,14 @@ describe.each(sources)(
           workspace,
           defaultSessionId: 'session-1',
         });
+        const errorLogged = deferred();
+        ports.logger.error.mockImplementationOnce(() => errorLogged.resolve());
         rejectInit(failure);
-        await vi.waitFor(() =>
-          expect(ports.logger.error).toHaveBeenCalledWith(
-            'Unexpected error during background workspace initialization',
-            expect.objectContaining({ message: 'Worktree failed' }),
-            { workspaceId: 'w-created' }
-          )
+        await errorLogged.promise;
+        expect(ports.logger.error).toHaveBeenCalledWith(
+          'Unexpected error during background workspace initialization',
+          expect.objectContaining({ message: 'Worktree failed' }),
+          { workspaceId: 'w-created' }
         );
       }
     );
@@ -412,17 +414,18 @@ describe.each([childSource, periodicSource])('$type background initialization', 
       defaultSessionId: 'session-1',
     });
     const failure = new Error('init failed');
+    const errorLogged = deferred();
+    ports.logger.error.mockImplementationOnce(() => errorLogged.resolve());
     rejectInit(failure);
-    await vi.waitFor(() =>
-      expect(ports.logger.error).toHaveBeenCalledWith(
-        ...(source.type === 'CHILD_WORKSPACE'
-          ? ['Child workspace init failed', { workspaceId: 'w-created', error: failure }]
-          : [
-              'Failed to initialize workspace for periodic task',
-              failure,
-              { workspaceId: 'w-created' },
-            ])
-      )
+    await errorLogged.promise;
+    expect(ports.logger.error).toHaveBeenCalledWith(
+      ...(source.type === 'CHILD_WORKSPACE'
+        ? ['Child workspace init failed', { workspaceId: 'w-created', error: failure }]
+        : [
+            'Failed to initialize workspace for periodic task',
+            failure,
+            { workspaceId: 'w-created' },
+          ])
     );
     expect(ports.initializeWorktree).toHaveBeenCalledExactlyOnceWith('w-created');
   });

@@ -24,6 +24,7 @@ vi.mock('qrcode', () => ({ toString: vi.fn().mockResolvedValue('QR') }));
 const options = { backendPort: 3001, httpsPort: 443 };
 let backend: ChildProcess;
 let serve: ChildProcess;
+let serveSpawned: Promise<void>;
 function child(pid: number): ChildProcess {
   return Object.assign(new ChildProcess(), {
     pid,
@@ -40,7 +41,12 @@ beforeEach(() => {
   serve = child(1235);
   vi.mocked(discoverTailscale).mockResolvedValue('https://mac.tail123.ts.net');
   vi.mocked(startFactoryFactoryServer).mockResolvedValue({ process: backend, port: 3007 });
-  vi.mocked(spawn).mockReturnValue(serve);
+  const spawned = Promise.withResolvers<void>();
+  serveSpawned = spawned.promise;
+  vi.mocked(spawn).mockImplementation(() => {
+    spawned.resolve();
+    return serve;
+  });
   vi.mocked(treeKillAsync).mockImplementation((pid) => {
     exit(pid === backend.pid ? backend : serve);
     return Promise.resolve();
@@ -54,10 +60,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function started() {
-  await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
-}
-
 describe('owned Tailscale session', () => {
   it('forwards the actual backend port with foreground Serve and cleans up on abort', async () => {
     const controller = new AbortController();
@@ -66,7 +68,7 @@ describe('owned Tailscale session', () => {
       options,
       signal: controller.signal,
     });
-    await started();
+    await serveSpawned;
     expect(findAvailablePort).toHaveBeenCalledWith(3001, {
       maxAttempts: 50,
       signal: controller.signal,
@@ -95,7 +97,7 @@ describe('owned Tailscale session', () => {
       signal: new AbortController().signal,
     });
     const assertion = expect(result).rejects.toThrow(/Tailscale Serve.*exited/);
-    await started();
+    await serveSpawned;
     exit(serve);
     await assertion;
     expect(treeKillAsync).toHaveBeenCalledWith(1234, 'SIGTERM');
@@ -107,7 +109,7 @@ describe('owned Tailscale session', () => {
       signal: new AbortController().signal,
     });
     const assertion = expect(result).rejects.toThrow(/Factory Factory.*exited/);
-    await started();
+    await serveSpawned;
     exit(backend, 1);
     await assertion;
     expect(treeKillAsync).toHaveBeenCalledWith(1235, 'SIGTERM');
@@ -119,7 +121,7 @@ describe('owned Tailscale session', () => {
       signal: new AbortController().signal,
     });
     const assertion = expect(result).rejects.toThrow(/Tailscale Serve.*ENOENT/);
-    await started();
+    await serveSpawned;
     serve.emit('error', new Error('ENOENT'));
     await assertion;
     expect(treeKillAsync).toHaveBeenCalledWith(1234, 'SIGTERM');

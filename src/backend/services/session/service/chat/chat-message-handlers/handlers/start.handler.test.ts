@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 
 const mocks = vi.hoisted(() => ({
   getSessionOptions: vi.fn(),
@@ -96,10 +97,8 @@ it('keeps the PR delivery fence when explicit startup fails', async () => {
 
 it('keeps a stop made while startup was pending after the old start finishes', async () => {
   const sessionId = 'pending-start-stop';
-  let release!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const starting = deferred();
+  const pending = deferred();
   let pauseReason: string | null = null;
   sessionBackgroundDeliveryService.configure({
     prepare: () => Promise.resolve({ status: 'discard' }),
@@ -119,7 +118,11 @@ it('keeps a stop made while startup was pending after the old start finishes', a
     },
   });
   mocks.getSessionOptions.mockResolvedValue({ workspaceStatus: 'READY' });
-  const startup = vi.fn().mockReturnValue(pending);
+  const startup = vi.fn();
+  startup.mockImplementation(() => {
+    starting.resolve();
+    return pending.promise;
+  });
   const handler = createStartHandler({
     domain: { markError: mocks.markError },
     lifecycle: { getSessionOptions: mocks.getSessionOptions },
@@ -127,9 +130,9 @@ it('keeps a stop made while startup was pending after the old start finishes', a
     startupService: { getSessionClient: vi.fn(), getOrCreateSessionClient: startup },
   });
   const start = handler({ sessionId, workingDir: '/tmp' }, { type: 'start' } as never);
-  await vi.waitFor(() => expect(startup).toHaveBeenCalled());
+  await starting.promise;
   await sessionBackgroundDeliveryService.userStop(sessionId);
-  release();
+  pending.resolve();
   await start;
   await Promise.resolve();
   expect(pauseReason).toBe('USER_STOPPED');

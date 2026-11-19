@@ -279,7 +279,8 @@ it('automatically loads earlier messages in a short conversation while following
   const host = document.createElement('div');
   document.body.append(host);
   const root = mountRoot(host);
-  const loadOlder = vi.fn();
+  const loadRequested = Promise.withResolvers<void>();
+  const loadOlder = vi.fn(() => loadRequested.resolve());
   flushSync(() =>
     root.render(
       <ChatTranscript
@@ -296,7 +297,8 @@ it('automatically loads earlier messages in a short conversation while following
       />
     )
   );
-  await vi.waitFor(() => expect(loadOlder).toHaveBeenCalled());
+  await loadRequested.promise;
+  expect(loadOlder).toHaveBeenCalled();
   expect(host.querySelector('[data-transcript-key="transcript:header"]')).not.toBeNull();
   expect(host.textContent).not.toContain('Load earlier messages');
 });

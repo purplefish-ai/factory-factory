@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AcpRuntimeEventHandlers } from '@/backend/services/session/service/acp';
+import type {
+  AcpProcessHandle,
+  AcpRuntimeEventHandlers,
+} from '@/backend/services/session/service/acp';
 import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
 import { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import {
@@ -10,6 +13,7 @@ import {
 import { AcpRuntimeSupervisor } from '@/backend/services/session/service/acp/acp-runtime-supervisor';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   gate,
@@ -286,9 +290,17 @@ describe('real supervisor and startup configuration phase ordering', () => {
         });
         replacement.configOptions = startupConfigOptions('third');
         exitChildWithCode(unsafeCoerce<MockChildProcess>(replacement.child));
+        const installed = deferred<AcpProcessHandle>();
+        const create = h.runtimeManager.getOrCreateClient;
+        h.runtimeManager.getOrCreateClient = vi.fn(async (...args) => {
+          const handle = await create(...args);
+          installed.resolve(handle);
+          return handle;
+        });
         h.factory.mockResolvedValueOnce(replacement);
         replacementStart = h.service.startSession(h.session.id);
-        await vi.waitFor(() => expect(h.manager.getClient(h.session.id)).toBe(replacement));
+        expect(await installed.promise).toBe(replacement);
+        expect(h.manager.getClient(h.session.id)).toBe(replacement);
       }
       const published = h.sessionDomainService.emitDelta.mock.calls.length;
       h.config.applyConfigOptionsUpdateDelta(

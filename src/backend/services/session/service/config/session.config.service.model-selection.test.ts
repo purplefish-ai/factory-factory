@@ -118,9 +118,13 @@ describe('durable session model selection', () => {
   it('returns the live choice if a runtime appears during catalog discovery', async () => {
     const h = setup();
     const discovered = createDeferred<Awaited<ReturnType<typeof h.catalog.getModels>>>();
-    h.catalog.getModels.mockReturnValue(discovered.promise);
+    const discovering = createDeferred<void>();
+    h.catalog.getModels.mockImplementation(() => {
+      discovering.resolve();
+      return discovered.promise;
+    });
     const reading = h.service.getSessionConfigOptionsWithFallback('session');
-    await vi.waitFor(() => expect(h.catalog.getModels).toHaveBeenCalled());
+    await discovering.promise;
     const handle = createTestProcessHandle();
     handle.configOptions = h.configOptions.map((option) =>
       option.type === 'select' ? { ...option, currentValue: 'live' } : option
@@ -134,9 +138,13 @@ describe('durable session model selection', () => {
   it('does not overwrite a newer stopped edit after delayed catalog discovery', async () => {
     const h = setup();
     const discovered = createDeferred<Awaited<ReturnType<typeof h.catalog.getModels>>>();
-    h.catalog.getModels.mockReturnValue(discovered.promise);
+    const discovering = createDeferred<void>();
+    h.catalog.getModels.mockImplementation(() => {
+      discovering.resolve();
+      return discovered.promise;
+    });
     const reading = h.service.getSessionConfigOptionsWithFallback('session');
-    await vi.waitFor(() => expect(h.catalog.getModels).toHaveBeenCalled());
+    await discovering.promise;
     await h.service.setSessionConfigOption('session', 'model', 'second');
     discovered.resolve([{ id: 'second', displayName: 'Second', isDefault: true }]);
     expect((await reading)[0]?.currentValue).toBe('second');

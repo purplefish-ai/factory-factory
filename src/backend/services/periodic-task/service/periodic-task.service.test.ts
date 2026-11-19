@@ -325,19 +325,19 @@ describe('PeriodicTaskService', () => {
   });
 
   it('awaits timer dispatch before linking its workspace to the reservation', async () => {
-    let finish!: (result: { workspaceId: string }) => void;
-    const dispatchTimerEvent = vi.fn(
-      () =>
-        new Promise<{ workspaceId: string }>((resolve) => {
-          finish = resolve;
-        })
-    );
+    const started = Promise.withResolvers<void>();
+    const pending = Promise.withResolvers<{ workspaceId: string }>();
+    const dispatchTimerEvent = vi.fn(() => {
+      started.resolve();
+      return pending.promise;
+    });
     const service = createServiceWithTimerDispatch(dispatchTimerEvent);
     const dispatch = dispatchTask(service);
-    await vi.waitFor(() => expect(dispatchTimerEvent).toHaveBeenCalledOnce());
+    await started.promise;
+    expect(dispatchTimerEvent).toHaveBeenCalledOnce();
     expect(mockUpdateExecution).not.toHaveBeenCalled();
 
-    finish({ workspaceId: 'launched-workspace' });
+    pending.resolve({ workspaceId: 'launched-workspace' });
     await dispatch;
 
     expect(mockUpdateExecution).toHaveBeenCalledExactlyOnceWith('exec-1', {

@@ -1,4 +1,3 @@
-import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -16,24 +15,18 @@ import {
 } from '@/backend/services/session';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { deferred } from '@/test-utils/deferred';
 import {
   type ChatConnectionRegistry,
   disposeChatTransportForApplication,
   getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
 import { createChatUpgradeHandler } from './chat.handler';
+import { MockWebSocket } from './mock-websocket.test-helpers';
 
 const allowedOrigin = 'http://localhost:3000';
 const testApplications = new Set<AppContext>();
 let chatConnectionRegistry: ChatConnectionRegistry;
-
-class MockWebSocket extends EventEmitter {
-  readyState: number = WS_READY_STATE.OPEN;
-  bufferedAmount = 0;
-  terminate = vi.fn();
-  send = vi.fn();
-  close = vi.fn();
-}
 
 function createLogger() {
   return {
@@ -174,7 +167,8 @@ describe('createChatUpgradeHandler', () => {
       new WeakMap<WebSocket, boolean>()
     );
     ws.emit('message', JSON.stringify({ type: 'load_session', loadRequestId }));
-    await vi.waitFor(() => expect(ws.send).toHaveBeenCalledTimes(1));
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenCalledTimes(1);
     expect(JSON.parse(ws.send.mock.calls[0]?.[0] ?? '')).toMatchObject({
       type: 'error',
       code: 413,
@@ -182,7 +176,8 @@ describe('createChatUpgradeHandler', () => {
     });
     expect(Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '')).toBeLessThan(1024);
     ws.emit('message', JSON.stringify({ type: 'set_model', model: 'model-1' }));
-    await vi.waitFor(() => expect(ws.send).toHaveBeenCalledTimes(2));
+    await ws.sent.waitForCount(2);
+    expect(ws.send).toHaveBeenCalledTimes(2);
     expect(JSON.parse(ws.send.mock.calls[1]?.[0] ?? '')).toMatchObject({
       type: 'chat_capabilities',
     });
@@ -215,13 +210,16 @@ describe('createChatUpgradeHandler', () => {
         wss,
         new WeakMap<WebSocket, boolean>()
       );
+      const closed = deferred();
+      ws.close.mockImplementationOnce(() => closed.resolve());
       ws.emit(
         'message',
         kind === 'invalid-json'
           ? '{invalid-json'
           : JSON.stringify({ type: 'set_model', model: 'model-1' })
       );
-      await vi.waitFor(() => expect(ws.close).toHaveBeenCalledWith(1013, expect.any(String)));
+      await closed.promise;
+      expect(ws.close).toHaveBeenCalledWith(1013, expect.any(String));
       expect(ws.send).not.toHaveBeenCalled();
       ws.emit('close');
     }
@@ -316,8 +314,13 @@ describe('createChatUpgradeHandler', () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
 
-    const { appContext, sessionLoadService, chatEventForwarderService, sessionFileLogger } =
-      createTestContext(tempRootDir);
+    const {
+      appContext,
+      sessionLoadService,
+      chatEventForwarderService,
+      sessionFileLogger,
+      sessionDomainService,
+    } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
     const ws = new MockWebSocket();
@@ -348,9 +351,16 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.get('conn-1')).toMatchObject({ dbSessionId: 'session-1' });
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(1);
 
+    vi.mocked(sessionLoadService.prepareLoad).mockResolvedValueOnce({
+      status: 'error',
+      outcome: { replies: [{ type: 'error', error: { kind: 'session_not_found' } }] },
+    });
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
-    await Promise.resolve();
-    await Promise.resolve();
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: 'error', message: 'Session not found' }),
+      expect.any(Function)
+    );
 
     expect(sessionLoadService.prepareLoad).toHaveBeenCalledWith({
       sessionId: 'session-1',
@@ -365,13 +375,19 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+    expect(sessionDomainService.clearSession).toHaveBeenCalledExactlyOnceWith('session-1', {
+      preserveRejections: true,
+    });
   });
 
   it.each([false, true])(
     'corrects every viewer when requester disconnects: %s',
     async (disconnect) => {
       const bus = new SessionEventBus();
-      const { appContext, sessionDomainService } = createTestContext(tempRootDir, bus);
+      const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(
+        tempRootDir,
+        bus
+      );
       const handler = createChatUpgradeHandler(appContext);
       const requester = new MockWebSocket();
       const second = new MockWebSocket();
@@ -398,7 +414,8 @@ describe('createChatUpgradeHandler', () => {
         );
       }
       requester.emit('message', JSON.stringify({ type: 'set_model', model: 'model-1' }));
-      await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
+      await requester.sent.waitForCount(1);
+      expect(requester.send).toHaveBeenCalledTimes(1);
       expect(requester.send).toHaveBeenLastCalledWith(
         JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES }),
         expect.any(Function)
@@ -406,7 +423,12 @@ describe('createChatUpgradeHandler', () => {
       expect(second.send).not.toHaveBeenCalled();
 
       requester.send.mockClear();
+      const disconnectedRequestSettled = deferred();
       if (disconnect) {
+        vi.mocked(acpRuntimeManager.isSessionRunning).mockImplementationOnce(() => {
+          disconnectedRequestSettled.resolve();
+          return false;
+        });
         requester.send.mockImplementationOnce(() => {
           requester.readyState = WS_READY_STATE.CLOSED;
           requester.emit('close');
@@ -429,7 +451,8 @@ describe('createChatUpgradeHandler', () => {
         'message',
         JSON.stringify({ type: 'set_config_option', configId: 'model', value: 'bad' })
       );
-      await vi.waitFor(() => expect(second.send).toHaveBeenCalledTimes(1));
+      await second.sent.waitForCount(1);
+      expect(second.send).toHaveBeenCalledTimes(1);
       const error = JSON.stringify({
         type: 'error',
         message: 'Failed to set config option: rejected',
@@ -438,15 +461,14 @@ describe('createChatUpgradeHandler', () => {
         type: 'session_delta',
         data: { type: 'config_options_update', configOptions },
       });
-      await vi.waitFor(() =>
-        expect(requester.send.mock.calls).toEqual(
-          disconnect
-            ? [[correction, expect.any(Function)]]
-            : [
-                [correction, expect.any(Function)],
-                [error, expect.any(Function)],
-              ]
-        )
+      await (disconnect ? disconnectedRequestSettled.promise : requester.sent.waitForCount(3));
+      expect(requester.send.mock.calls).toEqual(
+        disconnect
+          ? [[correction, expect.any(Function)]]
+          : [
+              [correction, expect.any(Function)],
+              [error, expect.any(Function)],
+            ]
       );
       expect(second.send.mock.calls).toEqual([[correction, expect.any(Function)]]);
       expect(sessionDomainService.emitDelta).toHaveBeenCalledWith('session-1', {
@@ -490,7 +512,8 @@ describe('createChatUpgradeHandler', () => {
       'message',
       JSON.stringify({ type: 'remove_queued_message', messageId: 'pr-event-held' })
     );
-    await vi.waitFor(() => expect(requester.send).toHaveBeenCalledTimes(1));
+    await requester.sent.waitForCount(1);
+    expect(requester.send).toHaveBeenCalledTimes(1);
     expect(requester.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'error',
@@ -597,7 +620,7 @@ describe('createChatUpgradeHandler', () => {
     open(handlerA, wsA, 'conn-a', 'session-a');
     open(handlerB, wsB, 'conn-b', 'session-b');
     wsA.send.mockClear();
-    wsB.send.mockClear();
+    wsB.send.mockClear().mockImplementationOnce((payload) => wsB.sent.record(payload));
 
     eventBusB.publishToSession('session-b', {
       type: 'session_delta',
@@ -702,12 +725,11 @@ describe('createChatUpgradeHandler', () => {
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
 
-    let releaseMessage: (() => void) | undefined;
-    const messageHandled = new Promise<void>((resolve) => {
-      releaseMessage = resolve;
-    });
+    const loadStarted = deferred();
+    const load = deferred();
     vi.mocked(sessionLoadService.prepareLoad).mockImplementation(async () => {
-      await messageHandled;
+      loadStarted.resolve();
+      await load.promise;
       return { status: 'error', outcome: { replies: [] } };
     });
 
@@ -733,24 +755,21 @@ describe('createChatUpgradeHandler', () => {
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
+    const sessionCleared = deferred();
+    vi.mocked(sessionDomainService.clearSession).mockImplementationOnce(() =>
+      sessionCleared.resolve()
+    );
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
-    await Promise.resolve();
+    await loadStarted.promise;
 
     ws.emit('close');
     expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
 
-    if (!releaseMessage) {
-      throw new Error('Expected message release callback');
-    }
-    releaseMessage();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    await vi.waitFor(() =>
-      expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-        preserveRejections: true,
-      })
-    );
+    load.resolve();
+    await sessionCleared.promise;
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
+      preserveRejections: true,
+    });
   });
 
   it('reports a failure in disconnected-session cleanup at the message boundary', async () => {
@@ -763,12 +782,11 @@ describe('createChatUpgradeHandler', () => {
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
 
-    let releaseMessage: (() => void) | undefined;
-    const messageHandled = new Promise<void>((resolve) => {
-      releaseMessage = resolve;
-    });
+    const loadStarted = deferred();
+    const load = deferred();
     vi.mocked(sessionLoadService.prepareLoad).mockImplementation(async () => {
-      await messageHandled;
+      loadStarted.resolve();
+      await load.promise;
       return { status: 'error', outcome: { replies: [] } };
     });
 
@@ -794,19 +812,17 @@ describe('createChatUpgradeHandler', () => {
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
+    const failureLogged = deferred();
+    logger.error.mockImplementationOnce(() => failureLogged.resolve());
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
-    await Promise.resolve();
+    await loadStarted.promise;
 
     ws.emit('close');
     expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
 
-    if (!releaseMessage) {
-      throw new Error('Expected message release callback');
-    }
-    releaseMessage();
-    await vi.waitFor(() => {
-      expect(logger.error).toHaveBeenCalledWith('Unhandled chat message failure', cleanupError);
-    });
+    load.resolve();
+    await failureLogged.promise;
+    expect(logger.error).toHaveBeenCalledWith('Unhandled chat message failure', cleanupError);
   });
 
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {
@@ -886,17 +902,13 @@ describe('createChatUpgradeHandler', () => {
 
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
+    const invalidMessage = { type: 'error', message: 'Invalid message format' };
+    ws.send.mockImplementationOnce((payload) => ws.sent.record(payload));
     ws.emit('message', '{invalid-json');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    ws.emit('message', JSON.stringify({ type: 'unknown_message_type' }));
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'error', message: 'Invalid message format' }),
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify(invalidMessage),
       expect.any(Function)
     );
     expect(sessionFileLogger.log).not.toHaveBeenCalledWith(
@@ -904,13 +916,30 @@ describe('createChatUpgradeHandler', () => {
       'OUT_TO_CLIENT',
       expect.anything()
     );
-    for (const [, flushed] of ws.send.mock.calls) {
-      flushed?.();
-    }
-    expect(sessionFileLogger.log).toHaveBeenCalledWith('session-1', 'OUT_TO_CLIENT', {
-      type: 'error',
-      message: 'Invalid message format',
-    });
+    ws.send.mock.calls[0]?.[1]?.();
+    expect(sessionFileLogger.log).toHaveBeenCalledWith(
+      'session-1',
+      'OUT_TO_CLIENT',
+      invalidMessage
+    );
+
+    const flushed = deferred();
+    vi.mocked(sessionFileLogger.log)
+      .mockClear()
+      .mockImplementationOnce(() => flushed.resolve());
+    ws.emit('message', JSON.stringify({ type: 'unknown_message_type' }));
+    await flushed.promise;
+    expect(ws.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify(invalidMessage),
+      expect.any(Function)
+    );
+    expect(sessionFileLogger.log).toHaveBeenCalledWith(
+      'session-1',
+      'OUT_TO_CLIENT',
+      invalidMessage
+    );
+    expect(sessionLoadService.prepareLoad).not.toHaveBeenCalled();
 
     ws.emit('error', new Error('socket failed'));
     expect(logger.error).toHaveBeenCalledWith('Chat WebSocket error', expect.any(Error));

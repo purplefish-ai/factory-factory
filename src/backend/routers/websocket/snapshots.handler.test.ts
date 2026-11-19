@@ -15,7 +15,9 @@ import {
   WorkspaceSnapshotStore,
 } from '@/backend/services/workspace';
 import { SnapshotServerMessageSchema } from '@/shared/workspace-snapshot';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { MockWebSocket } from './mock-websocket.test-helpers';
 import {
   createSnapshotsUpgradeHandler,
   disposeSnapshotsHandlerState,
@@ -29,14 +31,6 @@ const testStores = new Set<WorkspaceSnapshotStore>();
 // ============================================================================
 // Mocks
 // ============================================================================
-
-class MockWebSocket extends EventEmitter {
-  readyState: number = WS_READY_STATE.OPEN;
-  bufferedAmount = 0;
-  send = vi.fn();
-  close = vi.fn();
-  terminate = vi.fn();
-}
 
 // Use vi.hoisted so these are available inside hoisted vi.mock factories
 const {
@@ -141,12 +135,6 @@ function callHandler(
   return { wss, socket, wsAliveMap };
 }
 
-async function waitForInitialSnapshot(ws: MockWebSocket): Promise<void> {
-  await vi.waitFor(() => {
-    expect(ws.send).toHaveBeenCalled();
-  });
-}
-
 function createPendingBaseline(frameLimit?: () => number) {
   let finishSeed: () => void = () => undefined;
   mockWaitForSeed.mockReturnValueOnce(
@@ -195,7 +183,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       const projectId = 'p'.repeat(length);
       const result = callHandler(handler, ws, projectId);
       expect(result.wss.handleUpgrade).toHaveBeenCalledTimes(1);
-      await waitForInitialSnapshot(ws);
+      await ws.sent.waitForCount(1);
       if (length === 256) {
         expect(sentMessages(ws)[0]).toMatchObject({ type: 'snapshot_full', projectId });
       } else {
@@ -231,7 +219,7 @@ describe('createSnapshotsUpgradeHandler', () => {
           })
         ) - extra;
       finishSeed();
-      await waitForInitialSnapshot(ws);
+      await ws.sent.waitForCount(1);
       expect(sentMessages(ws)[0]).toMatchObject(
         extra > 0
           ? { type: 'snapshot_error', projectId: 'proj-1', code: 'FRAME_TOO_LARGE' }
@@ -249,15 +237,19 @@ describe('createSnapshotsUpgradeHandler', () => {
   it('accepts a large full snapshot, retires on accumulated deltas and reconnects from current state', async () => {
     const { store, handler, ws, finishSeed } = createPendingBaseline();
     const largeName = 'x'.repeat(2 * 1024 * 1024);
+    // Keep the full frame buffered while subsequent deltas arrive.
+    ws.send.mockImplementationOnce((payload) => {
+      ws.bufferedAmount = Buffer.byteLength(payload);
+      ws.sent.record(payload);
+    });
     store.upsert('ws-1', { projectId: 'proj-1', name: largeName, status: 'READY' }, 'test', 100);
     finishSeed();
-    await waitForInitialSnapshot(ws);
+    await ws.sent.waitForCount(1);
     expect(sentMessages(ws)[0]).toMatchObject({
       type: 'snapshot_full',
       entries: [expect.objectContaining({ name: largeName })],
     });
     expect(ws.close).not.toHaveBeenCalled();
-    ws.bufferedAmount = Buffer.byteLength(ws.send.mock.calls[0]?.[0] ?? '');
     store.upsert('ws-1', { name: 'Current' }, 'test', 200);
     expect(ws.send).toHaveBeenCalledTimes(2);
     ws.bufferedAmount += 1024 * 1024;
@@ -292,8 +284,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     const second = new MockWebSocket();
     callHandler(handler, second, 'proj-1');
     finishSeed();
-    await waitForInitialSnapshot(ws);
-    await waitForInitialSnapshot(second);
+    await ws.sent.waitForCount(1);
+    await second.sent.waitForCount(1);
     for (const viewer of [ws, second]) {
       expect(sentMessages(viewer)[0]).toMatchObject({ type: 'snapshot_full' });
       expect(viewer.send.mock.calls[0]![0]).not.toContain('nameUpdatedAt');
@@ -359,17 +351,16 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, ws, 'proj-1');
 
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'snapshot_full',
-          projectId: 'proj-1',
-          entries: [visibleEntry],
-          reviewCount: 5,
-        }),
-        expect.any(Function)
-      );
-    });
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [visibleEntry],
+        reviewCount: 5,
+      }),
+      expect.any(Function)
+    );
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
@@ -389,23 +380,22 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handler, ws, 'proj-1');
 
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledWith(
-        JSON.stringify({
-          type: 'snapshot_full',
-          projectId: 'proj-1',
-          entries: [
-            {
-              workspaceId: 'ws-1',
-              projectId: 'proj-1',
-              name: 'Visible',
-              status: 'READY',
-            },
-          ],
-        }),
-        expect.any(Function)
-      );
-    });
+    await ws.sent.waitForCount(1);
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [
+          {
+            workspaceId: 'ws-1',
+            projectId: 'proj-1',
+            name: 'Visible',
+            status: 'READY',
+          },
+        ],
+      }),
+      expect.any(Function)
+    );
     expect(mockRefreshReviewCountIfStale).toHaveBeenCalled();
   });
 
@@ -453,8 +443,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     callHandler(handler, wsA, 'proj-A');
     callHandler(handler, wsB, 'proj-B');
 
-    await waitForInitialSnapshot(wsA);
-    await waitForInitialSnapshot(wsB);
+    await wsA.sent.waitForCount(1);
+    await wsB.sent.waitForCount(1);
 
     // Clear send calls from full snapshot on connect
     wsA.send.mockClear();
@@ -530,8 +520,8 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     callHandler(handlerA, wsA, 'project-a');
     callHandler(handlerB, wsB, 'project-b');
-    await waitForInitialSnapshot(wsA);
-    await waitForInitialSnapshot(wsB);
+    await wsA.sent.waitForCount(1);
+    await wsB.sent.waitForCount(1);
     wsA.send.mockClear();
     wsB.send.mockClear();
     queryA.getCachedReviewCount.mockClear();
@@ -574,7 +564,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
-    await waitForInitialSnapshot(ws);
+    await ws.sent.waitForCount(1);
     ws.send.mockClear();
 
     const changedListener = storeListeners.get('snapshot_changed');
@@ -608,7 +598,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
-    await waitForInitialSnapshot(ws);
+    await ws.sent.waitForCount(1);
     ws.send.mockClear();
 
     const changedListener = storeListeners.get('snapshot_changed');
@@ -641,7 +631,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
-    await waitForInitialSnapshot(ws);
+    await ws.sent.waitForCount(1);
     ws.send.mockClear();
 
     const removedListener = storeListeners.get('snapshot_removed');
@@ -677,7 +667,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       expect(ws.send).not.toHaveBeenCalled();
 
       finishSeed();
-      await waitForInitialSnapshot(ws);
+      await ws.sent.waitForCount(1);
 
       expect(sentMessages(ws)).toEqual([
         expect.objectContaining({
@@ -705,7 +695,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       expect(ws.send).not.toHaveBeenCalled();
 
       finishSeed();
-      await waitForInitialSnapshot(ws);
+      await ws.sent.waitForCount(1);
 
       expect(sentMessages(ws)).toEqual([
         { type: 'snapshot_full', projectId: 'proj-1', entries: [], reviewCount: 5 },
@@ -726,7 +716,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     });
 
     finishSeed();
-    await vi.waitFor(() => expect(ws.send).toHaveBeenCalledTimes(2));
+    await ws.sent.waitForCount(2);
+    expect(ws.send).toHaveBeenCalledTimes(2);
 
     expect(sentMessages(ws)).toEqual([
       expect.objectContaining({
@@ -757,7 +748,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const reconnect = new MockWebSocket();
     callHandler(handler, reconnect, 'proj-1');
     finishSeed();
-    await waitForInitialSnapshot(reconnect);
+    await reconnect.sent.waitForCount(1);
 
     expect(ws.send).not.toHaveBeenCalled();
     expect(sentMessages(reconnect)).toEqual([
@@ -780,14 +771,15 @@ describe('createSnapshotsUpgradeHandler', () => {
 
     const handler = createSnapshotsUpgradeHandler(createAppContextMock());
     const ws = new MockWebSocket();
+    const sendAttempted = deferred();
     ws.send.mockImplementation(() => {
+      sendAttempted.resolve();
       throw new Error('socket closing');
     });
 
     callHandler(handler, ws, 'proj-1');
-    await vi.waitFor(() => {
-      expect(ws.send).toHaveBeenCalledTimes(1);
-    });
+    await sendAttempted.promise;
+    expect(ws.send).toHaveBeenCalledTimes(1);
 
     const changedListener = storeListeners.get('snapshot_changed');
     expect(changedListener).toBeDefined();
@@ -813,7 +805,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     const ws = new MockWebSocket();
 
     callHandler(handler, ws, 'proj-1');
-    await waitForInitialSnapshot(ws);
+    await ws.sent.waitForCount(1);
     ws.send.mockClear();
 
     // Set socket to CLOSED state
@@ -837,8 +829,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     callHandler(handler, throwingWs, 'proj-1');
     callHandler(handler, healthyWs, 'proj-1');
 
-    await waitForInitialSnapshot(throwingWs);
-    await waitForInitialSnapshot(healthyWs);
+    await throwingWs.sent.waitForCount(1);
+    await healthyWs.sent.waitForCount(1);
     throwingWs.send.mockClear();
     healthyWs.send.mockClear();
 
@@ -880,8 +872,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     callHandler(handler, throwingWs, 'proj-1');
     callHandler(handler, healthyWs, 'proj-1');
 
-    await waitForInitialSnapshot(throwingWs);
-    await waitForInitialSnapshot(healthyWs);
+    await throwingWs.sent.waitForCount(1);
+    await healthyWs.sent.waitForCount(1);
     throwingWs.send.mockClear();
     healthyWs.send.mockClear();
 

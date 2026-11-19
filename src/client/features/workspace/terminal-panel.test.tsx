@@ -136,9 +136,12 @@ describe('TerminalPanel', () => {
           })
         )
       );
+      const creationRequested = Promise.withResolvers<void>();
+      mocks.create.mockImplementationOnce(() => creationRequested.resolve());
       flushSync(() => mocks.options?.onTerminalList?.([]));
       await vi.dynamicImportSettled();
-      await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+      await creationRequested.promise;
+      expect(mocks.create).toHaveBeenCalledOnce();
       flushSync(() =>
         mocks.options?.onCreated?.('terminal-new', mocks.create.mock.calls[0]?.[0], '$ ready')
       );

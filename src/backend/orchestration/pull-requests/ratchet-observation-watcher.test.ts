@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 
 const mocks = vi.hoisted(() => ({
   listEnabled: vi.fn(),
@@ -153,14 +154,19 @@ it('checks at most three workspaces at once', async () => {
     }))
   );
   const observed = deferred<boolean>();
-  const observe = vi.fn(() => observed.promise);
+  const observationStarts = createTestEventLog<void>();
+  const observe = vi.fn(() => {
+    observationStarts.record();
+    return observed.promise;
+  });
   const service = new RatchetService({
     observe,
     wake: vi.fn().mockResolvedValue(undefined),
     setMonitoring: vi.fn(),
   });
   const checking = service.checkAllWorkspaces();
-  await vi.waitFor(() => expect(observe).toHaveBeenCalledTimes(3));
+  await observationStarts.waitForCount(3);
+  expect(observe).toHaveBeenCalledTimes(3);
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(observe).toHaveBeenCalledTimes(3);
   observed.resolve(true);

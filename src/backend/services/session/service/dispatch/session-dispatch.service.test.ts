@@ -7,18 +7,24 @@ import { sessionEventBus } from '@/backend/services/session/service/event-bus/se
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { visibleIdsAfterEachEvent } from './session-dispatch-visibility.test-helpers';
 import { SessionDispatchService } from './session-dispatch.service';
 
 const fakeClient = unsafeCoerce<AcpProcessHandle>({});
 
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
+function pendingCall<T = void>() {
+  const started = deferred();
+  const result = deferred<T>();
+  return {
+    started: started.promise,
+    resolve: result.resolve,
+    invoke: () => {
+      started.resolve();
+      return result.promise;
+    },
+  };
 }
 
 function enqueue(id: string) {
@@ -152,12 +158,12 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     const first = enqueue('first');
     const second = enqueue('second');
     second.settings.selectedModel = 'latest-model';
-    const pending = deferred();
-    sendSessionMessage.mockReturnValueOnce(pending.promise);
+    const sending = pendingCall();
+    sendSessionMessage.mockImplementationOnce(sending.invoke);
 
     const dispatch = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
-    expect(sendSessionMessage).toHaveBeenCalledWith('session', 'first\n\nsecond');
+    await sending.started;
+    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nsecond');
     expect(configureQueuedMessage).toHaveBeenCalledWith('session', second);
     expect(sessionDomainService.getQueueLength('session')).toBe(0);
     expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
@@ -165,7 +171,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       second.id,
     ]);
     const late = enqueue('late');
-    pending.resolve();
+    sending.resolve();
     await dispatch;
     expect(sessionDomainService.peekNextMessage('session')).toBe(late);
     expect(sendSessionMessage).toHaveBeenCalledOnce();
@@ -448,16 +454,19 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
     };
     sessionDomainService.enqueue('session', pr);
+    const preparationStarted = deferred();
     const preparing = deferred();
     backgroundDelivery.prepare
       .mockImplementationOnce(async () => {
+        preparationStarted.resolve();
         await preparing.promise;
         pr.text = 'PR facts';
         return { status: 'ready' };
       })
       .mockResolvedValue({ status: 'ready' });
     const dispatch = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(backgroundDelivery.prepare).toHaveBeenCalledOnce());
+    await preparationStarted.promise;
+    expect(backgroundDelivery.prepare).toHaveBeenCalledOnce();
     sessionDomainService.removeQueuedMessage('session', cancelled.id);
     preparing.resolve();
     await dispatch;
@@ -528,10 +537,11 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     enqueue('human');
     enqueue('workspace-notification-one');
     enqueue('workspace-notification-two');
-    const pending = deferred();
-    sendSessionMessage.mockReturnValueOnce(pending.promise);
+    const sending = pendingCall();
+    sendSessionMessage.mockImplementationOnce(sending.invoke);
     const dispatch = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
+    await sending.started;
+    expect(sendSessionMessage).toHaveBeenCalledOnce();
     expect(
       notifications.claimForDispatch('other-session', 'workspace-notification-one').status
     ).toBe('duplicate');
@@ -539,7 +549,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       notifications.claimForDispatch('other-session', 'workspace-notification-two').status
     ).toBe('duplicate');
     expect(delivered.size).toBe(0);
-    pending.resolve();
+    sending.resolve();
     await dispatch;
     expect([...delivered].sort()).toEqual(['one', 'two']);
     expect(sessionDomainService.getQueueLength('session')).toBe(0);
@@ -604,15 +614,18 @@ describe('session dispatcher queue and lifecycle coordination', () => {
   it('keeps the queued message visible until startup finishes across repeated dispatch requests', async () => {
     const { dispatcher, startup, sendSessionMessage } = harness();
     const message = enqueue('first');
+    const starting = deferred();
     const started = deferred();
     startup.getSessionClient.mockReturnValue(undefined);
     startup.getOrCreateSessionClient.mockImplementation(async () => {
+      starting.resolve();
       await started.promise;
       startup.getSessionClient.mockReturnValue(fakeClient);
       return {};
     });
     const pending = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(startup.getOrCreateSessionClient).toHaveBeenCalledOnce());
+    await starting.promise;
+    expect(startup.getOrCreateSessionClient).toHaveBeenCalledOnce();
     await dispatcher.tryDispatchNextMessage('session');
     expect(sessionDomainService.peekNextMessage('session')).toBe(message);
     expect(sendSessionMessage).not.toHaveBeenCalled();
@@ -666,17 +679,19 @@ describe('session dispatcher queue and lifecycle coordination', () => {
 
   it('does not let an old completion unlock a replacement dispatch after lifecycle reset', async () => {
     const { dispatcher, sendSessionMessage, stop } = harness();
-    const first = deferred();
-    const second = deferred();
-    sendSessionMessage.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const first = pendingCall();
+    const second = pendingCall();
+    sendSessionMessage.mockImplementationOnce(first.invoke).mockImplementationOnce(second.invoke);
     enqueue('first');
     const oldDispatch = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    await first.started;
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
     stop();
     dispatcher.resetDispatchState('session');
     enqueue('second');
     const replacement = dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(2));
+    await second.started;
+    expect(sendSessionMessage).toHaveBeenCalledTimes(2);
     first.resolve();
     await oldDispatch;
     const third = enqueue('third');
@@ -783,32 +798,30 @@ describe('explicit queued-message steering', () => {
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     const selected = enqueue('selected');
     h.steerSessionMessage.mockResolvedValueOnce({ outcome: 'promptRequired' });
+    const resuming = vi.spyOn(h.dispatcher, 'tryDispatchNextMessage');
     await h.dispatcher.steerQueuedMessage('session', selected.id);
     expect(sessionDomainService.getQueueSnapshot('session')).toEqual([selected]);
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
     await h.dispatcher.tryDispatchNextMessage('session');
-    await vi.waitFor(() =>
-      expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected')
-    );
+    await resuming.mock.results[0]?.value;
+    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected');
   });
 
   it('blocks duplicate steering and normal dispatch until the steer settles', async () => {
     const h = harness();
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     const selected = enqueue('selected');
-    const pending = deferred();
-    h.steerSessionMessage.mockImplementationOnce(async () => {
-      await pending.promise;
-      return { outcome: 'injected' };
-    });
+    const sending = pendingCall<{ outcome: 'injected' }>();
+    h.steerSessionMessage.mockImplementationOnce(sending.invoke);
     const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
-    await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+    await sending.started;
+    expect(h.steerSessionMessage).toHaveBeenCalledOnce();
     const duplicate = h.dispatcher.steerQueuedMessage('session', selected.id);
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
     await h.dispatcher.tryDispatchNextMessage('session');
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
-    pending.resolve();
+    sending.resolve({ outcome: 'injected' });
     await Promise.all([steer, duplicate]);
     expect(h.steerSessionMessage).toHaveBeenCalledOnce();
     expect(sessionDomainService.getQueueSnapshot('session')).toEqual([]);
@@ -834,15 +847,13 @@ it('does not resend accepted steering after a stop-generation change', async () 
   const h = harness();
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
   const selected = enqueue('selected');
-  const pending = deferred();
-  h.steerSessionMessage.mockImplementationOnce(async () => {
-    await pending.promise;
-    return { outcome: 'injected' };
-  });
+  const sending = pendingCall<{ outcome: 'injected' }>();
+  h.steerSessionMessage.mockImplementationOnce(sending.invoke);
   const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
-  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  await sending.started;
+  expect(h.steerSessionMessage).toHaveBeenCalledOnce();
   h.stop();
-  pending.resolve();
+  sending.resolve({ outcome: 'injected' });
   await steer;
   expect(sessionDomainService.hasQueuedMessage('session', selected.id)).toBe(false);
   expect(h.sendSessionMessage).not.toHaveBeenCalled();
@@ -873,33 +884,35 @@ it('wakes normal queue delivery if the turn completes before a failed steer sett
   const h = harness();
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
   const selected = enqueue('selected');
+  const sending = deferred();
   const pending = deferred();
   h.steerSessionMessage.mockImplementationOnce(async () => {
+    sending.resolve();
     await pending.promise;
     throw new Error('steer refused');
   });
   const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
-  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  await sending.promise;
+  expect(h.steerSessionMessage).toHaveBeenCalledOnce();
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
   await h.dispatcher.tryDispatchNextMessage('session');
+  const resume = vi.spyOn(h.dispatcher, 'tryDispatchNextMessage');
   pending.resolve();
   await expect(steer).rejects.toThrow('steer refused');
-  await vi.waitFor(() =>
-    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected')
-  );
+  expect(resume).toHaveBeenCalledExactlyOnceWith('session');
+  await resume.mock.results[0]?.value;
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'selected');
 });
 
 it('releases stale steering ownership on stop so a replacement turn can dispatch', async () => {
   const h = harness();
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
   const selected = enqueue('selected');
-  const pending = deferred();
-  h.steerSessionMessage.mockImplementationOnce(async () => {
-    await pending.promise;
-    return { outcome: 'injected' };
-  });
+  const sending = pendingCall<{ outcome: 'injected' }>();
+  h.steerSessionMessage.mockImplementationOnce(sending.invoke);
   const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
-  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  await sending.started;
+  expect(h.steerSessionMessage).toHaveBeenCalledOnce();
   h.stop();
   sessionDomainService.clearQueuedWork('session');
   enqueue('new-input');
@@ -907,7 +920,7 @@ it('releases stale steering ownership on stop so a replacement turn can dispatch
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
   await h.dispatcher.tryDispatchNextMessage('session');
   const dispatched = h.sendSessionMessage.mock.calls.length;
-  pending.resolve();
+  sending.resolve({ outcome: 'injected' });
   await steer;
   expect(dispatched).toBe(1);
   expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'new-input');
@@ -921,15 +934,13 @@ it('reports a conflicting steer for another queued message instead of silently i
   h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
   const selected = enqueue('selected');
   const other = enqueue('other');
-  const pending = deferred();
-  h.steerSessionMessage.mockImplementationOnce(async () => {
-    await pending.promise;
-    return { outcome: 'injected' };
-  });
+  const sending = pendingCall<{ outcome: 'injected' }>();
+  h.steerSessionMessage.mockImplementationOnce(sending.invoke);
   const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
-  await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
+  await sending.started;
+  expect(h.steerSessionMessage).toHaveBeenCalledOnce();
   const conflicting = h.dispatcher.steerQueuedMessage('session', other.id);
-  pending.resolve();
+  sending.resolve({ outcome: 'injected' });
   await expect(conflicting).rejects.toThrow('Another queued message is being steered');
   await steer;
   expect(sessionDomainService.hasQueuedMessage('session', other.id)).toBe(true);

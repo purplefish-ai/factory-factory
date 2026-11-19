@@ -15,6 +15,7 @@ import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-q
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { projectWorkspaceQueryOptions } from '@/client/lib/workspace-cache-reconciler';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
 let channel: UseWebSocketTransportOptions;
@@ -39,15 +40,15 @@ const list = (name = 'http', projectId = 'proj-1') => ({
   ],
   reviewCount: 99,
 });
-const requests: Array<{ projectId: string; resolve: (value: ReturnType<typeof list>) => void }> =
-  [];
+type ListRequest = { projectId: string; resolve: (value: ReturnType<typeof list>) => void };
+let requests = createTestEventLog<ListRequest>();
 const t = initTRPC.create({ transformer: superjson });
 const router = t.router({
   workspace: t.router({
     listForProject: t.procedure.input(z.object({ projectId: z.string() })).query(
       ({ input }) =>
         new Promise<ReturnType<typeof list>>((resolve) => {
-          requests.push({ ...input, resolve });
+          requests.record({ ...input, resolve });
         })
     ),
     get: t.procedure.input(z.object({ id: z.string() })).query(() => list().workspaces[0]!),
@@ -76,7 +77,7 @@ function render(projectId = 'proj-1') {
   );
 }
 async function fixture() {
-  requests.length = 0;
+  requests = createTestEventLog<ListRequest>();
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   server = createHTTPServer({ router });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -92,17 +93,19 @@ async function fixture() {
   root = createRoot(document.createElement('div'));
   render();
   channel.onConnected?.();
-  await vi.waitFor(() => expect(requests).toHaveLength(1));
+  await requests.waitForCount(1);
+  expect(requests.events).toHaveLength(1);
 }
 async function waitForRequests(count: number) {
-  await vi.waitFor(() => expect(requests).toHaveLength(count));
+  await requests.waitForCount(count);
+  expect(requests.events).toHaveLength(count);
 }
 afterEach(async () => {
   flushSync(() => root?.unmount());
   root = undefined;
   await queryClient?.cancelQueries();
   queryClient?.clear();
-  for (const request of requests) {
+  for (const request of requests.events) {
     request.resolve(list('cleanup', request.projectId));
   }
   if (server) {
@@ -130,8 +133,8 @@ describe('shared project query and live connection lifecycle', () => {
       reviewCount: 4,
     });
     await waitForRequests(2);
-    requests[0]!.resolve(list('old bootstrap'));
-    requests[1]!.resolve(list('old repair'));
+    requests.events[0]!.resolve(list('old bootstrap'));
+    requests.events[1]!.resolve(list('old repair'));
     await vi.waitFor(() =>
       expect(utils.workspace.listForProject.getData({ projectId: 'proj-1' })).toMatchObject({
         workspaces: [{ name: 'newest', githubIssueNumber: 42 }],
@@ -148,7 +151,7 @@ describe('shared project query and live connection lifecycle', () => {
       entries: [],
       reviewCount: 0,
     });
-    requests[0]!.resolve(list());
+    requests.events[0]!.resolve(list());
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(utils.workspace.listForProject.getData({ projectId: 'proj-1' })).toEqual({
       workspaces: [],
@@ -158,7 +161,7 @@ describe('shared project query and live connection lifecycle', () => {
 
   it('invalidates fallback once per disconnect and rejects retired callbacks before a lower-version baseline', async () => {
     await fixture();
-    requests[0]!.resolve(list());
+    requests.events[0]!.resolve(list());
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
     channel.onMessage?.({
       type: 'snapshot_full',
@@ -171,7 +174,7 @@ describe('shared project query and live connection lifecycle', () => {
     expect(invalidate).toHaveBeenCalledTimes(2);
     channel.onMessage?.({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
     await waitForRequests(2);
-    requests[1]!.resolve(list('fallback'));
+    requests.events[1]!.resolve(list('fallback'));
     await vi.waitFor(() =>
       expect(
         utils.workspace.listForProject.getData({ projectId: 'proj-1' })?.workspaces[0]?.name
@@ -193,14 +196,14 @@ describe('shared project query and live connection lifecycle', () => {
 
   it('retires A callbacks through A→B→A, without losing a new A HTTP seed', async () => {
     await fixture();
-    requests[0]!.resolve(list());
+    requests.events[0]!.resolve(list());
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
     channel.onMessage?.({ type: 'snapshot_full', projectId: 'proj-1', entries: [entry()] });
     const oldA = channel;
     render('proj-2');
     channel.onConnected?.();
     await waitForRequests(2);
-    requests[1]!.resolve(list('B', 'proj-2'));
+    requests.events[1]!.resolve(list('B', 'proj-2'));
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
     render('proj-1');
     channel.onConnected?.();
@@ -208,7 +211,7 @@ describe('shared project query and live connection lifecycle', () => {
     oldA.onMessage?.({ type: 'snapshot_full', projectId: 'proj-1', entries: [] });
     oldA.onDisconnected?.();
     oldA.onConnected?.();
-    requests[2]!.resolve(list('new A'));
+    requests.events[2]!.resolve(list('new A'));
     await vi.waitFor(() =>
       expect(
         utils.workspace.listForProject.getData({ projectId: 'proj-1' })?.workspaces[0]?.name
@@ -221,7 +224,7 @@ describe('shared project query and live connection lifecycle', () => {
 
   it('shares the original tRPC query key with imperative invalidation and cached fetches', async () => {
     await fixture();
-    requests[0]!.resolve(list());
+    requests.events[0]!.resolve(list());
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
     const fetch = vi.fn(() => Promise.resolve(list('unexpected')));
     const cached = await queryClient.fetchQuery(

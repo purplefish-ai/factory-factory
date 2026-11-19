@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADVERSARIAL_REVIEW_MARKER } from '@/shared/adversarial-review';
+import { deferred } from '@/test-utils/deferred';
 
 const logger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }));
 vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logger }));
@@ -120,8 +121,14 @@ describe('adversarial-review fallback delivery', () => {
         },
       },
     ] as never);
+    const sessionStopped = deferred();
+    vi.mocked(sessionLifecycleService.stopSession).mockImplementationOnce(() => {
+      sessionStopped.resolve();
+      return Promise.resolve();
+    });
     await triggerAdversarialReview('ws');
-    await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+    await sessionStopped.promise;
+    expect(sessionLifecycleService.stopSession).toHaveBeenCalled();
   }
 
   it('delivers a marked summary-only finding after an explicit self-review rejection', async () => {
@@ -179,6 +186,8 @@ describe('adversarial-review fallback delivery', () => {
     const summaryError = new Error('issue comment failed');
     vi.mocked(submitCodeReview).mockRejectedValue(new ReviewSubmissionError('self-review', true));
     vi.mocked(githubCLIService.addPRComment).mockRejectedValue(summaryError);
+    const errorLogged = deferred();
+    logger.error.mockImplementationOnce(() => errorLogged.resolve());
     await runReview([
       { path: 'file.ts', line: 1, side: 'RIGHT', body: 'Inline bug details', severity: 'blocking' },
     ]);
@@ -187,6 +196,7 @@ describe('adversarial-review fallback delivery', () => {
       1,
       expect.objectContaining({ body: expect.stringContaining('Inline bug details') })
     );
+    await errorLogged.promise;
     expect(logger.error).toHaveBeenCalledWith(
       'Adversarial review turn failed',
       expect.objectContaining({ errors: [summaryError] }),
@@ -202,6 +212,8 @@ describe('adversarial-review fallback delivery', () => {
     vi.mocked(createReviewComment)
       .mockRejectedValueOnce(inlineError)
       .mockResolvedValueOnce(undefined);
+    const errorLogged = deferred();
+    logger.error.mockImplementationOnce(() => errorLogged.resolve());
     await runReview([
       {
         path: 'file.ts',
@@ -219,6 +231,7 @@ describe('adversarial-review fallback delivery', () => {
       },
     ]);
     expect(createReviewComment).toHaveBeenCalledTimes(2);
+    await errorLogged.promise;
     expect(logger.error).toHaveBeenCalledWith(
       'Adversarial review turn failed',
       expect.objectContaining({

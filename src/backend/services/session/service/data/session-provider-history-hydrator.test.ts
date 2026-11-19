@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { deferred } from '@/test-utils/deferred';
 import {
   hydrateProviderHistoryIfNeeded,
   type ProviderHistorySession,
@@ -40,6 +41,16 @@ const loaded = (text: string) => ({
     },
   ],
 });
+
+function pauseHistoryRead(loader: typeof loadClaude) {
+  const started = deferred();
+  const result = deferred<unknown>();
+  loader.mockImplementationOnce(() => {
+    started.resolve();
+    return result.promise;
+  });
+  return { started: started.promise, resolve: result.resolve };
+}
 
 describe('history hydration after provider identity rollover', () => {
   beforeEach(() => {
@@ -108,10 +119,10 @@ describe('history hydration after provider identity rollover', () => {
   });
 
   it('discards an in-flight old Claude history read and loads the new identity', async () => {
-    const stale = createDeferred<unknown>();
-    loadClaude.mockReturnValueOnce(stale.promise);
+    const stale = pauseHistoryRead(loadClaude);
     const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old', 'CLAUDE'));
-    await vi.waitFor(() => expect(loadClaude).toHaveBeenCalledOnce());
+    await stale.started;
+    expect(loadClaude).toHaveBeenCalledOnce();
     sessionDomainService.resetProviderHistory('history-session', 'new');
     stale.resolve(loaded('stale Claude turn'));
     await hydration;
@@ -133,10 +144,10 @@ describe('history hydration after provider identity rollover', () => {
   it.each(['loaded', 'not_found'] as const)(
     'ignores an old in-flight %s result after rollover',
     async (status) => {
-      const oldRead = createDeferred<unknown>();
-      loadCodex.mockReturnValue(oldRead.promise);
+      const oldRead = pauseHistoryRead(loadCodex);
       const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old'));
-      await vi.waitFor(() => expect(loadCodex).toHaveBeenCalledOnce());
+      await oldRead.started;
+      expect(loadCodex).toHaveBeenCalledOnce();
       sessionDomainService.resetProviderHistory('history-session', 'new');
       oldRead.resolve(status === 'loaded' ? loaded('wrong stale turn') : { status: 'not_found' });
       await hydration;
@@ -149,10 +160,10 @@ describe('history hydration after provider identity rollover', () => {
   );
 
   it('does not resurrect a stale history read after the in-memory session is cleared', async () => {
-    const oldRead = createDeferred<unknown>();
-    loadCodex.mockReturnValue(oldRead.promise);
+    const oldRead = pauseHistoryRead(loadCodex);
     const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old'));
-    await vi.waitFor(() => expect(loadCodex).toHaveBeenCalledOnce());
+    await oldRead.started;
+    expect(loadCodex).toHaveBeenCalledOnce();
     sessionDomainService.resetProviderHistory('history-session', 'new');
     sessionDomainService.clearSession('history-session');
     oldRead.resolve(loaded('wrong old turn'));
@@ -162,10 +173,10 @@ describe('history hydration after provider identity rollover', () => {
   });
 
   it('invalidates old reads before archival and permits fresh reads if repair fails', async () => {
-    const oldRead = createDeferred<unknown>();
-    loadCodex.mockReturnValue(oldRead.promise);
+    const oldRead = pauseHistoryRead(loadCodex);
     const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old'));
-    await vi.waitFor(() => expect(loadCodex).toHaveBeenCalledOnce());
+    await oldRead.started;
+    expect(loadCodex).toHaveBeenCalledOnce();
     const resumeHistory = sessionDomainService.suspendProviderHistory('history-session');
     oldRead.resolve(loaded('old read completed during archival'));
     await hydration;
@@ -312,10 +323,10 @@ describe('history hydration after provider identity rollover', () => {
         message: { role: 'assistant', content: [{ type: 'text', text }] },
       },
     }));
-    const stale = createDeferred<unknown>();
-    loadCodex.mockReturnValueOnce(stale.promise);
+    const stale = pauseHistoryRead(loadCodex);
     const hydration = hydrateProviderHistoryIfNeeded('history-session', record('old'));
-    await vi.waitFor(() => expect(loadCodex).toHaveBeenCalledOnce());
+    await stale.started;
+    expect(loadCodex).toHaveBeenCalledOnce();
     sessionDomainService.resetProviderHistory('history-session', 'new');
     sessionDomainService.replaceTranscript('history-session', live, {
       historySource: 'acp_fallback',

@@ -67,9 +67,14 @@ it('does not publish an observation rejected by the atomic revision guard', asyn
 it('signals new events only after their observation transaction commits', async () => {
   const ports = observationPorts();
   const committed = deferred<{ applied: boolean; eventIds: string[] }>();
-  ports.acceptObservation.mockReturnValue(committed.promise);
+  const commitStarted = deferred<void>();
+  ports.acceptObservation.mockImplementation(() => {
+    commitStarted.resolve();
+    return committed.promise;
+  });
   const observing = observeMonitoredPR(ports, { workspaceId: 'w', prId: 'p' });
-  await vi.waitFor(() => expect(ports.acceptObservation).toHaveBeenCalledOnce());
+  await commitStarted.promise;
+  expect(ports.acceptObservation).toHaveBeenCalledOnce();
   expect(ports.publishAcceptedObservation).not.toHaveBeenCalled();
   committed.resolve({ applied: true, eventIds: ['failure'] });
   await observing;

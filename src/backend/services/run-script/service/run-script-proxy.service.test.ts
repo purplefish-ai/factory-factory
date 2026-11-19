@@ -403,6 +403,8 @@ describe('RunScriptProxyService', () => {
     const service = new RunScriptProxyService();
     const firstProcess = createChildProcess(1238);
     const replacementProcess = createChildProcess(1239);
+    const firstStarted = Promise.withResolvers<void>();
+    const replacementStarted = Promise.withResolvers<void>();
     let firstAuthProxyPort = 0;
     let replacementAuthProxyPort = 0;
     let resolveFirstTunnel:
@@ -418,6 +420,7 @@ describe('RunScriptProxyService', () => {
           new Promise((resolve) => {
             firstAuthProxyPort = Number(new URL(targetUrl).port);
             resolveFirstTunnel = resolve;
+            firstStarted.resolve();
           })
       )
       .mockImplementationOnce(
@@ -425,13 +428,16 @@ describe('RunScriptProxyService', () => {
           new Promise((resolve) => {
             replacementAuthProxyPort = Number(new URL(targetUrl).port);
             resolveReplacementTunnel = resolve;
+            replacementStarted.resolve();
           })
       );
 
     const firstTunnelPromise = ensureTunnel(service, 'w1', 3000);
-    await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(1));
+    await firstStarted.promise;
+    expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(1);
     const replacementTunnelPromise = ensureTunnel(service, 'w1', 4173);
-    await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2));
+    await replacementStarted.promise;
+    expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2);
 
     resolveFirstTunnel?.({
       publicUrl: 'https://first.trycloudflare.com',

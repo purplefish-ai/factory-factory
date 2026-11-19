@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import type { PreparedApplicationUpdate } from './application-update-installer';
 import { runServeSession } from './serve-session';
 import { runSupervisedServeSession } from './supervised-serve-session';
@@ -54,7 +55,8 @@ let packageRoot: string;
 let versionFile: string;
 let controller: AbortController;
 let session: Promise<void> | undefined;
-let backends: RunningBackend[];
+let backends: ReturnType<typeof createTestEventLog<RunningBackend>>;
+let preparationStarted: Promise<void>;
 let prepared: PreparedApplicationUpdate;
 const onReady = vi.fn<() => Promise<void>>();
 
@@ -88,8 +90,8 @@ function start(dev = false) {
 }
 
 async function backend(index = 0) {
-  await vi.waitFor(() => expect(backends.length).toBeGreaterThan(index));
-  return backends[index]!;
+  await backends.waitForCount(index + 1);
+  return backends.events[index]!;
 }
 
 async function ready(running: RunningBackend) {
@@ -109,12 +111,17 @@ async function requestUpdate(holdExit = false) {
   // Let any installation started by the request reach the installer.
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(mocks.prepare).not.toHaveBeenCalled();
+  const stopRequested = Promise.withResolvers<void>();
   if (holdExit) {
-    vi.mocked(original.child.kill).mockReturnValue(true);
+    vi.mocked(original.child.kill).mockImplementation(() => {
+      stopRequested.resolve();
+      return true;
+    });
   }
   original.child.emit('message', { type: 'update-ready' });
-  await vi.waitFor(() => expect(mocks.prepare).toHaveBeenCalledOnce());
-  return original;
+  await preparationStarted;
+  expect(mocks.prepare).toHaveBeenCalledOnce();
+  return { ...original, stopRequested: stopRequested.promise };
 }
 
 beforeEach(async () => {
@@ -130,7 +137,7 @@ beforeEach(async () => {
   );
   database.close();
   controller = new AbortController();
-  backends = [];
+  backends = createTestEventLog<RunningBackend>();
   session = undefined;
   mocks.supported = true;
   mocks.otherServers = false;
@@ -148,7 +155,12 @@ beforeEach(async () => {
     }),
     dispose: vi.fn().mockResolvedValue(undefined),
   };
-  mocks.prepare.mockResolvedValue(prepared);
+  const preparation = Promise.withResolvers<void>();
+  preparationStarted = preparation.promise;
+  mocks.prepare.mockImplementation(() => {
+    preparation.resolve();
+    return Promise.resolve(prepared);
+  });
   vi.mocked(execFile).mockImplementation((...args: unknown[]) => {
     const callback = args.at(-1);
     if (typeof callback === 'function') {
@@ -160,7 +172,7 @@ beforeEach(async () => {
     return new ChildProcess();
   });
   vi.mocked(runServeSession).mockImplementation((options) => {
-    const child = Object.assign(new ChildProcess(), { pid: 5000 + backends.length });
+    const child = Object.assign(new ChildProcess(), { pid: 5000 + backends.events.length });
     const messages: Serializable[] = [];
     Object.defineProperty(child, 'connected', { value: true });
     Object.defineProperty(child, 'send', {
@@ -198,7 +210,7 @@ beforeEach(async () => {
       options.onBackend?.(child);
       const listening = options.onReady();
       void listening.catch(reject);
-      backends.push({ child, options, messages, listening });
+      backends.record({ child, options, messages, listening });
     });
   });
 });
@@ -228,7 +240,8 @@ describe('production serve update integration', () => {
 
   it('waits for idle work, shuts down gracefully, migrates and restarts with the same launch settings', async () => {
     const original = await requestUpdate(true);
-    await vi.waitFor(() => expect(original.child.kill).toHaveBeenCalledWith('SIGTERM'));
+    await original.stopRequested;
+    expect(original.child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(mocks.migrate).not.toHaveBeenCalled();
     expect(original.messages).toContainEqual({
       type: 'update-status',
@@ -239,7 +252,7 @@ describe('production serve update integration', () => {
       status: { phase: 'restarting', targetVersion: '0.5.4' },
     });
     expect(prepared.activate).not.toHaveBeenCalled();
-    expect(backends).toHaveLength(1);
+    expect(backends.events).toHaveLength(1);
     exit(original.child);
     const replacement = await backend(1);
     expect(mocks.prepare).toHaveBeenCalledExactlyOnceWith('0.5.4', expect.any(AbortSignal));

@@ -8,6 +8,7 @@ import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import {
   createDeferred,
+  createDeferredCall,
   createLifecycleHarness,
   type LifecycleHarness,
 } from './session-lifecycle.test-helpers';
@@ -58,7 +59,8 @@ function createStartupCoordinator(harness: LifecycleHarness): SessionStartupCoor
   return coordinator;
 }
 
-function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescence {
+function installRuntimeQuiescence(harness: LifecycleHarness) {
+  const stopEntered = createDeferred<void>();
   const quiescence = new AcpRuntimeQuiescence({
     stopClient: harness.runtimeManager.stopClient,
   });
@@ -66,10 +68,11 @@ function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescen
     (sessionId, purpose, operation) =>
       quiescence.runClientCreationOperation(sessionId, purpose, operation)
   );
-  harness.runtimeManager.stopAndQuiesce.mockImplementation((sessionId) =>
-    quiescence.stopAndQuiesce(sessionId)
-  );
-  return quiescence;
+  harness.runtimeManager.stopAndQuiesce.mockImplementation((sessionId) => {
+    stopEntered.resolve();
+    return quiescence.stopAndQuiesce(sessionId);
+  });
+  return { stopEntered: stopEntered.promise };
 }
 
 describe('SessionStartupCoordinator', () => {
@@ -136,7 +139,7 @@ describe('SessionStartupCoordinator', () => {
     // Catches releasing the runtime creation fence before the durable RUNNING write settles.
     const harness = createLifecycleHarness();
     const coordinator = createStartupCoordinator(harness);
-    const runningPersistence = createDeferred<typeof harness.session>();
+    const runningPersistence = createDeferredCall<typeof harness.session>();
     const quiescence = new AcpRuntimeQuiescence({
       stopClient: harness.runtimeManager.stopClient,
     });
@@ -147,18 +150,17 @@ describe('SessionStartupCoordinator', () => {
         return creationOperation;
       }
     );
-    harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+    harness.repository.updateSession.mockImplementationOnce(runningPersistence.run);
 
     const startup = coordinator.getOrCreateSessionClient('session-1');
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.runClientCreationOperation).toHaveBeenCalledWith(
-        'session-1',
-        'active',
-        expect.any(Function)
-      );
-      expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
-        status: SessionStatus.RUNNING,
-      });
+    await runningPersistence.entered;
+    expect(harness.runtimeManager.runClientCreationOperation).toHaveBeenCalledWith(
+      'session-1',
+      'active',
+      expect.any(Function)
+    );
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.RUNNING,
     });
 
     const stopReservation = harness.lifecycleGate.reserveStop('session-1');
@@ -288,13 +290,12 @@ describe('SessionStartupCoordinator', () => {
 
   it('rejects stop before inspecting existing browse support', async () => {
     const harness = createLifecycleHarness();
-    const runtimeStop = createDeferred<void>();
-    harness.runtimeManager.stopAndQuiesce.mockReturnValueOnce(runtimeStop.promise);
+    const runtimeStop = createDeferredCall<void>();
+    harness.runtimeManager.stopAndQuiesce.mockImplementationOnce(runtimeStop.run);
 
     const stopPromise = harness.service.stopSession('session-1');
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
-    });
+    await runtimeStop.entered;
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
 
     await expect(harness.service.ensureSubagentBrowseSession('session-1')).resolves.toBe(false);
     expect(harness.runtimeManager.getSubagentBrowseCapability).not.toHaveBeenCalled();
@@ -305,13 +306,12 @@ describe('SessionStartupCoordinator', () => {
 
   it('rejects a pending browse client before rechecking support after stop', async () => {
     const harness = createLifecycleHarness();
-    const pendingClient = createDeferred<typeof harness.handle>();
-    harness.runtimeManager.getPendingClient.mockReturnValueOnce(pendingClient.promise);
+    const pendingClient = createDeferredCall<typeof harness.handle>();
+    harness.runtimeManager.getPendingClient.mockImplementationOnce(pendingClient.run);
 
     const browseResult = harness.service.ensureSubagentBrowseSession('session-1');
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.getPendingClient).toHaveBeenCalledWith('session-1');
-    });
+    await pendingClient.entered;
+    expect(harness.runtimeManager.getPendingClient).toHaveBeenCalledWith('session-1');
     await harness.service.stopSession('session-1');
     pendingClient.resolve(harness.handle);
 
@@ -389,21 +389,19 @@ describe('SessionStartupCoordinator', () => {
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
-    const activeSessionLookup = createDeferred<typeof session>();
-    const browseStop = createDeferred<undefined>();
-    repository.getSessionById.mockReturnValueOnce(activeSessionLookup.promise);
+    const activeSessionLookup = createDeferredCall<typeof session>();
+    const browseStop = createDeferredCall<undefined>();
+    repository.getSessionById.mockImplementationOnce(activeSessionLookup.run);
     runtimeManager.isBrowseOnlySession.mockReturnValue(true);
-    runtimeManager.stopClient.mockReturnValueOnce(browseStop.promise);
+    runtimeManager.stopClient.mockImplementationOnce(browseStop.run);
 
     const activeStartup = service.getOrCreateSessionClient('session-1');
-    await vi.waitFor(() => {
-      expect(repository.getSessionById).toHaveBeenCalledTimes(1);
-    });
+    await activeSessionLookup.entered;
+    expect(repository.getSessionById).toHaveBeenCalledTimes(1);
 
     const browseResult = service.ensureSubagentBrowseSession('session-1');
-    await vi.waitFor(() => {
-      expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
-    });
+    await browseStop.entered;
+    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
 
     activeSessionLookup.resolve(session);
     await expect(activeStartup).rejects.toThrow();
@@ -418,25 +416,23 @@ describe('SessionStartupCoordinator', () => {
       provider: 'CODEX',
       providerSessionId: 'provider-session-existing',
     });
-    const firstSessionLookup = createDeferred<typeof session>();
-    const secondSessionLookup = createDeferred<typeof session>();
-    const browseStop = createDeferred<undefined>();
+    const firstSessionLookup = createDeferredCall<typeof session>();
+    const secondSessionLookup = createDeferredCall<typeof session>();
+    const browseStop = createDeferredCall<undefined>();
     repository.getSessionById
-      .mockReturnValueOnce(firstSessionLookup.promise)
-      .mockReturnValueOnce(secondSessionLookup.promise);
+      .mockImplementationOnce(firstSessionLookup.run)
+      .mockImplementationOnce(secondSessionLookup.run);
     runtimeManager.isBrowseOnlySession.mockReturnValue(true);
-    runtimeManager.stopClient.mockReturnValueOnce(browseStop.promise);
+    runtimeManager.stopClient.mockImplementationOnce(browseStop.run);
 
     const firstBrowse = service.ensureSubagentBrowseSession('session-1');
     const secondBrowse = service.ensureSubagentBrowseSession('session-1');
-    await vi.waitFor(() => {
-      expect(repository.getSessionById).toHaveBeenCalledTimes(2);
-    });
+    await Promise.all([firstSessionLookup.entered, secondSessionLookup.entered]);
+    expect(repository.getSessionById).toHaveBeenCalledTimes(2);
 
     firstSessionLookup.resolve(session);
-    await vi.waitFor(() => {
-      expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
-    });
+    await browseStop.entered;
+    expect(runtimeManager.stopClient).toHaveBeenCalledWith('session-1');
 
     secondSessionLookup.resolve(session);
     await expect(secondBrowse).resolves.toBe(false);
@@ -453,22 +449,20 @@ describe('SessionStartupCoordinator', () => {
     });
     const { service, handle, runtimeManager, acpEventProcessor } = harness;
     installRuntimeQuiescence(harness);
-    const browseCreation = createDeferred<typeof handle>();
-    const activeCreation = createDeferred<typeof handle>();
+    const browseCreation = createDeferredCall<typeof handle>();
+    const activeCreation = createDeferredCall<typeof handle>();
     runtimeManager.getOrCreateClient
-      .mockReturnValueOnce(browseCreation.promise)
-      .mockReturnValueOnce(activeCreation.promise);
+      .mockImplementationOnce(browseCreation.run)
+      .mockImplementationOnce(activeCreation.run);
 
     const browseResult = service
       .ensureSubagentBrowseSession('session-1')
       .catch((error: unknown) => error);
-    await vi.waitFor(() => {
-      expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
-    });
+    await browseCreation.entered;
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(1);
     const activeResult = service.getOrCreateSessionClient('session-1');
-    await vi.waitFor(() => {
-      expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2);
-    });
+    await activeCreation.entered;
+    expect(runtimeManager.getOrCreateClient).toHaveBeenCalledTimes(2);
 
     browseCreation.reject(new Error('browse restore failed'));
     await expect(browseResult).resolves.toEqual(
@@ -560,21 +554,16 @@ describe('SessionStartupCoordinator', () => {
 
   it('does not create a client when stop completes during the initial session lookup', async () => {
     const { service, session, repository, runtimeManager } = createLifecycleHarness();
-    let resolveSession!: (value: typeof session) => void;
-    repository.getSessionById.mockReturnValueOnce(
-      new Promise<typeof session>((resolve) => {
-        resolveSession = resolve;
-      })
-    );
+    const sessionLookup = createDeferredCall<typeof session>();
+    repository.getSessionById.mockImplementationOnce(sessionLookup.run);
     const startupGeneration = service.getStopGeneration('session-1');
 
     const startResult = service.startSession('session-1').catch((error) => error);
-    await vi.waitFor(() => {
-      expect(repository.getSessionById).toHaveBeenCalledWith('session-1');
-    });
+    await sessionLookup.entered;
+    expect(repository.getSessionById).toHaveBeenCalledWith('session-1');
 
     await service.stopSession('session-1');
-    resolveSession(session);
+    sessionLookup.resolve(session);
 
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
@@ -611,25 +600,21 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not release a stop generation still owned by a concurrent startup', async () => {
-    let resolveFirstPreset!: (preset: 'STRICT') => void;
-    const firstPreset = new Promise<'STRICT'>((resolve) => {
-      resolveFirstPreset = resolve;
-    });
+    const firstPreset = createDeferredCall<'STRICT'>();
     const getPermissionPreset = vi
       .fn(() => Promise.resolve<'STRICT'>('STRICT'))
-      .mockReturnValueOnce(firstPreset);
+      .mockImplementationOnce(firstPreset.run);
     const { service, runtimeManager } = createLifecycleHarness({ getPermissionPreset });
     const startupGeneration = service.getStopGeneration('session-1');
 
     const firstStart = service.startSession('session-1');
-    await vi.waitFor(() => {
-      expect(getPermissionPreset).toHaveBeenCalledTimes(1);
-    });
+    await firstPreset.entered;
+    expect(getPermissionPreset).toHaveBeenCalledTimes(1);
 
     runtimeManager.getOrCreateClient.mockRejectedValueOnce(new Error('second spawn failed'));
     await expect(service.startSession('session-1')).rejects.toThrow('second spawn failed');
 
-    resolveFirstPreset('STRICT');
+    firstPreset.resolve('STRICT');
 
     await expect(firstStart).resolves.toBeUndefined();
     expect(service.isStopGenerationCurrent('session-1', startupGeneration)).toBe(true);
@@ -639,10 +624,10 @@ describe('SessionStartupCoordinator', () => {
     const harness = createLifecycleHarness();
     await harness.service.startSession('session-1', { initialPrompt: '' });
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
-    const promptResult = createDeferred<{ stopReason: string }>();
+    const promptResult = createDeferredCall<{ stopReason: string }>();
     const promptRuntimeManager = {
       getClient: () => harness.handle,
-      sendPrompt: vi.fn(() => promptResult.promise),
+      sendPrompt: vi.fn(promptResult.run),
       isSessionWorking: () => false,
     };
     const promptDomainService = new SessionDomainService();
@@ -667,9 +652,8 @@ describe('SessionStartupCoordinator', () => {
     });
 
     const prompt = promptService.sendSessionMessage('session-1', 'hello');
-    await vi.waitFor(() => {
-      expect(promptRuntimeManager.sendPrompt).toHaveBeenCalledOnce();
-    });
+    await promptResult.entered;
+    expect(promptRuntimeManager.sendPrompt).toHaveBeenCalledOnce();
     expect(promptDomainService.getRuntimeSnapshot('session-1')).toMatchObject({
       phase: 'running',
       activity: 'WORKING',
@@ -732,21 +716,17 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not complete startup when stop finishes during the initial prompt', async () => {
-    let resolvePrompt!: (value: undefined) => void;
-    const pendingPrompt = new Promise<undefined>((resolve) => {
-      resolvePrompt = resolve;
-    });
+    const pendingPrompt = createDeferredCall<undefined>();
     const { service, sendSessionMessage } = createLifecycleHarness();
-    sendSessionMessage.mockReturnValueOnce(pendingPrompt);
+    sendSessionMessage.mockImplementationOnce(pendingPrompt.run);
     const startupGeneration = service.getStopGeneration('session-1');
 
     const startResult = service.startSession('session-1').catch((error) => error);
-    await vi.waitFor(() => {
-      expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Continue with the task.');
-    });
+    await pendingPrompt.entered;
+    expect(sendSessionMessage).toHaveBeenCalledWith('session-1', 'Continue with the task.');
 
     await service.stopSession('session-1');
-    resolvePrompt(undefined);
+    pendingPrompt.resolve(undefined);
 
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
@@ -755,23 +735,19 @@ describe('SessionStartupCoordinator', () => {
   });
 
   it('does not create a client after stop completes during permission resolution', async () => {
-    let resolvePreset!: (preset: 'STRICT') => void;
-    const pendingPreset = new Promise<'STRICT'>((resolve) => {
-      resolvePreset = resolve;
-    });
-    const getPermissionPreset = vi.fn(() => pendingPreset);
+    const pendingPreset = createDeferredCall<'STRICT'>();
+    const getPermissionPreset = vi.fn(pendingPreset.run);
     const { service, sendSessionMessage, runtimeManager } = createLifecycleHarness({
       getPermissionPreset,
     });
     const startupGeneration = service.getStopGeneration('session-1');
 
     const startResult = service.startSession('session-1').catch((error) => error);
-    await vi.waitFor(() => {
-      expect(getPermissionPreset).toHaveBeenCalled();
-    });
+    await pendingPreset.entered;
+    expect(getPermissionPreset).toHaveBeenCalled();
 
     await service.stopSession('session-1');
-    resolvePreset('STRICT');
+    pendingPreset.resolve('STRICT');
 
     await expect(startResult).resolves.toEqual(
       expect.objectContaining({ message: 'Session is currently being stopped' })
@@ -783,11 +759,11 @@ describe('SessionStartupCoordinator', () => {
 
   it('does not publish startup capabilities after stop completes during the finalizer gate', async () => {
     const harness = createLifecycleHarness();
-    installRuntimeQuiescence(harness);
-    const startupFinalization = createDeferred<void>();
+    const { stopEntered } = installRuntimeQuiescence(harness);
+    const startupFinalization = createDeferredCall<void>();
     harness.sessionConfigService.completeStartupConfiguration.mockImplementationOnce(
       async (_id, params) => {
-        await startupFinalization.promise;
+        await startupFinalization.run();
         await params.beforeComplete();
         params.assertCurrent();
         params.complete();
@@ -797,14 +773,12 @@ describe('SessionStartupCoordinator', () => {
     const startResult = harness.service
       .startSession('session-1', { initialPrompt: '' })
       .catch((error: unknown) => error);
-    await vi.waitFor(() => {
-      expect(harness.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledOnce();
-    });
+    await startupFinalization.entered;
+    expect(harness.sessionConfigService.completeStartupConfiguration).toHaveBeenCalledOnce();
 
     const stopPromise = harness.service.stopSession('session-1');
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
-    });
+    await stopEntered;
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     const firstSettlement = await Promise.race([
       stopPromise.then(() => 'stopped' as const),
       new Promise<'blocked'>((resolve) => {
@@ -824,26 +798,24 @@ describe('SessionStartupCoordinator', () => {
 
   it('keeps stop ahead of startup when runtime stop fails during running persistence', async () => {
     const harness = createLifecycleHarness();
-    installRuntimeQuiescence(harness);
-    const runningPersistence = createDeferred<typeof harness.session>();
-    harness.repository.updateSession.mockReturnValueOnce(runningPersistence.promise);
+    const { stopEntered } = installRuntimeQuiescence(harness);
+    const runningPersistence = createDeferredCall<typeof harness.session>();
+    harness.repository.updateSession.mockImplementationOnce(runningPersistence.run);
     harness.runtimeManager.stopClient.mockRejectedValueOnce(new Error('stop failed'));
 
     const startResult = harness.service
       .startSession('session-1', { initialPrompt: '' })
       .catch((error: unknown) => error);
-    await vi.waitFor(() => {
-      expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
-        status: SessionStatus.RUNNING,
-      });
+    await runningPersistence.entered;
+    expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.RUNNING,
     });
 
     const stopPromise = harness.service.stopSession('session-1', {
       cleanupTransientRatchetSession: false,
     });
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
-    });
+    await stopEntered;
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     const firstSettlement = await Promise.race([
       stopPromise.then(() => 'stopped' as const),
       new Promise<'blocked'>((resolve) => {
@@ -891,57 +863,56 @@ describe('SessionStartupCoordinator', () => {
   ] as const)('cancels startup after stop begins during %s', async (boundary) => {
     const harness = createLifecycleHarness();
     let releaseBoundary: () => void;
-    let boundaryReached: () => boolean;
+    let boundaryReached: Promise<void>;
 
     if (boundary === 'session lookup') {
-      const deferred = createDeferred<typeof harness.session>();
-      harness.repository.getSessionById.mockReturnValueOnce(deferred.promise);
+      const deferred = createDeferredCall<typeof harness.session>();
+      harness.repository.getSessionById.mockImplementationOnce(deferred.run);
       releaseBoundary = () => deferred.resolve(harness.session);
-      boundaryReached = () => harness.repository.getSessionById.mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     } else if (boundary === 'client creation') {
-      const deferred = createDeferred<typeof harness.handle>();
-      harness.runtimeManager.getOrCreateClient.mockReturnValueOnce(deferred.promise);
+      const deferred = createDeferredCall<typeof harness.handle>();
+      harness.runtimeManager.getOrCreateClient.mockImplementationOnce(deferred.run);
       releaseBoundary = () => deferred.resolve(harness.handle);
-      boundaryReached = () => harness.runtimeManager.getOrCreateClient.mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     } else if (boundary === 'startup preset') {
-      const deferred = createDeferred<void>();
-      harness.sessionConfigService.applyStartupModePreset.mockReturnValueOnce(deferred.promise);
+      const deferred = createDeferredCall<void>();
+      harness.sessionConfigService.applyStartupModePreset.mockImplementationOnce(deferred.run);
       releaseBoundary = () => deferred.resolve(undefined);
-      boundaryReached = () =>
-        harness.sessionConfigService.applyStartupModePreset.mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     } else if (boundary === 'permission preset') {
-      const deferred = createDeferred<void>();
-      harness.sessionConfigService.applyConfiguredPermissionPreset.mockReturnValueOnce(
-        deferred.promise
+      const deferred = createDeferredCall<void>();
+      harness.sessionConfigService.applyConfiguredPermissionPreset.mockImplementationOnce(
+        deferred.run
       );
       releaseBoundary = () => deferred.resolve(undefined);
-      boundaryReached = () =>
-        harness.sessionConfigService.applyConfiguredPermissionPreset.mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     } else if (boundary === 'notification recovery') {
-      const deferred = createDeferred<null>();
-      vi.mocked(workspaceNotificationService.claimWake).mockReturnValueOnce(deferred.promise);
+      const deferred = createDeferredCall<null>();
+      vi.mocked(workspaceNotificationService.claimWake).mockImplementationOnce(deferred.run);
       releaseBoundary = () => deferred.resolve(null);
-      boundaryReached = () =>
-        vi.mocked(workspaceNotificationService.claimWake).mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     } else {
-      const deferred = createDeferred<void>();
-      harness.sendSessionMessage.mockReturnValueOnce(deferred.promise);
+      const deferred = createDeferredCall<void>();
+      harness.sendSessionMessage.mockImplementationOnce(deferred.run);
       releaseBoundary = () => deferred.resolve(undefined);
-      boundaryReached = () => harness.sendSessionMessage.mock.calls.length > 0;
+      boundaryReached = deferred.entered;
     }
 
     const startupResult = harness.service.startSession('session-1').catch((error) => error);
-    await vi.waitFor(() => {
-      expect(boundaryReached()).toBe(true);
-    });
+    await boundaryReached;
     const runningWritesBeforeStop = harness.repository.updateSession.mock.calls.filter(
       ([, update]) => update.status === SessionStatus.RUNNING
     ).length;
 
-    const stopPromise = harness.service.stopSession('session-1');
-    await vi.waitFor(() => {
-      expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
+    const stopEntered = createDeferred<void>();
+    harness.runtimeManager.stopAndQuiesce.mockImplementationOnce(() => {
+      stopEntered.resolve();
+      return Promise.resolve();
     });
+    const stopPromise = harness.service.stopSession('session-1');
+    await stopEntered.promise;
+    expect(harness.runtimeManager.stopAndQuiesce).toHaveBeenCalledWith('session-1');
     releaseBoundary();
     await stopPromise;
 

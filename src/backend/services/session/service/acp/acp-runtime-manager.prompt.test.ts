@@ -232,7 +232,7 @@ describe('AcpRuntimeManager', () => {
 
         firstChild.exitCode = 1;
         firstChild.emit('exit', 1, null);
-        await vi.waitFor(() => expect(manager.getClient('session-1')).toBeUndefined());
+        expect(manager.getClient('session-1')).toBeUndefined();
 
         const replacementChild = setupSuccessfulSpawn();
         const replacementHandle = await manager.getOrCreateClient(

@@ -10,6 +10,7 @@ import {
 import type { AppRouter } from '@/client/lib/trpc';
 import { workspaceDetailQueryOptions } from '@/client/lib/workspace-cache-reconciler';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
+import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { makeCompleteWorkspaceSnapshotEntry as complete } from '@/test-utils/workspace-snapshot';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
@@ -54,16 +55,16 @@ function detail(id: string, projectId = 'proj-1', overrides: Partial<WorkspaceDe
 }
 
 function observe(id: string, cached?: WorkspaceDetail, active = true) {
-  const requests: Array<{
+  const requests = createTestEventLog<{
     signal: AbortSignal;
     resolve: (value: WorkspaceDetail) => void;
-  }> = [];
+  }>();
   if (cached) {
     utils.workspace.get.setData({ id }, cached);
   }
   const options = workspaceDetailQueryOptions(queryClient, id, (signal) => {
     const request = Promise.withResolvers<WorkspaceDetail>();
-    requests.push({ signal, resolve: request.resolve });
+    requests.record({ signal, resolve: request.resolve });
     return request.promise;
   });
   const observer = new QueryObserver(queryClient, options);
@@ -72,7 +73,13 @@ function observe(id: string, cached?: WorkspaceDetail, active = true) {
   if (active) {
     unsubscribes.push(observer.subscribe((result) => rendered.push(result.data)));
   }
-  return { observer, requests, rendered, key: options.queryKey };
+  return {
+    observer,
+    requests: requests.events,
+    waitForRequests: requests.waitForCount,
+    rendered,
+    key: options.queryKey,
+  };
 }
 
 function baseline(entries: ReturnType<typeof complete>[] = []) {
@@ -210,7 +217,8 @@ describe('project reconnect detail healing with real queries', () => {
       if (responseProject === 'proj-1') {
         // Ownership is learned only at HTTP resolution. The old response reaches
         // the actual Query success commit, where provenance rejects its epoch.
-        await vi.waitFor(() => expect(unknown.requests).toHaveLength(2));
+        await unknown.waitForRequests(2);
+        expect(unknown.requests).toHaveLength(2);
         expect(queryClient.getQueryData(unknown.key)).toBeUndefined();
         expect(unknown.rendered.every((value) => value === undefined)).toBe(true);
         expect(unknown.observer.getCurrentResult()).toMatchObject({

@@ -11,6 +11,7 @@ import {
   resetAcpClientFactoryMocks,
   setupSuccessfulSpawn,
 } from '@/backend/services/session/service/acp/acp-client-factory.test-harness';
+import { deferred } from '@/test-utils/deferred';
 
 describe('AcpClientFactory startup deadlines', () => {
   beforeEach(resetAcpClientFactoryMocks);
@@ -144,7 +145,11 @@ describe('AcpClientFactory startup deadlines', () => {
     'preserves %s cancellation classification and leaves signal disposal to the manager',
     async (kind) => {
       const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
-      mocks.initialize.mockReturnValue(new Promise(() => undefined));
+      const initializing = deferred();
+      mocks.initialize.mockImplementation(() => {
+        initializing.resolve();
+        return new Promise(() => undefined);
+      });
       const shutdownSignal = createSignal();
       const stopSignal = createSignal();
       const selectedSignal = kind === 'shutdown' ? shutdownSignal : stopSignal;
@@ -152,7 +157,8 @@ describe('AcpClientFactory startup deadlines', () => {
       const creation = new AcpClientFactory().createClient(
         createParams({ shutdownSignal, stopSignal })
       );
-      await vi.waitFor(() => expect(mocks.initialize).toHaveBeenCalledTimes(1));
+      await initializing.promise;
+      expect(mocks.initialize).toHaveBeenCalledTimes(1);
 
       selectedSignal.reject(expected);
 

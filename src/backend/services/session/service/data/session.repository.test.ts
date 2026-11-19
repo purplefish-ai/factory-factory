@@ -167,7 +167,11 @@ describe('SessionRepository', () => {
 
   it('checks the captured runtime after loading same-identity snapshot metadata', async () => {
     const reading = createDeferred<AgentSessionRecord | null>();
-    sessions.findById.mockReturnValueOnce(reading.promise);
+    const readStarted = createDeferred<void>();
+    sessions.findById.mockImplementationOnce(() => {
+      readStarted.resolve();
+      return reading.promise;
+    });
     let isCurrent = true;
     const assertCurrent = () => {
       if (!isCurrent) {
@@ -183,7 +187,7 @@ describe('SessionRepository', () => {
         assertCurrent
       )
       .catch((error: unknown) => error);
-    await vi.waitFor(() => expect(sessions.findById).toHaveBeenCalled());
+    await readStarted.promise;
     isCurrent = false;
     reading.resolve(createSession({ providerSessionId: 'same' }));
     expect(await setting).toEqual(new Error('Runtime replaced'));

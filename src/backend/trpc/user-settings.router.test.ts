@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import type { RequestTrustInfo } from './trpc';
 
 const mockGet = vi.hoisted(() => vi.fn());
@@ -396,25 +397,26 @@ describe('userSettingsRouter', () => {
   });
 
   it('starts both provider catalog discoveries concurrently', async () => {
-    let resolveClaude: (value: unknown) => void;
-    let resolveCodex: (value: unknown) => void;
-    const claudeCatalog = new Promise((resolve) => {
-      resolveClaude = resolve;
+    const claudeStarted = deferred();
+    const codexStarted = deferred();
+    const claudeCatalog = deferred<unknown>();
+    const codexCatalog = deferred<unknown>();
+    mockGetClaudeModels.mockImplementation(() => {
+      claudeStarted.resolve();
+      return claudeCatalog.promise;
     });
-    const codexCatalog = new Promise((resolve) => {
-      resolveCodex = resolve;
+    mockGetCodexModels.mockImplementation(() => {
+      codexStarted.resolve();
+      return codexCatalog.promise;
     });
-    mockGetClaudeModels.mockReturnValue(claudeCatalog);
-    mockGetCodexModels.mockReturnValue(codexCatalog);
 
     const providerOptions = createCaller().getProviderOptions();
-    await vi.waitFor(() => {
-      expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
-      expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
-    });
+    await Promise.all([claudeStarted.promise, codexStarted.promise]);
+    expect(mockGetClaudeModels).toHaveBeenCalledTimes(1);
+    expect(mockGetCodexModels).toHaveBeenCalledTimes(1);
 
-    resolveClaude!([{ id: 'default', displayName: 'Default', description: null }]);
-    resolveCodex!([
+    claudeCatalog.resolve([{ id: 'default', displayName: 'Default', description: null }]);
+    codexCatalog.resolve([
       {
         id: 'gpt-5-codex',
         displayName: 'GPT-5 Codex',
