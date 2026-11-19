@@ -75,6 +75,7 @@ describe('typed Vitest mock codemod', () => {
         'vi.doMock("./module", { spy: true });',
         'vi.mock("node:fs");',
         'vi.mock("vitest");',
+        'vi.mock("/src/module");',
         'vi.mock("./module.ts");',
         'vi.doMock("@/module.ts");',
         'vi.mock("./unresolved");',

@@ -16,13 +16,17 @@ describe('test subject mocks', () => {
     ]);
   });
 
-  it('recognizes the subject through the repository alias', () => {
+  it.each([
+    ['src/client/lib/cli-health-cache.test.ts', '@/client/lib/cli-health-cache'],
+    ['src/backend/testing/fixtures/published-v6.test.ts', './published-v6'],
+    ['src/backend/testing/fixtures/published-v6.test.ts', './published-v6.json'],
+  ])('recognizes the subject in %s through %s', (filename, value) => {
     const reports: unknown[] = [];
     const visitor = plugin.rules['no-mock-test-subject'].create({
-      filename: join(repositoryRoot, 'src/client/lib/cli-health-cache.test.ts'),
+      filename: join(repositoryRoot, filename),
       report: (message: unknown) => reports.push(message),
     });
-    const target = { type: 'Literal', value: '@/client/lib/cli-health-cache' };
+    const target = { type: 'Literal', value };
     visitor.CallExpression?.({
       type: 'CallExpression',
       callee: {

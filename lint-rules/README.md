@@ -122,7 +122,9 @@ Rerun with `--write` to apply the listed changes, then run typecheck, the
 affected tests and `pnpm check`. Review any unused-code inventory changes
 introduced by the new module reference. The codemod leaves custom factories,
 package mocks and unresolved targets for manual review. It also respects the
-TypeScript configuration for explicit TypeScript file extensions.
+TypeScript configuration for explicit TypeScript file extensions. Vite-only
+`/src/` paths need a TypeScript-resolvable alias or relative path before
+conversion.
 
 ## Remaining Biome checks
 

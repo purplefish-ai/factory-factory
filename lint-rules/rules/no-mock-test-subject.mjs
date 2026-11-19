@@ -9,7 +9,7 @@ import {
 } from '../lib/module-mock.mjs';
 
 const testSuffix = /\.(?:integration\.)?test\.tsx?$/;
-const sourceExtension = /\.[cm]?[jt]sx?$/;
+const sourceExtension = /\.(?:[cm]?[jt]sx?|json)$/;
 
 function observesModule(options) {
   if (options?.type !== 'ObjectExpression' || options.properties.length !== 1) {
