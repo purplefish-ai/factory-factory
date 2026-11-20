@@ -125,7 +125,7 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
         ? state
         : { ...state, controlsHydratedSessionId: null };
     case 'STOP_REQUESTED':
-      return withRuntime(state, {
+      return applyRuntime(state, {
         ...state.sessionRuntime,
         phase: 'stopping',
         activity: 'IDLE',

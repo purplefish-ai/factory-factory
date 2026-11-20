@@ -443,6 +443,7 @@ it.each([
   'queue snapshot',
   'steered message',
   'prompt completion',
+  'local stop',
   'replacement snapshot',
 ] as const)('applies a later thought to the correct block following a %s', (transition) => {
   const runtime: SessionRuntimeState = {
@@ -481,6 +482,8 @@ it.each([
         },
       },
     });
+  } else if (transition === 'local stop') {
+    state = chatReducer(state, { type: 'STOP_REQUESTED' });
   } else if (transition === 'prompt completion') {
     state = chatReducer(state, {
       type: 'SESSION_RUNTIME_UPDATED',
@@ -492,6 +495,12 @@ it.each([
       },
     });
   } else {
+    if (transition === 'queue snapshot') {
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { order: 2, message: thought(' here') },
+      });
+    }
     state = chatReducer(state, {
       type: 'SESSION_SNAPSHOT',
       payload: {
@@ -504,11 +513,26 @@ it.each([
       },
     });
   }
+  if (transition === 'queue snapshot') {
+    expect(state.latestThinking).toBe('Start here');
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { order: 2, message: thought(' here') },
+    });
+  }
   const next = chatReducer(state, {
     type: 'WS_AGENT_MESSAGE',
     payload: { order: 3, message: thought(' again') },
   });
-  const expected =
-    transition === 'steered message' || transition === 'queue snapshot' ? 'Start again' : 'Start';
+  if (transition === 'queue snapshot') {
+    expect(next.latestThinking).toBe('Start here again');
+  }
+  const expected = {
+    'steered message': 'Start again',
+    'queue snapshot': 'Start here again',
+    'local stop': 'Start',
+    'prompt completion': 'Start',
+    'replacement snapshot': 'Start',
+  }[transition];
   expect(next.messages[0]?.message?.event).toMatchObject({ content_block: { thinking: expected } });
 });
