@@ -124,7 +124,7 @@ describe('SessionService steering conversion', () => {
       originalResponse.resolve({ stopReason: 'end_turn' });
       await original;
     }
-    expect(processor.finishPromptTurn).toHaveBeenCalledExactlyOnceWith('session');
+    expect(processor.finishPromptTurn).toHaveBeenCalledExactlyOnceWith('session', 'end_turn');
     expect(completion.schedule).toHaveBeenCalledExactlyOnceWith('session');
   });
 });

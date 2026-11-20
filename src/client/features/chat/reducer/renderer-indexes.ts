@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
   getToolUseIdFromEvent,
+  hasTranscriptOrder,
   isSafeRendererWindowStart,
   isStreamEventMessage,
   trimTranscriptForRenderer,
@@ -52,7 +53,7 @@ function getToolUseId(message: ChatMessage): string | null {
 }
 
 function getAgentOrder(message: ChatMessage): number | null {
-  return message.source === 'agent' && message.order >= 0 ? message.order : null;
+  return message.source === 'agent' && hasTranscriptOrder(message) ? message.order : null;
 }
 
 function addMessage(indexes: RendererIndexes, message: ChatMessage, index: number): void {

@@ -1948,7 +1948,7 @@ describe('SessionService', () => {
 
     await sessionService.sendSessionMessage('session-1', 'hello');
 
-    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
+    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1', 'end_turn');
   });
 
   it('closes assistant text streaming when an ACP prompt fails', async () => {
@@ -1960,7 +1960,7 @@ describe('SessionService', () => {
       'prompt failed'
     );
 
-    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1');
+    expect(finishPromptTurnSpy).toHaveBeenCalledWith('session-1', undefined);
   });
 
   it('requests prompt cancellation instead of hard-stopping on tool timeout', async () => {

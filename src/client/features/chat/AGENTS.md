@@ -81,6 +81,9 @@ The barrel is `index.ts`. Callers in routes and other features must:
 
 ## Map
 
+- `agent-activity/message-renderers/provider-notice-renderer.tsx`: structured
+  provider warnings, reconnect progress and archived interruption markers.
+
 - `use-chat-websocket.ts`: the socket, `load_session` requests, retries and the
   hydration guard. `chat-frame-diagnostics.ts` validates and reports frames.
 - `use-chat-transport.ts`: unwraps `session_delta` and maps every event, live or

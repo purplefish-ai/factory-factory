@@ -55,12 +55,17 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   reach the session, so one attached after a backend restart shows its context
   occupancy and can compact. `acp-event-processor.replay-suppression.test.ts`,
   `acp-event-processor.notices.test.ts`.
+- Structured provider warnings retain their identity and revision in the
+  transcript. Reconnect revisions update one row, and only output or a
+  successful completion of the active prompt can mark it recovered.
+  `acp-event-processor.notices.test.ts`.
 
 ## Map
 
 - `acp-event-processor.ts`: `AcpEventProcessor`, one runtime event handler per
   session; `acp-replay-policy.ts` decides which events replay suppression drops,
   and `acp-thought-buffer.ts` buffers thought chunks.
+- `acp-provider-notices.ts`: tracks live reconnect incidents and their outcomes.
 - `session.permission.service.ts`: bridges and the shown request.
 - `subagent-change-coalescer.ts`: subagent notifications;
   `subagent-tool-events.ts` collects a subagent's tool calls for interceptors.

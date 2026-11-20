@@ -12,7 +12,10 @@ export function isPRUpdateOutcomeMessage(message: ChatMessage): boolean {
 /** Local status cards must not block provider history hydration or take provider order slots. */
 export function isLocalTranscriptMessage(message: ChatMessage): boolean {
   return (
-    (message.source === 'agent' && message.message?.type === 'session_lifecycle') ||
+    (message.source === 'agent' &&
+      (message.message?.type === 'session_lifecycle' ||
+        (message.message?.type === 'session_notice' &&
+          message.id.startsWith('provider-notice:')))) ||
     isPRUpdateOutcomeMessage(message)
   );
 }

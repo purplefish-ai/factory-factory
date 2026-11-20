@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import {
   type ChatMessage,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/chat-protocol';
 import type { ArchivedJsonValueSchema } from '@/shared/acp-protocol/protocol/archived-content-schema';
 import { ArchivedChatMessageSchema } from '@/shared/acp-protocol/protocol/archived-message-schema';
+import { projectLegacyProviderNotice } from '@/shared/acp-protocol/protocol/project-legacy-provider-notice';
 
 type ArchivedJsonValue = z.infer<typeof ArchivedJsonValueSchema>;
 type ClosedSessionTranscriptItem =
@@ -41,8 +42,12 @@ function resultBlocks(row: ChatMessage): ToolResultContent[] {
 
 /** Passive projection: raw JSON stays untouched; only full-codec output enters grouping. */
 export function projectClosedSessionTranscriptRows(
-  rows: readonly ArchivedJsonValue[]
+  rows: readonly ArchivedJsonValue[],
+  archive?: unknown
 ): { key: string; item: ClosedSessionTranscriptItem }[] {
+  const provider = z
+    .object({ metadata: z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }) })
+    .safeParse(archive).data?.metadata.provider;
   const buckets: ClosedSessionTranscriptItem[][] = rows.map(() => []);
   const indices = new Map<ChatMessage, number>();
   let run: ChatMessage[] = [];
@@ -123,8 +128,9 @@ export function projectClosedSessionTranscriptRows(
     // Parse each ARRAY OCCURRENCE: repeated raw references must not share parsed identity.
     const parsed = ArchivedChatMessageSchema.safeParse(value);
     if (parsed.success) {
-      indices.set(parsed.data, sourceIndex);
-      run.push(parsed.data);
+      const row = projectLegacyProviderNotice(parsed.data, provider);
+      indices.set(row, sourceIndex);
+      run.push(row);
     } else {
       flush();
       add(sourceIndex, { kind: 'fallback', value, sourceIndex });

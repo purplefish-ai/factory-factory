@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RequestPermissionRequest, SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, expect, it } from 'vitest';
+import { AcpEventTranslator } from '@/shared/acp-protocol/session-update-translator';
 import { AcpClientFactory, cleanupFailedAcpClientCreation } from './acp-client-factory';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpProcessHandle } from './acp-process-handle';
@@ -123,6 +124,7 @@ async function playScenario(
       return kind === 'available_commands_update' || kind === 'session_info_update' ? [] : [kind];
     }),
     toolUpdates,
+    updates,
     chunks: updates.flatMap((update) =>
       update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text'
         ? [update.content.text]
@@ -260,3 +262,55 @@ it('slow-stream stops streaming when the client cancels the prompt', async () =>
   expect(played.response.stopReason).toBe('cancelled');
   expect(played.chunks).toEqual(['Streaming ']);
 }, 20_000);
+
+it.each(['retry-recover', 'retry-fail'])(
+  '%s carries one structured retry identity through the pinned adapter',
+  async (scenario) => {
+    const played = await playScenario(scenario, { chunkDelayMs: 5 });
+    const translator = new AcpEventTranslator({ warn: () => undefined });
+    const retries = played.updates.flatMap((update) =>
+      translator
+        .translateSessionUpdate(update, 'scenario-session', 'CODEX')
+        .flatMap((event) =>
+          event.type === 'agent_message' && event.data.type === 'session_notice'
+            ? [event.data.notice]
+            : []
+        )
+    );
+    expect(retries).toMatchObject([
+      {
+        id: expect.any(String),
+        severity: 'warning',
+        category: 'connection',
+        title: 'Reconnecting... 1/5',
+      },
+      {
+        id: retries[0]?.id,
+        severity: 'warning',
+        category: 'connection',
+        title: 'Reconnecting... 2/5',
+      },
+    ]);
+    expect(retries[1]!.revision).toBeGreaterThan(retries[0]!.revision);
+    if (scenario === 'retry-recover') {
+      expect(played.chunks).toEqual(['The scripted response resumed.']);
+      expect(played.response).toMatchObject({ stopReason: 'end_turn' });
+    } else {
+      expect(played.chunks).toEqual([]);
+      expect(played.response).toMatchObject({
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: retries[0]?.id,
+                severity: 'error',
+                title: 'The scripted response stream disconnected.',
+              },
+            },
+          },
+        },
+      });
+    }
+  },
+  20_000
+);

@@ -470,6 +470,30 @@ export class SessionDomainService extends EventEmitter {
     });
   }
 
+  upsertProviderNotice(
+    sessionId: string,
+    message: Extract<AgentMessage, { type: 'session_notice' }>,
+    resolving = false
+  ): boolean {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const id = `provider-notice:${message.notice.id}`;
+    const index = store.transcriptIdToIndex.get(id);
+    const existing = index === undefined ? undefined : store.transcript[index];
+    const previous =
+      existing?.message?.type === 'session_notice' ? existing.message.notice : undefined;
+    const isCurrentRetry =
+      previous?.reconnect === 'retrying' && previous.revision === message.notice.revision;
+    if (resolving ? !isCurrentRetry : previous && previous.revision >= message.notice.revision) {
+      return false;
+    }
+    const timestamp = existing?.timestamp ?? this.nowIso();
+    const order = existing?.order ?? this.allocateOrder(sessionId);
+    const data = { ...message, timestamp };
+    upsertTranscriptMessage(store, { id, source: 'agent', message: data, timestamp, order });
+    this.publisher.emitDelta(sessionId, { type: 'agent_message', data, messageId: id, order });
+    return true;
+  }
+
   upsertLifecycleMessage(sessionId: string, message: ChatMessage): boolean {
     const store = this.registry.getOrCreateActive(sessionId);
     const existed = store.transcript.some((entry) => entry.id === message.id);
@@ -816,7 +840,12 @@ export class SessionDomainService extends EventEmitter {
     store.historyHydratedAt = undefined;
     this.clearHistoryRetryCooldown(sessionId);
     // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
-    this.replaceTranscript(sessionId, store.transcript.filter(isLocalTranscriptMessage));
+    this.replaceTranscript(
+      sessionId,
+      store.transcript.filter(
+        (message) => isLocalTranscriptMessage(message) && message.message?.type !== 'session_notice'
+      )
+    );
     this.publisher.forwardSnapshot(store, { reason: 'manual_emit', resetTranscript: true });
   }
 

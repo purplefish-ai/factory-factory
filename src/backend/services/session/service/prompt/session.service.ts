@@ -459,13 +459,19 @@ export class SessionService {
     stopReason: string;
   }): void {
     const isWorking = this.runtimeManager.isSessionWorking(sessionId);
-    this.completePromptTurnIfCurrent(sessionId, stopGeneration, `stop_reason:${stopReason}`, {
-      phase: isWorking ? 'running' : 'idle',
-      processState: 'alive',
-      activity: isWorking ? 'WORKING' : 'IDLE',
-      ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
-      updatedAt: new Date().toISOString(),
-    });
+    this.completePromptTurnIfCurrent(
+      sessionId,
+      stopGeneration,
+      `stop_reason:${stopReason}`,
+      {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        ...getAcpWorkState(this.runtimeManager.getClient(sessionId)),
+        updatedAt: new Date().toISOString(),
+      },
+      stopReason
+    );
   }
 
   private completeFailedPromptTurn({
@@ -550,12 +556,13 @@ export class SessionService {
     sessionId: string,
     stopGeneration: number,
     orphanedToolCallReason: string,
-    runtime: SessionRuntimeState
+    runtime: SessionRuntimeState,
+    stopReason?: string
   ): void {
     if (!this.lifecycleGate.isGenerationCurrent(sessionId, stopGeneration)) {
       return;
     }
-    this.acpEventProcessor.finishPromptTurn(sessionId);
+    this.acpEventProcessor.finishPromptTurn(sessionId, stopReason);
     this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, orphanedToolCallReason);
     this.sessionDomainService.setRuntimeSnapshot(sessionId, runtime);
   }

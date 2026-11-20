@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLatestRef } from '@/client/hooks/use-stable-callback';
-import { type ChatMessage, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
+import {
+  type ChatMessage,
+  hasTranscriptOrder,
+  QUEUED_MESSAGE_ORDER_BASE,
+} from '@/lib/chat-protocol';
 import type { ChatAction, ChatState } from './reducer';
 
 export interface TranscriptHistoryControls {
@@ -65,9 +69,7 @@ export function useTranscriptHistory(options: Options): TranscriptHistoryControl
       return;
     }
     const first = current.messages.find(
-      (message) =>
-        (message.message?.type === 'session_lifecycle' || message.order >= 0) &&
-        message.order < QUEUED_MESSAGE_ORDER_BASE
+      (message) => hasTranscriptOrder(message) && message.order < QUEUED_MESSAGE_ORDER_BASE
     );
     if (!first) {
       return;
@@ -112,9 +114,7 @@ export function useTranscriptHistory(options: Options): TranscriptHistoryControl
   const canLoad =
     options.enabled &&
     options.messages.some(
-      (message) =>
-        (message.message?.type === 'session_lifecycle' || message.order >= 0) &&
-        message.order < QUEUED_MESSAGE_ORDER_BASE
+      (message) => hasTranscriptOrder(message) && message.order < QUEUED_MESSAGE_ORDER_BASE
     );
   return useMemo(
     () => ({

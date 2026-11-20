@@ -10,7 +10,7 @@ vi.mock('@/backend/services/session/service/logging/session-file-logger.service'
   sessionFileLogger: { log: vi.fn() },
 }));
 
-it('persists a structured resume warning while keeping idle transcript replay suppressed', () => {
+function createNoticeSession() {
   const domain = new SessionDomainService();
   const processor = new AcpEventProcessor({
     sessionDomainService: domain,
@@ -31,6 +31,16 @@ it('persists a structured resume warning while keeping idle transcript replay su
       type: 'acp_session_update',
       update: value,
     });
+  processor.registerSessionContext('notice-session', {
+    provider: 'CODEX',
+    workingDir: '/work',
+    workspaceId: 'workspace',
+  });
+  return { domain, processor, update };
+}
+
+it('persists a structured resume warning while keeping idle transcript replay suppressed', () => {
+  const { domain, processor, update } = createNoticeSession();
   processor.setReplaySuppression('notice-session', true);
   const history: SessionUpdate = {
     sessionUpdate: 'agent_message_chunk',
@@ -58,9 +68,84 @@ it('persists a structured resume warning while keeping idle transcript replay su
   const messages = domain.getTranscriptSnapshot('notice-session');
   expect(messages).toHaveLength(1);
   expect(messages[0]?.message).toMatchObject({
-    type: 'assistant',
-    message: {
-      content: [{ type: 'text', text: 'Warning: Setting ignored\n\n' }],
-    },
+    type: 'session_notice',
+    notice: { id: 'resume-warning', revision: 1, provider: 'CODEX', title: 'Setting ignored' },
   });
+});
+
+function retry(revision: number, id = 'turn-1:error'): SessionUpdate {
+  return {
+    sessionUpdate: 'session_info_update',
+    _meta: {
+      jetbrains: {
+        air: {
+          sessionFailure: {
+            id,
+            revision,
+            severity: 'warning',
+            category: 'connection',
+            title: `Reconnecting... ${revision}/5`,
+          },
+        },
+      },
+    },
+  };
+}
+
+it('updates one reconnect entry and marks it recovered when the response resumes', () => {
+  const { domain, processor, update } = createNoticeSession();
+  processor.beginPromptTurn('notice-session');
+  update(retry(1));
+  const first = domain.getTranscriptSnapshot('notice-session')[0];
+  update(retry(2));
+  update(retry(1));
+  expect(domain.getTranscriptSnapshot('notice-session')).toMatchObject([
+    {
+      id: first?.id,
+      order: first?.order,
+      message: { notice: { revision: 2, reconnect: 'retrying' } },
+    },
+  ]);
+  update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Back online.' } });
+  processor.finishPromptTurn('notice-session', 'end_turn');
+  expect(domain.getTranscriptSnapshot('notice-session')).toMatchObject([
+    {
+      id: first?.id,
+      order: first?.order,
+      message: { notice: { revision: 2, reconnect: 'recovered' } },
+    },
+    { message: { type: 'assistant' } },
+  ]);
+});
+
+it.each(['end_turn', 'cancelled', undefined])(
+  'closes an outstanding retry when the prompt ends with %s',
+  (reason) => {
+    const { domain, processor, update } = createNoticeSession();
+    processor.beginPromptTurn('notice-session');
+    update(retry(1));
+    processor.finishPromptTurn('notice-session', reason);
+    expect(domain.getTranscriptSnapshot('notice-session')).toMatchObject([
+      { message: { notice: { reconnect: reason === 'end_turn' ? 'recovered' : 'ended' } } },
+    ]);
+  }
+);
+
+it('records recovery on thought output before a second disconnect in the same prompt', () => {
+  const { domain, processor, update } = createNoticeSession();
+  processor.beginPromptTurn('notice-session');
+  update(retry(1));
+  update({
+    sessionUpdate: 'agent_thought_chunk',
+    content: { type: 'text', text: 'Resuming work.' },
+  });
+  update(retry(1, 'turn-1:second-error'));
+  processor.finishPromptTurn('notice-session', 'cancelled');
+  const notices = domain
+    .getTranscriptSnapshot('notice-session')
+    .flatMap(({ message }) => (message?.type === 'session_notice' ? [message.notice] : []));
+  expect(notices).toMatchObject([
+    { id: 'turn-1:error', reconnect: 'recovered' },
+    { id: 'turn-1:second-error', reconnect: 'ended' },
+  ]);
 });

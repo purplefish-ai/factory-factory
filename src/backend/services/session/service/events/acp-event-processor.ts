@@ -18,6 +18,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/st
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import { AcpProviderNotices } from './acp-provider-notices';
 import { isReplayExemptSessionUpdate, isTranscriptReplayEvent } from './acp-replay-policy';
 import { AcpThoughtBuffer } from './acp-thought-buffer';
 import { getAcpWorkState } from './session-work-state';
@@ -93,6 +94,7 @@ export class AcpEventProcessor {
   /** Maps sessionId → provider for slash command caching */
   private readonly sessionToProvider = new Map<string, 'CLAUDE' | 'CODEX'>();
   private readonly sessionToWorkflow = new Map<string, string>();
+  private readonly providerNotices: AcpProviderNotices;
   /** Maps sessionId → stable key for the currently executing prompt attempt. */
   private readonly activePromptAttemptKeys = new Map<string, string>();
   /**
@@ -104,6 +106,7 @@ export class AcpEventProcessor {
   constructor(options: AcpEventProcessorDependencies) {
     this.runtimeManager = options.runtimeManager;
     this.sessionDomainService = options.sessionDomainService;
+    this.providerNotices = new AcpProviderNotices(this.sessionDomainService);
     this.sessionPermissionService = options.sessionPermissionService;
     this.sessionConfigService = options.sessionConfigService;
     this.onToolCallTimeout = options.onToolCallTimeout;
@@ -163,6 +166,7 @@ export class AcpEventProcessor {
           this.handleAcpUserMessageChunk(sid, update.content.text);
           return;
         }
+        this.providerNotices.observeUpdate(sid, update);
         const deltas = this.acpEventTranslator.translateSessionUpdate(update, sid);
         if (deltas.length === 0) {
           acpTraceLogger.log(sid, 'translated_delta', {
@@ -262,7 +266,8 @@ export class AcpEventProcessor {
     this.suppressAcpReplayForSession.delete(sessionId);
   }
 
-  clearStreamingState(sessionId: string): void {
+  clearStreamingState(sessionId: string, reconnect: 'recovered' | 'ended' = 'ended'): void {
+    this.providerNotices.resolve(sessionId, reconnect);
     this.thoughts.flush(sessionId);
     this.finishAcpTextBlock(sessionId);
   }
@@ -304,9 +309,8 @@ export class AcpEventProcessor {
     return attemptKey;
   }
 
-  /** Ends a prompt turn; tool calls that predate it are not reported as its orphans. */
-  finishPromptTurn(sessionId: string): void {
-    this.clearStreamingState(sessionId);
+  finishPromptTurn(sessionId: string, stopReason?: string): void {
+    this.clearStreamingState(sessionId, stopReason === 'end_turn' ? 'recovered' : 'ended');
     this.activePromptAttemptKeys.delete(sessionId);
     for (const toolUseId of this.toolCallsBeforePromptTurn.get(sessionId) ?? []) {
       this.removePendingToolCall(sessionId, toolUseId);
@@ -411,9 +415,16 @@ export class AcpEventProcessor {
       this.accumulateAcpText(sid, safeData);
       return;
     }
-
-    // Non-text agent_message (thinking, tool_use, result): close the text block first.
     this.finishAcpTextBlock(sid);
+    if (safeData.type === 'session_notice') {
+      this.providerNotices.record(
+        sid,
+        { ...safeData.notice, provider: this.getProvider(sid) },
+        this.activePromptAttemptKeys.has(sid) && !this.suppressAcpReplayForSession.has(sid)
+      );
+      return;
+    }
+
     // Persist to transcript + allocate order in one step
     const order = this.sessionDomainService.appendClaudeEvent(sid, safeData);
     this.sessionDomainService.emitDelta(sid, { ...delta, data: safeData, order });

@@ -7,6 +7,7 @@ import type {
   ModelUsage,
   ToolDefinition,
 } from './content';
+import type { ProviderSessionNotice } from './provider-session-notice';
 
 export interface SessionLifecycleMessage {
   eventId: string;
@@ -28,6 +29,7 @@ type AgentMessageType =
   | 'result'
   | 'error'
   | 'session_lifecycle'
+  | 'session_notice'
   | 'child_workspace_update'
   | 'parent_workspace_update'
   | 'pr_update';
@@ -80,7 +82,12 @@ export type AgentMessage =
       lifecycle: SessionLifecycleMessage;
     })
   | (AgentMessageCommon & {
-      type: Exclude<AgentMessageType, 'session_lifecycle'>;
+      type: 'session_notice';
+      notice: ProviderSessionNotice;
+      lifecycle?: never;
+    })
+  | (AgentMessageCommon & {
+      type: Exclude<AgentMessageType, 'session_lifecycle' | 'session_notice'>;
       lifecycle?: never;
     });
 
@@ -92,6 +99,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   result: true,
   error: true,
   session_lifecycle: true,
+  session_notice: true,
   child_workspace_update: true,
   parent_workspace_update: true,
   pr_update: true,

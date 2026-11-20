@@ -157,7 +157,13 @@ describe('archived current-message codec (passive)', () => {
               timestamp: '',
             },
           }
-        : { ...richCommon, type };
+        : type === 'session_notice'
+          ? {
+              ...richCommon,
+              type,
+              notice: { id: 'notice', revision: 1, severity: 'warning', title: 'Warning' },
+            }
+          : { ...richCommon, type };
     const input = { ...row, message };
     expect(ArchivedChatMessageSchema.parse(JSON.parse(JSON.stringify(input)))).toStrictEqual(input);
   });
