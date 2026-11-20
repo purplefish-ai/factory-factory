@@ -652,13 +652,12 @@ describe('AcpEventTranslator', () => {
           },
         },
       };
-      expect(translator.translateSessionUpdate(update, 'session-1', 'CODEX')).toEqual([
+      expect(translator.translateSessionUpdate(update, 'session-1')).toEqual([
         {
           type: 'agent_message',
           data: {
             type: 'session_notice',
             notice: {
-              provider: 'CODEX',
               id: 'notice-1',
               revision: 1,
               severity: 'warning',

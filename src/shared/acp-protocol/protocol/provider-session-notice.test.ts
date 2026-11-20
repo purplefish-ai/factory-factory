@@ -55,6 +55,7 @@ it.each([
 });
 
 it('reads progress only from a known retry title', () => {
+  expect(readCodexReconnectTitle('Reconnecting 2/5')).toEqual({ progress: 'Attempt 2 of 5' });
   expect(readCodexReconnectTitle('Reconnecting… 2/5')).toEqual({ progress: 'Attempt 2 of 5' });
   expect(readCodexReconnectTitle('Reconnecting... waiting for network')).toEqual({});
 });

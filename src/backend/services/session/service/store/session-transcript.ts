@@ -221,11 +221,14 @@ function appendHistoryToTranscript(
   return order;
 }
 
-export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {
+export function buildTranscriptFromHistory(
+  history: HistoryMessage[],
+  provider?: 'CLAUDE' | 'CODEX'
+): ChatMessage[] {
   const transcript: ChatMessage[] = [];
   let order = 0;
   for (const [index, message] of history.entries()) {
-    order = appendHistoryToTranscript(message, index, transcript, order);
+    order = appendHistoryToTranscript(message, index, transcript, order, provider);
   }
   return transcript;
 }

@@ -75,3 +75,18 @@ it('yields after a single structured tool result when its projection budget expi
   expect(heartbeat).toHaveBeenCalledOnce();
   expect(projected).toEqual(transcript.buildTranscriptFromHistory(structured));
 });
+
+it('projects legacy notices identically in both history builders', async () => {
+  const entries: HistoryMessage[] = [
+    {
+      type: 'assistant',
+      content: 'Warning: Reconnecting... 2/5',
+      timestamp: '2026-10-18T12:00:00Z',
+    },
+  ];
+  const expected = transcript.buildTranscriptFromHistory(entries, 'CODEX');
+  expect(expected[0]?.message?.type).toBe('session_notice');
+  await expect(
+    transcript.buildTranscriptFromHistoryCooperatively(entries, () => true, 'CODEX')
+  ).resolves.toEqual(expected);
+});

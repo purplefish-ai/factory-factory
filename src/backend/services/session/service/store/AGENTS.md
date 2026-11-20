@@ -39,8 +39,6 @@ directly.
 - A runtime transition that changes nothing but the timestamp stores it without
   publishing a runtime delta. `session-runtime-machine.test.ts`.
 - Live provider notices keep the same transcript ID and ignore stale revisions.
-  History hydration keeps them alongside lifecycle rows because provider
-  rollouts can omit live notices.
   `../events/acp-event-processor.notices.test.ts`.
 - A message moving from the queue into the transcript is never published as
   absent from both: the delta that removes it also carries its transcript entry,

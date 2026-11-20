@@ -1,10 +1,7 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
-import {
-  ProviderSessionNoticeSchema,
-  type ProviderSessionNotice,
-} from './protocol/provider-session-notice';
+import { ProviderSessionNoticeSchema } from './protocol/provider-session-notice';
 import type { SubagentTranscriptUpdate } from './subagents';
 
 export type AcpTranslationLogger = {
@@ -74,11 +71,7 @@ export class AcpEventTranslator {
 
   constructor(private readonly logger: AcpTranslationLogger) {}
 
-  translateSessionUpdate(
-    update: TranslatableSessionUpdate,
-    sessionId = '',
-    provider?: ProviderSessionNotice['provider']
-  ): SessionDeltaEvent[] {
+  translateSessionUpdate(update: TranslatableSessionUpdate, sessionId = ''): SessionDeltaEvent[] {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
         return this.translateAgentMessageChunk(update);
@@ -117,7 +110,7 @@ export class AcpEventTranslator {
         return this.translateContextCompactionUpdate(update);
 
       case 'session_info_update':
-        return this.translateSessionNotice(update, provider);
+        return this.translateSessionNotice(update);
 
       // Not yet translated -- log-only
       case 'current_mode_update':
@@ -150,18 +143,13 @@ export class AcpEventTranslator {
     }
   }
 
-  private translateSessionNotice(
-    update: unknown,
-    provider: ProviderSessionNotice['provider']
-  ): AcpTranslatedDelta[] {
+  private translateSessionNotice(update: unknown): AcpTranslatedDelta[] {
     const parsed = sessionNoticeSchema.safeParse(update);
     if (!parsed.success) {
       return [];
     }
     const notice = parsed.data._meta.jetbrains.air.sessionFailure;
-    return [
-      { type: 'agent_message', data: { type: 'session_notice', notice: { ...notice, provider } } },
-    ];
+    return [{ type: 'agent_message', data: { type: 'session_notice', notice } }];
   }
 
   private captureTerminalOutput(

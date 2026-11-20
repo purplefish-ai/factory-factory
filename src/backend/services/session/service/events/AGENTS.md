@@ -11,10 +11,10 @@ that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
-The module owns which permission bridge each session uses, which requests are
-answered automatically, which pending request the user is shown, the throttling
-of subagent notifications, and keeping a failed turn's error through background
-activity. It does not own:
+The module owns provider reconnect notices, which permission bridge each session
+uses, which requests are answered automatically, which pending request the user
+is shown, the throttling of subagent notifications, and keeping a failed turn's
+error through background activity. It does not own:
 
 - The bridge's implementation, elicitation forms and the runtime's handlers:
   `../acp/acp-permission-bridge.ts`, `../acp/acp-elicitation.ts`.
@@ -56,9 +56,9 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   occupancy and can compact. `acp-event-processor.replay-suppression.test.ts`,
   `acp-event-processor.notices.test.ts`.
 - Structured provider warnings retain their identity and revision in the
-  transcript. Reconnect revisions update one row, and only output or a
-  successful completion of the active prompt can mark it recovered.
-  `acp-event-processor.notices.test.ts`.
+  transcript. Reconnect revisions update one row, and nonempty response text,
+  reasoning, tool updates, plan updates or successful prompt completion can mark
+  recovery. `acp-event-processor.notices.test.ts`.
 
 ## Map
 

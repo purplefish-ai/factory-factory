@@ -161,7 +161,16 @@ describe('archived current-message codec (passive)', () => {
           ? {
               ...richCommon,
               type,
-              notice: { id: 'notice', revision: 1, severity: 'warning', title: 'Warning' },
+              notice: {
+                id: 'notice',
+                revision: 1,
+                provider: 'CODEX',
+                severity: 'warning',
+                category: 'connection',
+                title: 'Reconnecting... 2/5',
+                details: 'The response stream closed.',
+                reconnect: 'retrying',
+              },
             }
           : { ...richCommon, type };
     const input = { ...row, message };

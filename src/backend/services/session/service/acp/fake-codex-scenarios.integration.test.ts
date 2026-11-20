@@ -38,7 +38,13 @@ async function playScenario(
     optionId = 'allow_once',
     stopAfterFirstChunk = false,
     chunkDelayMs,
-  }: { optionId?: string; stopAfterFirstChunk?: boolean; chunkDelayMs?: number } = {}
+    stopAfterRetry = false,
+  }: {
+    optionId?: string;
+    stopAfterFirstChunk?: boolean;
+    chunkDelayMs?: number;
+    stopAfterRetry?: boolean;
+  } = {}
 ) {
   // The session working directory arrives resolved; macOS temp dirs live under /private.
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'ff-scenario-')));
@@ -72,6 +78,7 @@ async function playScenario(
   let prompting = false;
   let stop: (() => void) | undefined;
   const bridge = new AcpPermissionBridge();
+  const translator = new AcpEventTranslator({ warn: () => undefined });
   const handle = await factory.createClient({
     sessionId: 'scenario-session',
     options: { provider: 'CODEX', workingDir: dir, sessionId: 'scenario-session' },
@@ -83,7 +90,18 @@ async function playScenario(
         }
         if (event.type === 'acp_session_update') {
           events.push({ type: 'update', update: event.update });
-          if (event.update.sessionUpdate === 'agent_message_chunk') {
+          const update = event.update;
+          const isSecondRetry =
+            stopAfterRetry &&
+            translator
+              .translateSessionUpdate(update)
+              .some(
+                (delta) =>
+                  delta.type === 'agent_message' &&
+                  delta.data.type === 'session_notice' &&
+                  delta.data.notice.title === 'Reconnecting... 2/5'
+              );
+          if (update.sessionUpdate === 'agent_message_chunk' || isSecondRetry) {
             stop?.();
             stop = undefined;
           }
@@ -100,7 +118,7 @@ async function playScenario(
   });
   handles.push(handle);
   prompting = true;
-  if (stopAfterFirstChunk) {
+  if (stopAfterFirstChunk || stopAfterRetry) {
     stop = () => void handle.connection.cancel({ sessionId: handle.providerSessionId });
   }
   const response = await handle.connection.prompt({
@@ -270,7 +288,7 @@ it.each(['retry-recover', 'retry-fail'])(
     const translator = new AcpEventTranslator({ warn: () => undefined });
     const retries = played.updates.flatMap((update) =>
       translator
-        .translateSessionUpdate(update, 'scenario-session', 'CODEX')
+        .translateSessionUpdate(update, 'scenario-session')
         .flatMap((event) =>
           event.type === 'agent_message' && event.data.type === 'session_notice'
             ? [event.data.notice]
@@ -314,3 +332,10 @@ it.each(['retry-recover', 'retry-fail'])(
   },
   20_000
 );
+
+it('cancels a retry wait promptly without emitting a terminal connection error', async () => {
+  const played = await playScenario('retry-fail', { stopAfterRetry: true, chunkDelayMs: 60_000 });
+  expect(played.response.stopReason).toBe('cancelled');
+  expect(played.response._meta?.jetbrains).toBeUndefined();
+  expect(played.chunks).toEqual([]);
+}, 20_000);

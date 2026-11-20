@@ -45,9 +45,11 @@ function retryConnection(turn, attempt, willRetry = true) {
 
 async function playRetries(turn) {
   retryConnection(turn, 1);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (!(await turn.wait(100))) {
+    return false;
+  }
   retryConnection(turn, 2);
-  await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+  return turn.wait(chunkDelayMs);
 }
 
 const scenarios = {
@@ -96,12 +98,14 @@ const scenarios = {
     return { status: 'failed', error };
   },
   'retry-recover': async (turn) => {
-    await playRetries(turn);
-    await turn.reply(['The scripted response resumed.']);
+    if (await playRetries(turn)) {
+      await turn.reply(['The scripted response resumed.']);
+    }
   },
   'retry-fail': async (turn) => {
-    await playRetries(turn);
-    return { status: 'failed', error: retryConnection(turn, 2, false) };
+    if (await playRetries(turn)) {
+      return { status: 'failed', error: retryConnection(turn, 2, false) };
+    }
   },
   'slow-stream': async (turn) => {
     await turn.reply(slowStreamChunks, chunkDelayMs);
@@ -223,6 +227,12 @@ async function playScenario(request, turnId) {
     cwd,
     input: request.params.input ?? [],
     notify,
+    async wait(ms) {
+      if (!interrupted) {
+        await sleep(ms);
+      }
+      return !interrupted;
+    },
     request(method, params) {
       const id = `fake-server-request-${++serverRequestCount}`;
       send({ id, method, params });

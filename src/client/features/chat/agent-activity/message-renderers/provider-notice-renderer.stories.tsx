@@ -3,7 +3,7 @@ import { expect, within } from 'storybook/test';
 import { ProviderNoticeRenderer } from './provider-notice-renderer';
 
 const meta = {
-  title: 'Chat/Provider notice',
+  title: 'Chat/Transcript/ProviderNoticeRenderer',
   component: ProviderNoticeRenderer,
   parameters: { layout: 'padded' },
   args: {
