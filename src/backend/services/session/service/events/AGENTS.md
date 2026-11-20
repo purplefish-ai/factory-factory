@@ -51,6 +51,10 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - A session's thought chunks are merged for at most 25 ms and written before its
   next written update, runtime event, replayed user message or turn end, so
   transcript order is unchanged. `acp-event-processor.text-streaming.test.ts`.
+- ACP text chunks with an explicit message ID share a row until the next message
+  or turn. Tool calls can interrupt delivery of one assistant message. Without
+  an ID, consecutive assistant chunks share a block and each replayed user chunk
+  starts a prompt. `acp-event-processor.transcript.test.ts`.
 - While history replay is suppressed, usage, plan and session info updates still
   reach the session, so one attached after a backend restart shows its context
   occupancy and can compact. `acp-event-processor.replay-suppression.test.ts`,
@@ -65,6 +69,7 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - `acp-event-processor.ts`: `AcpEventProcessor`, one runtime event handler per
   session; `acp-replay-policy.ts` decides which events replay suppression drops,
   and `acp-thought-buffer.ts` buffers thought chunks.
+- `acp-message-stream.ts`: assistant text delivery and replayed user chunks.
 - `acp-provider-notices.ts`: tracks live reconnect incidents and their outcomes.
 - `session.permission.service.ts`: bridges and the shown request.
 - `subagent-change-coalescer.ts`: subagent notifications;

@@ -12,7 +12,10 @@ it('finalizes orphaned tool calls with deltas the chat client accepts', () => {
   const processor = new AcpEventProcessor(
     unsafeCoerce<AcpEventProcessorDependencies>({
       runtimeManager: { getClient: vi.fn() },
-      sessionDomainService: { emitDelta, appendClaudeEvent: vi.fn().mockReturnValue(7) },
+      sessionDomainService: {
+        emitDelta,
+        appendClaudeEvent: vi.fn().mockReturnValue({ order: 7, messageId: 'sid-7' }),
+      },
       sessionPermissionService: {},
       sessionConfigService: {},
       onToolCallTimeout: vi.fn(),

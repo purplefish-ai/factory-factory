@@ -657,7 +657,7 @@ export function createLifecycleHarness(
     | 'hasObservedEmptyProviderSession'
   >;
   const sessionDomainService = {
-    appendClaudeEvent: vi.fn((_sessionId: string, _message: unknown) => 1),
+    appendClaudeEvent: vi.fn(() => ({ order: 1, messageId: 'transcript-1' })),
     emitDelta: vi.fn(),
     hasQueuedMessage: vi.fn((_sessionId: string, _messageId: string) => false),
     enqueue: vi.fn<SessionDomainService['enqueue']>(overrides.enqueue ?? (() => ({ position: 0 }))),

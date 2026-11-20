@@ -75,7 +75,7 @@ export type NotificationQueuePort = {
 export type NotificationTranscriptPort = {
   getTranscriptSnapshot(sessionId: string): ChatMessage[];
   getHistoryHydrationSource(sessionId: string): 'jsonl' | 'acp_fallback' | 'none' | undefined;
-  appendClaudeEvent(sessionId: string, message: AgentMessage): number;
+  appendClaudeEvent(sessionId: string, message: AgentMessage): void;
 };
 
 export type NotificationDeltaPort = {

@@ -445,7 +445,7 @@ export class SessionDomainService extends EventEmitter {
     return removed;
   }
 
-  appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage): number {
+  appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage) {
     const store = this.registry.getOrCreateActive(sessionId);
     return appendClaudeEvent(store, claudeMessage, {
       nowIso: this.nowIso,
@@ -459,15 +459,17 @@ export class SessionDomainService extends EventEmitter {
    * Upsert a Claude event at a specific order (for ACP text accumulation).
    * Creates or replaces the transcript entry at the given order.
    */
-  upsertClaudeEvent(sessionId: string, claudeMessage: AgentMessage, order: number): void {
+  upsertClaudeEvent(sessionId: string, claudeMessage: AgentMessage, order: number): string {
     const store = this.registry.getOrCreateActive(sessionId);
+    const id = `${store.sessionId}-${order}`;
     upsertTranscriptMessage(store, {
-      id: `${store.sessionId}-${order}`,
+      id,
       source: 'agent',
       message: claudeMessage,
       timestamp: claudeMessage.timestamp ?? this.nowIso(),
       order,
     });
+    return id;
   }
 
   upsertProviderNotice(
@@ -670,15 +672,16 @@ export class SessionDomainService extends EventEmitter {
   injectCommittedUserMessage(
     sessionId: string,
     text: string,
-    options?: { messageId?: string }
-  ): void {
+    options?: { messageId?: string; appendTo?: string }
+  ): string {
     const store = this.registry.getOrCreateActive(sessionId);
-    injectCommittedUserMessage(store, text, {
-      messageId: options?.messageId,
+    const id = injectCommittedUserMessage(store, text, {
+      ...options,
       nowIso: this.nowIso,
       nowMs: () => Date.now(),
     });
     this.publisher.forwardSnapshot(store, { reason: 'inject_user_message' });
+    return id;
   }
 
   clearSession(

@@ -53,7 +53,7 @@ function appendToolUse(
       },
     },
     options
-  );
+  ).order;
 }
 
 function appendToolResult(
@@ -70,7 +70,7 @@ function appendToolResult(
       },
     },
     options
-  );
+  ).order;
 }
 
 describe('session-transcript', () => {
@@ -92,7 +92,7 @@ describe('session-transcript', () => {
     for (const update of updates) {
       for (const delta of translator.translateSessionUpdate(update, 's1')) {
         if (delta.type === 'agent_message') {
-          orders.push(appendClaudeEvent(store, delta.data, options));
+          orders.push(appendClaudeEvent(store, delta.data, options).order);
         }
       }
     }
