@@ -56,6 +56,29 @@ function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): Snap
   };
 }
 
+/** A live snapshot may replace rows during a turn. Only the same open row may consume deltas. */
+function snapshotThinkingBlocks(state: ChatState, payload: SnapshotPayload) {
+  const open = new Map<number, number>();
+  if (payload.isHydration || state.openThinkingBlocks.size === 0) {
+    return open;
+  }
+  for (const row of payload.messages) {
+    const block = row.message?.event;
+    if (
+      block?.type !== 'content_block_start' ||
+      block.content_block.type !== 'thinking' ||
+      state.openThinkingBlocks.get(block.index) !== row.order
+    ) {
+      continue;
+    }
+    const previous = state.agentMessageOrderToIndex.get(row.order);
+    if (previous !== undefined && state.messages[previous]?.id === row.id) {
+      open.set(block.index, row.order);
+    }
+  }
+  return open;
+}
+
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'SESSION_SNAPSHOT': {
@@ -79,7 +102,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
           ...state,
           ...history,
           messages: [],
-          openThinkingBlocks: new Map(),
+          openThinkingBlocks: snapshotThinkingBlocks(state, action.payload),
           latestThinking: null,
           latestThinkingDeltaOrder: null,
           latestThinkingOrder: snapshotMessages.reduce<number | null>(

@@ -51,6 +51,16 @@ function shouldResetRuntimeTransientState(runtime: ChatState['sessionRuntime']):
 
 function applyRuntime(state: ChatState, runtime: ChatState['sessionRuntime']): ChatState {
   const next = withRuntime(state, runtime);
+  if (
+    state.openThinkingBlocks.size > 0 &&
+    (runtime.phase === 'idle' ||
+      runtime.phase === 'error' ||
+      runtime.phase === 'stopping' ||
+      runtime.processState === 'stopped' ||
+      (state.sessionRuntime.work?.promptInFlight && runtime.work?.promptInFlight === false))
+  ) {
+    next.openThinkingBlocks = new Map();
+  }
   if (!shouldResetRuntimeTransientState(runtime)) {
     return next;
   }

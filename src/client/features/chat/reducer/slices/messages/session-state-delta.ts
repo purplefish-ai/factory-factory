@@ -171,9 +171,7 @@ function applyCommittedMessage(
     ...state,
     pendingMessages: withoutPendingIds(state.pendingMessages, [message.id]),
     // A committed user message starts a new turn; drop the previous turn's preview.
-    ...(message.source === 'user'
-      ? { openThinkingBlocks: new Map(), latestThinking: null, latestThinkingDeltaOrder: null }
-      : {}),
+    ...(message.source === 'user' ? { latestThinking: null, latestThinkingDeltaOrder: null } : {}),
   };
   const existingIndex = messages.findIndex((entry) => entry.id === message.id);
   if (existingIndex >= 0 && isSameUserMessage(messages[existingIndex], message)) {
