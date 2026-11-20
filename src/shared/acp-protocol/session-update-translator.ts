@@ -461,8 +461,6 @@ export class AcpEventTranslator {
     }
 
     const previous = this.pendingOutput.take(key);
-    const content =
-      update.content == null ? previous?.content : this.formatToolContent(update.content);
     const terminalOutput = this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS);
     this.toolNames.delete(key);
     this.terminalOutput.delete(key);
@@ -470,14 +468,27 @@ export class AcpEventTranslator {
       this.createTerminalToolResultEvent({
         toolCallId: update.toolCallId,
         status: update.status,
-        content: content?.length
-          ? content
-          : terminalOutput ||
-            (update.rawOutput == null
-              ? (previous?.rawOutput ?? '')
-              : this.extractContentText(update.rawOutput)),
+        content: this.resolveToolResultContent(update, previous, terminalOutput),
       })
     );
+  }
+
+  private resolveToolResultContent(
+    update: { content?: unknown; rawOutput?: unknown },
+    previous: { content?: ToolResultContentValue; rawOutput?: string } | undefined,
+    terminalOutput: string | undefined
+  ): ToolResultContentValue {
+    const content =
+      update.content == null ? previous?.content : this.formatToolContent(update.content);
+    if (content?.length) {
+      return content;
+    }
+    if (terminalOutput) {
+      return terminalOutput;
+    }
+    return update.rawOutput == null
+      ? (previous?.rawOutput ?? '')
+      : this.extractContentText(update.rawOutput);
   }
 
   private extractTextChunkContent(
