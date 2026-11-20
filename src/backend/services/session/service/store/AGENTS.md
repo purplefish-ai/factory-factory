@@ -43,8 +43,8 @@ directly.
 - A human submission ID identifies one payload while it is queued, preparing for
   dispatch, or committed in the session store. Retries acknowledge its existing
   state. A failed admission atomically removes the original and publishes its
-  recoverable draft. `queue-message.admission.test.ts` in
-  `../chat/chat-message-handlers/handlers/`.
+  recoverable draft.
+  `../chat/chat-message-handlers/handlers/queue-message.admission.test.ts`.
 - Replay, queue deltas and snapshots include a claimed batch through provider
   configuration. Dispatch cannot select a claimed message again.
   `../dispatch/session-dispatch.service.test.ts`.
