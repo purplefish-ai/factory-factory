@@ -31,6 +31,27 @@ const model = {
 };
 const slowStreamChunks = ['Streaming ', 'this ', 'reply ', 'one ', 'chunk ', 'at ', 'a ', 'time.'];
 const slowStreamDelayMs = 400;
+function retryConnection(turn, attempt, willRetry = true) {
+  const error = {
+    message: willRetry
+      ? `Reconnecting... ${attempt}/5`
+      : 'The scripted response stream disconnected.',
+    codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: null } },
+    additionalDetails: null,
+  };
+  turn.notify('error', { error, willRetry, threadId: turn.threadId, turnId: turn.id });
+  return error;
+}
+
+async function playRetries(turn) {
+  retryConnection(turn, 1);
+  if (!(await turn.wait(100))) {
+    return false;
+  }
+  retryConnection(turn, 2);
+  return turn.wait(chunkDelayMs);
+}
+
 const scenarios = {
   echo: async (turn) => {
     const text = turn.input.flatMap((input) => (input.type === 'text' ? [input.text] : []));
@@ -75,6 +96,16 @@ const scenarios = {
     };
     turn.notify('error', { error, willRetry: false, threadId: turn.threadId, turnId: turn.id });
     return { status: 'failed', error };
+  },
+  'retry-recover': async (turn) => {
+    if (await playRetries(turn)) {
+      await turn.reply(['The scripted response resumed.']);
+    }
+  },
+  'retry-fail': async (turn) => {
+    if (await playRetries(turn)) {
+      return { status: 'failed', error: retryConnection(turn, 2, false) };
+    }
   },
   'slow-stream': async (turn) => {
     await turn.reply(slowStreamChunks, chunkDelayMs);
@@ -196,6 +227,12 @@ async function playScenario(request, turnId) {
     cwd,
     input: request.params.input ?? [],
     notify,
+    async wait(ms) {
+      if (!interrupted) {
+        await sleep(ms);
+      }
+      return !interrupted;
+    },
     request(method, params) {
       const id = `fake-server-request-${++serverRequestCount}`;
       send({ id, method, params });

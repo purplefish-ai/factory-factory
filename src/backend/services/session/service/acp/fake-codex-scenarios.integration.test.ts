@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RequestPermissionRequest, SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, expect, it } from 'vitest';
+import { AcpEventTranslator } from '@/shared/acp-protocol/session-update-translator';
 import { AcpClientFactory, cleanupFailedAcpClientCreation } from './acp-client-factory';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpProcessHandle } from './acp-process-handle';
@@ -37,7 +38,13 @@ async function playScenario(
     optionId = 'allow_once',
     stopAfterFirstChunk = false,
     chunkDelayMs,
-  }: { optionId?: string; stopAfterFirstChunk?: boolean; chunkDelayMs?: number } = {}
+    stopAfterRetry = false,
+  }: {
+    optionId?: string;
+    stopAfterFirstChunk?: boolean;
+    chunkDelayMs?: number;
+    stopAfterRetry?: boolean;
+  } = {}
 ) {
   // The session working directory arrives resolved; macOS temp dirs live under /private.
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'ff-scenario-')));
@@ -71,6 +78,7 @@ async function playScenario(
   let prompting = false;
   let stop: (() => void) | undefined;
   const bridge = new AcpPermissionBridge();
+  const translator = new AcpEventTranslator({ warn: () => undefined });
   const handle = await factory.createClient({
     sessionId: 'scenario-session',
     options: { provider: 'CODEX', workingDir: dir, sessionId: 'scenario-session' },
@@ -82,7 +90,18 @@ async function playScenario(
         }
         if (event.type === 'acp_session_update') {
           events.push({ type: 'update', update: event.update });
-          if (event.update.sessionUpdate === 'agent_message_chunk') {
+          const update = event.update;
+          const isSecondRetry =
+            stopAfterRetry &&
+            translator
+              .translateSessionUpdate(update)
+              .some(
+                (delta) =>
+                  delta.type === 'agent_message' &&
+                  delta.data.type === 'session_notice' &&
+                  delta.data.notice.title === 'Reconnecting... 2/5'
+              );
+          if (update.sessionUpdate === 'agent_message_chunk' || isSecondRetry) {
             stop?.();
             stop = undefined;
           }
@@ -99,7 +118,7 @@ async function playScenario(
   });
   handles.push(handle);
   prompting = true;
-  if (stopAfterFirstChunk) {
+  if (stopAfterFirstChunk || stopAfterRetry) {
     stop = () => void handle.connection.cancel({ sessionId: handle.providerSessionId });
   }
   const response = await handle.connection.prompt({
@@ -123,6 +142,7 @@ async function playScenario(
       return kind === 'available_commands_update' || kind === 'session_info_update' ? [] : [kind];
     }),
     toolUpdates,
+    updates,
     chunks: updates.flatMap((update) =>
       update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text'
         ? [update.content.text]
@@ -259,4 +279,63 @@ it('slow-stream stops streaming when the client cancels the prompt', async () =>
   });
   expect(played.response.stopReason).toBe('cancelled');
   expect(played.chunks).toEqual(['Streaming ']);
+}, 20_000);
+
+it.each(['retry-recover', 'retry-fail'])(
+  '%s carries one structured retry identity through the pinned adapter',
+  async (scenario) => {
+    const played = await playScenario(scenario, { chunkDelayMs: 5 });
+    const translator = new AcpEventTranslator({ warn: () => undefined });
+    const retries = played.updates.flatMap((update) =>
+      translator
+        .translateSessionUpdate(update, 'scenario-session')
+        .flatMap((event) =>
+          event.type === 'agent_message' && event.data.type === 'session_notice'
+            ? [event.data.notice]
+            : []
+        )
+    );
+    expect(retries).toMatchObject([
+      {
+        id: expect.any(String),
+        severity: 'warning',
+        category: 'connection',
+        title: 'Reconnecting... 1/5',
+      },
+      {
+        id: retries[0]?.id,
+        severity: 'warning',
+        category: 'connection',
+        title: 'Reconnecting... 2/5',
+      },
+    ]);
+    expect(retries[1]!.revision).toBeGreaterThan(retries[0]!.revision);
+    if (scenario === 'retry-recover') {
+      expect(played.chunks).toEqual(['The scripted response resumed.']);
+      expect(played.response).toMatchObject({ stopReason: 'end_turn' });
+    } else {
+      expect(played.chunks).toEqual([]);
+      expect(played.response).toMatchObject({
+        _meta: {
+          jetbrains: {
+            air: {
+              sessionFailure: {
+                id: retries[0]?.id,
+                severity: 'error',
+                title: 'The scripted response stream disconnected.',
+              },
+            },
+          },
+        },
+      });
+    }
+  },
+  20_000
+);
+
+it('cancels a retry wait promptly without emitting a terminal connection error', async () => {
+  const played = await playScenario('retry-fail', { stopAfterRetry: true, chunkDelayMs: 60_000 });
+  expect(played.response.stopReason).toBe('cancelled');
+  expect(played.response._meta?.jetbrains).toBeUndefined();
+  expect(played.chunks).toEqual([]);
 }, 20_000);

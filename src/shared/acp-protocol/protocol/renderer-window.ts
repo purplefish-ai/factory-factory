@@ -37,11 +37,16 @@ export function isSafeRendererWindowStart(message: ChatMessage): boolean {
   return !(isToolResultMessage(message.message) || isStreamFragment(message.message));
 }
 
+export function hasTranscriptOrder(message: ChatMessage): boolean {
+  return (
+    message.order >= 0 ||
+    message.message?.type === 'session_lifecycle' ||
+    message.message?.type === 'session_notice'
+  );
+}
+
 function rendererSortOrder(message: ChatMessage): number {
-  if (message.message?.type === 'session_lifecycle') {
-    return message.order;
-  }
-  return message.order < 0 ? Number.POSITIVE_INFINITY : message.order;
+  return hasTranscriptOrder(message) ? message.order : Number.POSITIVE_INFINITY;
 }
 
 export function compareTranscriptMessageOrder(left: ChatMessage, right: ChatMessage): number {

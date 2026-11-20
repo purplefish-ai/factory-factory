@@ -1,6 +1,7 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
+import { ProviderSessionNoticeSchema } from './protocol/provider-session-notice';
 import type { SubagentTranscriptUpdate } from './subagents';
 
 export type AcpTranslationLogger = {
@@ -24,13 +25,13 @@ const sessionNoticeSchema = z.object({
   _meta: z.object({
     jetbrains: z.object({
       air: z.object({
-        sessionFailure: z.object({
-          id: z.string().min(1),
-          revision: z.number().int().nonnegative(),
-          severity: z.literal('warning'),
-          title: z.string().trim().min(1),
-          details: z.string().optional(),
-        }),
+        sessionFailure: ProviderSessionNoticeSchema.pick({
+          id: true,
+          revision: true,
+          category: true,
+          title: true,
+          details: true,
+        }).extend({ severity: z.literal('warning') }),
       }),
     }),
   }),
@@ -63,7 +64,6 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  * and returns an empty array, so one bad event does not break the pipeline.
  */
 export class AcpEventTranslator {
-  private readonly sessionNotices = new Map<string, Set<string>>();
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
   private readonly toolNames = new Map<string, { sessionId: string; name: string }>();
   // Retain replay identities until clearTerminalOutput tears down their session.
@@ -110,7 +110,7 @@ export class AcpEventTranslator {
         return this.translateContextCompactionUpdate(update);
 
       case 'session_info_update':
-        return this.translateSessionNotice(update, sessionId);
+        return this.translateSessionNotice(update);
 
       // Not yet translated -- log-only
       case 'current_mode_update':
@@ -126,7 +126,6 @@ export class AcpEventTranslator {
   }
 
   clearTerminalOutput(sessionId: string): void {
-    this.sessionNotices.delete(sessionId);
     for (const [key, tool] of this.toolNames) {
       if (tool.sessionId === sessionId) {
         this.toolNames.delete(key);
@@ -144,24 +143,13 @@ export class AcpEventTranslator {
     }
   }
 
-  private translateSessionNotice(update: unknown, sessionId: string): AcpTranslatedDelta[] {
+  private translateSessionNotice(update: unknown): AcpTranslatedDelta[] {
     const parsed = sessionNoticeSchema.safeParse(update);
     if (!parsed.success) {
       return [];
     }
     const notice = parsed.data._meta.jetbrains.air.sessionFailure;
-    const key = JSON.stringify([notice.id, notice.revision]);
-    const seen = this.sessionNotices.get(sessionId) ?? new Set<string>();
-    if (seen.has(key)) {
-      return [];
-    }
-    seen.add(key);
-    this.sessionNotices.set(sessionId, seen);
-    const text = `Warning: ${notice.title}${notice.details ? `\n\n${notice.details}` : ''}\n\n`;
-    return this.translateAgentMessageChunk({
-      sessionUpdate: 'agent_message_chunk',
-      content: { type: 'text', text },
-    });
+    return [{ type: 'agent_message', data: { type: 'session_notice', notice } }];
   }
 
   private captureTerminalOutput(

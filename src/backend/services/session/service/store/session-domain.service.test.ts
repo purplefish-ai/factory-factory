@@ -777,7 +777,28 @@ describe('SessionDomainService additional behavior', () => {
 });
 
 it('marks provider identity replacement as a complete transcript reset', () => {
+  const notice = {
+    id: 'retry',
+    revision: 1,
+    severity: 'warning',
+    title: 'Reconnecting... 1/5',
+  } as const;
+  sessionDomainService.upsertProviderNotice('replacement-snapshot', {
+    type: 'session_notice',
+    notice: { ...notice, reconnect: 'retrying' },
+  });
   sessionDomainService.resetProviderHistory('replacement-snapshot', 'replacement-provider');
+  expect(
+    sessionDomainService.upsertProviderNotice(
+      'replacement-snapshot',
+      {
+        type: 'session_notice',
+        notice: { ...notice, reconnect: 'ended' },
+      },
+      true
+    )
+  ).toBe(false);
+  expect(sessionDomainService.getTranscriptSnapshot('replacement-snapshot')).toEqual([]);
   expect(publishToSessionMock).toHaveBeenCalledWith(
     'replacement-snapshot',
     expect.objectContaining({ type: 'session_snapshot', resetTranscript: true })

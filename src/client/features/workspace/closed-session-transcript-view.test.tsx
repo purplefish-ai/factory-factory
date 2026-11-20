@@ -122,6 +122,24 @@ function failRead(fixture: ReturnType<typeof renderWire>, kind: (typeof failureK
 }
 
 describe('compatible archive view with real query selection, projection and rich renderer', () => {
+  it('renders legacy Claude interruption records without rewriting the archive', async () => {
+    const marker = '[Request interrupted by user for tool use]';
+    const wire = JSON.stringify({
+      metadata: { provider: 'CLAUDE' },
+      messages: [user(marker), user(`Quoted: ${marker}`)],
+    });
+    const { container } = renderWire(wire);
+    await vi.waitFor(() => expect(container.textContent).toContain('Request interrupted'));
+    expect(container.textContent).toContain(`Quoted: ${marker}`);
+    expect(container.querySelector('[data-status-tone="info"]')?.textContent).toBe(
+      'Request interrupted'
+    );
+    expect(parseClosedSessionReadTranscript(wire).messages[0]).toMatchObject({
+      source: 'user',
+      text: marker,
+    });
+  });
+
   it('retains the loading state while its query has no response', () => {
     expect(renderWire(undefined).container.textContent).toContain('Loading transcript…');
   });

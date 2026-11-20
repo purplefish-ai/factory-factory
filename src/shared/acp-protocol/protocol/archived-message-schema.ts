@@ -10,6 +10,7 @@ import {
   ArchivedUsageSchema,
 } from './archived-content-schema';
 import type { AgentMessage, ChatMessage } from './messages';
+import { ProviderSessionNoticeSchema } from './provider-session-notice';
 
 const commonFields = {
   prDeliveryState: z.enum(['queued', 'delivered', 'failed', 'cancelled']).optional(),
@@ -56,6 +57,12 @@ export const ArchivedAgentMessageSchema = z.discriminatedUnion('type', [
       message: z.string(),
       timestamp: z.string(),
     }),
+  }),
+  z.object({
+    ...commonFields,
+    type: z.literal('session_notice'),
+    lifecycle: z.never().optional(),
+    notice: ProviderSessionNoticeSchema,
   }),
   z.object({
     ...commonFields,

@@ -46,7 +46,7 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
         {(data) => (
           <ScrollArea key={sessionId} viewportRef={followOutputRef} className="min-h-0 flex-1">
             <div className="p-4 space-y-4">
-              {projectClosedSessionTranscriptRows(data.messages).map(({ item, key }) =>
+              {projectClosedSessionTranscriptRows(data.messages, data).map(({ item, key }) =>
                 item.kind === 'rich' ? (
                   <GroupedMessageItemRenderer key={key} item={item.value} />
                 ) : (

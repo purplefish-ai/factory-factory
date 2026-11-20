@@ -165,7 +165,11 @@ async function readProviderHistoryTranscript(
   if (loaded.status !== 'loaded') {
     return loaded;
   }
-  const transcript = await buildTranscriptFromHistoryCooperatively(loaded.history, isCurrent);
+  const transcript = await buildTranscriptFromHistoryCooperatively(
+    loaded.history,
+    isCurrent,
+    dbSession.provider
+  );
   if (!(transcript && isCurrent())) {
     return CANCELLED;
   }

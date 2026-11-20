@@ -8,6 +8,7 @@ import {
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
 } from '@/shared/acp-protocol';
+import { projectLegacyProviderNotice } from '@/shared/acp-protocol/protocol/project-legacy-provider-notice';
 import { isPRUpdateOutcomeMessage } from './session-local-transcript';
 import type { SessionStore } from './session-store.types';
 import {
@@ -166,7 +167,8 @@ function appendHistoryToTranscript(
   historyMsg: HistoryMessage,
   index: number,
   transcript: ChatMessage[],
-  order: number
+  order: number,
+  provider?: 'CLAUDE' | 'CODEX'
 ): number {
   const messageBaseId = historyMsg.uuid ?? buildDeterministicHistoryId(historyMsg, index);
   const messageId = `${messageBaseId}-${order}`;
@@ -179,14 +181,19 @@ function appendHistoryToTranscript(
     }
   }
   if (historyMsg.type === 'user') {
-    transcript.push({
-      id: messageId,
-      source: 'user',
-      text: historyMsg.content,
-      attachments: historyMsg.attachments,
-      timestamp: historyMsg.timestamp,
-      order,
-    });
+    transcript.push(
+      projectLegacyProviderNotice(
+        {
+          id: messageId,
+          source: 'user',
+          text: historyMsg.content,
+          attachments: historyMsg.attachments,
+          timestamp: historyMsg.timestamp,
+          order,
+        },
+        provider
+      )
+    );
     return order + 1;
   }
 
@@ -197,23 +204,31 @@ function appendHistoryToTranscript(
     historyMsg.type === 'thinking' ||
     historyMsg.type === 'user_tool_result'
   ) {
-    transcript.push({
-      id: messageId,
-      source: 'agent',
-      message: historyToClaudeMessage(historyMsg),
-      timestamp: historyMsg.timestamp,
-      order,
-    });
+    transcript.push(
+      projectLegacyProviderNotice(
+        {
+          id: messageId,
+          source: 'agent',
+          message: historyToClaudeMessage(historyMsg),
+          timestamp: historyMsg.timestamp,
+          order,
+        },
+        provider
+      )
+    );
     order += 1;
   }
   return order;
 }
 
-export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessage[] {
+export function buildTranscriptFromHistory(
+  history: HistoryMessage[],
+  provider?: 'CLAUDE' | 'CODEX'
+): ChatMessage[] {
   const transcript: ChatMessage[] = [];
   let order = 0;
   for (const [index, message] of history.entries()) {
-    order = appendHistoryToTranscript(message, index, transcript, order);
+    order = appendHistoryToTranscript(message, index, transcript, order, provider);
   }
   return transcript;
 }
@@ -221,7 +236,8 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
 /** Same projection and identities, yielding between small batches during hydration. */
 export async function buildTranscriptFromHistoryCooperatively(
   history: HistoryMessage[],
-  isCurrent: () => boolean
+  isCurrent: () => boolean,
+  provider?: 'CLAUDE' | 'CODEX'
 ): Promise<ChatMessage[] | null> {
   const transcript: ChatMessage[] = [];
   let order = 0;
@@ -230,7 +246,7 @@ export async function buildTranscriptFromHistoryCooperatively(
     if (index % 8 === 0 && !isCurrent()) {
       return null;
     }
-    order = appendHistoryToTranscript(message, index, transcript, order);
+    order = appendHistoryToTranscript(message, index, transcript, order, provider);
     if (
       ((index + 1) % 8 === 0 ||
         Array.isArray(message.content) ||
@@ -339,7 +355,10 @@ export function removeTranscriptMessageById(
 export function setNextOrderFromTranscript(store: SessionStore): void {
   let nextOrder = store.nextOrder;
   for (const message of store.transcript) {
-    if (message.message?.type === 'session_lifecycle') {
+    if (
+      message.message?.type === 'session_lifecycle' ||
+      (message.message?.type === 'session_notice' && !Number.isInteger(message.order))
+    ) {
       continue;
     }
     if (message.order >= nextOrder) {
