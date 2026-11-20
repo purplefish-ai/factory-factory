@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, SessionRuntimeState } from '@/lib/chat-protocol';
 import { MessageState } from '@/lib/chat-protocol';
 import {
   AcpEventTranslator,
@@ -372,4 +372,167 @@ describe('live thinking sequences', () => {
     });
     expect(state.latestThinking).toBe('Current block');
   });
+});
+
+it('keeps replayed reasoning immutable when a new turn streams a thought with the same block index', () => {
+  const state = chatReducer(createInitialChatState(), {
+    type: 'SESSION_REPLAY_BATCH',
+    payload: {
+      replayEvents: [
+        {
+          type: 'agent_message',
+          order: 1,
+          messageId: 'past-thought',
+          data: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'thinking', thinking: 'Past reasoning' },
+            },
+          },
+        },
+        {
+          type: 'message_state_changed',
+          id: 'next-turn',
+          newState: MessageState.ACCEPTED,
+          userMessage: { text: 'continue', timestamp: '2026-11-20T12:00:00Z', order: 2 },
+        },
+        { type: 'message_state_changed', id: 'next-turn', newState: MessageState.COMMITTED },
+      ],
+    },
+  });
+  const next = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: { order: 3, message: thought('Current reasoning') },
+  });
+  expect(next.latestThinking).toBe('Current reasoning');
+  expect(next.messages[0]).toEqual(state.messages[0]);
+});
+
+it('closes a thinking block at its stop even when the next thought reuses its index', () => {
+  let state = chatReducer(createInitialChatState(), {
+    type: 'WS_AGENT_MESSAGE',
+    payload: {
+      order: 1,
+      message: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: 'Finished' },
+        },
+      },
+    },
+  });
+  state = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: {
+      order: 2,
+      message: { type: 'stream_event', event: { type: 'content_block_stop', index: 0 } },
+    },
+  });
+  const next = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: { order: 3, message: thought('Fresh') },
+  });
+  expect(next.messages[0]).toEqual(state.messages[0]);
+});
+
+it.each([
+  'queue snapshot',
+  'steered message',
+  'prompt completion',
+  'local stop',
+  'replacement snapshot',
+] as const)('applies a later thought to the correct block following a %s', (transition) => {
+  const runtime: SessionRuntimeState = {
+    phase: 'running',
+    processState: 'alive',
+    activity: 'WORKING',
+    updatedAt: '2026-11-20T12:00:00Z',
+    work: { promptInFlight: true, backgroundTasks: [], runningSubagents: 0, activeGoals: 0 },
+  };
+  let state = chatReducer(createInitialChatState({ sessionRuntime: runtime }), {
+    type: 'WS_AGENT_MESSAGE',
+    payload: {
+      order: 1,
+      messageId: 'open-block',
+      message: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: 'Start' },
+        },
+      },
+    },
+  });
+  if (transition === 'steered message') {
+    state = chatReducer(state, {
+      type: 'TRANSCRIPT_MESSAGE_COMMITTED',
+      payload: {
+        queuedMessages: [],
+        message: {
+          id: 'steer',
+          order: 2,
+          source: 'user',
+          text: 'Refine the answer',
+          timestamp: runtime.updatedAt,
+        },
+      },
+    });
+  } else if (transition === 'local stop') {
+    state = chatReducer(state, { type: 'STOP_REQUESTED' });
+  } else if (transition === 'prompt completion') {
+    state = chatReducer(state, {
+      type: 'SESSION_RUNTIME_UPDATED',
+      payload: {
+        sessionRuntime: {
+          ...state.sessionRuntime,
+          work: { backgroundTasks: [], activeGoals: 0, runningSubagents: 0, promptInFlight: false },
+        },
+      },
+    });
+  } else {
+    if (transition === 'queue snapshot') {
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { order: 2, message: thought(' here') },
+      });
+    }
+    state = chatReducer(state, {
+      type: 'SESSION_SNAPSHOT',
+      payload: {
+        messages:
+          transition === 'queue snapshot'
+            ? state.messages
+            : state.messages.map((m) => ({ ...m, id: 'replacement' })),
+        queuedMessages: [],
+        sessionRuntime: state.sessionRuntime,
+      },
+    });
+  }
+  if (transition === 'queue snapshot') {
+    expect(state.latestThinking).toBe('Start here');
+    state = chatReducer(state, {
+      type: 'WS_AGENT_MESSAGE',
+      payload: { order: 2, message: thought(' here') },
+    });
+  }
+  const next = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: { order: 3, message: thought(' again') },
+  });
+  if (transition === 'queue snapshot') {
+    expect(next.latestThinking).toBe('Start here again');
+  }
+  const expected = {
+    'steered message': 'Start again',
+    'queue snapshot': 'Start here again',
+    'local stop': 'Start',
+    'prompt completion': 'Start',
+    'replacement snapshot': 'Start',
+  }[transition];
+  expect(next.messages[0]?.message?.event).toMatchObject({ content_block: { thinking: expected } });
 });

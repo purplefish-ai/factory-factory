@@ -56,6 +56,35 @@ function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): Snap
   };
 }
 
+/** A live snapshot may replace rows during a turn. Only the same open row may consume deltas. */
+function snapshotThinkingBlocks(state: ChatState, payload: SnapshotPayload) {
+  const openThinkingBlocks = new Map<number, number>();
+  let latestThinking: string | null = null;
+  let latestBlockOrder = -1;
+  if (payload.isHydration || state.openThinkingBlocks.size === 0) {
+    return { openThinkingBlocks, latestThinking };
+  }
+  for (const row of payload.messages) {
+    const block = row.message?.event;
+    if (
+      block?.type !== 'content_block_start' ||
+      block.content_block.type !== 'thinking' ||
+      state.openThinkingBlocks.get(block.index) !== row.order
+    ) {
+      continue;
+    }
+    const previous = state.agentMessageOrderToIndex.get(row.order);
+    if (previous !== undefined && state.messages[previous]?.id === row.id) {
+      openThinkingBlocks.set(block.index, row.order);
+      if (row.order > latestBlockOrder) {
+        latestBlockOrder = row.order;
+        latestThinking = block.content_block.thinking || null;
+      }
+    }
+  }
+  return { openThinkingBlocks, latestThinking };
+}
+
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'SESSION_SNAPSHOT': {
@@ -74,19 +103,21 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         action.payload.queuedMessages.map((queued) => [queued.id, queued] as const)
       );
 
+      const thinking = snapshotThinkingBlocks(state, action.payload);
+      const retainsThinking = thinking.openThinkingBlocks.size > 0;
       return applyRendererMessages(
         {
           ...state,
           ...history,
           messages: [],
-          latestThinking: null,
-          latestThinkingDeltaOrder: null,
+          ...thinking,
+          latestThinkingDeltaOrder: retainsThinking ? state.latestThinkingDeltaOrder : null,
           latestThinkingOrder: snapshotMessages.reduce<number | null>(
             (latest, message) =>
               message.source === 'agent' && message.order >= 0
                 ? Math.max(latest ?? message.order, message.order)
                 : latest,
-            null
+            retainsThinking ? state.latestThinkingOrder : null
           ),
           acpPlan: action.payload.acpPlan ?? null,
           queuedMessages,

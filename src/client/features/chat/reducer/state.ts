@@ -12,6 +12,7 @@ function createBaseResetState(): Pick<
   | 'pendingRequest'
   | 'toolUseIdToIndex'
   | 'agentMessageOrderToIndex'
+  | 'openThinkingBlocks'
   | 'latestThinking'
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
@@ -39,6 +40,7 @@ function createBaseResetState(): Pick<
     pendingRequest: { type: 'none' },
     toolUseIdToIndex: new Map(),
     agentMessageOrderToIndex: new Map(),
+    openThinkingBlocks: new Map(),
     latestThinking: null,
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
@@ -72,6 +74,7 @@ function createSessionSwitchResetState(): Pick<
   | 'pendingRequest'
   | 'toolUseIdToIndex'
   | 'agentMessageOrderToIndex'
+  | 'openThinkingBlocks'
   | 'latestThinking'
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
@@ -146,6 +149,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     agentMessageOrderToIndex: new Map(),
+    openThinkingBlocks: new Map(),
     latestThinking: null,
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
