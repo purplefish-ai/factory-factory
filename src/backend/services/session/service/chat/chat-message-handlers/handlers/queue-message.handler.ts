@@ -79,6 +79,9 @@ function replyToPreviousSubmission(
       ],
     };
   }
+  if (existing.kind === 'rejected') {
+    return { replies: [existing.event] };
+  }
   if (existing.kind === 'queued') {
     return {
       replies: [

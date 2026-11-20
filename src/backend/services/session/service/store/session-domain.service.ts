@@ -26,16 +26,14 @@ import {
   peekNext,
   removeQueuedMessage,
   requeueFront,
-  retainSubmissionOptions,
-  sameSubmission,
   setPendingInteractiveRequest,
-  visibleQueue,
 } from './session-queue';
 import { buildReplayEvents } from './session-replay-builder';
 import { sessionResumeFences } from './session-resume-fence';
 import { SessionRuntimeMachine } from './session-runtime-machine';
 import { SessionStoreRegistry } from './session-store-registry';
 import type { RecentMessageRejection, SessionStore } from './session-store.types';
+import { existingSubmission, rejectionEvent, retainSubmissionOptions } from './session-submission';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
@@ -62,49 +60,32 @@ export class SessionDomainService extends EventEmitter {
 
   existingSubmission(sessionId: string, candidate: QueuedMessage) {
     const store = this.registry.getExisting(sessionId);
-    if (!store) {
-      return;
-    }
-    const queue = visibleQueue(store);
-    const position = queue.findIndex((message) => message.id === candidate.id);
-    const queued = queue[position];
-    const index = store.transcriptIdToIndex.get(candidate.id);
-    const committed = index === undefined ? undefined : store.transcript[index];
-    if (queued) {
-      if (
-        queued.source ||
-        !sameSubmission(candidate, queued, this.submittedOptions.get(queued) ?? queued)
-      ) {
-        return { kind: 'conflict' as const };
-      }
-      return this.pendingAdmissions.has(queued)
-        ? { kind: 'pending' as const }
-        : { kind: 'queued' as const, message: queued, position };
-    }
-    if (!committed) {
-      return;
-    }
-    if (
-      committed.source !== 'user' ||
-      !sameSubmission(candidate, committed, this.submittedOptions.get(committed))
-    ) {
-      return { kind: 'conflict' as const };
-    }
-    return { kind: 'committed' as const, message: committed, queue };
+    return (
+      store && existingSubmission(store, candidate, this.pendingAdmissions, this.submittedOptions)
+    );
   }
 
   trackDispatchBatch(sessionId: string, messages: readonly QueuedMessage[]): () => void {
-    const claimed = new Set(messages);
     const store = this.registry.getOrCreateActive(sessionId);
-    store.dispatching = claimed;
+    store.dispatching ??= new Map();
+    const dispatching = store.dispatching;
+    const token = Symbol();
+    const batch = [...messages];
+    for (const message of batch) {
+      dispatching.set(message, token);
+    }
     return () => {
-      // A delivery that settled through its own subsystem may still need a queue update.
-      if (store.dispatching !== claimed || !this.registry.isCurrentStore(sessionId, store)) {
+      if (!this.registry.isCurrentStore(sessionId, store)) {
         return;
       }
-      store.dispatching = undefined;
-      if (claimed.size > 0) {
-        claimed.clear();
+      let changed = false;
+      for (const message of batch) {
+        if (dispatching.get(message) === token) {
+          dispatching.delete(message);
+          changed = true;
+        }
+      }
+      if (changed) {
         this.publishQueue(sessionId);
       }
     };
@@ -279,6 +260,7 @@ export class SessionDomainService extends EventEmitter {
     if (store && removeQueuedMessage(store, message.id, { expectedMessage: message })) {
       this.recordRecentMessageRejection(sessionId, {
         ...buildMessageFailure(sessionId, message, errorMessage),
+        submittedOptions: this.submittedOptions.get(message),
         state: MessageState.REJECTED,
       });
     }
@@ -300,10 +282,10 @@ export class SessionDomainService extends EventEmitter {
       this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
       return;
     }
-    this.recordRecentMessageRejection(
-      sessionId,
-      buildMessageFailure(sessionId, message, errorMessage)
-    );
+    this.recordRecentMessageRejection(sessionId, {
+      ...buildMessageFailure(sessionId, message, errorMessage),
+      submittedOptions: this.submittedOptions.get(message),
+    });
   }
 
   private recordRecentMessageRejection(
@@ -325,13 +307,7 @@ export class SessionDomainService extends EventEmitter {
       store.recentRejections = store.recentRejections.slice(-MAX_RECENT_REJECTIONS);
     }
 
-    this.publisher.emitDelta(sessionId, {
-      type: 'message_state_changed',
-      id: rejection.id,
-      newState: rejection.state ?? MessageState.REJECTED,
-      errorMessage: rejection.errorMessage,
-      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
-    });
+    this.publisher.emitDelta(sessionId, rejectionEvent(rejection));
   }
 
   setRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeState, emitDelta = true): void {

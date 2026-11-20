@@ -6,6 +6,7 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 export interface RecentMessageRejection {
   id: string;
   errorMessage: string;
+  submittedOptions?: Pick<QueuedMessage, 'settings' | 'voiceMode'>;
   rejectedAt: string;
   expiresAt: number;
   state?: MessageState.REJECTED | MessageState.FAILED;
@@ -29,7 +30,7 @@ export interface SessionStore {
   transcriptIdToIndex: Map<string, number>;
   queue: QueuedMessage[];
   /** Taken by dispatch, still visible until each handoff or failure. */
-  dispatching?: Set<QueuedMessage>;
+  dispatching?: Map<QueuedMessage, symbol>;
   recentRejections: RecentMessageRejection[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
   runtime: SessionRuntimeState;

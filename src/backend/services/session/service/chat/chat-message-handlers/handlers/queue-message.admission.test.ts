@@ -364,3 +364,27 @@ it('removes failed admission with a recoverable rejection on the live channel an
     frames.mockRestore();
   }
 });
+
+it('returns a retained admission rejection on retry and preserves it on a conflicting submission', async () => {
+  const domain = new SessionDomainService();
+  const persist = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('write failed'))
+    .mockResolvedValue(undefined);
+  const run = admission(domain, persist);
+  await run(context, submit);
+  const retry = await run(context, submit);
+  expect(retry.replies).toMatchObject([
+    {
+      type: 'message_state_changed',
+      id: 'human',
+      newState: 'REJECTED',
+      userMessage: { text: 'continue', sessionId: 'session' },
+    },
+  ]);
+  expect((await run(context, { ...submit, voiceMode: true })).replies).toMatchObject([
+    { type: 'error' },
+  ]);
+  expect(persist).toHaveBeenCalledOnce();
+  expect(domain.getQueueSnapshot('session')).toEqual([]);
+});

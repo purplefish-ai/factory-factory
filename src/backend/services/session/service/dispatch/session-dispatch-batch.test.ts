@@ -180,3 +180,37 @@ it('shows the claimed batch in replay and queue updates while provider configura
     second.id,
   ]);
 });
+
+it('keeps both preparing batches visible when a stopped generation overlaps its successor', async () => {
+  const h = harness();
+  const first = enqueue('old');
+  const oldGate = pendingCall<QueuedMessage['settings']>();
+  const newGate = pendingCall<QueuedMessage['settings']>();
+  h.configureQueuedMessage
+    .mockImplementationOnce(oldGate.invoke)
+    .mockImplementationOnce(newGate.invoke);
+  const oldRun = h.dispatcher.tryDispatchNextMessage('session');
+  await oldGate.started;
+  h.stop();
+  h.dispatcher.resetDispatchState('session');
+  const next = enqueue('new');
+  const newRun = h.dispatcher.tryDispatchNextMessage('session');
+  await newGate.started;
+  const queuedIds = () =>
+    sessionDomainService
+      .prepareLoad('session', sessionDomainService.getRuntimeSnapshot('session'))
+      .replayEvents.flatMap((event) =>
+        event.type === 'message_state_changed' && event.newState === 'ACCEPTED' ? [event.id] : []
+      );
+  try {
+    expect(queuedIds()).toEqual(['old', 'new']);
+    oldGate.resolve(first.settings);
+    await oldRun;
+    expect(queuedIds()).toEqual(['new']);
+  } finally {
+    oldGate.resolve(first.settings);
+    newGate.resolve(next.settings);
+    await Promise.all([oldRun, newRun]);
+  }
+  expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'new');
+});

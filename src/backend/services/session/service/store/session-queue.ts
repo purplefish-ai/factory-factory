@@ -1,50 +1,12 @@
-import { isDeepStrictEqual } from 'node:util';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
-import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { recordPRUpdateOutcome } from './session-pr-update';
 import type { SessionStore } from './session-store.types';
 import { removeTranscriptMessageById } from './session-transcript';
 
 export function visibleQueue(store: SessionStore): QueuedMessage[] {
-  return [...(store.dispatching ?? []), ...store.queue];
-}
-
-type SubmissionContent = Pick<ChatMessage, 'text' | 'attachments'>;
-type SubmittedOptions = Pick<QueuedMessage, 'voiceMode' | 'settings'>;
-
-function sameContent(left: SubmissionContent, right: SubmissionContent): boolean {
-  return (
-    left.text === right.text && isDeepStrictEqual(left.attachments ?? [], right.attachments ?? [])
-  );
-}
-
-export function sameSubmission(
-  candidate: QueuedMessage,
-  existing: SubmissionContent,
-  options?: SubmittedOptions
-): boolean {
-  return (
-    options !== undefined &&
-    sameContent(candidate, existing) &&
-    Boolean(candidate.voiceMode) === Boolean(options.voiceMode) &&
-    isDeepStrictEqual(candidate.settings, options.settings)
-  );
-}
-
-export function retainSubmissionOptions(
-  store: SessionStore,
-  transcript: readonly ChatMessage[],
-  submittedOptions: WeakMap<QueuedMessage | ChatMessage, SubmittedOptions>
-): void {
-  for (const row of transcript) {
-    const index = store.transcriptIdToIndex.get(row.id);
-    const previous = index === undefined ? undefined : store.transcript[index];
-    const options = previous && submittedOptions.get(previous);
-    if (row.source === 'user' && previous && options && sameContent(previous, row)) {
-      submittedOptions.set(row, options);
-    }
-  }
+  return [...(store.dispatching?.keys() ?? []), ...store.queue];
 }
 
 export function enqueueMessage(

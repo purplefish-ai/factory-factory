@@ -10,6 +10,7 @@ import {
 import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
 import { visibleQueue } from './session-queue';
 import type { SessionStore } from './session-store.types';
+import { rejectionEvent } from './session-submission';
 import { messageSort } from './session-transcript';
 
 function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
@@ -47,13 +48,7 @@ function appendRecentRejectionEvents(
       continue;
     }
 
-    replayEvents.push({
-      type: 'message_state_changed',
-      id: rejection.id,
-      newState: rejection.state ?? MessageState.REJECTED,
-      errorMessage: rejection.errorMessage,
-      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
-    });
+    replayEvents.push(rejectionEvent(rejection));
   }
 }
 
