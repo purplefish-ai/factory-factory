@@ -18,6 +18,8 @@ const {
     peekNextMessage: vi.fn(),
     captureStoreGuard: vi.fn(() => () => true),
     getQueueSnapshot: vi.fn(),
+    trackDispatchBatch: vi.fn(() => () => undefined),
+    finishDispatchPreparation: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),

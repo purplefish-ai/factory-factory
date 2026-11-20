@@ -5,6 +5,10 @@ import { recordPRUpdateOutcome } from './session-pr-update';
 import type { SessionStore } from './session-store.types';
 import { removeTranscriptMessageById } from './session-transcript';
 
+export function visibleQueue(store: SessionStore): QueuedMessage[] {
+  return [...(store.dispatching?.keys() ?? []), ...store.queue];
+}
+
 export function enqueueMessage(
   store: SessionStore,
   message: QueuedMessage

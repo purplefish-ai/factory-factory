@@ -40,6 +40,14 @@ directly.
   publishing a runtime delta. `session-runtime-machine.test.ts`.
 - Live provider notices keep the same transcript ID and ignore stale revisions.
   `../events/acp-event-processor.notices.test.ts`.
+- A human submission ID identifies one payload while it is queued, preparing for
+  dispatch, or committed in the session store. Retries acknowledge its existing
+  state. If the original is still queued when persistence fails, admission
+  removes it and publishes its recoverable draft in one rejection.
+  `../chat/chat-message-handlers/handlers/queue-message.admission.test.ts`.
+- Replay, queue deltas and snapshots include a claimed batch through provider
+  configuration. Dispatch cannot select a claimed message again.
+  `../dispatch/session-dispatch-batch.test.ts`.
 - A message moving from the queue into the transcript is never published as
   absent from both: the delta that removes it also carries its transcript entry,
   as a `transcript_message_committed` delta with the remaining queue or a
@@ -56,6 +64,7 @@ directly.
   its pages and tool calls; `session-local-transcript.ts` and
   `session-lifecycle-transcript.ts` place status and lifecycle cards.
 - `session-queue.ts`: the queue and the pending interactive request;
+  `session-submission.ts`: matching human retries to their retained outcomes;
   `session-pr-update.ts`: PR update outcomes.
 - `session-runtime-machine.ts`: runtime snapshots, including the initial launch;
   `session-process-exit.ts`: a process exit.

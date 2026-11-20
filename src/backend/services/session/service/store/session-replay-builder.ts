@@ -8,7 +8,9 @@ import {
   trimTranscriptForRenderer,
 } from '@/shared/acp-protocol';
 import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
+import { visibleQueue } from './session-queue';
 import type { SessionStore } from './session-store.types';
+import { rejectionEvent } from './session-submission';
 import { messageSort } from './session-transcript';
 
 function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
@@ -17,7 +19,7 @@ function selectRendererTranscriptWindow(store: SessionStore): ChatMessage[] {
 
 export function buildSnapshotMessages(store: SessionStore): ChatMessage[] {
   const snapshot = [...selectRendererTranscriptWindow(store)];
-  store.queue.forEach((queued, index) => {
+  visibleQueue(store).forEach((queued, index) => {
     snapshot.push({
       id: queued.id,
       source: 'user',
@@ -38,7 +40,7 @@ function appendRecentRejectionEvents(
 ): void {
   const activeMessageIds = new Set([
     ...transcript.map((message) => message.id),
-    ...store.queue.map((message) => message.id),
+    ...visibleQueue(store).map((message) => message.id),
   ]);
   const now = Date.now();
   for (const rejection of store.recentRejections) {
@@ -46,13 +48,7 @@ function appendRecentRejectionEvents(
       continue;
     }
 
-    replayEvents.push({
-      type: 'message_state_changed',
-      id: rejection.id,
-      newState: rejection.state ?? MessageState.REJECTED,
-      errorMessage: rejection.errorMessage,
-      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
-    });
+    replayEvents.push(rejectionEvent(rejection));
   }
 }
 
@@ -117,7 +113,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
     }
   }
 
-  for (const [queuePosition, queued] of store.queue.entries()) {
+  for (const [queuePosition, queued] of visibleQueue(store).entries()) {
     replayEvents.push({
       type: 'message_state_changed',
       id: queued.id,

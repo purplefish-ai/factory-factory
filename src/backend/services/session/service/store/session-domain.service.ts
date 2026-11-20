@@ -33,6 +33,7 @@ import { sessionResumeFences } from './session-resume-fence';
 import { SessionRuntimeMachine } from './session-runtime-machine';
 import { SessionStoreRegistry } from './session-store-registry';
 import type { RecentMessageRejection, SessionStore } from './session-store.types';
+import { existingSubmission, rejectionEvent, retainSubmissionOptions } from './session-submission';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
@@ -51,7 +52,54 @@ const MAX_RECENT_REJECTIONS = 100;
 export class SessionDomainService extends EventEmitter {
   private readonly pendingAdmissions = new WeakMap<QueuedMessage, Promise<void>>();
 
+  // Dispatch may replace a batch member's settings with the provider's effective settings.
+  private readonly submittedOptions = new WeakMap<
+    QueuedMessage | ChatMessage,
+    Pick<QueuedMessage, 'settings' | 'voiceMode'>
+  >();
+
+  existingSubmission(sessionId: string, candidate: QueuedMessage) {
+    const store = this.registry.getExisting(sessionId);
+    return (
+      store && existingSubmission(store, candidate, this.pendingAdmissions, this.submittedOptions)
+    );
+  }
+
+  trackDispatchBatch(sessionId: string, messages: readonly QueuedMessage[]): () => void {
+    const store = this.registry.getOrCreateActive(sessionId);
+    store.dispatching ??= new Map();
+    const dispatching = store.dispatching;
+    const token = Symbol();
+    const batch = [...messages];
+    for (const message of batch) {
+      dispatching.set(message, token);
+    }
+    return () => {
+      if (!this.registry.isCurrentStore(sessionId, store)) {
+        return;
+      }
+      let changed = false;
+      for (const message of batch) {
+        if (dispatching.get(message) === token) {
+          dispatching.delete(message);
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.publishQueue(sessionId);
+      }
+    };
+  }
+
+  finishDispatchPreparation(sessionId: string, message: QueuedMessage): void {
+    this.registry.getExisting(sessionId)?.dispatching?.delete(message);
+  }
+
   holdMessageForAdmission(message: QueuedMessage): () => void {
+    this.submittedOptions.set(message, {
+      settings: { ...message.settings },
+      voiceMode: message.voiceMode,
+    });
     let resolve!: () => void;
     const pending = new Promise<void>((done) => {
       resolve = done;
@@ -207,12 +255,24 @@ export class SessionDomainService extends EventEmitter {
       errorMessage,
     });
   }
+  rejectQueuedAdmission(sessionId: string, message: QueuedMessage, errorMessage: string): void {
+    const store = this.registry.getExisting(sessionId);
+    if (store && removeQueuedMessage(store, message.id, { expectedMessage: message })) {
+      this.recordRecentMessageRejection(sessionId, {
+        ...buildMessageFailure(sessionId, message, errorMessage),
+        submittedOptions: this.submittedOptions.get(message),
+        state: MessageState.REJECTED,
+      });
+    }
+  }
+
   failMessage(
     sessionId: string,
     message: QueuedMessage,
     errorMessage: string,
     deliveryState: 'failed' | 'cancelled' = 'failed'
   ): void {
+    this.finishDispatchPreparation(sessionId, message);
     if (message.source?.type === 'pr_event') {
       const store = this.registry.getOrCreateActive(sessionId);
       if (!recordPRUpdateOutcome(store, message, deliveryState, errorMessage)) {
@@ -222,10 +282,10 @@ export class SessionDomainService extends EventEmitter {
       this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
       return;
     }
-    this.recordRecentMessageRejection(
-      sessionId,
-      buildMessageFailure(sessionId, message, errorMessage)
-    );
+    this.recordRecentMessageRejection(sessionId, {
+      ...buildMessageFailure(sessionId, message, errorMessage),
+      submittedOptions: this.submittedOptions.get(message),
+    });
   }
 
   private recordRecentMessageRejection(
@@ -247,13 +307,7 @@ export class SessionDomainService extends EventEmitter {
       store.recentRejections = store.recentRejections.slice(-MAX_RECENT_REJECTIONS);
     }
 
-    this.publisher.emitDelta(sessionId, {
-      type: 'message_state_changed',
-      id: rejection.id,
-      newState: rejection.state ?? MessageState.REJECTED,
-      errorMessage: rejection.errorMessage,
-      ...(rejection.userMessage ? { userMessage: rejection.userMessage } : {}),
-    });
+    this.publisher.emitDelta(sessionId, rejectionEvent(rejection));
   }
 
   setRuntimeSnapshot(sessionId: string, runtime: SessionRuntimeState, emitDelta = true): void {
@@ -302,7 +356,7 @@ export class SessionDomainService extends EventEmitter {
     } else {
       this.publisher.forwardQueue(store);
     }
-    return result;
+    return { position: result.position + (store.dispatching?.size ?? 0) };
   }
 
   enqueueInitialMessage(
@@ -418,7 +472,12 @@ export class SessionDomainService extends EventEmitter {
     order: number,
     options?: { publish?: boolean }
   ): void {
+    store.dispatching?.delete(message);
     const committed = commitSentUserMessageWithOrder(store, message, order);
+    const optionsAtAdmission = this.submittedOptions.get(message);
+    if (optionsAtAdmission) {
+      this.submittedOptions.set(committed, optionsAtAdmission);
+    }
     this.emit('user_message_committed', { sessionId: store.sessionId });
 
     if (options?.publish !== false) {
@@ -891,6 +950,7 @@ export class SessionDomainService extends EventEmitter {
     options?: { historySource?: 'jsonl' | 'acp_fallback' | 'none' }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
+    retainSubmissionOptions(store, transcript, this.submittedOptions);
     store.transcript = [...transcript].sort(messageSort);
     rebuildTranscriptIndex(store);
     setNextOrderFromTranscript(store);

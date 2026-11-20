@@ -60,6 +60,8 @@ describe('socket-free command registry', () => {
       ...createChatRouterServices(sessionCommandFactories),
       execution: {
         domain: {
+          existingSubmission: vi.fn(),
+          rejectQueuedAdmission: vi.fn(),
           hasQueuedMessage: vi.fn(() => true),
           holdMessageForAdmission: vi.fn(() => vi.fn()),
           waitForMessageAdmission: vi.fn(),
@@ -144,6 +146,8 @@ it('routes execution commands using injected application capabilities and typed 
     userResume: vi.fn().mockResolvedValue(undefined),
   };
   const domain = {
+    existingSubmission: vi.fn(),
+    rejectQueuedAdmission: vi.fn(),
     hasQueuedMessage: vi.fn(() => true),
     holdMessageForAdmission: vi.fn(() => vi.fn()),
     waitForMessageAdmission: vi.fn(),

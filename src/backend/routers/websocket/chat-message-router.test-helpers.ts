@@ -15,6 +15,8 @@ export function createChatRouterServices(
     factories,
     execution: {
       domain: {
+        existingSubmission: vi.fn(),
+        rejectQueuedAdmission: vi.fn(),
         hasQueuedMessage: vi.fn(() => true),
         holdMessageForAdmission: vi.fn(() => vi.fn()),
         waitForMessageAdmission: vi.fn(),

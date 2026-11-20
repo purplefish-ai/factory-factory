@@ -146,6 +146,7 @@ export async function dispatchCollectedBatch(input: {
       );
       return 'retry';
     }
+    const release = sessionDomainService.trackDispatchBatch(input.sessionId, messages);
     try {
       await input.send(messages);
       input.onSuccess();
@@ -161,6 +162,8 @@ export async function dispatchCollectedBatch(input: {
       for (const message of backwards) {
         input.onError(message, error);
       }
+    } finally {
+      release();
     }
   } finally {
     input.batch.release();

@@ -1,6 +1,7 @@
 import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import type { ChatMessage, SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
+import { visibleQueue } from './session-queue';
 import { buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';
 import { normalizeTranscript } from './session-transcript';
@@ -41,7 +42,7 @@ export class SessionPublisher {
       ...(options?.resetTranscript ? { resetTranscript: true } : {}),
       ...(options?.removedMessageIds ? { removedMessageIds: options.removedMessageIds } : {}),
       messages: snapshotMessages,
-      queuedMessages: [...store.queue],
+      queuedMessages: visibleQueue(store),
       pendingInteractiveRequest: store.pendingInteractiveRequest,
       sessionRuntime: store.runtime,
       taskPlan: store.taskPlan ? structuredClone(store.taskPlan) : null,
@@ -53,7 +54,7 @@ export class SessionPublisher {
         path: 'snapshot',
         reason: options.reason ?? 'manual_emit',
         loadRequestId: options.loadRequestId ?? null,
-        queuedCount: store.queue.length,
+        queuedCount: payload.queuedMessages.length,
         snapshot: normalizeTranscript(snapshotMessages),
       });
     }
@@ -66,7 +67,7 @@ export class SessionPublisher {
    * instead of a snapshot, which would rebuild and resend the transcript window.
    */
   forwardQueue(store: SessionStore): void {
-    this.emitDelta(store.sessionId, { type: 'queue_updated', queuedMessages: [...store.queue] });
+    this.emitDelta(store.sessionId, { type: 'queue_updated', queuedMessages: visibleQueue(store) });
   }
 
   /** Publish one committed transcript entry and the queue that remains after it. */
@@ -74,7 +75,7 @@ export class SessionPublisher {
     this.emitDelta(store.sessionId, {
       type: 'transcript_message_committed',
       chatMessage,
-      queuedMessages: [...store.queue],
+      queuedMessages: visibleQueue(store),
     });
   }
 
