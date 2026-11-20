@@ -7,6 +7,10 @@ import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
+import type {
+  SessionDispatchDependencies,
+  SessionDispatchStartupService,
+} from './session-dispatch.types';
 
 export const fakeClient = unsafeCoerce<AcpProcessHandle>({});
 
@@ -48,10 +52,14 @@ export function harness(
   const sendSessionMessage = vi
     .fn<(sessionId: string, content: string | AgentContentItem[]) => Promise<void>>()
     .mockResolvedValue(undefined);
-  const steerSessionMessage = vi.fn().mockResolvedValue({ outcome: 'injected' });
+  const steerSessionMessage = vi
+    .fn<SessionDispatchDependencies['promptService']['steerSessionMessage']>()
+    .mockResolvedValue({ outcome: 'injected' });
   const startup = {
     getSessionClient: vi.fn<() => AcpProcessHandle | undefined>().mockReturnValue(fakeClient),
-    getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
+    getOrCreateSessionClient: vi
+      .fn<SessionDispatchStartupService['getOrCreateSessionClient']>()
+      .mockResolvedValue(fakeClient),
   };
   const runtimeManager = {
     isSessionWorking: vi.fn(() => false),
@@ -65,10 +73,16 @@ export function harness(
     Promise.resolve(message.settings)
   );
   const backgroundDelivery = {
-    prepare: vi.fn(),
-    validate: vi.fn().mockResolvedValue(true),
-    fail: vi.fn().mockResolvedValue(undefined),
-    complete: vi.fn().mockResolvedValue(undefined),
+    prepare: vi.fn<SessionDispatchDependencies['backgroundDelivery']['prepare']>(),
+    validate: vi
+      .fn<SessionDispatchDependencies['backgroundDelivery']['validate']>()
+      .mockResolvedValue(true),
+    fail: vi
+      .fn<SessionDispatchDependencies['backgroundDelivery']['fail']>()
+      .mockResolvedValue(undefined),
+    complete: vi
+      .fn<SessionDispatchDependencies['backgroundDelivery']['complete']>()
+      .mockResolvedValue(undefined),
   };
   const dispatcher = new SessionDispatchService({
     eventAuthority,

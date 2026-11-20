@@ -9,6 +9,19 @@ import { deferred } from '@/test-utils/deferred';
 import { enqueue, fakeClient, harness, pendingCall } from './session-dispatch-harness.test-helpers';
 import { visibleIdsAfterEachEvent } from './session-dispatch-visibility.test-helpers';
 
+const preparedDelivery = {
+  status: 'ready' as const,
+  delivery: {
+    deliveryId: 'delivery',
+    sessionId: 'session',
+    bindingRevision: 1,
+    eventIds: ['event'],
+    text: 'PR facts',
+    attempt: 1,
+  },
+  releaseOnRejection: async () => undefined,
+};
+
 afterEach(() => {
   sessionDomainService.clearAllSessions();
   vi.restoreAllMocks();
@@ -71,7 +84,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     sessionDomainService.enqueue('session', pr);
     backgroundDelivery.prepare.mockImplementation(() => {
       pr.text = '<!-- factory-factory-pr-event:batch -->\nPR #1 and PR #2 updates';
-      return Promise.resolve({ status: 'ready' });
+      return Promise.resolve(preparedDelivery);
     });
     await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith(
@@ -95,7 +108,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     const reached = deferred();
     const release = deferred();
     let checksAfterPrepare = 0;
-    h.backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    h.backgroundDelivery.prepare.mockResolvedValue(preparedDelivery);
     const dispatch = h.dispatcher.tryDispatchNextMessage('session', {
       guard: {
         check: async () => {
@@ -240,7 +253,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     };
     // A busy PR-only send can be restored in front of a human message arriving mid-send.
     sessionDomainService.requeueFront('session', pr);
-    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.prepare.mockResolvedValue(preparedDelivery);
     await dispatcher.tryDispatchNextMessage('session');
     const content = sendSessionMessage.mock.calls[0]?.[1];
     if (!Array.isArray(content)) {
@@ -280,7 +293,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
     };
     sessionDomainService.enqueue('session', pr);
-    backgroundDelivery.prepare.mockResolvedValue({ status: 'blocked' });
+    backgroundDelivery.prepare.mockResolvedValue({ status: 'blocked', reason: 'busy' });
     await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'first\n\nsecond');
     expect(sessionDomainService.peekNextMessage('session')).toBe(pr);
@@ -311,7 +324,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
     };
     sessionDomainService.enqueue('session', pr);
-    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.prepare.mockResolvedValue(preparedDelivery);
     backgroundDelivery.validate.mockImplementation(() => {
       // Stop after the individual validator returns true, before the batch resumes.
       queueMicrotask(() => queueMicrotask(stop));
@@ -343,9 +356,9 @@ describe('session dispatcher queue and lifecycle coordination', () => {
         preparationStarted.resolve();
         await preparing.promise;
         pr.text = 'PR facts';
-        return { status: 'ready' };
+        return preparedDelivery;
       })
-      .mockResolvedValue({ status: 'ready' });
+      .mockResolvedValue(preparedDelivery);
     const dispatch = dispatcher.tryDispatchNextMessage('session');
     await preparationStarted.promise;
     expect(backgroundDelivery.prepare).toHaveBeenCalledOnce();
@@ -383,7 +396,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       text: 'PR facts',
     };
     sessionDomainService.enqueue('session', pr);
-    backgroundDelivery.prepare.mockResolvedValue({ status: 'ready' });
+    backgroundDelivery.prepare.mockResolvedValue(preparedDelivery);
     backgroundDelivery.complete.mockRejectedValue(new Error('database unavailable'));
     const fail = vi.spyOn(sessionDomainService, 'failMessage');
     await dispatcher.tryDispatchNextMessage('session');
@@ -503,7 +516,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
       starting.resolve();
       await started.promise;
       startup.getSessionClient.mockReturnValue(fakeClient);
-      return {};
+      return fakeClient;
     });
     const pending = dispatcher.tryDispatchNextMessage('session');
     await starting.promise;
@@ -523,7 +536,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     startup.getSessionClient.mockReturnValue(undefined);
     startup.getOrCreateSessionClient.mockImplementation(() => {
       startup.getSessionClient.mockReturnValue(fakeClient);
-      return Promise.resolve({});
+      return Promise.resolve(fakeClient);
     });
     resolveQueuedMessageSettings.mockImplementation((_id, message) => ({
       ...message.settings,
@@ -547,7 +560,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     startup.getOrCreateSessionClient.mockImplementation(() => {
       startup.getSessionClient.mockReturnValue(fakeClient);
       runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
-      return Promise.resolve({});
+      return Promise.resolve(fakeClient);
     });
 
     await dispatcher.tryDispatchNextMessage('session');
