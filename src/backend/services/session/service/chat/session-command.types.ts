@@ -2,7 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import type { SessionLifecycleService } from '@/backend/services/session/service/lifecycle/session.lifecycle.service';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
-import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { AgentContentItem, WebSocketMessage } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { ChatMessageInput } from '@/shared/websocket';
 
@@ -43,6 +43,7 @@ export type SessionCommandError =
     };
 
 export type SessionCommandReply =
+  | Extract<WebSocketMessage, { type: 'message_state_changed' | 'session_delta' }>
   | { type: 'chat_capabilities'; capabilities: ChatBarCapabilities }
   | { type: 'steer_settled'; requestId: string }
   | { type: 'config_option_applied'; requestId: string }
@@ -89,6 +90,8 @@ export interface SessionExecutionCommandServices {
   domain: Pick<
     SessionDomainService,
     | 'markError'
+    | 'existingSubmission'
+    | 'rejectQueuedAdmission'
     | 'rejectMessage'
     | 'enqueue'
     | 'emitDelta'

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageState } from '@/shared/acp-protocol';
 
 const mocks = vi.hoisted(() => ({
+  existingSubmission: vi.fn(),
+  rejectQueuedAdmission: vi.fn(),
   hasQueuedMessage: vi.fn(() => true),
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
@@ -84,12 +86,9 @@ describe('createQueueMessageHandler', () => {
         text: 'continue',
       }
     );
-    expect(mocks.removeQueuedMessage).toHaveBeenCalledWith('session-1', 'follow-up', {
-      expectedMessage: expect.objectContaining({ id: 'follow-up' }),
-    });
-    expect(mocks.rejectMessage).toHaveBeenCalledWith(
+    expect(mocks.rejectQueuedAdmission).toHaveBeenCalledWith(
       'session-1',
-      'follow-up',
+      expect.objectContaining({ id: 'follow-up' }),
       expect.stringContaining('Try again')
     );
     expect(mocks.emitDelta).not.toHaveBeenCalled();

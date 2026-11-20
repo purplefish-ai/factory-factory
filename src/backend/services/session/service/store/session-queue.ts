@@ -1,9 +1,28 @@
+import { isDeepStrictEqual } from 'node:util';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
-import type { QueuedMessage } from '@/shared/acp-protocol';
+import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { recordPRUpdateOutcome } from './session-pr-update';
 import type { SessionStore } from './session-store.types';
 import { removeTranscriptMessageById } from './session-transcript';
+
+export function visibleQueue(store: SessionStore): QueuedMessage[] {
+  return [...(store.dispatching ?? []), ...store.queue];
+}
+
+export function sameSubmission(
+  candidate: QueuedMessage,
+  existing: Pick<ChatMessage, 'text' | 'attachments'>,
+  submittedOptions?: Pick<QueuedMessage, 'voiceMode' | 'settings'>
+): boolean {
+  return (
+    candidate.text === existing.text &&
+    isDeepStrictEqual(candidate.attachments ?? [], existing.attachments ?? []) &&
+    (!submittedOptions ||
+      (Boolean(candidate.voiceMode) === Boolean(submittedOptions.voiceMode) &&
+        isDeepStrictEqual(candidate.settings, submittedOptions.settings)))
+  );
+}
 
 export function enqueueMessage(
   store: SessionStore,

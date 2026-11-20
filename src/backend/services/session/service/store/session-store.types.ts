@@ -28,6 +28,8 @@ export interface SessionStore {
   transcript: ChatMessage[];
   transcriptIdToIndex: Map<string, number>;
   queue: QueuedMessage[];
+  /** Taken by dispatch, still visible until each handoff or failure. */
+  dispatching?: Set<QueuedMessage>;
   recentRejections: RecentMessageRejection[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;
   runtime: SessionRuntimeState;

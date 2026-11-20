@@ -26,7 +26,9 @@ import {
   peekNext,
   removeQueuedMessage,
   requeueFront,
+  sameSubmission,
   setPendingInteractiveRequest,
+  visibleQueue,
 } from './session-queue';
 import { buildReplayEvents } from './session-replay-builder';
 import { sessionResumeFences } from './session-resume-fence';
@@ -51,7 +53,71 @@ const MAX_RECENT_REJECTIONS = 100;
 export class SessionDomainService extends EventEmitter {
   private readonly pendingAdmissions = new WeakMap<QueuedMessage, Promise<void>>();
 
+  // Dispatch may replace a batch member's settings with the provider's effective settings.
+  private readonly submittedOptions = new WeakMap<
+    QueuedMessage | ChatMessage,
+    Pick<QueuedMessage, 'settings' | 'voiceMode'>
+  >();
+
+  existingSubmission(sessionId: string, candidate: QueuedMessage) {
+    const store = this.registry.getExisting(sessionId);
+    if (!store) {
+      return;
+    }
+    const queue = visibleQueue(store);
+    const position = queue.findIndex((message) => message.id === candidate.id);
+    const queued = queue[position];
+    const index = store.transcriptIdToIndex.get(candidate.id);
+    const committed = index === undefined ? undefined : store.transcript[index];
+    if (queued) {
+      if (
+        queued.source ||
+        !sameSubmission(candidate, queued, this.submittedOptions.get(queued) ?? queued)
+      ) {
+        return { kind: 'conflict' as const };
+      }
+      return this.pendingAdmissions.has(queued)
+        ? { kind: 'pending' as const }
+        : { kind: 'queued' as const, message: queued, position };
+    }
+    if (!committed) {
+      return;
+    }
+    if (
+      committed.source !== 'user' ||
+      !sameSubmission(candidate, committed, this.submittedOptions.get(committed))
+    ) {
+      return { kind: 'conflict' as const };
+    }
+    return { kind: 'committed' as const, message: committed, queue };
+  }
+
+  trackDispatchBatch(sessionId: string, messages: readonly QueuedMessage[]): () => void {
+    const claimed = new Set(messages);
+    const store = this.registry.getOrCreateActive(sessionId);
+    store.dispatching = claimed;
+    return () => {
+      // A delivery that settled through its own subsystem may still need a queue update.
+      if (store.dispatching !== claimed || !this.registry.isCurrentStore(sessionId, store)) {
+        return;
+      }
+      store.dispatching = undefined;
+      if (claimed.size > 0) {
+        claimed.clear();
+        this.publishQueue(sessionId);
+      }
+    };
+  }
+
+  finishDispatchPreparation(sessionId: string, message: QueuedMessage): void {
+    this.registry.getExisting(sessionId)?.dispatching?.delete(message);
+  }
+
   holdMessageForAdmission(message: QueuedMessage): () => void {
+    this.submittedOptions.set(message, {
+      settings: { ...message.settings },
+      voiceMode: message.voiceMode,
+    });
     let resolve!: () => void;
     const pending = new Promise<void>((done) => {
       resolve = done;
@@ -207,12 +273,23 @@ export class SessionDomainService extends EventEmitter {
       errorMessage,
     });
   }
+  rejectQueuedAdmission(sessionId: string, message: QueuedMessage, errorMessage: string): void {
+    const store = this.registry.getExisting(sessionId);
+    if (store && removeQueuedMessage(store, message.id, { expectedMessage: message })) {
+      this.recordRecentMessageRejection(sessionId, {
+        ...buildMessageFailure(sessionId, message, errorMessage),
+        state: MessageState.REJECTED,
+      });
+    }
+  }
+
   failMessage(
     sessionId: string,
     message: QueuedMessage,
     errorMessage: string,
     deliveryState: 'failed' | 'cancelled' = 'failed'
   ): void {
+    this.finishDispatchPreparation(sessionId, message);
     if (message.source?.type === 'pr_event') {
       const store = this.registry.getOrCreateActive(sessionId);
       if (!recordPRUpdateOutcome(store, message, deliveryState, errorMessage)) {
@@ -302,7 +379,7 @@ export class SessionDomainService extends EventEmitter {
     } else {
       this.publisher.forwardQueue(store);
     }
-    return result;
+    return { position: result.position + (store.dispatching?.size ?? 0) };
   }
 
   enqueueInitialMessage(
@@ -418,7 +495,12 @@ export class SessionDomainService extends EventEmitter {
     order: number,
     options?: { publish?: boolean }
   ): void {
+    store.dispatching?.delete(message);
     const committed = commitSentUserMessageWithOrder(store, message, order);
+    const optionsAtAdmission = this.submittedOptions.get(message);
+    if (optionsAtAdmission) {
+      this.submittedOptions.set(committed, optionsAtAdmission);
+    }
     this.emit('user_message_committed', { sessionId: store.sessionId });
 
     if (options?.publish !== false) {

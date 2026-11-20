@@ -473,6 +473,7 @@ export class SessionDispatchService {
     capturedClient?: AcpProcessHandle,
     guard?: SessionCallerGuard
   ): void {
+    sessionDomainService.finishDispatchPreparation(dbSessionId, msg);
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
       rollbackStoppedDispatchMessage(dbSessionId, msg, this.notificationDeliveryService, error);
       return;
@@ -716,16 +717,17 @@ export class SessionDispatchService {
         },
         order,
       };
+      sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
       sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
         id: message.id,
         newState: MessageState.DISPATCHED,
         userMessage,
       });
-      return { message, order, userMessage };
+      return { message, userMessage };
     });
 
-    const sendPromise = sendArmedWorkspaceMailBatch({
+    await sendArmedWorkspaceMailBatch({
       sessionId: dbSessionId,
       messages,
       notifications: this.lifecycle.notificationDelivery,
@@ -742,13 +744,6 @@ export class SessionDispatchService {
           ...(guard ? ([guard] as const) : [])
         ),
     });
-    // Persist immediately after dispatch so refresh/replay keeps this user message
-    // visible while the provider is still working on the turn. Each commit
-    // publishes only its entry and the remaining queue.
-    for (const { message, order } of dispatched) {
-      sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
-    }
-    await sendPromise;
     for (const { message, userMessage } of dispatched) {
       sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
@@ -856,6 +851,7 @@ export class SessionDispatchService {
   }
 
   private failStoppedUserMessage(dbSessionId: string, msg: QueuedMessage): void {
+    sessionDomainService.finishDispatchPreparation(dbSessionId, msg);
     if (this.lifecycle.notificationDelivery.isNotificationMessage(msg.id)) {
       // The notification was taken from the queue without publication.
       sessionDomainService.publishQueue(dbSessionId);

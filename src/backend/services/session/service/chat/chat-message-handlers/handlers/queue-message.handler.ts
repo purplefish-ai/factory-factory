@@ -6,24 +6,14 @@ import {
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import type {
   SessionCommandHandler,
+  SessionCommandOutcome,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
-import type { QueuedMessage } from '@/shared/acp-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 
 const logger = createLogger('chat-message-handlers');
-
-function rejectFailedAdmission(
-  domain: Pick<SessionExecutionCommandServices['domain'], 'removeQueuedMessage' | 'rejectMessage'>,
-  sessionId: string,
-  message: QueuedMessage
-): void {
-  if (domain.removeQueuedMessage(sessionId, message.id, { expectedMessage: message })) {
-    domain.rejectMessage(sessionId, message.id, 'Could not reopen workspace. Try again.');
-  }
-}
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -64,6 +54,50 @@ function validateQueueMessageInput(
   return validateAttachments(message.attachments);
 }
 
+function replyToPreviousSubmission(
+  existing: NonNullable<
+    ReturnType<SessionExecutionCommandServices['domain']['existingSubmission']>
+  >,
+  hasReservedSource: boolean
+): SessionCommandOutcome {
+  if (existing.kind === 'conflict' || hasReservedSource) {
+    return {
+      replies: [
+        {
+          type: 'error',
+          error: {
+            kind: 'queue_input_invalid',
+            reason: 'Message ID already belongs to a different submission.',
+          },
+        },
+      ],
+    };
+  }
+  if (existing.kind === 'queued') {
+    return {
+      replies: [
+        buildAcceptedMessageStateChange(existing.message.id, existing.message, existing.position),
+      ],
+    };
+  }
+  if (existing.kind === 'committed') {
+    return {
+      replies: [
+        {
+          type: 'session_delta',
+          data: {
+            type: 'transcript_message_committed',
+            chatMessage: existing.message,
+            queuedMessages: existing.queue,
+          },
+        },
+      ],
+    };
+  }
+  // The in-progress admission publishes its outcome to all subscribers.
+  return { replies: [] };
+}
+
 export function createQueueMessageHandler(
   deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery' | 'humanMessageAccepted'> & {
     domain: Pick<
@@ -71,7 +105,8 @@ export function createQueueMessageHandler(
       | 'enqueue'
       | 'emitDelta'
       | 'rejectMessage'
-      | 'removeQueuedMessage'
+      | 'existingSubmission'
+      | 'rejectQueuedAdmission'
       | 'holdMessageForAdmission'
       | 'hasQueuedMessage'
     >;
@@ -80,6 +115,12 @@ export function createQueueMessageHandler(
 ): SessionCommandHandler<QueueMessageInput> {
   return async ({ sessionId }, message) => {
     const text = message.text?.trim();
+    const messageId = message.id;
+    const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
+    const existing = deps.domain.existingSubmission(sessionId, queuedMsg);
+    if (existing) {
+      return replyToPreviousSubmission(existing, message.source !== undefined);
+    }
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
       if (message.id) {
@@ -95,8 +136,6 @@ export function createQueueMessageHandler(
     }
 
     const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
-    const messageId = message.id;
-    const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const acceptedAt = new Date();
     const releaseAdmission = deps.domain.holdMessageForAdmission(queuedMsg);
     const result = deps.domain.enqueue(sessionId, queuedMsg);
@@ -110,7 +149,11 @@ export function createQueueMessageHandler(
     try {
       await deps.humanMessageAccepted?.(sessionId, acceptedAt);
     } catch (error) {
-      rejectFailedAdmission(deps.domain, sessionId, queuedMsg);
+      deps.domain.rejectQueuedAdmission(
+        sessionId,
+        queuedMsg,
+        'Could not reopen workspace. Try again.'
+      );
       logger.warn('Failed to persist workspace follow-up', { sessionId, error });
       releaseAdmission();
       await deps.tryDispatchNextMessage(sessionId);

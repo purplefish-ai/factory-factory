@@ -1,5 +1,7 @@
 import { expect, it, vi } from 'vitest';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import { deferred } from '@/test-utils/deferred';
 import { createQueueMessageHandler } from './queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './remove-queued-message.handler';
 
@@ -111,7 +113,6 @@ it.each([false, true])(
     });
 
     const dispatch = vi.fn().mockResolvedValue(undefined);
-    const rejectMessage = vi.spyOn(domain, 'rejectMessage');
     const handler = createQueueMessageHandler({
       domain,
       backgroundDelivery: {
@@ -143,7 +144,9 @@ it.each([false, true])(
       await outcome;
       if (reject) {
         expect(domain.getQueueSnapshot('session')).toEqual([]);
-        expect(rejectMessage).toHaveBeenCalled();
+        expect(
+          domain.prepareLoad('session', domain.getRuntimeSnapshot('session')).replayEvents
+        ).toContainEqual(expect.objectContaining({ newState: 'REJECTED' }));
         expect(dispatch).toHaveBeenCalledOnce();
       } else {
         expect(domain.peekNextMessage('session')).toBe(queued);
@@ -195,5 +198,121 @@ it('wakes accepted follow-up messages after an earlier admission fails', async (
     expect(domain.getQueueSnapshot('session')).toEqual([]);
   } finally {
     domain.clearSession('session');
+  }
+});
+
+const context = { sessionId: 'session', workingDir: '/tmp' };
+const submit = { type: 'queue_message', id: 'human', text: 'continue' } as const;
+
+function admission(
+  domain: SessionDomainService,
+  persist: () => Promise<void> = async () => undefined
+) {
+  return createQueueMessageHandler({
+    domain,
+    humanMessageAccepted: persist,
+    backgroundDelivery: {
+      captureResumeGuard: () => () => true,
+      userResume: async () => undefined,
+    },
+    tryDispatchNextMessage: async () => undefined,
+  });
+}
+
+it('admits one human submission while persistence is pending and acknowledges subsequent retries', async () => {
+  const domain = new SessionDomainService();
+  const gate = deferred();
+  const persist = vi.fn(() => gate.promise);
+  const run = admission(domain, persist);
+  const first = run(context, submit);
+  const retry = run(context, submit);
+  try {
+    expect(domain.getQueueSnapshot('session').map(({ id }) => id)).toEqual(['human']);
+  } finally {
+    gate.resolve();
+    await Promise.all([first, retry]);
+  }
+  expect(persist).toHaveBeenCalledOnce();
+  expect((await run(context, submit)).replies).toMatchObject([
+    { type: 'message_state_changed', id: 'human', newState: 'ACCEPTED', queuePosition: 0 },
+  ]);
+  const message = domain.dequeueNext('session')!;
+  domain.commitSentUserMessage('session', message);
+  expect((await run(context, submit)).replies).toMatchObject([
+    {
+      type: 'session_delta',
+      data: {
+        type: 'transcript_message_committed',
+        chatMessage: { id: 'human', order: 0 },
+        queuedMessages: [],
+      },
+    },
+  ]);
+  expect(domain.getQueueSnapshot('session')).toEqual([]);
+  expect(persist).toHaveBeenCalledOnce();
+});
+
+it.each(['different', ''])(
+  'reports an ID conflict only to its requester and preserves the original submission (%j)',
+  async (text) => {
+    const domain = new SessionDomainService();
+    const run = admission(domain);
+    await run(context, submit);
+    const frames = vi.spyOn(sessionEventBus, 'publishToSession');
+    try {
+      expect((await run(context, { ...submit, text })).replies).toMatchObject([
+        { type: 'error', error: { kind: 'queue_input_invalid' } },
+      ]);
+      expect(frames).not.toHaveBeenCalled();
+      expect(domain.getQueueSnapshot('session').map(({ text }) => text)).toEqual(['continue']);
+    } finally {
+      frames.mockRestore();
+    }
+  }
+);
+
+it('removes failed admission with a recoverable rejection on the live channel and replay', async () => {
+  const domain = new SessionDomainService();
+  const gate = deferred();
+  const attachment = {
+    id: 'file',
+    name: 'notes.txt',
+    type: 'text/plain',
+    contentType: 'text' as const,
+    size: 3,
+    data: 'abc',
+  };
+  const run = admission(
+    domain,
+    vi.fn(async () => {
+      await gate.promise;
+      throw new Error('persistence unavailable');
+    })
+  );
+  const outcome = run(context, { ...submit, attachments: [attachment] });
+  const frames = vi.spyOn(sessionEventBus, 'publishToSession');
+  try {
+    gate.resolve();
+    await outcome;
+    const rejection = {
+      type: 'message_state_changed',
+      id: 'human',
+      newState: 'REJECTED',
+      userMessage: { text: 'continue', sessionId: 'session', attachments: [attachment] },
+    };
+    expect(frames.mock.calls.map(([, frame]) => frame)).toMatchObject([
+      { type: 'session_delta', data: rejection },
+    ]);
+    expect(domain.getQueueSnapshot('session')).toEqual([]);
+    expect(
+      domain.prepareLoad('session', domain.getRuntimeSnapshot('session')).replayEvents
+    ).toContainEqual(
+      expect.objectContaining({
+        ...rejection,
+        userMessage: expect.objectContaining(rejection.userMessage),
+      })
+    );
+  } finally {
+    frames.mockRestore();
   }
 });
