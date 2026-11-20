@@ -230,7 +230,8 @@ it('admits one human submission while persistence is pending and acknowledges su
     expect(domain.getQueueSnapshot('session').map(({ id }) => id)).toEqual(['human']);
   } finally {
     gate.resolve();
-    await Promise.all([first, retry]);
+    const [, retried] = await Promise.all([first, retry]);
+    expect(retried).toEqual({ replies: [] });
   }
   expect(persist).toHaveBeenCalledOnce();
   expect((await run(context, submit)).replies).toMatchObject([
@@ -250,6 +251,53 @@ it('admits one human submission while persistence is pending and acknowledges su
   ]);
   expect(domain.getQueueSnapshot('session')).toEqual([]);
   expect(persist).toHaveBeenCalledOnce();
+});
+
+it('preserves submission options through history refresh and reports unverified history IDs to the requester', async () => {
+  const domain = new SessionDomainService();
+  const run = admission(domain);
+  const sent = { ...submit, voiceMode: true };
+  await run(context, sent);
+  domain.commitSentUserMessage('session', domain.dequeueNext('session')!);
+  const history = structuredClone(domain.getTranscriptSnapshot('session'));
+  domain.replaceTranscript('session', history);
+  expect((await run(context, sent)).replies).toMatchObject([
+    { data: { type: 'transcript_message_committed' } },
+  ]);
+  expect((await run(context, submit)).replies).toMatchObject([{ type: 'error' }]);
+
+  // A newly hydrated store knows the provider row, but cannot authenticate its client options.
+  const restored = new SessionDomainService();
+  restored.replaceTranscript('session', history);
+  expect((await admission(restored)(context, submit)).replies).toMatchObject([{ type: 'error' }]);
+  expect(restored.getQueueSnapshot('session')).toEqual([]);
+  expect(restored.getTranscriptSnapshot('session')).toEqual(history);
+});
+
+it('keeps a matching reserved workspace notification private to its delivery subsystem', async () => {
+  const domain = new SessionDomainService();
+  const id = 'workspace-notification-real';
+  domain.enqueue('session', {
+    id,
+    text: submit.text,
+    timestamp: '2026-11-20T14:24:00Z',
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  });
+  const frames = vi.spyOn(sessionEventBus, 'publishToSession');
+  try {
+    expect((await admission(domain)(context, { ...submit, id })).replies).toMatchObject([
+      { type: 'error', error: { kind: 'queue_input_invalid' } },
+    ]);
+    expect(frames).not.toHaveBeenCalled();
+    expect(domain.hasQueuedMessage('session', id)).toBe(true);
+  } finally {
+    frames.mockRestore();
+  }
 });
 
 it.each(['different', ''])(

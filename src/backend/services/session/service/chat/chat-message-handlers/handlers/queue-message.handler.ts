@@ -30,6 +30,14 @@ function validateAttachments(attachments: QueueMessageInput['attachments']): str
   }
 }
 
+function isReservedSubmission(message: QueueMessageInput): boolean {
+  return (
+    message.source !== undefined ||
+    message.id?.startsWith(PR_EVENT_MESSAGE_ID_PREFIX) ||
+    message.id?.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)
+  );
+}
+
 function validateQueueMessageInput(
   message: QueueMessageInput,
   text: string | undefined
@@ -43,11 +51,7 @@ function validateQueueMessageInput(
     return 'Missing message id';
   }
 
-  if (
-    message.source !== undefined ||
-    message.id.startsWith(PR_EVENT_MESSAGE_ID_PREFIX) ||
-    message.id.startsWith(WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX)
-  ) {
+  if (isReservedSubmission(message)) {
     return 'Reserved message id';
   }
 
@@ -58,16 +62,18 @@ function replyToPreviousSubmission(
   existing: NonNullable<
     ReturnType<SessionExecutionCommandServices['domain']['existingSubmission']>
   >,
-  hasReservedSource: boolean
+  reserved: boolean
 ): SessionCommandOutcome {
-  if (existing.kind === 'conflict' || hasReservedSource) {
+  if (existing.kind === 'conflict' || reserved) {
     return {
       replies: [
         {
           type: 'error',
           error: {
             kind: 'queue_input_invalid',
-            reason: 'Message ID already belongs to a different submission.',
+            reason: reserved
+              ? 'Reserved message id'
+              : 'Message ID is already in use and the submissions could not be matched.',
           },
         },
       ],
@@ -119,7 +125,7 @@ export function createQueueMessageHandler(
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
     const existing = deps.domain.existingSubmission(sessionId, queuedMsg);
     if (existing) {
-      return replyToPreviousSubmission(existing, message.source !== undefined);
+      return replyToPreviousSubmission(existing, isReservedSubmission(message));
     }
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {

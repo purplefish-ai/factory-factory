@@ -26,6 +26,7 @@ import {
   peekNext,
   removeQueuedMessage,
   requeueFront,
+  retainSubmissionOptions,
   sameSubmission,
   setPendingInteractiveRequest,
   visibleQueue,
@@ -970,6 +971,7 @@ export class SessionDomainService extends EventEmitter {
     options?: { historySource?: 'jsonl' | 'acp_fallback' | 'none' }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
+    retainSubmissionOptions(store, transcript, this.submittedOptions);
     store.transcript = [...transcript].sort(messageSort);
     rebuildTranscriptIndex(store);
     setNextOrderFromTranscript(store);

@@ -10,18 +10,41 @@ export function visibleQueue(store: SessionStore): QueuedMessage[] {
   return [...(store.dispatching ?? []), ...store.queue];
 }
 
+type SubmissionContent = Pick<ChatMessage, 'text' | 'attachments'>;
+type SubmittedOptions = Pick<QueuedMessage, 'voiceMode' | 'settings'>;
+
+function sameContent(left: SubmissionContent, right: SubmissionContent): boolean {
+  return (
+    left.text === right.text && isDeepStrictEqual(left.attachments ?? [], right.attachments ?? [])
+  );
+}
+
 export function sameSubmission(
   candidate: QueuedMessage,
-  existing: Pick<ChatMessage, 'text' | 'attachments'>,
-  submittedOptions?: Pick<QueuedMessage, 'voiceMode' | 'settings'>
+  existing: SubmissionContent,
+  options?: SubmittedOptions
 ): boolean {
   return (
-    candidate.text === existing.text &&
-    isDeepStrictEqual(candidate.attachments ?? [], existing.attachments ?? []) &&
-    (!submittedOptions ||
-      (Boolean(candidate.voiceMode) === Boolean(submittedOptions.voiceMode) &&
-        isDeepStrictEqual(candidate.settings, submittedOptions.settings)))
+    options !== undefined &&
+    sameContent(candidate, existing) &&
+    Boolean(candidate.voiceMode) === Boolean(options.voiceMode) &&
+    isDeepStrictEqual(candidate.settings, options.settings)
   );
+}
+
+export function retainSubmissionOptions(
+  store: SessionStore,
+  transcript: readonly ChatMessage[],
+  submittedOptions: WeakMap<QueuedMessage | ChatMessage, SubmittedOptions>
+): void {
+  for (const row of transcript) {
+    const index = store.transcriptIdToIndex.get(row.id);
+    const previous = index === undefined ? undefined : store.transcript[index];
+    const options = previous && submittedOptions.get(previous);
+    if (row.source === 'user' && previous && options && sameContent(previous, row)) {
+      submittedOptions.set(row, options);
+    }
+  }
 }
 
 export function enqueueMessage(
