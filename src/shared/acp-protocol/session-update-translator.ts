@@ -1,5 +1,6 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import { PendingToolOutput } from './pending-tool-output';
 import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
 import { ProviderSessionNoticeSchema } from './protocol/provider-session-notice';
 import type { SubagentTranscriptUpdate } from './subagents';
@@ -55,7 +56,7 @@ const terminalReferenceSchema = z.object({
 type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<string> };
 
 /**
- * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending terminal output.
+ * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending tool output.
  *
  * Modeled on CodexEventTranslator. Each ACP session update type is mapped to the
  * appropriate FF delta event type(s) that the frontend already knows how to render.
@@ -65,6 +66,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  */
 export class AcpEventTranslator {
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
+  private readonly pendingOutput = new PendingToolOutput();
   private readonly toolNames = new Map<string, { sessionId: string; name: string }>();
   // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
@@ -126,6 +128,7 @@ export class AcpEventTranslator {
   }
 
   clearTerminalOutput(sessionId: string): void {
+    this.pendingOutput.clearSession(sessionId);
     for (const [key, tool] of this.toolNames) {
       if (tool.sessionId === sessionId) {
         this.toolNames.delete(key);
@@ -278,6 +281,7 @@ export class AcpEventTranslator {
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
     const key = JSON.stringify([sessionId, update.toolCallId]);
+    this.pendingOutput.take(key);
     this.toolNames.delete(key);
     this.toolNames.set(key, { sessionId, name: toolName });
     if (this.toolNames.size > MAX_TRACKED_TOOL_CALLS) {
@@ -306,7 +310,7 @@ export class AcpEventTranslator {
 
     // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
     // Emit tool_result here so UI tool cards don't remain stuck in pending state.
-    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
+    this.applyToolResultUpdate(events, update, sessionId);
 
     return events;
   }
@@ -369,7 +373,7 @@ export class AcpEventTranslator {
     events.push(event as AcpTranslatedDelta);
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
-    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
+    this.applyToolResultUpdate(events, update, sessionId);
 
     return events;
   }
@@ -405,35 +409,16 @@ export class AcpEventTranslator {
     ];
   }
 
-  private extractToolOutputText(
-    content: unknown,
-    rawOutput: unknown,
-    terminalOutput: string
-  ): ToolResultContentValue {
-    // Image results (Read of an image file, MCP screenshots) keep the same
-    // text/image item shape as provider history replay instead of base64 JSON text.
-    const items = this.extractToolResultItems(content);
-    if (items) {
-      return items;
-    }
-    const contentText = this.extractContentText(content);
-    if (contentText.length > 0) {
-      return contentText;
-    }
-    return terminalOutput || this.extractContentText(rawOutput);
+  private formatToolContent(content: unknown): ToolResultContentValue {
+    // Preserve structured screenshots in both progress snapshots and immediate results.
+    return this.extractToolResultItems(content) ?? this.extractContentText(content);
   }
 
   private createTerminalToolResultEvent(params: {
     toolCallId: string;
-    status?: unknown;
-    content?: unknown;
-    rawOutput?: unknown;
-    terminalOutput: string;
-  }): AcpTranslatedDelta | null {
-    if (!this.isTerminalToolStatus(params.status)) {
-      return null;
-    }
-
+    status: 'completed' | 'failed';
+    content: ToolResultContentValue;
+  }): AcpTranslatedDelta {
     return {
       type: 'agent_message',
       data: {
@@ -444,11 +429,7 @@ export class AcpEventTranslator {
             {
               type: 'tool_result',
               tool_use_id: params.toolCallId,
-              content: this.extractToolOutputText(
-                params.content,
-                params.rawOutput,
-                params.terminalOutput
-              ),
+              content: params.content,
               ...(params.status === 'failed' ? { is_error: true } : {}),
             },
           ],
@@ -457,7 +438,7 @@ export class AcpEventTranslator {
     };
   }
 
-  private appendTerminalToolResultIfNeeded(
+  private applyToolResultUpdate(
     events: AcpTranslatedDelta[],
     update: {
       toolCallId: string;
@@ -468,15 +449,46 @@ export class AcpEventTranslator {
     sessionId: string
   ): void {
     const key = JSON.stringify([sessionId, update.toolCallId]);
-    const terminalResult = this.createTerminalToolResultEvent({
-      ...update,
-      terminalOutput: this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS) ?? '',
-    });
-    if (terminalResult) {
-      this.toolNames.delete(key);
-      this.terminalOutput.delete(key);
-      events.push(terminalResult);
+    if (!this.isTerminalToolStatus(update.status)) {
+      if (update.content != null || update.rawOutput != null) {
+        this.pendingOutput.patch(key, sessionId, {
+          content: update.content == null ? undefined : this.formatToolContent(update.content),
+          rawOutput:
+            update.rawOutput == null ? undefined : this.extractContentText(update.rawOutput),
+        });
+      }
+      return;
     }
+
+    const previous = this.pendingOutput.take(key);
+    const terminalOutput = this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS);
+    this.toolNames.delete(key);
+    this.terminalOutput.delete(key);
+    events.push(
+      this.createTerminalToolResultEvent({
+        toolCallId: update.toolCallId,
+        status: update.status,
+        content: this.resolveToolResultContent(update, previous, terminalOutput),
+      })
+    );
+  }
+
+  private resolveToolResultContent(
+    update: { content?: unknown; rawOutput?: unknown },
+    previous: { content?: ToolResultContentValue; rawOutput?: string } | undefined,
+    terminalOutput: string | undefined
+  ): ToolResultContentValue {
+    const content =
+      update.content == null ? previous?.content : this.formatToolContent(update.content);
+    if (content?.length) {
+      return content;
+    }
+    if (terminalOutput) {
+      return terminalOutput;
+    }
+    return update.rawOutput == null
+      ? (previous?.rawOutput ?? '')
+      : this.extractContentText(update.rawOutput);
   }
 
   private extractTextChunkContent(
