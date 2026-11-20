@@ -375,7 +375,7 @@ export function appendClaudeEvent(
     nowIso: () => string;
     onParityTrace: (data: Record<string, unknown>) => void;
   }
-): number {
+): { order: number; messageId?: string } {
   // When the ACP adapter sends progressive enrichment for the same tool call
   // (same toolCallId, updated title/input), upsert the existing transcript
   // entry and return its original order so the frontend updates in place
@@ -392,7 +392,7 @@ export function appendClaudeEvent(
           order: existing.order,
           claudeMessage,
         });
-        return existing.order;
+        return { order: existing.order, messageId: existing.id };
       }
     }
   }
@@ -409,7 +409,7 @@ export function appendClaudeEvent(
       order,
       claudeMessage,
     });
-    return order;
+    return { order };
   }
 
   const entry: ChatMessage = {
@@ -429,7 +429,7 @@ export function appendClaudeEvent(
     claudeMessage,
   });
 
-  return order;
+  return { order, messageId: entry.id };
 }
 
 export function commitSentUserMessageWithOrder(
@@ -460,8 +460,15 @@ export function commitSentUserMessageWithOrder(
 export function injectCommittedUserMessage(
   store: SessionStore,
   text: string,
-  options: { messageId?: string; nowIso: () => string; nowMs: () => number }
-): void {
+  options: { messageId?: string; appendTo?: string; nowIso: () => string; nowMs: () => number }
+): string {
+  const index =
+    options.appendTo === undefined ? undefined : store.transcriptIdToIndex.get(options.appendTo);
+  const existing = index === undefined ? undefined : store.transcript[index];
+  if (existing?.source === 'user' && existing.id === options.appendTo) {
+    upsertTranscriptMessage(store, { ...existing, text: (existing.text ?? '') + text });
+    return existing.id;
+  }
   const order = store.nextOrder;
   // Replay can inject several messages in the same millisecond; the order keeps ids unique.
   const messageId = options.messageId ?? `injected-${options.nowMs()}-${order}`;
@@ -474,6 +481,7 @@ export function injectCommittedUserMessage(
   };
   store.nextOrder += 1;
   upsertTranscriptMessage(store, message);
+  return message.id;
 }
 
 function summarizeAttachment(attachment: NonNullable<ChatMessage['attachments']>[number]): {

@@ -198,6 +198,7 @@ describe('AcpEventProcessor replay suppression', () => {
       type: 'agent_message',
       data: { type: 'result', result: usage },
       order: messages[0]?.order,
+      messageId: messages[0]?.id,
     });
   });
 

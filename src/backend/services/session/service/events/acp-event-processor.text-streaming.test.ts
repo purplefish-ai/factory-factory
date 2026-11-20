@@ -52,8 +52,10 @@ function makeDeps(
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
       emitDelta: vi.fn(),
-      appendClaudeEvent: vi.fn().mockReturnValue(3),
-      upsertClaudeEvent: vi.fn(),
+      appendClaudeEvent: vi.fn().mockReturnValue({ order: 3, messageId: 'sid-3' }),
+      upsertClaudeEvent: vi.fn(
+        (sid: string, _data: AgentMessage, order: number) => `${sid}-${order}`
+      ),
       allocateOrder: vi.fn().mockReturnValue(2),
     } as unknown as AcpEventProcessorDependencies['sessionDomainService'],
     sessionPermissionService: {
@@ -310,12 +312,19 @@ describe('AcpEventProcessor assistant text streaming', () => {
     const processor = new AcpEventProcessor(deps);
 
     processor.handleAcpDelta('sid', assistantDelta('final'));
+    expect(vi.getTimerCount()).toBe(1);
     processor.clearStreamingState('sid');
+    expect(vi.getTimerCount()).toBe(0);
 
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(25);
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
-    expect(processor.acpStreamState.has('sid')).toBe(false);
+    processor.handleAcpDelta('sid', assistantDelta('next'));
+    processor.clearStreamingState('sid');
+    expect(deps.sessionDomainService.emitDelta).toHaveBeenLastCalledWith(
+      'sid',
+      expect.objectContaining({ text: 'next', offset: 0 })
+    );
   });
 
   it('merges thought chunks and writes them before the next message', () => {

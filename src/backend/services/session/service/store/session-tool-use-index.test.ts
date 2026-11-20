@@ -219,7 +219,7 @@ describe('findPersistedToolUseStart', () => {
     const store = createStore();
     const firstOrder = appendClaudeEvent(store, toolUse('t1'), appendOptions);
     const enrichedOrder = appendClaudeEvent(store, toolUse('t1', { cmd: 'ls' }), appendOptions);
-    expect(enrichedOrder).toBe(firstOrder);
+    expect(enrichedOrder).toEqual(firstOrder);
     expect(store.transcript).toHaveLength(1);
     expect(findPersistedToolUseStart(store, 't1')?.message).toEqual(toolUse('t1', { cmd: 'ls' }));
 
@@ -227,8 +227,8 @@ describe('findPersistedToolUseStart', () => {
     expect(findPersistedToolUseStart(store, 't1')).toBeUndefined();
 
     const restartOrder = appendClaudeEvent(store, toolUse('t1'), appendOptions);
-    expect(restartOrder).not.toBe(firstOrder);
-    expect(findPersistedToolUseStart(store, 't1')?.order).toBe(restartOrder);
+    expect(restartOrder.order).not.toBe(firstOrder.order);
+    expect(findPersistedToolUseStart(store, 't1')?.order).toBe(restartOrder.order);
   });
 
   it('ignores a result inserted before the start and re-exposes a start whose result is removed', () => {

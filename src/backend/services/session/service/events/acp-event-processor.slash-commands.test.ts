@@ -63,7 +63,7 @@ function makeDeps(
     } as unknown as AcpEventProcessorDependencies['runtimeManager'],
     sessionDomainService: {
       emitDelta: vi.fn(),
-      appendClaudeEvent: vi.fn().mockReturnValue(1),
+      appendClaudeEvent: vi.fn().mockReturnValue({ order: 1, messageId: 'sid-1' }),
       upsertClaudeEvent: vi.fn(),
       allocateOrder: vi.fn().mockReturnValue(1),
     } as unknown as AcpEventProcessorDependencies['sessionDomainService'],

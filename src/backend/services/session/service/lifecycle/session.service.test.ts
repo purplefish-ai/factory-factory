@@ -1041,7 +1041,7 @@ describe('SessionService', () => {
     const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
     const appendClaudeEventSpy = vi
       .spyOn(sessionDomainService, 'appendClaudeEvent')
-      .mockReturnValue(77);
+      .mockReturnValue({ order: 77, messageId: 'transcript-77' });
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
     await acpHandlers.onRuntimeExit!({ ...activeRuntime, sessionId: session.id, exitCode: 1 });
@@ -1254,7 +1254,7 @@ describe('SessionService', () => {
     const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
     const appendClaudeEventSpy = vi
       .spyOn(sessionDomainService, 'appendClaudeEvent')
-      .mockReturnValue(77);
+      .mockReturnValue({ order: 77, messageId: 'transcript-77' });
 
     await sessionLifecycleService.stopSession('session-1');
 
@@ -1900,7 +1900,7 @@ describe('SessionService', () => {
     const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
     const appendClaudeEventSpy = vi
       .spyOn(sessionDomainService, 'appendClaudeEvent')
-      .mockReturnValue(77);
+      .mockReturnValue({ order: 77, messageId: 'transcript-77' });
 
     await sessionService.sendSessionMessage('session-1', 'hello');
 
@@ -2222,7 +2222,7 @@ describe('SessionService', () => {
     );
     const appendClaudeEventSpy = vi
       .spyOn(sessionDomainService, 'appendClaudeEvent')
-      .mockReturnValue(88);
+      .mockReturnValue({ order: 88, messageId: 'transcript-88' });
 
     stoppedPrompt.reject(new Error('Prompt timed out'));
     await stoppedSendRejection;
