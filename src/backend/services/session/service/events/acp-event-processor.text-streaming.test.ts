@@ -312,7 +312,9 @@ describe('AcpEventProcessor assistant text streaming', () => {
     const processor = new AcpEventProcessor(deps);
 
     processor.handleAcpDelta('sid', assistantDelta('final'));
+    expect(vi.getTimerCount()).toBe(1);
     processor.clearStreamingState('sid');
+    expect(vi.getTimerCount()).toBe(0);
 
     expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
     vi.advanceTimersByTime(25);

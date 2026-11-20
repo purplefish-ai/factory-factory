@@ -53,8 +53,8 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   transcript order is unchanged. `acp-event-processor.text-streaming.test.ts`.
 - ACP text chunks with an explicit message ID share a row until the next message
   or turn. Tool calls can interrupt delivery of one assistant message. Without
-  an ID, consecutive assistant chunks share a block and each replayed user chunk
-  starts a prompt. `acp-event-processor.transcript.test.ts`.
+  an ID, consecutive assistant chunks share a block and each non-empty replayed
+  user chunk starts a prompt. `acp-event-processor.transcript.test.ts`.
 - While history replay is suppressed, usage, plan and session info updates still
   reach the session, so one attached after a backend restart shows its context
   occupancy and can compact. `acp-event-processor.replay-suppression.test.ts`,
