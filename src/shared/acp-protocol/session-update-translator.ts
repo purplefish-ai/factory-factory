@@ -52,10 +52,16 @@ const terminalReferenceSchema = z.object({
   type: z.literal('terminal'),
   terminalId: z.string().min(1),
 });
+type PendingToolCall = {
+  sessionId: string;
+  name?: string;
+  content?: unknown;
+  rawOutput?: unknown;
+};
 type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<string> };
 
 /**
- * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending terminal output.
+ * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending tool state.
  *
  * Modeled on CodexEventTranslator. Each ACP session update type is mapped to the
  * appropriate FF delta event type(s) that the frontend already knows how to render.
@@ -65,7 +71,7 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  */
 export class AcpEventTranslator {
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
-  private readonly toolNames = new Map<string, { sessionId: string; name: string }>();
+  private readonly pendingTools = new Map<string, PendingToolCall>();
   // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
 
@@ -126,9 +132,9 @@ export class AcpEventTranslator {
   }
 
   clearTerminalOutput(sessionId: string): void {
-    for (const [key, tool] of this.toolNames) {
+    for (const [key, tool] of this.pendingTools) {
       if (tool.sessionId === sessionId) {
-        this.toolNames.delete(key);
+        this.pendingTools.delete(key);
       }
     }
     for (const [key, state] of this.compactions) {
@@ -277,15 +283,6 @@ export class AcpEventTranslator {
       | { claudeCode?: { toolName?: string } }
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
-    const key = JSON.stringify([sessionId, update.toolCallId]);
-    this.toolNames.delete(key);
-    this.toolNames.set(key, { sessionId, name: toolName });
-    if (this.toolNames.size > MAX_TRACKED_TOOL_CALLS) {
-      const oldest = this.toolNames.keys().next().value;
-      if (oldest !== undefined) {
-        this.toolNames.delete(oldest);
-      }
-    }
     const input = toolInputSchema.safeParse(update.rawInput);
     const events: AcpTranslatedDelta[] = [
       this.createToolUseEvent(update.toolCallId, toolName, input.success ? input.data : {}),
@@ -306,7 +303,7 @@ export class AcpEventTranslator {
 
     // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
     // Emit tool_result here so UI tool cards don't remain stuck in pending state.
-    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
+    this.applyToolResultUpdate(events, update, sessionId, toolName);
 
     return events;
   }
@@ -359,9 +356,9 @@ export class AcpEventTranslator {
     }
 
     const events: AcpTranslatedDelta[] = [];
-    const tool = this.toolNames.get(JSON.stringify([sessionId, update.toolCallId]));
+    const tool = this.pendingTools.get(JSON.stringify([sessionId, update.toolCallId]));
     const input = toolInputSchema.safeParse(update.rawInput);
-    if (tool && input.success) {
+    if (tool?.name !== undefined && input.success) {
       // rawInput is a whole replacement, not a JSON fragment. Reuse the tool
       // start so the transcript store upserts its original order for live/replay.
       events.push(this.createToolUseEvent(update.toolCallId, tool.name, input.data));
@@ -369,7 +366,7 @@ export class AcpEventTranslator {
     events.push(event as AcpTranslatedDelta);
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
-    this.appendTerminalToolResultIfNeeded(events, update, sessionId);
+    this.applyToolResultUpdate(events, update, sessionId);
 
     return events;
   }
@@ -457,7 +454,7 @@ export class AcpEventTranslator {
     };
   }
 
-  private appendTerminalToolResultIfNeeded(
+  private applyToolResultUpdate(
     events: AcpTranslatedDelta[],
     update: {
       toolCallId: string;
@@ -465,17 +462,42 @@ export class AcpEventTranslator {
       content?: unknown;
       rawOutput?: unknown;
     },
-    sessionId: string
+    sessionId: string,
+    startName?: string
   ): void {
     const key = JSON.stringify([sessionId, update.toolCallId]);
+    // A new start replaces any abandoned call that used the same provider ID.
+    const previous = startName === undefined ? this.pendingTools.get(key) : undefined;
+    const content = update.content ?? previous?.content;
+    const rawOutput = update.rawOutput ?? previous?.rawOutput;
     const terminalResult = this.createTerminalToolResultEvent({
       ...update,
+      content,
+      rawOutput,
       terminalOutput: this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS) ?? '',
     });
     if (terminalResult) {
-      this.toolNames.delete(key);
+      this.pendingTools.delete(key);
       this.terminalOutput.delete(key);
       events.push(terminalResult);
+      return;
+    }
+
+    if (startName === undefined && update.content == null && update.rawOutput == null) {
+      return;
+    }
+    this.pendingTools.delete(key);
+    this.pendingTools.set(key, {
+      sessionId,
+      name: startName ?? previous?.name,
+      content,
+      rawOutput,
+    });
+    if (this.pendingTools.size > MAX_TRACKED_TOOL_CALLS) {
+      const oldest = this.pendingTools.keys().next().value;
+      if (oldest !== undefined) {
+        this.pendingTools.delete(oldest);
+      }
     }
   }
 

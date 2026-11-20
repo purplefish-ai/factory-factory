@@ -89,3 +89,118 @@ describe('ACP tool results with image content', () => {
     expect(toolResultContent(events)).toBe('1\thello');
   });
 });
+
+describe('ACP tool results across sparse updates', () => {
+  const textContent = (text: string) => [
+    { type: 'content' as const, content: { type: 'text' as const, text } },
+  ];
+
+  function complete(translator: AcpEventTranslator, toolCallId: string, sessionId = '') {
+    return toolResultContent(
+      translator.translateSessionUpdate(
+        { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' },
+        sessionId
+      )
+    );
+  }
+
+  it('uses the latest content on a status-only completion and forgets the completed call', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    const toolCallId = 'read';
+    translator.translateSessionUpdate({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: 'Read',
+      content: textContent('initial'),
+    });
+    translator.translateSessionUpdate({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      content: textContent('latest'),
+    });
+    translator.translateSessionUpdate({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      content: null,
+    });
+    expect(complete(translator, toolCallId)).toBe('latest');
+    expect(complete(translator, toolCallId)).toBe('');
+  });
+
+  it('keeps raw output across null patches and clears replaced content before deriving a failed result', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    const toolCallId = 'read';
+    translator.translateSessionUpdate({
+      sessionUpdate: 'tool_call',
+      toolCallId,
+      title: 'Read',
+      content: textContent('initial'),
+      rawOutput: 'initial raw',
+    });
+    translator.translateSessionUpdate({
+      sessionUpdate: 'tool_call_update',
+      toolCallId,
+      rawOutput: { message: 'failed' },
+    });
+    expect(
+      translator
+        .translateSessionUpdate({
+          sessionUpdate: 'tool_call_update',
+          toolCallId,
+          content: [],
+          rawOutput: null,
+          status: 'failed',
+        })
+        .at(-1)
+    ).toMatchObject({
+      data: { message: { content: [{ content: '{"message":"failed"}', is_error: true }] } },
+    });
+    expect(complete(translator, toolCallId)).toBe('');
+  });
+
+  it('isolates parallel tools and sessions and drops earlier output on teardown or a fresh start', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    for (const [sessionId, toolCallId, rawOutput] of [
+      ['a', 'one', 'first'],
+      ['b', 'one', 'second'],
+      ['b', 'two', 'third'],
+      ['b', 'three', 'old'],
+    ] as const) {
+      translator.translateSessionUpdate(
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId,
+          title: 'Read',
+          rawOutput,
+        },
+        sessionId
+      );
+    }
+    translator.clearTerminalOutput('a');
+    translator.translateSessionUpdate(
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'three',
+        title: 'New tool',
+      },
+      'b'
+    );
+    expect(complete(translator, 'one', 'a')).toBe('');
+    expect(complete(translator, 'two', 'b')).toBe('third');
+    expect(complete(translator, 'one', 'b')).toBe('second');
+    expect(complete(translator, 'three', 'b')).toBe('');
+  });
+
+  it('bounds abandoned tool snapshots, including updates without a start frame', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    for (let id = 0; id <= 1024; id++) {
+      translator.translateSessionUpdate({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: String(id),
+        content: textContent(String(id)),
+      });
+    }
+    expect(complete(translator, '0')).toBe('');
+    expect(complete(translator, '1024')).toBe('1024');
+  });
+});
