@@ -423,11 +423,7 @@ export class AcpEventProcessor {
       this.messages.appendAssistant(sid, safeData, providerMessageId);
       return;
     }
-    if (safeData.type === 'stream_event' || safeData.type === 'user') {
-      this.messages.interrupt(sid);
-    } else {
-      this.messages.clear(sid);
-    }
+    this.messages.interrupt(sid);
     if (safeData.type === 'session_notice') {
       this.providerNotices.record(
         sid,

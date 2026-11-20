@@ -74,6 +74,23 @@ describe('main-chat ACP transcript', () => {
     ).toEqual(['  one\n\ntwo  ', 'next']);
   });
 
+  it('keeps identified text together across incidental provider usage updates', () => {
+    const { chunk, domain, processor, update } = fixture();
+    chunk('user_message_chunk', 'question ', 'user');
+    update({ sessionUpdate: 'usage_update', used: 2, size: 1000 });
+    chunk('user_message_chunk', 'continued', 'user');
+    chunk('agent_message_chunk', 'answer ', 'agent');
+    update({ sessionUpdate: 'usage_update', used: 3, size: 1000 });
+    chunk('agent_message_chunk', 'continued', 'agent');
+    processor.clearSessionState(sid);
+    expect(domain.getTranscriptSnapshot(sid).map(rowText)).toEqual([
+      'question continued',
+      undefined,
+      'answer continued',
+      undefined,
+    ]);
+  });
+
   it('keeps separate unlabelled user prompts and coalesces adjacent unlabelled assistant chunks', () => {
     const { chunk, domain, processor } = fixture();
     chunk('user_message_chunk', '  first prompt ');

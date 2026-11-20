@@ -77,9 +77,8 @@ export class AcpMessageStream {
     }
   }
 
-  /** Tools and thoughts interrupt delivery, but identified Markdown continues in its original row. */
+  /** Interleaved events flush pending text. Identified messages can resume in their original row. */
   interrupt(sid: string): void {
-    this.users.delete(sid);
     const stream = this.assistants.get(sid);
     if (!stream) {
       return;
