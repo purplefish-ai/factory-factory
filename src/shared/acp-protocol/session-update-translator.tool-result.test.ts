@@ -203,4 +203,42 @@ describe('ACP tool results across sparse updates', () => {
     expect(complete(translator, '0')).toBe('');
     expect(complete(translator, '1024')).toBe('1024');
   });
+
+  it('evicts older output when multiple snapshots exceed the shared character budget', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    const large = 'x'.repeat(6 * 1024 * 1024);
+    for (const toolCallId of ['oldest', 'middle', 'newest']) {
+      translator.translateSessionUpdate({
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        rawOutput: large,
+      });
+    }
+    expect(String(complete(translator, 'oldest')).length).toBe(0);
+    expect(String(complete(translator, 'middle')).length).toBe(large.length);
+    expect(String(complete(translator, 'newest')).length).toBe(large.length);
+  });
+
+  it('drops oversized pending replacements without limiting an output supplied on completion', () => {
+    const translator = new AcpEventTranslator({ warn: vi.fn() });
+    const large = 'x'.repeat(17 * 1024 * 1024);
+    for (const key of ['content', 'rawOutput'] as const) {
+      const update = { sessionUpdate: 'tool_call_update', toolCallId: key } as const;
+      translator.translateSessionUpdate({
+        ...update,
+        [key]: key === 'content' ? textContent('old') : 'old',
+      });
+      translator.translateSessionUpdate({
+        ...update,
+        [key]: key === 'content' ? textContent(large) : large,
+      });
+      expect(String(complete(translator, key)).length).toBe(0);
+      const direct = translator.translateSessionUpdate({
+        ...update,
+        status: 'completed',
+        [key]: key === 'content' ? textContent(large) : large,
+      });
+      expect(String(toolResultContent(direct)).length).toBe(large.length);
+    }
+  });
 });

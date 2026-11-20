@@ -1,5 +1,6 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import { PendingToolOutput } from './pending-tool-output';
 import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
 import { ProviderSessionNoticeSchema } from './protocol/provider-session-notice';
 import type { SubagentTranscriptUpdate } from './subagents';
@@ -52,16 +53,10 @@ const terminalReferenceSchema = z.object({
   type: z.literal('terminal'),
   terminalId: z.string().min(1),
 });
-type PendingToolCall = {
-  sessionId: string;
-  name?: string;
-  content?: unknown;
-  rawOutput?: unknown;
-};
 type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<string> };
 
 /**
- * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending tool state.
+ * Maps ACP SessionUpdate variants to FF deltas, retaining bounded pending tool output.
  *
  * Modeled on CodexEventTranslator. Each ACP session update type is mapped to the
  * appropriate FF delta event type(s) that the frontend already knows how to render.
@@ -71,7 +66,8 @@ type TerminalOutputState = { sessionId: string; text: string; terminalIds: Set<s
  */
 export class AcpEventTranslator {
   private readonly terminalOutput = new Map<string, TerminalOutputState>();
-  private readonly pendingTools = new Map<string, PendingToolCall>();
+  private readonly pendingOutput = new PendingToolOutput();
+  private readonly toolNames = new Map<string, { sessionId: string; name: string }>();
   // Retain replay identities until clearTerminalOutput tears down their session.
   private readonly compactions = new Map<string, { sessionId: string; status: string }>();
 
@@ -132,9 +128,10 @@ export class AcpEventTranslator {
   }
 
   clearTerminalOutput(sessionId: string): void {
-    for (const [key, tool] of this.pendingTools) {
+    this.pendingOutput.clearSession(sessionId);
+    for (const [key, tool] of this.toolNames) {
       if (tool.sessionId === sessionId) {
-        this.pendingTools.delete(key);
+        this.toolNames.delete(key);
       }
     }
     for (const [key, state] of this.compactions) {
@@ -283,6 +280,16 @@ export class AcpEventTranslator {
       | { claudeCode?: { toolName?: string } }
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
+    const key = JSON.stringify([sessionId, update.toolCallId]);
+    this.pendingOutput.take(key);
+    this.toolNames.delete(key);
+    this.toolNames.set(key, { sessionId, name: toolName });
+    if (this.toolNames.size > MAX_TRACKED_TOOL_CALLS) {
+      const oldest = this.toolNames.keys().next().value;
+      if (oldest !== undefined) {
+        this.toolNames.delete(oldest);
+      }
+    }
     const input = toolInputSchema.safeParse(update.rawInput);
     const events: AcpTranslatedDelta[] = [
       this.createToolUseEvent(update.toolCallId, toolName, input.success ? input.data : {}),
@@ -303,7 +310,7 @@ export class AcpEventTranslator {
 
     // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
     // Emit tool_result here so UI tool cards don't remain stuck in pending state.
-    this.applyToolResultUpdate(events, update, sessionId, toolName);
+    this.applyToolResultUpdate(events, update, sessionId);
 
     return events;
   }
@@ -356,9 +363,9 @@ export class AcpEventTranslator {
     }
 
     const events: AcpTranslatedDelta[] = [];
-    const tool = this.pendingTools.get(JSON.stringify([sessionId, update.toolCallId]));
+    const tool = this.toolNames.get(JSON.stringify([sessionId, update.toolCallId]));
     const input = toolInputSchema.safeParse(update.rawInput);
-    if (tool?.name !== undefined && input.success) {
+    if (tool && input.success) {
       // rawInput is a whole replacement, not a JSON fragment. Reuse the tool
       // start so the transcript store upserts its original order for live/replay.
       events.push(this.createToolUseEvent(update.toolCallId, tool.name, input.data));
@@ -402,35 +409,16 @@ export class AcpEventTranslator {
     ];
   }
 
-  private extractToolOutputText(
-    content: unknown,
-    rawOutput: unknown,
-    terminalOutput: string
-  ): ToolResultContentValue {
-    // Image results (Read of an image file, MCP screenshots) keep the same
-    // text/image item shape as provider history replay instead of base64 JSON text.
-    const items = this.extractToolResultItems(content);
-    if (items) {
-      return items;
-    }
-    const contentText = this.extractContentText(content);
-    if (contentText.length > 0) {
-      return contentText;
-    }
-    return terminalOutput || this.extractContentText(rawOutput);
+  private formatToolContent(content: unknown): ToolResultContentValue {
+    // Preserve structured screenshots in both progress snapshots and immediate results.
+    return this.extractToolResultItems(content) ?? this.extractContentText(content);
   }
 
   private createTerminalToolResultEvent(params: {
     toolCallId: string;
-    status?: unknown;
-    content?: unknown;
-    rawOutput?: unknown;
-    terminalOutput: string;
-  }): AcpTranslatedDelta | null {
-    if (!this.isTerminalToolStatus(params.status)) {
-      return null;
-    }
-
+    status: 'completed' | 'failed';
+    content: ToolResultContentValue;
+  }): AcpTranslatedDelta {
     return {
       type: 'agent_message',
       data: {
@@ -441,11 +429,7 @@ export class AcpEventTranslator {
             {
               type: 'tool_result',
               tool_use_id: params.toolCallId,
-              content: this.extractToolOutputText(
-                params.content,
-                params.rawOutput,
-                params.terminalOutput
-              ),
+              content: params.content,
               ...(params.status === 'failed' ? { is_error: true } : {}),
             },
           ],
@@ -462,43 +446,38 @@ export class AcpEventTranslator {
       content?: unknown;
       rawOutput?: unknown;
     },
-    sessionId: string,
-    startName?: string
+    sessionId: string
   ): void {
     const key = JSON.stringify([sessionId, update.toolCallId]);
-    // A new start replaces any abandoned call that used the same provider ID.
-    const previous = startName === undefined ? this.pendingTools.get(key) : undefined;
-    const content = update.content ?? previous?.content;
-    const rawOutput = update.rawOutput ?? previous?.rawOutput;
-    const terminalResult = this.createTerminalToolResultEvent({
-      ...update,
-      content,
-      rawOutput,
-      terminalOutput: this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS) ?? '',
-    });
-    if (terminalResult) {
-      this.pendingTools.delete(key);
-      this.terminalOutput.delete(key);
-      events.push(terminalResult);
+    if (!this.isTerminalToolStatus(update.status)) {
+      if (update.content != null || update.rawOutput != null) {
+        this.pendingOutput.patch(key, sessionId, {
+          content: update.content == null ? undefined : this.formatToolContent(update.content),
+          rawOutput:
+            update.rawOutput == null ? undefined : this.extractContentText(update.rawOutput),
+        });
+      }
       return;
     }
 
-    if (startName === undefined && update.content == null && update.rawOutput == null) {
-      return;
-    }
-    this.pendingTools.delete(key);
-    this.pendingTools.set(key, {
-      sessionId,
-      name: startName ?? previous?.name,
-      content,
-      rawOutput,
-    });
-    if (this.pendingTools.size > MAX_TRACKED_TOOL_CALLS) {
-      const oldest = this.pendingTools.keys().next().value;
-      if (oldest !== undefined) {
-        this.pendingTools.delete(oldest);
-      }
-    }
+    const previous = this.pendingOutput.take(key);
+    const content =
+      update.content == null ? previous?.content : this.formatToolContent(update.content);
+    const terminalOutput = this.terminalOutput.get(key)?.text.slice(-MAX_TERMINAL_OUTPUT_CHARS);
+    this.toolNames.delete(key);
+    this.terminalOutput.delete(key);
+    events.push(
+      this.createTerminalToolResultEvent({
+        toolCallId: update.toolCallId,
+        status: update.status,
+        content: content?.length
+          ? content
+          : terminalOutput ||
+            (update.rawOutput == null
+              ? (previous?.rawOutput ?? '')
+              : this.extractContentText(update.rawOutput)),
+      })
+    );
   }
 
   private extractTextChunkContent(
