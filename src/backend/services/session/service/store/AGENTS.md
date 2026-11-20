@@ -47,7 +47,7 @@ directly.
   `../chat/chat-message-handlers/handlers/queue-message.admission.test.ts`.
 - Replay, queue deltas and snapshots include a claimed batch through provider
   configuration. Dispatch cannot select a claimed message again.
-  `../dispatch/session-dispatch.service.test.ts`.
+  `../dispatch/session-dispatch-batch.test.ts`.
 - A message moving from the queue into the transcript is never published as
   absent from both: the delta that removes it also carries its transcript entry,
   as a `transcript_message_committed` delta with the remaining queue or a
