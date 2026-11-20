@@ -59,12 +59,18 @@ The barrel is `index.ts`. Callers in routes and other features must:
 - A targeted delta replaces the queue, committed entry or pending request it
   carries, matching what a snapshot would show.
   `reducer/session-state-delta.test.ts`.
+- Replay replaces the confirmed queue, retaining composer recovery metadata for
+  surviving messages. A cancellation missed during disconnect cannot reappear
+  in the queue count. `reducer/pending-sends.test.ts`.
 - A local send stays in the transcript as Sending through snapshots and replay
   until the server reports its ID. `reducer/pending-sends.test.ts`,
   `transcript-rows.sending.test.tsx`.
 - A thinking delta changes neither the preview nor the transcript when its order
   is below the latest thinking order or not above the last accepted delta's, so
   only a block's first delta may share the block's start order.
+  `reducer/thinking.test.ts`.
+- Thinking deltas can edit only an open block at their index. Replaying history
+  closes historical blocks before live updates resume.
   `reducer/thinking.test.ts`.
 - Typing in the composer does not re-render `ChatTranscript`, and streaming does
   not re-render `ChatInput`.

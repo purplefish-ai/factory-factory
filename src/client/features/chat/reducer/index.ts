@@ -87,7 +87,17 @@ function reduceSingleAction(currentState: ChatState, currentAction: ChatAction):
   return nextState;
 }
 
-function createReplayBaseState(state: ChatState): ChatState {
+function createReplayBaseState(state: ChatState, replayEvents: SessionDeltaEvent[]): ChatState {
+  // Retain local recovery metadata only for messages this replay accounts for.
+  const queuedMessages: ChatState['queuedMessages'] = new Map();
+  for (const event of replayEvents) {
+    if (event.type === 'message_state_changed') {
+      const previous = state.queuedMessages.get(event.id);
+      if (previous) {
+        queuedMessages.set(event.id, previous);
+      }
+    }
+  }
   return {
     ...state,
     ...createBaseResetState(),
@@ -96,9 +106,7 @@ function createReplayBaseState(state: ChatState): ChatState {
     // Preserve optimistic pending sends that are not yet reflected in replayed events.
     pendingMessages: state.pendingMessages,
     pendingSteer: state.pendingSteer,
-    // Preserve queued messages - they will be reconstructed from replay events,
-    // but preserving them ensures they remain visible during replay processing.
-    queuedMessages: state.queuedMessages,
+    queuedMessages,
     // Preserve rejected-message recovery content until the UI effect restores it.
     lastRejectedMessage: state.lastRejectedMessage,
     sessionStatus: { phase: 'loading' },
@@ -114,7 +122,7 @@ function createReplayBaseState(state: ChatState): ChatState {
 }
 
 function replaySessionEvents(state: ChatState, replayEvents: SessionDeltaEvent[]): ChatState {
-  let nextState = createReplayBaseState(state);
+  let nextState = createReplayBaseState(state, replayEvents);
   for (const event of replayEvents) {
     const replayAction = createActionFromWebSocketMessage(event);
     if (replayAction) {
@@ -126,7 +134,10 @@ function replaySessionEvents(state: ChatState, replayEvents: SessionDeltaEvent[]
   if (nextState.sessionStatus.phase === 'loading') {
     nextState = reduceSingleAction(nextState, { type: 'SESSION_LOADING_END' });
   }
-  return nextState;
+  // Replayed thinking starts belong to history. Live deltas need a fresh start.
+  return nextState.openThinkingBlocks.size > 0
+    ? { ...nextState, openThinkingBlocks: new Map() }
+    : nextState;
 }
 
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {

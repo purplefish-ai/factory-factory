@@ -79,6 +79,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
           ...state,
           ...history,
           messages: [],
+          openThinkingBlocks: new Map(),
           latestThinking: null,
           latestThinkingDeltaOrder: null,
           latestThinkingOrder: snapshotMessages.reduce<number | null>(

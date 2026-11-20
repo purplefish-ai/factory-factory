@@ -26,47 +26,37 @@ export function generateMessageId(): string {
 }
 
 function appendThinkingDelta(state: ChatState, index: number, deltaText: string): ChatState {
-  if (!deltaText) {
+  const order = state.openThinkingBlocks.get(index);
+  const position = order === undefined ? undefined : state.agentMessageOrderToIndex.get(order);
+  const row = position === undefined ? undefined : state.messages[position];
+  const message = row?.message;
+  const event = message?.event;
+  if (
+    position === undefined ||
+    !row ||
+    !message ||
+    event?.type !== 'content_block_start' ||
+    event.content_block.type !== 'thinking' ||
+    event.index !== index
+  ) {
     return state;
   }
 
-  for (let i = state.messages.length - 1; i >= 0; i -= 1) {
-    const msg = state.messages[i];
-    if (!msg) {
-      continue;
-    }
-    if (msg.source !== 'agent' || !msg.message || !isStreamEventMessage(msg.message)) {
-      continue;
-    }
-
-    const event = msg.message.event;
-    if (
-      event?.type !== 'content_block_start' ||
-      event.content_block.type !== 'thinking' ||
-      event.index !== index
-    ) {
-      continue;
-    }
-
-    const nextMessages = [...state.messages];
-    nextMessages[i] = {
-      ...msg,
-      message: {
-        ...msg.message,
-        event: {
-          ...event,
-          content_block: {
-            ...event.content_block,
-            thinking: (event.content_block.thinking ?? '') + deltaText,
-          },
+  const messages = [...state.messages];
+  messages[position] = {
+    ...row,
+    message: {
+      ...message,
+      event: {
+        ...event,
+        content_block: {
+          ...event.content_block,
+          thinking: (event.content_block.thinking ?? '') + deltaText,
         },
       },
-    } as ChatMessage;
-
-    return { ...state, messages: nextMessages };
-  }
-
-  return state;
+    },
+  };
+  return { ...state, messages };
 }
 
 function applyThinkingDelta(
@@ -198,24 +188,20 @@ function startsThinkingBoundary(claudeMsg: AgentMessage): boolean {
   const event = claudeMsg.event;
   return (
     event.type === 'message_start' ||
-    (event.type === 'content_block_start' &&
-      ['thinking', 'tool_use'].includes(event.content_block.type))
+    (event.type === 'content_block_start' && event.content_block.type === 'tool_use')
   );
 }
 
-function hasExistingAgentMessageAtOrder(state: ChatState, order: number): boolean {
-  return state.messages.some((msg) => msg.source === 'agent' && msg.order === order);
-}
-
-function resetThinkingAtOrder(
-  state: ChatState,
-  order: number,
-  thinking: string | null = null
-): ChatState {
+function resetThinkingAtOrder(state: ChatState, order: number): ChatState {
   if (state.latestThinkingOrder !== null && order <= state.latestThinkingOrder) {
     return state;
   }
-  return { ...state, latestThinking: thinking || null, latestThinkingOrder: order };
+  return {
+    ...state,
+    openThinkingBlocks: new Map(),
+    latestThinking: null,
+    latestThinkingOrder: order,
+  };
 }
 
 function resetThinkingAtBoundary(
@@ -223,15 +209,36 @@ function resetThinkingAtBoundary(
   message: AgentMessage,
   order: number
 ): ChatState {
-  if (!startsThinkingBoundary(message) || hasExistingAgentMessageAtOrder(state, order)) {
+  if (
+    (state.latestThinkingOrder !== null && order < state.latestThinkingOrder) ||
+    state.agentMessageOrderToIndex.has(order)
+  ) {
     return state;
   }
   const event = isStreamEventMessage(message) ? message.event : undefined;
-  const thinking =
-    event?.type === 'content_block_start' && event.content_block.type === 'thinking'
-      ? event.content_block.thinking
-      : null;
-  return resetThinkingAtOrder(state, order, thinking);
+  if (event?.type === 'content_block_start' && event.content_block.type === 'thinking') {
+    const openThinkingBlocks = new Map(state.openThinkingBlocks);
+    openThinkingBlocks.set(event.index, order);
+    return {
+      ...state,
+      openThinkingBlocks,
+      latestThinking: event.content_block.thinking || null,
+      latestThinkingOrder: order,
+    };
+  }
+  if (event?.type === 'content_block_stop' && state.openThinkingBlocks.has(event.index)) {
+    const openThinkingBlocks = new Map(state.openThinkingBlocks);
+    openThinkingBlocks.delete(event.index);
+    return { ...state, openThinkingBlocks };
+  }
+  if (
+    event?.type === 'message_stop' ||
+    message.type === 'result' ||
+    startsThinkingBoundary(message)
+  ) {
+    return resetThinkingAtOrder(state, order);
+  }
+  return state;
 }
 
 /**

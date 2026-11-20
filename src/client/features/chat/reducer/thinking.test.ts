@@ -373,3 +373,68 @@ describe('live thinking sequences', () => {
     expect(state.latestThinking).toBe('Current block');
   });
 });
+
+it('keeps replayed reasoning immutable when a new turn streams a thought with the same block index', () => {
+  const state = chatReducer(createInitialChatState(), {
+    type: 'SESSION_REPLAY_BATCH',
+    payload: {
+      replayEvents: [
+        {
+          type: 'agent_message',
+          order: 1,
+          messageId: 'past-thought',
+          data: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'thinking', thinking: 'Past reasoning' },
+            },
+          },
+        },
+        {
+          type: 'message_state_changed',
+          id: 'next-turn',
+          newState: MessageState.ACCEPTED,
+          userMessage: { text: 'continue', timestamp: '2026-11-20T12:00:00Z', order: 2 },
+        },
+        { type: 'message_state_changed', id: 'next-turn', newState: MessageState.COMMITTED },
+      ],
+    },
+  });
+  const next = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: { order: 3, message: thought('Current reasoning') },
+  });
+  expect(next.latestThinking).toBe('Current reasoning');
+  expect(next.messages[0]).toEqual(state.messages[0]);
+});
+
+it('closes a thinking block at its stop even when the next thought reuses its index', () => {
+  let state = chatReducer(createInitialChatState(), {
+    type: 'WS_AGENT_MESSAGE',
+    payload: {
+      order: 1,
+      message: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: 'Finished' },
+        },
+      },
+    },
+  });
+  state = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: {
+      order: 2,
+      message: { type: 'stream_event', event: { type: 'content_block_stop', index: 0 } },
+    },
+  });
+  const next = chatReducer(state, {
+    type: 'WS_AGENT_MESSAGE',
+    payload: { order: 3, message: thought('Fresh') },
+  });
+  expect(next.messages[0]).toEqual(state.messages[0]);
+});
