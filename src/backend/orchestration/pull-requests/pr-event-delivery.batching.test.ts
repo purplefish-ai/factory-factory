@@ -365,6 +365,102 @@ it('bounds the reads one three-PR MAIN delivery makes from preparation to final 
   expect(mocks.claim).toHaveBeenCalledOnce();
 });
 
+const dedicatedRequest = {
+  workspaceId: 'w',
+  prId: 'p',
+  bindingRevision: 1,
+  deliveryMode: 'DEDICATED' as const,
+};
+function useDedicatedRecipient() {
+  mocks.get.mockResolvedValue(monitoring({ deliveryMode: 'DEDICATED', recipientSessionId: null }));
+  mocks.session.mockResolvedValue({
+    id: 'dedicated',
+    workspaceId: 'w',
+    workspacePrId: 'p',
+    workflow: 'pr-monitoring',
+    provider: 'CLAUDE',
+    providerSessionId: 'dedicated-provider',
+    workspace: { status: 'READY', worktreePath: tmpdir() },
+  });
+  mocks.dedicated.mockResolvedValue({ id: 'dedicated' });
+}
+function claimedDedicatedDelivery(deliveryId = 'delivery') {
+  mocks.pending.mockResolvedValue([{ ...fact('p'), state: 'DISPATCHING', deliveryId }]);
+  return {
+    deliveryId,
+    sessionId: 'dedicated',
+    bindingRevision: 1,
+    eventIds: ['event-p'],
+    text: 'frozen',
+    attempt: 1,
+    deliveryProvider: 'CLAUDE' as const,
+    deliveryProviderSessionId: 'dedicated-provider',
+  };
+}
+
+it('bounds the reads one DEDICATED delivery makes from preparation to final validation', async () => {
+  useDedicatedRecipient();
+  mocks.pending.mockResolvedValue([fact('p')]);
+  const prepared = await preparePRDelivery(
+    { sessionId: 'dedicated', request: dedicatedRequest },
+    ports
+  );
+  expect(prepared).toMatchObject({ status: 'ready', delivery: { eventIds: ['event-p'] } });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected a claimed delivery');
+  }
+  const port = createPRBackgroundDeliveryPort(ports);
+  const claimed = claimedDedicatedDelivery(prepared.delivery.deliveryId);
+  expect(await port.validate(claimed)).toBe(true);
+  const reads = {
+    monitoringConfig: mocks.get.mock.calls.length,
+    pendingEvents: mocks.pending.mock.calls.length,
+    session: mocks.session.mock.calls.length,
+    workspaceSessions: mocks.otherReady.mock.calls.length,
+    dedicatedBinding: mocks.dedicated.mock.calls.length,
+    prRows: vi.mocked(ports.workspacePrSnapshotService.find).mock.calls.length,
+    settings: vi.mocked(ports.userSettingsService.get).mock.calls.length,
+    worktree: vi.mocked(filesystem.stat).mock.calls.length,
+  };
+  // Three guard evaluations, as in MAIN mode; each also reads the dedicated
+  // binding twice and re-reads the monitoring config after the second lookup.
+  // Before this bound, a delivery made 51 reads.
+  expect(reads).toEqual({
+    monitoringConfig: 10,
+    pendingEvents: 3,
+    session: 7,
+    workspaceSessions: 6,
+    dedicatedBinding: 6,
+    prRows: 4,
+    settings: 1,
+    worktree: 3,
+  });
+  expect(Object.values(reads).reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(40);
+});
+
+// In DEDICATED mode the recipient check awaits the dedicated-conversation lookup,
+// so the binding read before it is stale by the time the guard answers.
+it.each([
+  ['its binding revision changes', monitoring({ deliveryMode: 'DEDICATED', bindingRevision: 2 })],
+  ['its mode changes to MAIN', monitoring({ deliveryMode: 'MAIN', recipientSessionId: 'main' })],
+])(
+  'rejects a DEDICATED delivery when %s during the final dedicated-conversation lookup',
+  async (_, changed) => {
+    useDedicatedRecipient();
+    const delivery = claimedDedicatedDelivery();
+    let lookups = 0;
+    mocks.dedicated.mockImplementation(() => {
+      // The second lookup is the one after the worktree check, the last before dispatch.
+      if (++lookups === 2) {
+        mocks.get.mockResolvedValue(changed);
+      }
+      return Promise.resolve({ id: 'dedicated' });
+    });
+    expect(await createPRBackgroundDeliveryPort(ports).validate(delivery)).toBe(false);
+    expect(lookups).toBe(2);
+  }
+);
+
 it('discards the queued placeholder when no stored fact can be read', async () => {
   mocks.pending.mockResolvedValue([
     { ...fact('p', 'unreadable'), payload: { kind: 'FROM_ANOTHER_BUILD' } },

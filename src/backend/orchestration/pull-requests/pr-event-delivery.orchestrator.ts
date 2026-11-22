@@ -141,10 +141,32 @@ async function recheckAfterWorktree(
   if (!(final && (await isRecipientForEvery(final, otherPrIds, services)))) {
     return 'discard';
   }
-  if (!othersIdle || final.config.deliveryPauseReason || isRecipientBusy(sessionId, services)) {
+  const config = await readBindingAfterRecipientLookup(final.config, target, services);
+  if (!config) {
+    return 'discard';
+  }
+  if (!othersIdle || config.deliveryPauseReason || isRecipientBusy(sessionId, services)) {
     return 'blocked';
   }
   return 'ready';
+}
+
+/**
+ * A DEDICATED recipient check awaits the dedicated-conversation lookup, so the
+ * binding read before it may be stale; read it again. A MAIN check awaits
+ * nothing, so its binding read is still the latest. After `validate` there is
+ * no claim transaction left to catch a stale binding.
+ */
+async function readBindingAfterRecipientLookup(
+  config: NonNullable<MonitoringConfig>,
+  request: PRDeliveryRequest,
+  services: PRDeliveryPorts
+) {
+  if ((config.deliveryMode ?? 'MAIN') === 'MAIN') {
+    return config;
+  }
+  const latest = await services.workspacePRMonitoringService.get(request.workspaceId);
+  return matchesBinding(latest, request) ? latest : null;
 }
 
 async function isRecipientForEvery(
