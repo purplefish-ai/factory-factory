@@ -69,6 +69,6 @@ export type PRDeliveryPorts = PRDedicatedSessionPorts &
     sessionBackgroundDeliveryService: Pick<typeof sessionBackgroundDeliveryService, 'invalidate'>;
     workspacePRMonitoringService: Pick<
       typeof workspacePRMonitoringService,
-      'claimDelivery' | 'settleDelivery' | 'deferBusy' | 'pause' | 'resume'
+      'claimDelivery' | 'settleDelivery' | 'deferBusy' | 'pause' | 'resume' | 'cancelUndeliverable'
     >;
   };

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   emit: vi.fn(),
   dedicated: vi.fn(),
   ensureDedicated: vi.fn(),
+  undeliverable: vi.fn(),
 }));
 vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: mocks.otherReady }));
 vi.mock('./pr-observation.orchestrator', () => ({
@@ -71,6 +72,7 @@ const ports = createPRDeliveryPorts(
       pause: mocks.pause,
       resume: mocks.resume,
       cancelRecoveredDelivery: mocks.cancel,
+      cancelUndeliverable: mocks.undeliverable,
       settleDelivery: mocks.settle,
     },
     workspacePrSnapshotService: { find: vi.fn(), list: vi.fn() },
@@ -289,5 +291,29 @@ it('discards an obsolete placeholder when refresh supersedes every pending fact'
   expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
     status: 'discard',
   });
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('discards a stored fact it cannot read and delivers the rest without pausing', async () => {
+  const unreadable = { ...fact('p', 'unreadable'), payload: { kind: 'FROM_ANOTHER_BUILD' } };
+  mocks.pending.mockResolvedValue([unreadable, fact('p'), fact('q')]);
+  const prepared = await preparePRDelivery({ sessionId: 'main', request }, ports);
+  expect(mocks.undeliverable).toHaveBeenCalledExactlyOnceWith('w', ['unreadable']);
+  expect(mocks.pause).not.toHaveBeenCalled();
+  expect(prepared).toMatchObject({
+    status: 'ready',
+    delivery: { eventIds: ['event-p', 'event-q'] },
+  });
+});
+
+it('discards the queued placeholder when no stored fact can be read', async () => {
+  mocks.pending.mockResolvedValue([
+    { ...fact('p', 'unreadable'), payload: { kind: 'FROM_ANOTHER_BUILD' } },
+  ]);
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(mocks.undeliverable).toHaveBeenCalledExactlyOnceWith('w', ['unreadable']);
+  expect(mocks.pause).not.toHaveBeenCalled();
   expect(mocks.claim).not.toHaveBeenCalled();
 });

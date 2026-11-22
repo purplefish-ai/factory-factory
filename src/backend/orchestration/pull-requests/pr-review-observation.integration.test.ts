@@ -326,3 +326,80 @@ it('rejects a core-only observation when monitoring turns on before it is accept
     (await workspacePRMonitoringService.listPending(target.workspaceId)).map((event) => event.kind)
   ).toEqual(['REVIEW_FEEDBACK']);
 });
+
+it.each([false, true])(
+  'states existing feedback to a new epoch (first review read incomplete: %s)',
+  async (firstReadIncomplete) => {
+    const { target, observe } = await setup();
+    expect(await observe()).toBe(true);
+    await setMonitoring(target.workspaceId, false);
+    expect(await workspacePRMonitoringService.listPending(target.workspaceId)).toEqual([]);
+    await setMonitoring(target.workspaceId, true);
+    if (firstReadIncomplete) {
+      // The previous epoch's feedback must not become this epoch's baseline.
+      vi.mocked(githubCLIService.getReviewComments).mockRejectedValueOnce(new Error('rate limit'));
+      expect(await observe()).toBe(true);
+      expect(await workspacePrSnapshotService.find(target)).toMatchObject({
+        observation: { reviewsComplete: false, actionableReviews: [] },
+      });
+    }
+    expect(await observe()).toBe(true);
+    expect(
+      (await workspacePRMonitoringService.listPending(target.workspaceId)).map((e) => e.kind)
+    ).toEqual(['REVIEW_FEEDBACK']);
+  }
+);
+
+it('restates a pending fact once after a mode switch and still supersedes it', async () => {
+  const { target, observe } = await setup();
+  vi.mocked(githubCLIService.getReviewComments).mockResolvedValue([]);
+  const check = { __typename: 'CheckRun' as const, name: 'test', status: 'COMPLETED' as const };
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue({
+    ...core,
+    statusCheckRollup: [{ ...check, conclusion: 'FAILURE' }],
+  });
+  expect(await observe()).toBe(true);
+  const [before] = await workspacePRMonitoringService.listPending(target.workspaceId);
+  expect(before?.kind).toBe('CI_FAILED');
+  const config = await workspacePRMonitoringService.get(target.workspaceId);
+  await workspacePRMonitoringService.setBinding({
+    workspaceId: target.workspaceId,
+    enabled: true,
+    deliveryMode: 'DEDICATED',
+    expectedBindingRevision: config?.bindingRevision ?? 0,
+  });
+  expect(await observe()).toBe(true);
+  const restated = await workspacePRMonitoringService.listPending(target.workspaceId);
+  expect(restated.map((e) => e.kind)).toEqual(['CI_FAILED']);
+  expect(restated[0]?.id).not.toBe(before?.id);
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue({
+    ...core,
+    statusCheckRollup: [{ ...check, conclusion: 'SUCCESS' }],
+  });
+  expect(await observe()).toBe(true);
+  expect(await workspacePRMonitoringService.listPending(target.workspaceId)).toEqual([]);
+});
+
+it('keeps observing when a stored observation or fact cannot be read', async () => {
+  const { target, observe } = await setup();
+  expect(await observe()).toBe(true);
+  const [fact] = await workspacePRMonitoringService.listPending(target.workspaceId);
+  await db.prisma.workspacePR.update({
+    where: { id: target.prId },
+    data: { observation: { writtenBy: 'another build' } },
+  });
+  await db.prisma.workspacePREvent.update({
+    where: { id: fact?.id },
+    data: { payload: { kind: 'FROM_ANOTHER_BUILD' } },
+  });
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue({ ...core, title: 'Renamed' });
+  expect(await observe()).toBe(true);
+  expect(await workspacePrSnapshotService.find(target)).toMatchObject({
+    title: 'Renamed',
+    observation: { reviewsComplete: true, headSha: 'head' },
+  });
+  // The unreadable fact stays queued for delivery to discard; the comparison restarts.
+  const pending = await workspacePRMonitoringService.listPending(target.workspaceId);
+  expect(pending.map((e) => e.id)).toContain(fact?.id);
+  expect(pending).toHaveLength(2);
+});

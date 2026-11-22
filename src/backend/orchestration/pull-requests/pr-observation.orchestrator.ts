@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
 import { hasPRObservation, shouldPollPR } from '@/shared/pr-polling';
+import { isSettledPRFailure } from '@/shared/pr-trigger-policy';
 import type { PRObservationPorts } from './pr-observation-ports';
 
 /** Automatic observations reuse an accepted observation for this long. */
@@ -18,7 +19,7 @@ type RecentObservation = {
   fingerprint: string;
   /** Consecutive unforced reads that returned the previous facts unchanged. */
   repeats: number;
-  /** Open with terminal CI and, when requested, complete review facts. */
+  /** Open with no check still running and, when requested, complete review facts. */
   settled: boolean;
 };
 type RecentObservations = Map<string, RecentObservation>;
@@ -64,7 +65,8 @@ function isSettled(observation: PRObservation, includeReviews: boolean): boolean
   return (
     observation.prState !== 'MERGED' &&
     observation.prState !== 'CLOSED' &&
-    (observation.ciStatus === 'SUCCESS' || observation.ciStatus === 'FAILURE') &&
+    // A failure is announced when its run finishes, so that read must not be delayed.
+    (observation.ciStatus === 'SUCCESS' || isSettledPRFailure(observation)) &&
     (observation.reviewsComplete || !includeReviews)
   );
 }

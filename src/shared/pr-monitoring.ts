@@ -1,4 +1,6 @@
-export { prDeliveryModeSchema } from './schemas/pr-event.schema';
+import { prPauseReasonSchema } from './schemas/pr-event.schema';
+
+export { prDeliveryModeSchema, prPauseReasonSchema } from './schemas/pr-event.schema';
 export const PRDeliveryMode = { MAIN: 'MAIN', DEDICATED: 'DEDICATED' } as const;
 export type PRDeliveryMode = (typeof PRDeliveryMode)[keyof typeof PRDeliveryMode];
 export const PR_DEDICATED_WORKFLOW = 'pr-monitoring';
@@ -9,6 +11,7 @@ export type {
   PRMonitoringControlPayload,
   PRMonitoringEventPayload,
   PRObservation,
+  PRPauseReason,
   PRTarget,
 } from './schemas/pr-event.schema';
 export type { PREventDraft } from './pr-trigger-policy.types';
@@ -38,15 +41,13 @@ export const PR_DELIVERY_BLOCKED_PAUSE_REASON = 'DELIVERY_BLOCKED';
 export function isPRDeliveryBlocked(reason: string | null | undefined): boolean {
   return reason === PR_DELIVERY_BLOCKED_PAUSE_REASON;
 }
-const resumablePauseReasons = new Set([
-  'USER_STOPPED',
-  'SESSION_FAILED',
-  'RESUME_FAILED',
-  'DELIVERY_FAILED',
-  'RECEIPT_UNAVAILABLE',
-]);
+/**
+ * Whether an explicit resume or the recipient's next turn clears this pause.
+ * The others end elsewhere: the legacy fixer cutover lifts its `LEGACY_FIXER`
+ * fence at startup, and the user discards a blocked delivery.
+ */
 export function canResumePRMonitoring(reason: string | null | undefined): boolean {
-  return reason != null && resumablePauseReasons.has(reason);
+  return prPauseReasonSchema.safeParse(reason).success;
 }
 export const PR_EVENT_MESSAGE_ID_PREFIX = 'pr-event-';
 export const PR_UPDATE_QUEUED_TEXT = 'PR update queued for the next turn';

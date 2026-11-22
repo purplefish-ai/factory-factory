@@ -23,6 +23,21 @@ export const prDeliveryStateSchema = z.enum([
   'DISMISSED',
 ]);
 
+/**
+ * `WorkspacePRMonitoring.deliveryPauseReason` values delivery writes. Each one
+ * clears on an explicit resume or the recipient's next turn, so no pause is a
+ * dead end. `INVALID_EVENT` is no longer written (delivery discards a fact it
+ * cannot render instead) and stays so that rows paused by earlier builds resume.
+ */
+export const prPauseReasonSchema = z.enum([
+  'USER_STOPPED',
+  'SESSION_FAILED',
+  'RESUME_FAILED',
+  'DELIVERY_FAILED',
+  'RECEIPT_UNAVAILABLE',
+  'INVALID_EVENT',
+]);
+
 export const prTargetSchema = z.strictObject({
   workspaceId: z.string().min(1),
   prId: z.string().min(1),
@@ -65,6 +80,13 @@ export const prObservationSchema = z.strictObject({
   actionableReviews: z.array(prReviewSchema),
   reviewsComplete: z.boolean(),
   resolvedReviewIds: z.array(z.string()).optional(),
+  /**
+   * Reducer memory, set only on the stored observation of a failing PR: when
+   * this failure (same head and failing checks) was first observed, and whether
+   * it has been announced. A fetch never sets it; a stored failure without it
+   * predates the field and counts as announced.
+   */
+  ciFailure: z.strictObject({ since: z.iso.datetime(), announced: z.boolean() }).optional(),
 });
 const facts = { target: prTargetSchema, observation: prObservationSchema };
 export const prFactPayloadSchema = z.discriminatedUnion('kind', [
@@ -104,3 +126,4 @@ export type PRMonitoringControlPayload = z.infer<typeof prMonitoringControlPaylo
 export type PRMonitoringEventPayload = z.infer<typeof prMonitoringEventPayloadSchema>;
 export type PRDeliveryRequest = z.infer<typeof prDeliveryRequestSchema>;
 export type PRDeliveryState = z.infer<typeof prDeliveryStateSchema>;
+export type PRPauseReason = z.infer<typeof prPauseReasonSchema>;

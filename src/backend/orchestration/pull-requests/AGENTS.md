@@ -74,8 +74,7 @@ There is no barrel. Production code elsewhere imports only these, by importer:
   `src/backend/services/workspace/resources/workspace-pr-delivery-modes.accessor.integration.test.ts`.
 - Stopping the service invalidates its in-flight workspace checks, so none
   starts a delivery wake or emits a state change afterwards, and drains every
-  delivery wake it started. `ratchet-observation-watcher.test.ts`.
-- The poll checks at most three workspaces at once.
+  delivery wake it started. The poll checks at most three workspaces at once.
   `ratchet-observation-watcher.test.ts`.
 - A project-scoped review-request list holds only that project's repository and
   never searches globally; with `gh` healthy, a missing, unlinked or invalid
@@ -107,6 +106,7 @@ There is no barrel. Production code elsewhere imports only these, by importer:
 ## Decisions
 
 - [PR updates go to the workspace's own conversations](../../../../docs/decisions/2026-11-13-pr-updates-go-to-workspace-conversations.md)
+- [A destination change cancels and restates PR facts](../../../../docs/decisions/2026-11-22-a-destination-change-cancels-and-restates-pr-facts.md)
 - [PR updates do not grant merge authorization](../../../../docs/decisions/2026-11-13-pr-updates-do-not-grant-merge-authorization.md)
 - [Deliveries are frozen and proven by receipt](../../../../docs/decisions/2026-11-13-pr-deliveries-are-frozen-and-proven-by-receipt.md)
 - [Delivery resumes the exact conversation](../../../../docs/decisions/2026-11-13-pr-delivery-resumes-the-exact-conversation.md)

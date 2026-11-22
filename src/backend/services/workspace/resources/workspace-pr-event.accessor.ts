@@ -74,14 +74,15 @@ const unclaimedDeliveryWhere = {
 } satisfies Prisma.WorkspacePREventWhereInput;
 
 /**
- * Fact kinds whose deduplication identity embeds the PR's transition sequence.
- * That sequence is persisted with each accepted observation and only grows, so
- * the reducer can never regenerate one of these keys. `CI_RECOVERED` (keyed by
- * head and failure) and legacy `MONITORING_ENABLED` controls are never pruned.
+ * Every fact kind: each deduplication identity embeds the PR's transition
+ * sequence, which is persisted with each accepted observation and only grows,
+ * so the reducer can never regenerate a pruned key. Legacy `MONITORING_ENABLED`
+ * controls are never pruned.
  */
 const PRUNABLE_FACT_KINDS = [
   'REVIEW_FEEDBACK',
   'CI_FAILED',
+  'CI_RECOVERED',
   'CONFLICT_DETECTED',
   'CONFLICT_CLEARED',
   'PR_MERGED',
@@ -879,13 +880,14 @@ class WorkspacePrEventAccessor {
       data: { state: EVENT.CANCELLED },
     });
   }
-  cancelUnclaimedControls(tx: Prisma.TransactionClient, workspaceId: string) {
-    return tx.workspacePREvent.updateMany({
+  /** Discard unclaimed facts that cannot be rendered, so they stop holding back later ones. */
+  cancelUndeliverable(workspaceId: string, ids: string[]) {
+    return prisma.workspacePREvent.updateMany({
       where: {
+        id: { in: ids },
         workspaceId,
-        kind: 'MONITORING_ENABLED',
-        ...unclaimedDeliveryWhere,
         state: EVENT.PENDING,
+        ...unclaimedDeliveryWhere,
       },
       data: { state: EVENT.CANCELLED },
     });
