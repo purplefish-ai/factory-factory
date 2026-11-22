@@ -206,6 +206,7 @@ it('retains omitted feedback on a partial page while honoring only known resolve
 it('still supersedes old heads and terminal facts while reviews are unavailable', async () => {
   const { target, observe } = await setup();
   expect(await observe()).toBe(true);
+  const [oldHead] = await workspacePRMonitoringService.listPending(target.workspaceId, target.prId);
   readPolicy.mockRejectedValue(new Error('settings unavailable'));
   vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue({
     ...core,
@@ -215,11 +216,10 @@ it('still supersedes old heads and terminal facts while reviews are unavailable'
     ],
   });
   expect(await observe()).toBe(true);
-  expect(
-    (await workspacePRMonitoringService.listPending(target.workspaceId, target.prId)).map(
-      (event) => event.kind
-    )
-  ).toEqual(['CI_FAILED']);
+  // The old head's feedback is superseded and, being undelivered, queued again for the new head.
+  const pending = await workspacePRMonitoringService.listPending(target.workspaceId, target.prId);
+  expect(pending.map((event) => event.kind).sort()).toEqual(['CI_FAILED', 'REVIEW_FEEDBACK']);
+  expect(pending.map((event) => event.id)).not.toContain(oldHead?.id);
   vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue({
     ...core,
     headRefOid: 'next-head',

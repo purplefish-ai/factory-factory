@@ -693,3 +693,45 @@ describe('the stored observation', () => {
     ).toEqual([review, other]);
   });
 });
+
+it('re-emits undelivered feedback on a new head whose review read is incomplete', () => {
+  const review = {
+    identity: 'comment:11',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'Guard the null case',
+    path: 'src/a.ts',
+    line: 4,
+    url: `${redObservation.url}#discussion_r11`,
+    activityAt: redObservation.observedAt,
+  };
+  const green = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [] };
+  const observed = reduce({ ...green, actionableReviews: [review] });
+  const queued = { ...observed.events[0]!, id: 'queued' };
+  // The push supersedes the queued fact, and the read that sees the push returns no reviews.
+  const unread = { ...green, headSha: 'head-2', observedAt: at(5), reviewsComplete: false };
+  const afterPush = reduce(unread, observed.storedObservation, {
+    pendingEvents: [queued],
+    transitionSequence: observed.nextTransitionSequence,
+  });
+  expect(afterPush.supersededEventIds).toEqual(['queued']);
+  expect(afterPush.events).toMatchObject([
+    { kind: 'REVIEW_FEEDBACK', payload: { reviews: [review], observation: { headSha: 'head-2' } } },
+  ]);
+  // The complete read that follows finds it queued and neither drops nor repeats it.
+  const requeued = { ...afterPush.events[0]!, id: 'requeued' };
+  expect(
+    reduce(
+      { ...unread, actionableReviews: [review], reviewsComplete: true },
+      afterPush.storedObservation,
+      {
+        pendingEvents: [requeued],
+        transitionSequence: afterPush.nextTransitionSequence,
+      }
+    )
+  ).toMatchObject({ events: [], supersededEventIds: [] });
+  // Feedback the recipient already has is not repeated by the push.
+  expect(reduce(unread, observed.storedObservation, { deliveredEvents: [queued] }).events).toEqual(
+    []
+  );
+});

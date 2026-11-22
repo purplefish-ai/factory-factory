@@ -1,5 +1,10 @@
 import type { PRFactDraft, PREventSummary } from './pr-trigger-policy.types';
-import type { PRFactPayload, PRObservation, PRTarget } from './schemas/pr-event.schema';
+import type {
+  PRFactPayload,
+  PRObservation,
+  PRStoredObservation,
+  PRTarget,
+} from './schemas/pr-event.schema';
 
 const failures = new Set([
   'FAILURE',
@@ -60,7 +65,8 @@ type Ledger = {
 
 export function reducePRObservation(input: {
   target: PRTarget;
-  previous: PRObservation | null;
+  /** The stored observation of this epoch, or null on its first observation. */
+  previous: PRStoredObservation | null;
   current: PRObservation;
   transitionSequence: number;
   eventEpoch: number;
@@ -107,7 +113,12 @@ export function reducePRObservation(input: {
   };
   nextTransitionSequence = addCITransition(input, add, nextTransitionSequence, ledger);
   nextTransitionSequence = addConflictTransition(input, add, nextTransitionSequence, ledger);
-  nextTransitionSequence = addReviewTransitions(input, add, nextTransitionSequence);
+  nextTransitionSequence = addReviewTransitions(
+    input,
+    add,
+    nextTransitionSequence,
+    storedObservation.actionableReviews
+  );
   return { events, supersededEventIds, nextTransitionSequence, storedObservation };
 }
 
@@ -116,7 +127,7 @@ export function reducePRObservation(input: {
  * a feedback fact names its own review, and no reader uses the rest.
  */
 function factObservation(current: PRObservation): PRObservation {
-  const { resolvedReviewIds: _resolvedReviewIds, ciFailure: _ciFailure, ...facts } = current;
+  const { resolvedReviewIds: _resolvedReviewIds, ...facts } = current;
   return { ...facts, actionableReviews: [] };
 }
 
@@ -124,7 +135,11 @@ function factObservation(current: PRObservation): PRObservation {
  * What is remembered of the current failure: carried from `previous` while the
  * head and the failing checks are unchanged, and started afresh otherwise.
  */
-function failureMemory(previous: PRObservation | null, current: PRObservation, terminal: boolean) {
+function failureMemory(
+  previous: PRStoredObservation | null,
+  current: PRObservation,
+  terminal: boolean
+) {
   const carried =
     previous &&
     previous.ciStatus === 'FAILURE' &&
@@ -146,19 +161,18 @@ function failureMemory(previous: PRObservation | null, current: PRObservation, t
  * was read again; `previous` is null in a new epoch, so nothing crosses one.
  */
 function nextStoredObservation(
-  previous: PRObservation | null,
+  previous: PRStoredObservation | null,
   current: PRObservation,
   terminal: boolean
-): PRObservation {
-  const { ciFailure: _ciFailure, ...fetched } = current;
+): PRStoredObservation {
   const failure =
     current.ciStatus === 'FAILURE' ? failureMemory(previous, current, terminal) : null;
-  const stored: PRObservation = failure
+  const stored: PRStoredObservation = failure
     ? {
-        ...fetched,
+        ...current,
         ciFailure: { since: failure.since, announced: failure.announced || failure.due },
       }
-    : fetched;
+    : current;
   if (current.reviewsComplete || !previous) {
     return stored;
   }
@@ -179,13 +193,17 @@ function nextStoredObservation(
 
 /** The most recently observed of `events`; ledger order breaks a tie. */
 function latest(events: readonly PREventSummary[]): PREventSummary | undefined {
-  return [...events]
-    .sort(
-      (a, b) =>
-        a.payload.observation.observedAt.localeCompare(b.payload.observation.observedAt) ||
-        (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0)
-    )
-    .at(-1);
+  let newest: PREventSummary | undefined;
+  for (const event of events) {
+    const order = newest
+      ? event.payload.observation.observedAt.localeCompare(newest.payload.observation.observedAt) ||
+        (event.createdAt?.getTime() ?? 0) - (newest.createdAt?.getTime() ?? 0)
+      : 1;
+    if (order >= 0) {
+      newest = event;
+    }
+  }
+  return newest;
 }
 
 function sameReview(
@@ -304,13 +322,20 @@ function addCITransition(input: ReductionInput, add: AddFact, sequence: number, 
   return sequence;
 }
 
-function addReviewTransitions(input: ReductionInput, add: AddFact, sequence: number) {
+function addReviewTransitions(
+  input: ReductionInput,
+  add: AddFact,
+  sequence: number,
+  actionableReviews: PRStoredObservation['actionableReviews']
+) {
   const { previous, current } = input;
   // A new head supersedes undelivered feedback, so it is re-emitted; delivered
   // feedback is unchanged and is not repeated. Feedback frozen in flight is
-  // re-emitted too, because a cancelled claim would otherwise lose it.
+  // re-emitted too, because a cancelled claim would otherwise lose it. The
+  // reviews are the stored ones, so feedback an incomplete read kept is also
+  // re-emitted on a new head instead of being adopted by it unannounced.
   const delivered = deliveredReviews(input.deliveredEvents);
-  for (const review of current.actionableReviews) {
+  for (const review of actionableReviews) {
     if (
       !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
       (previous.headSha !== current.headSha && !delivered.some((r) => sameReview(r, review)))

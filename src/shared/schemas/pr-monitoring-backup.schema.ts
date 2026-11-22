@@ -3,7 +3,7 @@ import {
   prDeliveryModeSchema,
   prEventStateSchema,
   prMonitoringEventPayloadSchema,
-  prObservationSchema,
+  prStoredObservationSchema,
 } from './pr-event.schema';
 
 const date = z.iso.datetime();
@@ -77,7 +77,7 @@ export const prAssociationBackupSchema = z.strictObject({
   syncedAt: date.nullable(),
   detachedAt: date.nullable(),
   revision: z.number().int().nonnegative(),
-  observation: prObservationSchema.nullable().default(null),
+  observation: prStoredObservationSchema.nullable().default(null),
   observationEpoch: z.number().int().nonnegative().default(0),
   transitionSequence: z.number().int().nonnegative().default(0),
   ciFailedAt: date.nullable(),

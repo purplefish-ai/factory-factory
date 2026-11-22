@@ -7,7 +7,7 @@ import {
   reducePRObservation,
 } from './pr-trigger-policy';
 import type { PREventSummary } from './pr-trigger-policy.types';
-import type { PRObservation } from './schemas/pr-event.schema';
+import type { PRObservation, PRStoredObservation } from './schemas/pr-event.schema';
 
 /**
  * Replays random histories of one open PR (pushes, check results, conflicts,
@@ -38,7 +38,7 @@ type World = {
   threads: number;
 };
 type Ledger = {
-  previous: PRObservation | null;
+  previous: PRStoredObservation | null;
   pending: PREventSummary[];
   inFlight: PREventSummary[];
   delivered: PREventSummary[];
@@ -91,7 +91,7 @@ function mutate(world: World, next: () => number, tick: number) {
   }
 }
 
-function observation(world: World, tick: number): PRObservation {
+function observation(world: World, tick: number, reviewsRead: boolean): PRObservation {
   const checks = world.checks.map((c) => ({
     identity: c.name,
     attempt: null,
@@ -110,8 +110,9 @@ function observation(world: World, tick: number): PRObservation {
     ciStatus: deriveCiStatusFromCheckRollup(checks),
     hasMergeConflict: world.conflict,
     checks,
-    reviewsComplete: true,
-    actionableReviews: [...world.reviews].map(([identity, revision]) => ({
+    // An incomplete read (a rate limit, say) returns no reviews and resolves none.
+    reviewsComplete: reviewsRead,
+    actionableReviews: (reviewsRead ? [...world.reviews] : []).map(([identity, revision]) => ({
       identity,
       contentHash: `v${revision}`,
       author: 'reviewer',
@@ -232,10 +233,15 @@ function checkRecovery({ ledger, current, live, onHead }: Checked) {
   ).toBe(failure !== undefined);
 }
 
-/** Every open thread is told or queued, and nothing resolved stays queued. */
+/** After a complete read, every open thread is told or queued and nothing resolved stays queued. */
 function checkFeedback({ ledger, current, live }: Checked) {
   const same = (a: { identity: string; contentHash: string }) => (b: typeof a) =>
     a.identity === b.identity && a.contentHash === b.contentHash;
+  const queued = reviewsIn(ledger.pending);
+  expect(new Set(queued.map((r) => `${r.identity}:${r.contentHash}`)).size).toBe(queued.length);
+  if (!current.reviewsComplete) {
+    return;
+  }
   for (const review of current.actionableReviews) {
     expect(reviewsIn(live).some(same(review))).toBe(true);
     expect(reviewsIn(ledger.pending).filter(same(review)).length).toBeLessThanOrEqual(1);
@@ -290,7 +296,7 @@ it('tells the recipient what is true of the PR, once, for random histories', () 
         );
         ledger.inFlight = [];
       }
-      const current = observation(world, tick + 2);
+      const current = observation(world, tick + 2, next() >= 0.25);
       const emitted = observe(ledger, current, tick + 2);
       try {
         check(ledger, current, emitted);

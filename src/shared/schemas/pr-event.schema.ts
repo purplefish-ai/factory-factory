@@ -80,12 +80,15 @@ export const prObservationSchema = z.strictObject({
   actionableReviews: z.array(prReviewSchema),
   reviewsComplete: z.boolean(),
   resolvedReviewIds: z.array(z.string()).optional(),
-  /**
-   * Reducer memory, set only on the stored observation of a failing PR: when
-   * this failure (same head and failing checks) was first observed, and whether
-   * it has been announced. A fetch never sets it; a stored failure without it
-   * predates the field and counts as announced.
-   */
+});
+/**
+ * The observation as stored on the PR row: the fetched facts plus the reducer's
+ * memory of a failing PR, namely when this failure (same head and failing
+ * checks) was first observed and whether it has been announced. A stored
+ * failure without it predates the field and counts as announced. Fetched
+ * observations and facts never carry it.
+ */
+export const prStoredObservationSchema = prObservationSchema.extend({
   ciFailure: z.strictObject({ since: z.iso.datetime(), announced: z.boolean() }).optional(),
 });
 const facts = { target: prTargetSchema, observation: prObservationSchema };
@@ -121,6 +124,7 @@ export const prDeliveryRequestSchema = z.strictObject({
 });
 export type PRTarget = z.infer<typeof prTargetSchema>;
 export type PRObservation = z.infer<typeof prObservationSchema>;
+export type PRStoredObservation = z.infer<typeof prStoredObservationSchema>;
 export type PRFactPayload = z.infer<typeof prFactPayloadSchema>;
 export type PRMonitoringControlPayload = z.infer<typeof prMonitoringControlPayloadSchema>;
 export type PRMonitoringEventPayload = z.infer<typeof prMonitoringEventPayloadSchema>;

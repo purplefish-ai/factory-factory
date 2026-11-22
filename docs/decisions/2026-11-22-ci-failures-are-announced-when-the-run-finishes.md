@@ -13,8 +13,8 @@ turn and describing a run that was still changing.
 ## Decision
 
 A failure is announced once no check of the run is still in progress
-(`isSettledPRFailure` in `src/shared/pr-trigger-policy.ts`). Until then the
-reducer queues nothing for it.
+(`isSettledPRFailure` in `src/shared/pr-trigger-policy.ts`), or once it has
+waited for the limit below. Until then the reducer queues nothing for it.
 
 A check can stay in progress indefinitely: a job awaiting an environment
 approval, or a required status that nobody reports. So an unchanged failure
@@ -25,9 +25,10 @@ The reducer compares each observation only with the previous one, and a failing
 run can pass through "still running" between two announcements (another check is
 re-run) or before its first. The stored observation therefore records, as
 `ciFailure`, when its failure (the same head and failing checks) was first
-observed and whether it has been announced. A fetch never sets the field; a
-stored failure without it predates the field and counts as announced, which is
-what the earlier rule did.
+observed and whether it has been announced. Only the stored observation's schema
+has the field, so a fetched observation or a fact cannot carry it; a stored
+failure without it predates the field and counts as announced, which is what the
+earlier rule did.
 
 Pinned by `src/shared/pr-trigger-policy.test.ts` and, over random histories,
 `src/shared/pr-trigger-policy.property.test.ts`.

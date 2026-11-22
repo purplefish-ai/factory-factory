@@ -31,7 +31,8 @@ review thread is resolved, so it could hide a change the ledger needs.
 - A change made on GitHub while a PR is backed off, such as a new human review
   or a merge in the web UI, can take up to 10 minutes to be observed.
 - Pending or unknown CI never backs off, and neither do a failing run with a
-  check still in progress (its failure is announced when the run finishes; see
+  check still in progress (its failure is announced when the run finishes, or
+  after 30 minutes; see
   [CI failures are announced when the run finishes](2026-11-22-ci-failures-are-announced-when-the-run-finishes.md))
   or incomplete reviews while monitoring is on. A core-only observation, made
   while monitoring is off, reports reviews incomplete and backs off on CI alone.

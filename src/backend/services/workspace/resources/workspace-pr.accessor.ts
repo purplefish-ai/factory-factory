@@ -5,7 +5,11 @@ import type { CIStatus, PRState } from '@/shared/core';
 import { shouldPollPR } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
 import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
-import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
+import {
+  prFactPayloadSchema,
+  prObservationSchema,
+  prStoredObservationSchema,
+} from '@/shared/schemas/pr-event.schema';
 import {
   deriveWorkspacePRSelection,
   selectWorkspacePR,
@@ -300,7 +304,7 @@ class WorkspacePRAccessor {
       // unreadable fact is left for delivery to discard.
       const baseline =
         row.observationEpoch === config.eventEpoch
-          ? prObservationSchema.safeParse(row.observation)
+          ? prStoredObservationSchema.safeParse(row.observation)
           : null;
       const previous = baseline?.success ? baseline.data : null;
       const unreadable = {
