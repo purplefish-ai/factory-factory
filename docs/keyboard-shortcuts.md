@@ -8,6 +8,8 @@ Commands share handlers with keyboard shortcuts.
 - `Alt+↑` / `Alt+↓`: previous / next workspace in sidebar order.
 - `Alt+Shift+↓`: next workspace that needs input or attention.
 - `Alt+[` / `Alt+]`: previous / next chat.
+- In a focused terminal on macOS, Option+Left and Option+Right move by a word in
+  shells that bind Meta+B and Meta+F to word movement.
 - `/`: focus the composer, while outside a text field.
 - `Alt+Shift+P`: toggle planning; `Alt+Shift+E`: toggle thinking; `Alt+Shift+Q`:
   open quick actions when those controls are available.

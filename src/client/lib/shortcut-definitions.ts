@@ -151,6 +151,22 @@ export const SHORTCUTS = [
     },
   },
   {
+    id: 'terminal.wordBackward',
+    scope: 'workspace',
+    description: 'Move backward one word in the terminal',
+    chords: [{ key: 'ArrowLeft', alt: true, platform: 'mac' }],
+    context: 'element',
+    allowRepeat: true,
+  },
+  {
+    id: 'terminal.wordForward',
+    scope: 'workspace',
+    description: 'Move forward one word in the terminal',
+    chords: [{ key: 'ArrowRight', alt: true, platform: 'mac' }],
+    context: 'element',
+    allowRepeat: true,
+  },
+  {
     id: 'tabs.close',
     scope: 'workspace',
     description: 'Close the focused tab',

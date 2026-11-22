@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { contrastRatio, parseThemeColor } from '@/client/lib/color-contrast';
+import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { Button } from '@/components/ui/button';
@@ -258,5 +259,25 @@ export const ManualFocus: Story = {
     await expect(toggle).toHaveFocus();
     await userEvent.click(canvas.getByRole('application', { name: 'Terminal' }));
     await expect(canvasElement.querySelector('.xterm-helper-textarea')).toHaveFocus();
+  },
+};
+
+export const MacWordNavigation: Story = {
+  beforeEach: () => {
+    setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'browser' });
+    return () => setShortcutEnvironmentForTesting(null);
+  },
+  args: { onData: fn(), output: new TerminalOutputStream('$ ') },
+  render: (args) => (
+    <div className="h-[280px] w-[700px]">
+      <TerminalInstance {...args} />
+    </div>
+  ),
+  play: async ({ args, canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('application', { name: 'Terminal' }));
+    await userEvent.keyboard('{Alt>}{ArrowLeft}{ArrowRight}{/Alt}');
+    await expect(args.onData).toHaveBeenCalledTimes(2);
+    await expect(args.onData).toHaveBeenNthCalledWith(1, '\x1bb');
+    await expect(args.onData).toHaveBeenNthCalledWith(2, '\x1bf');
   },
 };

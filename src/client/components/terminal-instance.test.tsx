@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcuts';
 import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
     fontSans: null as string | null,
     fontMono: null as string | null,
   },
+  attachCustomKeyEventHandler: vi.fn<Terminal['attachCustomKeyEventHandler']>(),
+  input: vi.fn(),
   fit: vi.fn(),
   clear: vi.fn(),
   dispose: vi.fn(),
@@ -44,6 +47,8 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: vi.fn(function Terminal(options: Record<string, unknown>) {
     return {
       clear: mocks.clear,
+      attachCustomKeyEventHandler: mocks.attachCustomKeyEventHandler,
+      input: mocks.input,
       cols: 80,
       dispose: mocks.dispose,
       focus: mocks.focus,
@@ -74,6 +79,8 @@ describe('TerminalInstance', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     Object.assign(mocks.appearance, DEFAULT_APPEARANCE);
     vi.mocked(Terminal).mockClear();
+    mocks.attachCustomKeyEventHandler.mockClear();
+    mocks.input.mockClear();
     mocks.fit.mockReset();
     mocks.clear.mockReset();
     mocks.dispose.mockReset();
@@ -85,8 +92,56 @@ describe('TerminalInstance', () => {
   });
 
   afterEach(() => {
+    setShortcutEnvironmentForTesting(null);
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+  });
+
+  it.each(['mac', 'other'] as const)('handles Option-arrows on %s clients', (platform) => {
+    setShortcutEnvironmentForTesting({ platform, runtime: 'browser' });
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(TerminalInstance, {
+            onData: vi.fn(),
+            onResize: vi.fn(),
+            output: new TerminalOutputStream(),
+          })
+        )
+      );
+      if (platform === 'other') {
+        expect(mocks.attachCustomKeyEventHandler).not.toHaveBeenCalled();
+        return;
+      }
+
+      const handle = mocks.attachCustomKeyEventHandler.mock.lastCall?.[0];
+      if (!handle) {
+        throw new Error('Expected the terminal to register a Mac key handler');
+      }
+      for (const key of ['ArrowLeft', 'ArrowRight']) {
+        const options = { key, altKey: true, cancelable: true };
+        const down = new KeyboardEvent('keydown', options);
+        expect(handle(down)).toBe(false);
+        expect(down.defaultPrevented).toBe(true);
+        expect(handle(new KeyboardEvent('keyup', options))).toBe(true);
+        for (const extra of [
+          { shiftKey: true },
+          { ctrlKey: true },
+          { metaKey: true },
+          { isComposing: true },
+          { altKey: false },
+          { key: 'é' },
+        ]) {
+          const other = new KeyboardEvent('keydown', { ...options, ...extra });
+          expect(handle(other)).toBe(true);
+          expect(other.defaultPrevented).toBe(false);
+        }
+      }
+      expect(mocks.input.mock.calls).toEqual([['\x1bb'], ['\x1bf']]);
+    } finally {
+      root.unmount();
+    }
   });
 
   it('updates terminal colors after theme mutations without losing output or rebuilding the terminal', async () => {
