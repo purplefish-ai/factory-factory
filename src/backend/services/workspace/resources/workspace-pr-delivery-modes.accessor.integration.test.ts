@@ -540,7 +540,7 @@ it('rejects stale explicit resume and preserves nonrecoverable pauses through di
   });
 });
 
-async function recoveryAndReviewFacts() {
+async function recoveryAndReviewFacts(keyPrefix = '') {
   const review = {
     identity: 'comment:7',
     contentHash: 'hash',
@@ -555,7 +555,7 @@ async function recoveryAndReviewFacts() {
     workspacePrEventAccessor.insert(tx, 'w', 'p', [
       {
         kind: 'CI_RECOVERED',
-        deduplicationKey: 'recovered',
+        deduplicationKey: `${keyPrefix}recovered`,
         payload: {
           kind: 'CI_RECOVERED',
           target: { workspaceId: 'w', prId: 'p' },
@@ -564,7 +564,7 @@ async function recoveryAndReviewFacts() {
       },
       {
         kind: 'REVIEW_FEEDBACK',
-        deduplicationKey: 'review',
+        deduplicationKey: `${keyPrefix}review`,
         payload: {
           kind: 'REVIEW_FEEDBACK',
           target: { workspaceId: 'w', prId: 'p' },
@@ -575,14 +575,17 @@ async function recoveryAndReviewFacts() {
     ])
   );
 }
-it('preserves unclaimed recovery and review facts through mode-only switches while replacing controls', async () => {
+it('cancels unclaimed facts and controls on a mode-only switch and renews the epoch that restates them', async () => {
   const [controlId] = await workspacePrEventAccessor.addEnabledControl('w', 0, true);
   const eventIds = await recoveryAndReviewFacts();
+  const epoch = (await workspacePrMonitoringAccessor.get('w'))?.eventEpoch ?? 0;
   await switchDedicated();
-  expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
-  expect(await readEvent(controlId)).toMatchObject({
-    state: 'CANCELLED',
-  });
+  expect(await workspacePrEventAccessor.listPending('w')).toHaveLength(0);
+  for (const id of [controlId, ...eventIds]) {
+    expect(await readEvent(id)).toMatchObject({ state: 'CANCELLED' });
+  }
+  expect(await workspacePrMonitoringAccessor.get('w')).toMatchObject({ eventEpoch: epoch + 1 });
+  const dedicatedFact = await fact();
   await workspacePrMonitoringAccessor.setBinding({
     workspaceId: 'w',
     enabled: true,
@@ -590,19 +593,22 @@ it('preserves unclaimed recovery and review facts through mode-only switches whi
     expectedBindingRevision: 1,
     replyToPrComments: false,
   });
-  expect(await workspacePrEventAccessor.listPending('w', 'p')).toHaveLength(2);
-  expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(0);
+  expect(await workspacePrEventAccessor.listPending('w')).toHaveLength(0);
+  expect(await readEvent(dedicatedFact)).toMatchObject({ state: 'CANCELLED' });
+  expect(await workspacePrMonitoringAccessor.get('w')).toMatchObject({ eventEpoch: epoch + 2 });
+  // Facts of the new epoch are claimed by the restored main recipient.
+  const restated = await recoveryAndReviewFacts('restated');
   expect(
     await workspacePrEventAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
       {
         deliveryId: 'rerouted',
         sessionId: 'main',
-        eventIds,
+        eventIds: restated,
         text: 'Queued facts',
       }
     )
-  ).toMatchObject({ eventIds, sessionId: 'main', attempt: 1 });
+  ).toMatchObject({ eventIds: restated, sessionId: 'main', attempt: 1 });
 });
 it('rejects incomplete dispatching backup claims before persisting a workspace lock', async () => {
   const event = {
@@ -635,7 +641,7 @@ it('rejects incomplete dispatching backup claims before persisting a workspace l
   expect(await db.prisma.workspacePREvent.count()).toBe(0);
 });
 
-it('preserves facts when a dedicated-to-main switch also binds a missing main preference', async () => {
+it('cancels unclaimed facts but keeps the frozen claim when a dedicated-to-main switch also binds a missing main preference', async () => {
   await switchDedicated();
   await db.prisma.workspacePRMonitoring.update({
     where: { workspaceId: 'w' },
@@ -683,15 +689,12 @@ it('preserves facts when a dedicated-to-main switch also binds a missing main pr
       replyToPrComments: false,
     })
   ).toEqual({ applied: true, bindingRevision: 2 });
-  for (const id of eventIds) {
+  for (const id of [...eventIds, oldControl]) {
     expect(await readEvent(id)).toMatchObject({
-      state: 'PENDING',
+      state: 'CANCELLED',
       deliveryId: null,
     });
   }
-  expect(await readEvent(oldControl)).toMatchObject({
-    state: 'CANCELLED',
-  });
   expect(await workspacePrEventAccessor.listPending('w', null)).toHaveLength(0);
   expect(await readEvent(frozenId)).toMatchObject({
     state: 'DISPATCHING',
@@ -708,17 +711,18 @@ it('preserves facts when a dedicated-to-main switch also binds a missing main pr
     bindingRevision: 1,
     result: 'delivered',
   });
+  const restated = await recoveryAndReviewFacts('restated');
   expect(
     await workspacePrEventAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
       {
         deliveryId: 'new-main',
         sessionId: 'main',
-        eventIds,
+        eventIds: restated,
         text: 'Queued facts',
       }
     )
-  ).toMatchObject({ eventIds, sessionId: 'main', attempt: 1 });
+  ).toMatchObject({ eventIds: restated, sessionId: 'main', attempt: 1 });
 });
 
 async function mainBatchFacts() {

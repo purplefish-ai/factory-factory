@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { prFailureSignature, reducePRObservation } from './pr-trigger-policy';
+import { deriveCiStatusFromCheckRollup } from './core';
+import {
+  isSettledPRFailure,
+  PR_FAILURE_MAX_WAIT_MS,
+  prFailureSignature,
+  reducePRObservation,
+} from './pr-trigger-policy';
 import type { PRObservation } from './schemas/pr-event.schema';
 
 const target = { workspaceId: 'w', prId: 'p' };
@@ -279,7 +285,7 @@ it('recovers against the latest delivered failure even when ledger reads are uno
       deliveredEvents: [latest, first],
     }).events
   ).toMatchObject([
-    { kind: 'CI_RECOVERED', deduplicationKey: 'p:epoch:1:CI_RECOVERED:head-1:latest-key' },
+    { kind: 'CI_RECOVERED', deduplicationKey: 'p:epoch:1:CI_RECOVERED:head-1:latest-key:1' },
   ]);
 });
 
@@ -415,4 +421,317 @@ describe('review feedback across pushes', () => {
     });
     expect(afterEdit.events.map((e) => e.kind)).toEqual(['REVIEW_FEEDBACK']);
   });
+});
+
+const at = (minute: number) => `2026-10-08T00:${String(minute).padStart(2, '0')}:00.000Z`;
+const kindsOf = (reduction: ReturnType<typeof reduce>) => reduction.events.map((e) => e.kind);
+
+describe('conflict facts', () => {
+  const clean = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [] };
+  const conflicted = { ...clean, hasMergeConflict: true, observedAt: at(1) };
+  const detection = reduce(conflicted, clean);
+  const detected = { ...detection.events[0]!, id: 'detected' };
+
+  it('re-emits an undelivered conflict that a new head supersedes', () => {
+    // The agent was busy when the conflict appeared and pushed without resolving it.
+    const pushed = { ...conflicted, headSha: 'head-2', observedAt: at(2) };
+    const afterPush = reduce(pushed, conflicted, {
+      pendingEvents: [detected],
+      transitionSequence: detection.nextTransitionSequence,
+    });
+    expect(afterPush.supersededEventIds).toEqual(['detected']);
+    expect(kindsOf(afterPush)).toEqual(['CONFLICT_DETECTED']);
+    expect(afterPush.events[0]?.payload.observation.headSha).toBe('head-2');
+    for (const told of ['deliveredEvents', 'inFlightEvents'] as const) {
+      expect(reduce(pushed, conflicted, { [told]: [detected] }).events).toEqual([]);
+    }
+  });
+
+  it('reports a clearance only for the conflict the recipient last heard about', () => {
+    const cleared = {
+      ...reduce({ ...clean, observedAt: at(2) }, conflicted, { deliveredEvents: [detected] })
+        .events[0]!,
+      id: 'cleared',
+    };
+    expect(cleared.kind).toBe('CONFLICT_CLEARED');
+    // A second conflict that clears before it is delivered was never announced.
+    const second = { ...conflicted, observedAt: at(3) };
+    const secondDetected = {
+      ...reduce(second, clean, { deliveredEvents: [detected, cleared], transitionSequence: 2 })
+        .events[0]!,
+      id: 'second',
+    };
+    const afterSecond = reduce({ ...clean, observedAt: at(4) }, second, {
+      deliveredEvents: [detected, cleared],
+      pendingEvents: [secondDetected],
+      transitionSequence: 3,
+    });
+    expect(afterSecond.supersededEventIds).toEqual(['second']);
+    expect(afterSecond.events).toEqual([]);
+  });
+
+  it('drops a queued clearance when the conflict returns', () => {
+    const cleared = {
+      ...reduce({ ...clean, observedAt: at(2) }, conflicted, { deliveredEvents: [detected] })
+        .events[0]!,
+      id: 'cleared',
+    };
+    const returned = reduce({ ...conflicted, observedAt: at(3) }, clean, {
+      deliveredEvents: [detected],
+      pendingEvents: [cleared],
+      transitionSequence: 2,
+    });
+    expect(returned.supersededEventIds).toEqual(['cleared']);
+    expect(kindsOf(returned)).toEqual(['CONFLICT_DETECTED']);
+  });
+
+  it('re-emits an undelivered clearance that a new head supersedes', () => {
+    const resolved = { ...clean, headSha: 'head-2', observedAt: at(2) };
+    const cleared = {
+      ...reduce(resolved, conflicted, { deliveredEvents: [detected] }).events[0]!,
+      id: 'cleared',
+    };
+    const pushed = { ...resolved, headSha: 'head-3', observedAt: at(3) };
+    const afterPush = reduce(pushed, resolved, {
+      deliveredEvents: [detected],
+      pendingEvents: [cleared],
+      transitionSequence: 2,
+    });
+    expect(afterPush.supersededEventIds).toEqual(['cleared']);
+    expect(kindsOf(afterPush)).toEqual(['CONFLICT_CLEARED']);
+    expect(reduce(pushed, resolved, { deliveredEvents: [detected, cleared] }).events).toEqual([]);
+  });
+});
+
+describe('CI failures while checks are still running', () => {
+  const failed = redObservation.checks[0]!;
+  const running = {
+    ...failed,
+    identity: 'run-2',
+    name: 'lint',
+    status: 'IN_PROGRESS',
+    conclusion: null,
+  };
+  const passed = { ...running, status: 'COMPLETED', conclusion: 'SUCCESS' };
+  const unsettled = { ...redObservation, checks: [failed, running] };
+  const settled = { ...redObservation, checks: [failed, passed] };
+
+  it('waits for the run to finish before announcing a failure', () => {
+    const first = reduce(unsettled);
+    expect(first).toMatchObject({ events: [], nextTransitionSequence: 0 });
+    expect(first.storedObservation.ciFailure?.announced).toBe(false);
+    const finished = reduce(settled, first.storedObservation);
+    expect(kindsOf(finished)).toEqual(['CI_FAILED']);
+    expect(finished.storedObservation.ciFailure?.announced).toBe(true);
+    expect(reduce(settled, finished.storedObservation).events).toEqual([]);
+  });
+
+  it('announces one failure for a run in which a second check fails later', () => {
+    const first = reduce(unsettled);
+    const both = {
+      ...redObservation,
+      checks: [failed, { ...passed, conclusion: 'FAILURE' }],
+    };
+    const finished = reduce(both, first.storedObservation);
+    expect(kindsOf(finished)).toEqual(['CI_FAILED']);
+    expect(finished.events[0]?.payload.observation.checks).toHaveLength(2);
+  });
+
+  it.each(['pendingEvents', 'deliveredEvents'] as const)(
+    'does not repeat an announced failure (%s) while another check is re-run',
+    (state) => {
+      const announced = reduce(settled);
+      const ledger = { [state]: [{ ...announced.events[0]!, id: 'announced' }] };
+      const rerun = reduce(unsettled, announced.storedObservation, ledger);
+      expect(rerun).toMatchObject({ events: [], supersededEventIds: [] });
+      expect(rerun.storedObservation.ciFailure?.announced).toBe(true);
+      expect(reduce(settled, rerun.storedObservation, ledger).events).toEqual([]);
+    }
+  );
+
+  it('announces a failure that recurs with identical metadata after CI passed', () => {
+    // Commit statuses carry no timestamps, so a repeated failure has the same signature.
+    const announced = reduce(settled);
+    const delivered = [{ ...announced.events[0]!, id: 'announced' }];
+    const green = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [passed] };
+    const recovered = reduce(green, announced.storedObservation, { deliveredEvents: delivered });
+    expect(kindsOf(recovered)).toEqual(['CI_RECOVERED']);
+    const failing = reduce(unsettled, recovered.storedObservation, { deliveredEvents: delivered });
+    expect(failing.events).toEqual([]);
+    const finished = reduce(settled, failing.storedObservation, {
+      deliveredEvents: delivered,
+      transitionSequence: recovered.nextTransitionSequence,
+    });
+    expect(kindsOf(finished)).toEqual(['CI_FAILED']);
+    expect(finished.events[0]?.deduplicationKey).not.toBe(announced.events[0]?.deduplicationKey);
+  });
+
+  it.each([
+    'PENDING',
+    'EXPECTED',
+    'QUEUED',
+    'IN_PROGRESS',
+    'WAITING',
+    'REQUESTED',
+    'COMPLETED',
+    'UNKNOWN',
+  ])('agrees with the CI status derivation on whether a %s check is running', (status) => {
+    // The policy takes no runtime import, so it restates which statuses are not terminal.
+    const check = { ...running, status, conclusion: status === 'COMPLETED' ? 'SUCCESS' : null };
+    expect(isSettledPRFailure({ ...redObservation, checks: [failed, check] })).toBe(
+      deriveCiStatusFromCheckRollup([check]) !== 'PENDING'
+    );
+  });
+
+  it('announces a failure once when its run never finishes', () => {
+    // For example a job awaiting approval, or a required status nobody reports.
+    const first = reduce(unsettled);
+    const later = (ms: number) => ({
+      ...unsettled,
+      observedAt: new Date(Date.parse(unsettled.observedAt) + ms).toISOString(),
+    });
+    const waiting = reduce(later(PR_FAILURE_MAX_WAIT_MS - 1), first.storedObservation);
+    expect(waiting.events).toEqual([]);
+    const overdue = reduce(later(PR_FAILURE_MAX_WAIT_MS), waiting.storedObservation);
+    expect(kindsOf(overdue)).toEqual(['CI_FAILED']);
+    const pending = { pendingEvents: [{ ...overdue.events[0]!, id: 'overdue' }] };
+    expect(
+      reduce(later(2 * PR_FAILURE_MAX_WAIT_MS), overdue.storedObservation, pending).events
+    ).toEqual([]);
+    expect(reduce(settled, overdue.storedObservation, pending).events).toEqual([]);
+  });
+
+  it('treats a failure stored before the field existed as announced', () => {
+    expect(reduce(settled, unsettled).events).toEqual([]);
+  });
+});
+
+it('drops a queued recovery when CI fails again and reports the next recovery separately', () => {
+  const failure = { ...reduce(redObservation).events[0]!, id: 'failure' };
+  const green = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [], observedAt: at(1) };
+  const first = reduce(green, redObservation, { deliveredEvents: [failure] });
+  const recovery = { ...first.events[0]!, id: 'recovery' };
+  expect(recovery.kind).toBe('CI_RECOVERED');
+  const redAgain = {
+    ...redObservation,
+    checks: [{ ...redObservation.checks[0]!, completedAt: at(2) }],
+    observedAt: at(2),
+  };
+  const failedAgain = reduce(redAgain, green, {
+    deliveredEvents: [failure],
+    pendingEvents: [recovery],
+    transitionSequence: first.nextTransitionSequence,
+  });
+  expect(failedAgain.supersededEventIds).toEqual(['recovery']);
+  expect(kindsOf(failedAgain)).toEqual(['CI_FAILED']);
+  // The second failure is superseded undelivered, so the same delivered failure recovers again.
+  const second = reduce({ ...green, observedAt: at(3) }, failedAgain.storedObservation, {
+    deliveredEvents: [failure],
+    pendingEvents: [{ ...failedAgain.events[0]!, id: 'second-failure' }],
+    transitionSequence: failedAgain.nextTransitionSequence,
+  });
+  expect(second.supersededEventIds).toEqual(['second-failure']);
+  expect(kindsOf(second)).toEqual(['CI_RECOVERED']);
+  expect(second.events[0]?.deduplicationKey).not.toBe(recovery.deduplicationKey);
+});
+
+it('drops a queued closure when the PR is reopened', () => {
+  const closed = { ...redObservation, prState: 'CLOSED' as const };
+  const closure = { ...reduce(closed, redObservation).events[0]!, id: 'closure' };
+  expect(closure.kind).toBe('PR_CLOSED');
+  expect(reduce(closed, closed, { pendingEvents: [closure] }).supersededEventIds).toEqual([]);
+  expect(reduce(redObservation, closed, { pendingEvents: [closure] }).supersededEventIds).toEqual([
+    'closure',
+  ]);
+});
+
+describe('the stored observation', () => {
+  const review = {
+    identity: 'comment:9',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'Handle the empty case',
+    path: 'src/a.ts',
+    line: 1,
+    url: `${redObservation.url}#discussion_r9`,
+    activityAt: redObservation.observedAt,
+  };
+  const withReview = { ...redObservation, actionableReviews: [review] };
+  const unread = { ...redObservation, actionableReviews: [], reviewsComplete: false };
+
+  it('keeps feedback this epoch observed when a review read is incomplete', () => {
+    expect(reduce(unread, withReview).storedObservation.actionableReviews).toEqual([review]);
+    expect(
+      reduce({ ...unread, resolvedReviewIds: [review.identity] }, withReview).storedObservation
+        .actionableReviews
+    ).toEqual([]);
+  });
+
+  it('carries nothing into a new epoch, so its first complete read states the feedback', () => {
+    // `previous` is null when the stored observation belongs to an earlier epoch.
+    const first = reduce(unread, null);
+    expect(first.storedObservation.actionableReviews).toEqual([]);
+    expect(kindsOf(reduce(withReview, first.storedObservation))).toContain('REVIEW_FEEDBACK');
+  });
+
+  it('is not copied into facts with its review list', () => {
+    const other = { ...review, identity: 'comment:10' };
+    const reduction = reduce({
+      ...withReview,
+      actionableReviews: [review, other],
+      resolvedReviewIds: ['comment:1'],
+    });
+    for (const event of reduction.events) {
+      expect(event.payload.observation).toMatchObject({ actionableReviews: [] });
+      expect(event.payload.observation).not.toHaveProperty('resolvedReviewIds');
+      expect(event.payload.observation).not.toHaveProperty('ciFailure');
+    }
+    expect(
+      reduction.events.flatMap((e) =>
+        e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []
+      )
+    ).toEqual([review, other]);
+  });
+});
+
+it('re-emits undelivered feedback on a new head whose review read is incomplete', () => {
+  const review = {
+    identity: 'comment:11',
+    contentHash: 'hash',
+    author: 'reviewer',
+    body: 'Guard the null case',
+    path: 'src/a.ts',
+    line: 4,
+    url: `${redObservation.url}#discussion_r11`,
+    activityAt: redObservation.observedAt,
+  };
+  const green = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [] };
+  const observed = reduce({ ...green, actionableReviews: [review] });
+  const queued = { ...observed.events[0]!, id: 'queued' };
+  // The push supersedes the queued fact, and the read that sees the push returns no reviews.
+  const unread = { ...green, headSha: 'head-2', observedAt: at(5), reviewsComplete: false };
+  const afterPush = reduce(unread, observed.storedObservation, {
+    pendingEvents: [queued],
+    transitionSequence: observed.nextTransitionSequence,
+  });
+  expect(afterPush.supersededEventIds).toEqual(['queued']);
+  expect(afterPush.events).toMatchObject([
+    { kind: 'REVIEW_FEEDBACK', payload: { reviews: [review], observation: { headSha: 'head-2' } } },
+  ]);
+  // The complete read that follows finds it queued and neither drops nor repeats it.
+  const requeued = { ...afterPush.events[0]!, id: 'requeued' };
+  expect(
+    reduce(
+      { ...unread, actionableReviews: [review], reviewsComplete: true },
+      afterPush.storedObservation,
+      {
+        pendingEvents: [requeued],
+        transitionSequence: afterPush.nextTransitionSequence,
+      }
+    )
+  ).toMatchObject({ events: [], supersededEventIds: [] });
+  // Feedback the recipient already has is not repeated by the push.
+  expect(reduce(unread, observed.storedObservation, { deliveredEvents: [queued] }).events).toEqual(
+    []
+  );
 });

@@ -311,8 +311,13 @@ describe('stable-PR backoff', () => {
     expect(await pollTimes(ports, 4)).toEqual([true, true, true, false]);
   });
 
+  const failedBesideRunning: PRObservation['checks'] = [
+    ...redObservation.checks,
+    { ...redObservation.checks[0]!, identity: 'run-2', status: 'IN_PROGRESS', conclusion: null },
+  ];
   it.each([
     ['running CI', { ciStatus: 'PENDING' }],
+    ['a failed check beside one still running', { checks: failedBesideRunning }],
     ['unknown CI', { ciStatus: 'UNKNOWN' }],
     ['incomplete review facts', { reviewsComplete: false }],
   ] as const)('keeps the normal cadence while a PR has %s', async (_name, overrides) => {

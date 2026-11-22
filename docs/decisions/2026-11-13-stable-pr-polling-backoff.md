@@ -11,11 +11,11 @@ agent pushes or a human reviews or merges.
 
 ## Decision
 
-An open PR is settled when its CI is terminal (`SUCCESS` or `FAILURE`) and,
-while monitoring is on, its review facts are complete. After three consecutive
-identical observations of a settled PR (ignoring the observation time), unforced
-observations keep the committed facts until 10 minutes have passed since the
-last GitHub read.
+An open PR is settled when its CI is terminal (`SUCCESS`, or `FAILURE` with no
+check still running) and, while monitoring is on, its review facts are complete.
+After three consecutive identical observations of a settled PR (ignoring the
+observation time), unforced observations keep the committed facts until 10
+minutes have passed since the last GitHub read.
 
 The PR returns to the normal cadence when an observation changes, another writer
 changes its revision, a forced observation runs, or a session in the workspace
@@ -30,6 +30,9 @@ review thread is resolved, so it could hide a change the ledger needs.
 
 - A change made on GitHub while a PR is backed off, such as a new human review
   or a merge in the web UI, can take up to 10 minutes to be observed.
-- Pending or unknown CI never backs off, and neither do incomplete reviews while
-  monitoring is on. A core-only observation, made while monitoring is off,
-  reports reviews incomplete and backs off on CI alone.
+- Pending or unknown CI never backs off, and neither do a failing run with a
+  check still in progress (its failure is announced when the run finishes, or
+  after 30 minutes; see
+  [CI failures are announced when the run finishes](2026-11-22-ci-failures-are-announced-when-the-run-finishes.md))
+  or incomplete reviews while monitoring is on. A core-only observation, made
+  while monitoring is off, reports reviews incomplete and backs off on CI alone.

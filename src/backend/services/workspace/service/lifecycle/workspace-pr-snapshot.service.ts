@@ -1,9 +1,12 @@
+import { createLogger } from '@/backend/services/logger.service';
 import {
   projectWorkspacePRCollection,
   workspacePrAccessor,
 } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { PRDiscoveryClaim, WorkspacePRIdentity } from '@/backend/services/workspace/types';
+
+const logger = createLogger('workspace-pr-snapshot');
 
 class WorkspacePrSnapshotService {
   dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
@@ -12,10 +15,19 @@ class WorkspacePrSnapshotService {
   projectCollection(prs: Awaited<ReturnType<typeof workspacePrAccessor.list>>, enabled: boolean) {
     return projectWorkspacePRCollection(prs, enabled);
   }
-  acceptMonitoredObservation(
+  async acceptMonitoredObservation(
     input: Parameters<typeof workspacePrAccessor.acceptMonitoredObservation>[0]
   ) {
-    return workspacePrAccessor.acceptMonitoredObservation(input);
+    const result = await workspacePrAccessor.acceptMonitoredObservation(input);
+    const unreadable = 'unreadable' in result ? result.unreadable : undefined;
+    if (unreadable && (unreadable.baseline || unreadable.eventIds.length)) {
+      logger.warn('Stored PR monitoring data could not be read and was ignored', {
+        ...input.target,
+        baseline: unreadable.baseline,
+        eventIds: unreadable.eventIds,
+      });
+    }
+    return result;
   }
   list(workspaceId: string) {
     return workspacePrAccessor.list(workspaceId);

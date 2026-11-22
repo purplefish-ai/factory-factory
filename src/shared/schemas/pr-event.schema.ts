@@ -23,6 +23,21 @@ export const prDeliveryStateSchema = z.enum([
   'DISMISSED',
 ]);
 
+/**
+ * `WorkspacePRMonitoring.deliveryPauseReason` values delivery writes. Each one
+ * clears on an explicit resume or the recipient's next turn, so no pause is a
+ * dead end. `INVALID_EVENT` is no longer written (delivery discards a fact it
+ * cannot render instead) and stays so that rows paused by earlier builds resume.
+ */
+export const prPauseReasonSchema = z.enum([
+  'USER_STOPPED',
+  'SESSION_FAILED',
+  'RESUME_FAILED',
+  'DELIVERY_FAILED',
+  'RECEIPT_UNAVAILABLE',
+  'INVALID_EVENT',
+]);
+
 export const prTargetSchema = z.strictObject({
   workspaceId: z.string().min(1),
   prId: z.string().min(1),
@@ -66,6 +81,16 @@ export const prObservationSchema = z.strictObject({
   reviewsComplete: z.boolean(),
   resolvedReviewIds: z.array(z.string()).optional(),
 });
+/**
+ * The observation as stored on the PR row: the fetched facts plus the reducer's
+ * memory of a failing PR, namely when this failure (same head and failing
+ * checks) was first observed and whether it has been announced. A stored
+ * failure without it predates the field and counts as announced. Fetched
+ * observations and facts never carry it.
+ */
+export const prStoredObservationSchema = prObservationSchema.extend({
+  ciFailure: z.strictObject({ since: z.iso.datetime(), announced: z.boolean() }).optional(),
+});
 const facts = { target: prTargetSchema, observation: prObservationSchema };
 export const prFactPayloadSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('CI_FAILED'), ...facts }),
@@ -99,8 +124,10 @@ export const prDeliveryRequestSchema = z.strictObject({
 });
 export type PRTarget = z.infer<typeof prTargetSchema>;
 export type PRObservation = z.infer<typeof prObservationSchema>;
+export type PRStoredObservation = z.infer<typeof prStoredObservationSchema>;
 export type PRFactPayload = z.infer<typeof prFactPayloadSchema>;
 export type PRMonitoringControlPayload = z.infer<typeof prMonitoringControlPayloadSchema>;
 export type PRMonitoringEventPayload = z.infer<typeof prMonitoringEventPayloadSchema>;
 export type PRDeliveryRequest = z.infer<typeof prDeliveryRequestSchema>;
 export type PRDeliveryState = z.infer<typeof prDeliveryStateSchema>;
+export type PRPauseReason = z.infer<typeof prPauseReasonSchema>;

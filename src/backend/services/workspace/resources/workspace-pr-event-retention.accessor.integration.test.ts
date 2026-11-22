@@ -150,8 +150,8 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
     // Too recent.
     { id: 'recent-superseded', state: 'SUPERSEDED', createdAt: RECENT },
     { id: 'boundary-superseded', state: 'SUPERSEDED', createdAt: CUTOFF },
-    // Keys without a transition sequence.
     { id: 'recovered-superseded', state: 'SUPERSEDED', kind: 'CI_RECOVERED' },
+    // Legacy controls are not facts.
     { id: 'control-cancelled', state: 'CANCELLED', kind: 'MONITORING_ENABLED' },
     // Frozen delivery members, whatever their own state.
     { id: 'delivered-batch-member', state: 'SUPERSEDED', batchId: 'delivered-batch' },
@@ -163,7 +163,7 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
   ]);
 
   expect(await workspacePrEventAccessor.pruneTerminalEvents({ before: CUTOFF, limit: 100 })).toBe(
-    4
+    5
   );
 
   expect(await remainingIds()).toEqual(
@@ -179,7 +179,6 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
       ...legacyRows.map((row) => row.id),
       'pending',
       'recent-superseded',
-      'recovered-superseded',
     ].sort()
   );
   // Frozen batches keep the complete membership that backup export validates.
@@ -235,7 +234,7 @@ it('prunes undeliverable pending facts of ARCHIVED workspaces under the same rul
   ]);
 
   expect(await workspacePrEventAccessor.pruneTerminalEvents({ before: CUTOFF, limit: 100 })).toBe(
-    2
+    3
   );
 
   expect(await remainingIds()).toEqual(
@@ -246,7 +245,6 @@ it('prunes undeliverable pending facts of ARCHIVED workspaces under the same rul
       'archived-dispatching',
       'archived-legacy-receipt',
       'archived-recent',
-      'archived-recovered',
       'archiving-pending',
       'ready-pending',
     ].sort()

@@ -155,7 +155,8 @@ export async function preparePRDelivery(
   }
   const batch = await buildDeliveryBatch(first, events, request, services);
   if (!batch) {
-    return { status: 'blocked', reason: 'Stored PR update is invalid' };
+    // Nothing deliverable was left this time; the next wake queues what remains.
+    return { status: 'discard' };
   }
   const targetGuard = await guardDeliveryTargets(sessionId, request, batch.events, services);
   if (targetGuard !== 'ready') {
@@ -228,6 +229,10 @@ async function refreshDeliveryObservations(
   await Promise.all(Array.from({ length: Math.min(3, targets.length) }, () => worker()));
   return refreshed;
 }
+/**
+ * Render the batch to freeze. A stored fact that cannot be parsed or rendered is
+ * discarded here, so one bad row never holds back the facts queued behind it.
+ */
 async function buildDeliveryBatch(
   first: PendingPREvent,
   events: PendingPREvent[],
@@ -236,30 +241,53 @@ async function buildDeliveryBatch(
 ) {
   const settings = await services.userSettingsService.get();
   const deliveryId = first.deliveryId ?? randomUUID();
+  if (first.deliveryText !== null && first.deliveryText !== undefined) {
+    return { deliveryId, text: first.deliveryText, events };
+  }
+  const parsed = events.map((event) => ({
+    event,
+    payload: prFactPayloadSchema.safeParse(event.payload),
+  }));
+  const facts = parsed.flatMap(({ event, payload }) =>
+    payload.success ? [{ event, payload: payload.data }] : []
+  );
+  const undeliverable = parsed.flatMap(({ event, payload }) => (payload.success ? [] : [event]));
+  let batch: ReturnType<typeof buildPREventBatch> | null = null;
+  let renderError: unknown;
   try {
-    if (first.deliveryText !== null && first.deliveryText !== undefined) {
-      return { deliveryId, text: first.deliveryText, events };
-    }
-    const batch = buildPREventBatch({
-      deliveryId,
-      events: events.map((event) => prFactPayloadSchema.parse(event.payload)),
-      replyToPrComments: settings.ratchetReplyToPrComments,
-      deliveryMode: request.deliveryMode,
-    });
-    return {
-      deliveryId,
-      text: batch.text,
-      events: events.filter((event) => event.prId && batch.prIds.includes(event.prId)),
-    };
+    batch = facts.length
+      ? buildPREventBatch({
+          deliveryId,
+          events: facts.map((fact) => fact.payload),
+          replyToPrComments: settings.ratchetReplyToPrComments,
+          deliveryMode: request.deliveryMode,
+        })
+      : null;
   } catch (error) {
-    await services.workspacePRMonitoringService.pauseWorkspace(
-      request.workspaceId,
-      'INVALID_EVENT',
-      request.bindingRevision
+    // Rendering fails only on the batch's first PR, whose section must always fit.
+    renderError = error;
+    undeliverable.push(
+      ...facts.filter((fact) => fact.event.prId === facts[0]?.event.prId).map((fact) => fact.event)
     );
-    logger.error('Invalid persisted PR event', { error });
+  }
+  if (undeliverable.length) {
+    const eventIds = undeliverable.map((event) => event.id);
+    await services.workspacePRMonitoringService.cancelUndeliverable(request.workspaceId, eventIds);
+    logger.error('Discarded stored PR facts that cannot be delivered', {
+      workspaceId: request.workspaceId,
+      eventIds,
+      ...(renderError === undefined ? {} : { error: renderError }),
+    });
+  }
+  if (!batch) {
     return null;
   }
+  const prIds = batch.prIds;
+  return {
+    deliveryId,
+    text: batch.text,
+    events: facts.flatMap(({ event }) => (event.prId && prIds.includes(event.prId) ? [event] : [])),
+  };
 }
 
 async function guardDeliveryTargets(

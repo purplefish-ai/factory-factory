@@ -6,6 +6,7 @@ import {
   PR_DEDICATED_WORKFLOW,
   prDeliveryModeSchema,
   type PRDeliveryMode,
+  type PRPauseReason,
 } from '@/shared/pr-monitoring';
 import { prMonitoringBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
@@ -45,19 +46,20 @@ function resolveBinding(input: PRBindingInput, config: WorkspacePRMonitoring) {
   return { ...input, deliveryMode, recipientSessionId };
 }
 
+/**
+ * A change of destination (enablement, mode or recipient) cancels the unclaimed
+ * facts queued for the old one. Whenever monitoring stays or turns on, it also
+ * renews the event epoch, whose first observation states every fact that still
+ * holds for the new destination; so no unclaimed fact outlives its epoch.
+ */
 function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring) {
   const effective = resolveBinding(input, config);
   const { deliveryMode, recipientSessionId } = effective;
   const modeChanged = config.deliveryMode !== deliveryMode;
   const recipientChanged = config.recipientSessionId !== recipientSessionId;
-  const preservePendingFacts = modeChanged && config.enabled && input.enabled;
-  const cancelPendingFacts =
-    config.enabled !== input.enabled || (recipientChanged && !preservePendingFacts);
-  const bindingChanged = cancelPendingFacts || modeChanged;
+  const bindingChanged = config.enabled !== input.enabled || recipientChanged || modeChanged;
   const shouldResume = input.resume === true && canResumePRMonitoring(config.deliveryPauseReason);
-  const renewEpoch =
-    modeChanged ||
-    (input.enabled && (!config.enabled || config.recipientSessionId !== recipientSessionId));
+  const renewEpoch = modeChanged || (input.enabled && (!config.enabled || recipientChanged));
   const data: Prisma.WorkspacePRMonitoringUncheckedUpdateManyInput = {
     enabled: input.enabled,
     ...(shouldResume ? { deliveryPauseReason: null } : {}),
@@ -66,20 +68,16 @@ function bindingTransition(input: PRBindingInput, config: WorkspacePRMonitoring)
     bindingRevision: { increment: 1 },
     ...(renewEpoch ? { eventEpoch: { increment: 1 } } : {}),
   };
-  return { effective, bindingChanged, cancelPendingFacts, shouldResume, data };
+  return { effective, bindingChanged, shouldResume, data };
 }
 
 async function updateBindingEvents(
   tx: Prisma.TransactionClient,
   transition: ReturnType<typeof bindingTransition>
 ) {
-  const { effective, bindingChanged, cancelPendingFacts, shouldResume } = transition;
+  const { effective, bindingChanged, shouldResume } = transition;
   if (bindingChanged) {
-    if (cancelPendingFacts) {
-      await workspacePrEventAccessor.cancelInTransaction(tx, effective.workspaceId);
-    } else {
-      await workspacePrEventAccessor.cancelUnclaimedControls(tx, effective.workspaceId);
-    }
+    await workspacePrEventAccessor.cancelInTransaction(tx, effective.workspaceId);
   }
   if (shouldResume) {
     await workspacePrEventAccessor.renewRetryAllowance(tx, effective.workspaceId);
@@ -164,7 +162,7 @@ class WorkspacePrMonitoringAccessor {
       };
     });
   }
-  pause(sessionId: string, reason: string) {
+  pause(sessionId: string, reason: PRPauseReason) {
     return prisma.$transaction(async (tx) => {
       const configs = await tx.workspacePRMonitoring.findMany({
         where: recipientWhere(sessionId),
@@ -225,7 +223,11 @@ class WorkspacePrMonitoringAccessor {
       });
     }
   }
-  pauseWorkspace(workspaceId: string, reason: string, expectedBindingRevision: number) {
+  pauseWorkspace(
+    workspaceId: string,
+    reason: PRPauseReason | 'LEGACY_FIXER',
+    expectedBindingRevision: number
+  ) {
     return prisma.$transaction(async (tx) => {
       const config = await tx.workspacePRMonitoring.findFirst({
         where: { workspaceId, bindingRevision: expectedBindingRevision },

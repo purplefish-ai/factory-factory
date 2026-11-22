@@ -20,12 +20,14 @@ predicate; the loop yields between batches and stops on shutdown. A
 old rows in those states.
 
 Only facts no reader uses are eligible. Delivery members, legacy receipt or
-frozen metadata, DISPATCHING and DELIVERED rows, `CI_RECOVERED` and legacy
-`MONITORING_ENABLED` rows are kept. Eligible kinds are those whose deduplication
-key includes the PR's transition sequence, which only increases, so the reducer
-can never regenerate a pruned key. ARCHIVED workspaces cannot return to READY
-and claims require READY, so their pending facts can never be delivered.
-ARCHIVING workspaces keep theirs, because a failed archive rolls back to READY.
+frozen metadata, DISPATCHING and DELIVERED rows and legacy `MONITORING_ENABLED`
+rows are kept. Every fact kind is eligible, because each deduplication key
+includes the PR's transition sequence, which only increases, so the reducer can
+never regenerate a pruned key. (`CI_RECOVERED` was keyed by head and failure,
+and so kept, until its key gained the sequence on 2026-11-22.) ARCHIVED
+workspaces cannot return to READY and claims require READY, so their pending
+facts can never be delivered. ARCHIVING workspaces keep theirs, because a failed
+archive rolls back to READY.
 
 The app does not run `VACUUM`. It rewrites the whole database under an exclusive
 lock and needs temporary space about the size of the database, and enabling

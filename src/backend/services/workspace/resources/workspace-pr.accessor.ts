@@ -5,7 +5,11 @@ import type { CIStatus, PRState } from '@/shared/core';
 import { shouldPollPR } from '@/shared/pr-polling';
 import { reducePRObservation } from '@/shared/pr-trigger-policy';
 import type { PRObservation, PRTarget } from '@/shared/schemas/pr-event.schema';
-import { prFactPayloadSchema, prObservationSchema } from '@/shared/schemas/pr-event.schema';
+import {
+  prFactPayloadSchema,
+  prObservationSchema,
+  prStoredObservationSchema,
+} from '@/shared/schemas/pr-event.schema';
 import {
   deriveWorkspacePRSelection,
   selectWorkspacePR,
@@ -295,12 +299,26 @@ class WorkspacePRAccessor {
       ) {
         return { applied: false, eventIds: [] };
       }
-      const baseline = row.observation === null ? null : prObservationSchema.parse(row.observation);
-      const previous = row.observationEpoch === config.eventEpoch ? baseline : null;
+      // A stored blob an earlier or later build wrote differently must not stop
+      // observation: an unreadable baseline restarts the comparison, and an
+      // unreadable fact is left for delivery to discard.
+      const baseline =
+        row.observationEpoch === config.eventEpoch
+          ? prStoredObservationSchema.safeParse(row.observation)
+          : null;
+      const previous = baseline?.success ? baseline.data : null;
+      const unreadable = {
+        baseline: baseline?.success === false && row.observation !== null,
+        eventIds: [] as string[],
+      };
       const rows = await workspacePrEventAccessor.listForPR(tx, row.id, config.eventEpoch);
-      const events = rows.map((e) => {
-        const payload = prFactPayloadSchema.parse(e.payload);
-        return { ...e, kind: payload.kind, payload };
+      const events = rows.flatMap((e) => {
+        const payload = prFactPayloadSchema.safeParse(e.payload);
+        if (!payload.success) {
+          unreadable.eventIds.push(e.id);
+          return [];
+        }
+        return [{ ...e, kind: payload.data.kind, payload: payload.data }];
       });
       const reduction = reducePRObservation({
         hashIdentity: (identity) => createHash('sha256').update(identity).digest('hex'),
@@ -329,22 +347,7 @@ class WorkspacePRAccessor {
           hasMergeConflict: observation.hasMergeConflict,
           syncedAt: new Date(observation.observedAt),
           revision: { increment: 1 },
-          observation:
-            !observation.reviewsComplete && baseline
-              ? {
-                  ...observation,
-                  actionableReviews: [
-                    ...observation.actionableReviews,
-                    ...baseline.actionableReviews.filter(
-                      (r) =>
-                        !(
-                          observation.resolvedReviewIds?.includes(r.identity) ||
-                          observation.actionableReviews.some((c) => c.identity === r.identity)
-                        )
-                    ),
-                  ],
-                }
-              : observation,
+          observation: reduction.storedObservation,
           transitionSequence: reduction.nextTransitionSequence,
           observationEpoch: config.eventEpoch,
         },
@@ -353,7 +356,7 @@ class WorkspacePRAccessor {
         return { applied: false, eventIds: [] };
       }
       if (!config.enabled) {
-        return { applied: true, eventIds: [] };
+        return { applied: true, eventIds: [], unreadable };
       }
       await workspacePrEventAccessor.supersede(tx, reduction.supersededEventIds);
       return {
@@ -364,6 +367,7 @@ class WorkspacePRAccessor {
           row.id,
           reduction.events
         ),
+        unreadable,
       };
     });
   }
