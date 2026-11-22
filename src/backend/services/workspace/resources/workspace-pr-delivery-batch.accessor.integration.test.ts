@@ -8,6 +8,7 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import type { PrismaClient } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 
@@ -155,7 +156,7 @@ it('stores one frozen multi-PR batch and rejects incomplete membership or stale 
     eventIds: [id, second],
     text: 'exact frozen multi PR message',
   };
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     attempt: 1,
   });
   const physical = await db.prisma.workspacePREvent.findMany({ where: { batchId: 'batch' } });
@@ -171,20 +172,20 @@ it('stores one frozen multi-PR batch and rejects incomplete membership or stale 
       }),
     ])
   );
-  await workspacePrEventAccessor.settleDelivery({
+  await workspacePrDeliveryAccessor.settleDelivery({
     ...input,
     bindingRevision: 0,
     attempt: 1,
     result: 'retry',
   });
   expect(
-    await workspacePrEventAccessor.claimDelivery(request, { ...input, eventIds: [id] })
+    await workspacePrDeliveryAccessor.claimDelivery(request, { ...input, eventIds: [id] })
   ).toBeNull();
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     attempt: 2,
   });
   expect(
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       ...input,
       bindingRevision: 0,
       attempt: 1,
@@ -196,7 +197,7 @@ it('stores one frozen multi-PR batch and rejects incomplete membership or stale 
     prMonitoring: { pendingEventCount: 2 },
   });
   expect(
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       ...input,
       bindingRevision: 0,
       attempt: 2,
@@ -218,15 +219,15 @@ it('settles provider acceptance after a crash before the database acknowledgemen
     eventIds,
     text: 'accepted prompt',
   };
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     attempt: 1,
   });
   // Provider has the receipt; the process dies before settleDelivery runs.
-  expect(await workspacePrEventAccessor.recoverClaim(input.deliveryId, true)).toEqual({
+  expect(await workspacePrDeliveryAccessor.recoverClaim(input.deliveryId, true)).toEqual({
     count: 2,
     status: 'recovered',
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
   expect(await workspacePrEventAccessor.listPending('w')).toEqual([]);
   expect(
     await db.prisma.workspacePRDelivery.findUnique({ where: { id: input.deliveryId } })
@@ -250,7 +251,7 @@ it.each(['lost', 'added legacy member'])(
       eventIds,
       text: 'frozen before corruption',
     };
-    await workspacePrEventAccessor.claimDelivery(request, input);
+    await workspacePrDeliveryAccessor.claimDelivery(request, input);
     if (damage === 'lost') {
       await db.prisma.workspacePREvent.delete({ where: { id: eventIds[1] } });
     } else {
@@ -268,12 +269,12 @@ it.each(['lost', 'added legacy member'])(
         },
       });
     }
-    expect(await workspacePrEventAccessor.recoverClaim(input.deliveryId, true)).toEqual({
+    expect(await workspacePrDeliveryAccessor.recoverClaim(input.deliveryId, true)).toEqual({
       count: 0,
       status: 'identity_mismatch',
     });
     expect(
-      await workspacePrEventAccessor.settleDelivery({
+      await workspacePrDeliveryAccessor.settleDelivery({
         ...input,
         bindingRevision: 0,
         attempt: 1,
@@ -291,7 +292,7 @@ it.each(['lost', 'added legacy member'])(
       'Cannot export incomplete PR delivery membership'
     );
     expect(
-      await workspacePrEventAccessor.claimDelivery(request, {
+      await workspacePrDeliveryAccessor.claimDelivery(request, {
         ...input,
         deliveryId: 'replacement',
         eventIds: [eventIds[0]!],
@@ -317,8 +318,8 @@ it('does not reset or settle inconsistent legacy receipt evidence on resume', as
       },
     });
   }
-  await db.prisma.$transaction((tx) => workspacePrEventAccessor.renewRetryAllowance(tx, 'w'));
-  expect(await workspacePrEventAccessor.recoverClaim('legacy-inconsistent', true)).toEqual({
+  await db.prisma.$transaction((tx) => workspacePrDeliveryAccessor.renewRetryAllowance(tx, 'w'));
+  expect(await workspacePrDeliveryAccessor.recoverClaim('legacy-inconsistent', true)).toEqual({
     count: 0,
     status: 'identity_mismatch',
   });
@@ -343,7 +344,7 @@ it('round trips a normalized frozen batch through the compatible event backup wi
     text: 'immutable backup message',
   };
   const request = { workspaceId: 'w', prId: null, bindingRevision: 0 };
-  await workspacePrEventAccessor.claimDelivery(request, input);
+  await workspacePrDeliveryAccessor.claimDelivery(request, input);
   const rows = await db.prisma.workspacePREvent.findMany({ where: { workspaceId: 'w' } });
   const deliveries = await db.prisma.workspacePRDelivery.findMany({ where: { workspaceId: 'w' } });
   const events = workspacePrEventAccessor
@@ -358,7 +359,7 @@ it('round trips a normalized frozen batch through the compatible event backup wi
     );
   await db.prisma.workspacePREvent.deleteMany({ where: { workspaceId: 'w' } });
   await db.prisma.workspacePRDelivery.deleteMany({ where: { workspaceId: 'w' } });
-  await db.prisma.$transaction((tx) => workspacePrEventAccessor.restoreBackup(tx, 'w', events));
+  await db.prisma.$transaction((tx) => workspacePrDeliveryAccessor.restoreBackup(tx, 'w', events));
   expect(
     await db.prisma.workspacePRDelivery.findUnique({ where: { id: input.deliveryId } })
   ).toMatchObject({
@@ -370,8 +371,8 @@ it('round trips a normalized frozen batch through the compatible event backup wi
     providerSessionId: 'main-provider',
     bindingRevision: 0,
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
-  expect(await workspacePrEventAccessor.recoverClaim(input.deliveryId, true)).toEqual({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.recoverClaim(input.deliveryId, true)).toEqual({
     count: 2,
     status: 'recovered',
   });
@@ -380,7 +381,7 @@ it('round trips a normalized frozen batch through the compatible event backup wi
 
 it('rolls back a restore that collides with an existing delivery identity', async () => {
   const [id] = await mainBatchFacts();
-  await workspacePrEventAccessor.claimDelivery(
+  await workspacePrDeliveryAccessor.claimDelivery(
     { workspaceId: 'w', prId: null, bindingRevision: 0 },
     { deliveryId: 'collision', sessionId: 'main', eventIds: [id!], text: 'original' }
   );
@@ -399,7 +400,7 @@ it('rolls back a restore that collides with an existing delivery identity', asyn
       })
     );
   await expect(
-    db.prisma.$transaction((tx) => workspacePrEventAccessor.restoreBackup(tx, 'w', events))
+    db.prisma.$transaction((tx) => workspacePrDeliveryAccessor.restoreBackup(tx, 'w', events))
   ).rejects.toThrow('Imported PR event or delivery identity already exists');
   expect(
     await db.prisma.workspacePREvent.findUnique({ where: { id: 'imported-event' } })
@@ -411,7 +412,7 @@ it('rolls back a restore that collides with an existing delivery identity', asyn
 
 it('preserves explicit workspace deletion cascade for normalized batches', async () => {
   const eventIds = await mainBatchFacts();
-  await workspacePrEventAccessor.claimDelivery(
+  await workspacePrDeliveryAccessor.claimDelivery(
     { workspaceId: 'w', prId: null, bindingRevision: 0 },
     { deliveryId: 'deletion', sessionId: 'main', eventIds, text: 'frozen' }
   );
@@ -442,7 +443,7 @@ it('cannot cascade another workspace event through a quarantined cross-workspace
       },
     },
   });
-  expect(await workspacePrEventAccessor.recoverClaim('shared-legacy-receipt', true)).toEqual({
+  expect(await workspacePrDeliveryAccessor.recoverClaim('shared-legacy-receipt', true)).toEqual({
     count: 0,
     status: 'identity_mismatch',
   });
@@ -470,13 +471,13 @@ it.each([null, ''])(
     });
     const before = await db.prisma.workspacePREvent.findUnique({ where: { id } });
     expect(
-      await workspacePrEventAccessor.claimDelivery(
+      await workspacePrDeliveryAccessor.claimDelivery(
         { workspaceId: 'w', prId: null, bindingRevision: 0 },
         { deliveryId: 'replacement-receipt', sessionId: 'main', eventIds: [id], text: 'new text' }
       )
     ).toBeNull();
     await db.prisma.$transaction(async (tx) => {
-      await workspacePrEventAccessor.renewRetryAllowance(tx, 'w');
+      await workspacePrDeliveryAccessor.renewRetryAllowance(tx, 'w');
       await workspacePrEventAccessor.supersede(tx, [id]);
       await workspacePrEventAccessor.cancelInTransaction(tx, 'w');
     });
@@ -487,7 +488,7 @@ it.each([null, ''])(
 it('rejects an export member linked only through a legacy receipt field', async () => {
   const eventIds = await mainBatchFacts();
   const deliveryId = 'lost-explicit-membership';
-  await workspacePrEventAccessor.claimDelivery(
+  await workspacePrDeliveryAccessor.claimDelivery(
     { workspaceId: 'w', prId: null, bindingRevision: 0 },
     { deliveryId, sessionId: 'main', eventIds, text: 'frozen' }
   );

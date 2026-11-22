@@ -6,7 +6,7 @@ import {
 } from '@/backend/testing/integration-db';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import type { PrismaClient } from '@prisma-gen/client';
-import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 
 const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({
@@ -81,7 +81,7 @@ it.each(['raw-only', 'normalized', 'batch-only', 'event', 'dedup'] as const)(
     const deliveries = await db.prisma.workspacePRDelivery.findMany();
     await db.prisma.$transaction(async (tx) => {
       await expect(
-        workspacePrEventAccessor.restoreBackup(
+        workspacePrDeliveryAccessor.restoreBackup(
           tx,
           'w',
           [event('incoming-first', null), event('incoming-second', 'collision')],
@@ -104,7 +104,7 @@ it('validates every payload owner before inserting earlier members when the call
   };
   await db.prisma.$transaction(async (tx) => {
     await expect(
-      workspacePrEventAccessor.restoreBackup(tx, 'w', [event('valid-first', null), invalid])
+      workspacePrDeliveryAccessor.restoreBackup(tx, 'w', [event('valid-first', null), invalid])
     ).rejects.toThrow('Imported event payload target is invalid');
     expect(await tx.workspacePREvent.count()).toBe(0);
   });

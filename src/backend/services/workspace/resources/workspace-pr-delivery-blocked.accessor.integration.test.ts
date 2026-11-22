@@ -8,8 +8,9 @@ import {
 import { PR_DELIVERY_BLOCKED_PAUSE_REASON } from '@/shared/pr-monitoring';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PrismaClient } from '@prisma-gen/client';
-import { readDeliveryEvents } from './workspace-pr-delivery.accessor';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import { readDeliveryEvents } from './workspace-pr-ledger-reads.accessor';
 import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -97,7 +98,7 @@ async function blockLegacyBatch(workspaceId: string, deliveryId: string) {
     });
   }
   await db.prisma.$transaction((tx) =>
-    workspacePrEventAccessor.renewRetryAllowance(tx, workspaceId)
+    workspacePrDeliveryAccessor.renewRetryAllowance(tx, workspaceId)
   );
   expect(
     await db.prisma.workspacePRDelivery.findUnique({ where: { id: deliveryId } })
@@ -106,7 +107,7 @@ async function blockLegacyBatch(workspaceId: string, deliveryId: string) {
 }
 
 function claim(workspaceId: string, deliveryId: string, eventIds: string[]) {
-  return workspacePrEventAccessor.claimDelivery(
+  return workspacePrDeliveryAccessor.claimDelivery(
     { workspaceId, prId: null, bindingRevision: 0 },
     { deliveryId, sessionId: `${workspaceId}-main`, eventIds, text: 'fresh facts' }
   );
@@ -151,8 +152,8 @@ it('discards a blocked delivery without resending or rewriting its evidence', as
   });
   const exportedBefore = await exportWorkspace('w');
 
-  expect(await workspacePrEventAccessor.discardBlockedDeliveries('w')).toEqual({ count: 1 });
-  expect(await workspacePrEventAccessor.discardBlockedDeliveries('w')).toEqual({ count: 0 });
+  expect(await workspacePrDeliveryAccessor.discardBlockedDeliveries('w')).toEqual({ count: 1 });
+  expect(await workspacePrDeliveryAccessor.discardBlockedDeliveries('w')).toEqual({ count: 0 });
 
   expect(
     await db.prisma.workspacePRDelivery.findUniqueOrThrow({ where: { id: 'legacy-blocked' } })
@@ -176,15 +177,15 @@ it('discards a blocked delivery without resending or rewriting its evidence', as
   // Dismissed members are never retried, settled, deferred or recovered.
   expect(await claim('w', 'legacy-blocked', members)).toBeNull();
   expect(
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       deliveryId: 'legacy-blocked',
       sessionId: 'w-main',
       bindingRevision: 0,
       result: 'delivered',
     })
   ).toBe(false);
-  expect(await workspacePrEventAccessor.deferBusy('legacy-blocked')).toEqual({ count: 0 });
-  expect(await workspacePrEventAccessor.recoverClaim('legacy-blocked', true)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.deferBusy('legacy-blocked')).toEqual({ count: 0 });
+  expect(await workspacePrDeliveryAccessor.recoverClaim('legacy-blocked', true)).toMatchObject({
     count: 0,
   });
   expect(
@@ -201,7 +202,7 @@ it('keeps export fail-closed for damaged normalized membership after a discard',
   await claim('w', 'damaged', ids);
   await db.prisma.workspacePREvent.delete({ where: { id: ids[1] } });
   expect(
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       deliveryId: 'damaged',
       sessionId: 'w-main',
       bindingRevision: 0,
@@ -212,7 +213,7 @@ it('keeps export fail-closed for damaged normalized membership after a discard',
     prMonitoring: { pauseReason: PR_DELIVERY_BLOCKED_PAUSE_REASON },
   });
 
-  expect(await workspacePrEventAccessor.discardBlockedDeliveries('w')).toEqual({ count: 1 });
+  expect(await workspacePrDeliveryAccessor.discardBlockedDeliveries('w')).toEqual({ count: 1 });
   await expect(exportWorkspace('w')).rejects.toThrow(
     'Cannot export incomplete PR delivery membership'
   );
@@ -239,7 +240,7 @@ it('keeps delivered members of a dismissed batch as delivered history', async ()
     where: { id: delivered },
     data: { state: 'DELIVERED' },
   });
-  await workspacePrEventAccessor.discardBlockedDeliveries('w');
+  await workspacePrDeliveryAccessor.discardBlockedDeliveries('w');
   const states = new Map(
     (await readDeliveryEvents(db.prisma, { workspaceId: 'w' })).map((e) => [e.id, e.state])
   );

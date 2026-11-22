@@ -6,6 +6,7 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PrismaClient } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
 
@@ -127,7 +128,7 @@ describe('durable monitoring', () => {
     const request = { workspaceId: 'w', prId: null, bindingRevision: config.bindingRevision };
     const claims = await Promise.all(
       ['one', 'two'].map((deliveryId) =>
-        workspacePrEventAccessor.claimDelivery(request, {
+        workspacePrDeliveryAccessor.claimDelivery(request, {
           deliveryId,
           sessionId: 'main',
           eventIds: events.map((e) => e.id),
@@ -137,7 +138,7 @@ describe('durable monitoring', () => {
     );
     expect(claims.filter(Boolean)).toHaveLength(1);
     expect(
-      await workspacePrEventAccessor.settleDelivery({
+      await workspacePrDeliveryAccessor.settleDelivery({
         deliveryId: 'wrong',
         sessionId: 'main',
         bindingRevision: config.bindingRevision,
@@ -150,13 +151,13 @@ describe('durable monitoring', () => {
     if (!event?.deliveryId || event.deliveryBindingRevision === null) {
       throw new Error('Missing frozen claim');
     }
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       deliveryId: event.deliveryId,
       sessionId: 'main',
       bindingRevision: event.deliveryBindingRevision,
       result: 'retry',
     });
-    await workspacePrEventAccessor.recoverClaim(event.deliveryId, true);
+    await workspacePrDeliveryAccessor.recoverClaim(event.deliveryId, true);
     expect((await readEvent(event.id))?.state).toBe('DELIVERED');
   });
   it('enables monitoring without creating PR events and keeps retries idempotent', async () => {
@@ -269,7 +270,7 @@ describe('durable monitoring', () => {
       deliveryText: 'exact original text',
     });
     expect(
-      await workspacePrEventAccessor.claimDelivery(
+      await workspacePrDeliveryAccessor.claimDelivery(
         { workspaceId: 'other', prId: null, bindingRevision: 1 },
         {
           deliveryId: 'frozen',

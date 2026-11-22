@@ -6,6 +6,7 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PrismaClient } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
@@ -365,7 +366,7 @@ it('keeps events unclaimed until the recipient has a provider conversation ident
     eventIds: [event.id],
     text: 'frozen',
   };
-  expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, delivery)).toBeNull();
   expect(await readEvent(event.id)).toMatchObject({
     state: 'PENDING',
     attempts: 0,
@@ -377,7 +378,7 @@ it('keeps events unclaimed until the recipient has a provider conversation ident
     where: { id: 'main' },
     data: { providerSessionId: 'conversation' },
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, delivery)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, delivery)).toMatchObject({
     attempt: 1,
   });
   expect(await readEvent(event.id)).toMatchObject({

@@ -21,8 +21,12 @@ const { prune, pruneDeliveries, slim } = vi.hoisted(() => ({
 vi.mock('@/backend/services/workspace/resources/workspace-pr-event.accessor', () => ({
   workspacePrEventAccessor: {
     pruneTerminalEvents: prune,
-    pruneSettledDeliveries: pruneDeliveries,
     slimReviewLists: slim,
+  },
+}));
+vi.mock('@/backend/services/workspace/resources/workspace-pr-delivery.accessor', () => ({
+  workspacePrDeliveryAccessor: {
+    pruneSettledDeliveries: pruneDeliveries,
   },
 }));
 
