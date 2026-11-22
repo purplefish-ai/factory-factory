@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   listEnabled: vi.fn(),
   listPending: vi.fn(),
   markChecked: vi.fn(),
-  pruneTerminalEvents: vi.fn(),
+  runEventRetention: vi.fn(),
   register: vi.fn(),
   snapshot: vi.fn(),
   get: vi.fn(),
@@ -183,9 +183,13 @@ it('registers bounded PR event retention as its own job', async () => {
   expect(retention).toMatchObject({ intervalMs: 30 * 60_000 });
   expect(retention.runImmediately).toBeUndefined();
   const signal = new AbortController().signal;
-  mocks.pruneTerminalEvents.mockResolvedValue({ deleted: 3, batches: 1, complete: true });
+  mocks.runEventRetention.mockResolvedValue({
+    terminal: { deleted: 3, batches: 1, complete: true },
+    deliveries: { deliveries: 1, events: 2, batches: 1, complete: true },
+    reviewLists: { slimmed: 0, batches: 1, complete: true },
+  });
   await retention.run(signal);
-  expect(mocks.pruneTerminalEvents).toHaveBeenCalledExactlyOnceWith({ signal });
+  expect(mocks.runEventRetention).toHaveBeenCalledExactlyOnceWith({ signal });
 });
 
 const config = {
