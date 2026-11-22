@@ -1,6 +1,12 @@
+import * as filesystem from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -36,6 +42,7 @@ vi.mock('./pr-dedicated-session.orchestrator', () => ({
 }));
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
+import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import type { PRMonitoringServices } from './pr-monitoring-dependencies';
 
@@ -306,6 +313,58 @@ it('discards a stored fact it cannot read and delivers the rest without pausing'
   });
 });
 
+it('bounds the reads one three-PR MAIN delivery makes from preparation to final validation', async () => {
+  mocks.pending.mockResolvedValue([fact('p'), fact('q'), fact('r')]);
+  const prepared = await preparePRDelivery({ sessionId: 'main', request }, ports);
+  expect(prepared).toMatchObject({
+    status: 'ready',
+    delivery: { eventIds: ['event-p', 'event-q', 'event-r'] },
+  });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected a claimed delivery');
+  }
+  const claimed = {
+    ...prepared.delivery,
+    deliveryProvider: 'CLAUDE' as const,
+    deliveryProviderSessionId: 'original',
+  };
+  mocks.pending.mockResolvedValue(
+    ['p', 'q', 'r'].map((prId) => ({
+      ...fact(prId),
+      state: 'DISPATCHING',
+      deliveryId: claimed.deliveryId,
+    }))
+  );
+  expect(await createPRBackgroundDeliveryPort(ports).validate(claimed)).toBe(true);
+  const reads = {
+    monitoringConfig: mocks.get.mock.calls.length,
+    pendingEvents: mocks.pending.mock.calls.length,
+    session: mocks.session.mock.calls.length,
+    workspaceSessions: mocks.otherReady.mock.calls.length,
+    dedicatedBinding: mocks.dedicated.mock.calls.length,
+    prRows: vi.mocked(ports.workspacePrSnapshotService.find).mock.calls.length,
+    settings: vi.mocked(ports.userSettingsService.get).mock.calls.length,
+    worktree: vi.mocked(filesystem.stat).mock.calls.length,
+  };
+  // Three guard evaluations: before the refresh, before the claim (all three PRs
+  // at once) and in validate (all three PRs at once). Each reads the binding,
+  // the recipient and the workspace's sessions before and after the worktree
+  // check. Before this bound, one full guard per PR made 81 reads.
+  expect(reads).toEqual({
+    monitoringConfig: 7,
+    pendingEvents: 3,
+    session: 7,
+    workspaceSessions: 6,
+    dedicatedBinding: 0,
+    prRows: 10,
+    settings: 1,
+    worktree: 3,
+  });
+  expect(Object.values(reads).reduce((sum, count) => sum + count, 0)).toBeLessThanOrEqual(37);
+  expect(mocks.observe).toHaveBeenCalledTimes(3);
+  expect(mocks.claim).toHaveBeenCalledOnce();
+});
+
 it('discards the queued placeholder when no stored fact can be read', async () => {
   mocks.pending.mockResolvedValue([
     { ...fact('p', 'unreadable'), payload: { kind: 'FROM_ANOTHER_BUILD' } },
@@ -314,6 +373,206 @@ it('discards the queued placeholder when no stored fact can be read', async () =
     status: 'discard',
   });
   expect(mocks.undeliverable).toHaveBeenCalledExactlyOnceWith('w', ['unreadable']);
+  expect(mocks.pause).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+function monitoring(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    deliveryMode: 'MAIN',
+    workspaceId: 'w',
+    recipientSessionId: 'main',
+    bindingRevision: 1,
+    deliveryPauseReason: null,
+    ...overrides,
+  };
+}
+
+// The guard before the refresh keeps GitHub untouched for a delivery that cannot go.
+it('does not refresh GitHub for a request whose binding is already stale', async () => {
+  mocks.get.mockResolvedValue(monitoring({ bindingRevision: 2 }));
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(mocks.observe).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+// The guard before the claim closes every race that can happen during the refresh.
+it.each([
+  ['the recipient starts a prompt', () => mocks.busy.mockReturnValue(true)],
+  [
+    'the recipient opens an interaction',
+    () => mocks.interaction.mockReturnValue({ requestId: 'approval' }),
+  ],
+  ['another session starts a prompt', () => mocks.otherReady.mockResolvedValue(false)],
+  [
+    'the user pauses delivery',
+    () => mocks.get.mockResolvedValue(monitoring({ deliveryPauseReason: 'USER_STOPPED' })),
+  ],
+])('keeps the update queued without claiming when %s during the refresh', async (_, change) => {
+  mocks.observe.mockImplementation(() => {
+    change();
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
+    status: 'blocked',
+    reason: 'Recipient is paused or busy',
+  });
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['the binding changes', () => mocks.get.mockResolvedValue(monitoring({ bindingRevision: 2 }))],
+  [
+    'the main recipient switches',
+    () => mocks.get.mockResolvedValue(monitoring({ recipientSessionId: 'other' })),
+  ],
+  [
+    'the recipient workspace stops being ready',
+    () =>
+      mocks.session.mockResolvedValue({
+        id: 'main',
+        workspaceId: 'w',
+        workflow: 'implement',
+        provider: 'CLAUDE',
+        providerSessionId: 'original',
+        workspace: { status: 'ARCHIVING', worktreePath: tmpdir() },
+      }),
+  ],
+])('discards the update without claiming when %s during the refresh', async (_, change) => {
+  mocks.observe.mockImplementation(() => {
+    change();
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('discards the update without claiming when a batch sibling is detached during the refresh', async () => {
+  const find = vi.mocked(ports.workspacePrSnapshotService.find);
+  mocks.observe.mockImplementation((_ports, { prId }) => {
+    if (prId === 'q') {
+      find.mockImplementation((target) =>
+        Promise.resolve(target.prId === 'q' ? null : ({ id: 'p' } as never))
+      );
+    }
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(find).toHaveBeenLastCalledWith({ workspaceId: 'w', prId: 'q' });
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('pauses as SESSION_FAILED without claiming when the worktree disappears during the refresh', async () => {
+  mocks.pause.mockResolvedValue({ count: 1 });
+  mocks.observe.mockImplementation(() => {
+    mocks.session.mockResolvedValue({
+      id: 'main',
+      workspaceId: 'w',
+      workflow: 'implement',
+      provider: 'CLAUDE',
+      providerSessionId: 'original',
+      workspace: { status: 'READY', worktreePath: null },
+    });
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
+    status: 'blocked',
+  });
+  expect(mocks.pause).toHaveBeenCalledExactlyOnceWith('w', 'SESSION_FAILED', 1);
+  expect(mocks.invalidate).toHaveBeenCalledWith('w', 1);
+  expect(mocks.emit).toHaveBeenCalledWith('ratchet_dispatch_changed', { workspaceId: 'w' });
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('rechecks the recipient after the worktree check that precedes the claim', async () => {
+  const { stat: realStat } =
+    await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+  let checks = 0;
+  vi.mocked(filesystem.stat).mockImplementation((path) => {
+    // The second worktree check is the one immediately before the claim.
+    if (++checks === 2) {
+      mocks.busy.mockReturnValue(true);
+    }
+    return realStat(path);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
+    status: 'blocked',
+  });
+  expect(checks).toBe(2);
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('classifies a lost claim with the guard, discarding it once the binding changed', async () => {
+  mocks.claim.mockImplementation(() => {
+    mocks.get.mockResolvedValue(monitoring({ bindingRevision: 2 }));
+    return Promise.resolve(null);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(mocks.claim).toHaveBeenCalledOnce();
+});
+
+// The guard after the refresh still precedes every early return and every write.
+it('does not cancel unreadable facts after the binding changes during the refresh', async () => {
+  const unreadable = { ...fact('p', 'unreadable'), payload: { kind: 'FROM_ANOTHER_BUILD' } };
+  mocks.pending.mockResolvedValue([unreadable, fact('p'), fact('q')]);
+  mocks.observe.mockImplementation(() => {
+    mocks.get.mockResolvedValue(monitoring({ bindingRevision: 2 }));
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
+  expect(mocks.undeliverable).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('does not pause an exhausted delivery while its recipient became busy during the refresh', async () => {
+  mocks.pending.mockResolvedValue([{ ...fact('p'), attempts: 3 }]);
+  mocks.observe.mockImplementation(() => {
+    mocks.busy.mockReturnValue(true);
+    return Promise.resolve(true);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
+    status: 'blocked',
+    reason: 'Recipient is paused or busy',
+  });
+  expect(mocks.pause).not.toHaveBeenCalled();
+  mocks.busy.mockReturnValue(false);
+  mocks.observe.mockResolvedValue(true);
+  mocks.pause.mockResolvedValue({ count: 1 });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
+    status: 'blocked',
+    reason: 'PR update transport failed three times',
+  });
+  expect(mocks.pause).toHaveBeenCalledExactlyOnceWith('w', 'DELIVERY_FAILED', 1);
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
+it('does not pause a frozen retry for an unknown conversation after its binding changed', async () => {
+  const frozen = {
+    ...fact('p'),
+    deliveryId: 'frozen',
+    deliveryText: 'frozen text',
+    deliverySessionId: 'main',
+    deliveryProvider: 'CLAUDE',
+    deliveryProviderSessionId: 'previous-conversation',
+  };
+  mocks.pending.mockImplementation(() => {
+    mocks.get.mockResolvedValue(monitoring({ bindingRevision: 2 }));
+    return Promise.resolve([frozen]);
+  });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
   expect(mocks.pause).not.toHaveBeenCalled();
   expect(mocks.claim).not.toHaveBeenCalled();
 });
