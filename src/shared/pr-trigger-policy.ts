@@ -55,17 +55,31 @@ type Fact =
   | { kind: Exclude<PRFactPayload['kind'], 'REVIEW_FEEDBACK'> }
   | Pick<Extract<PRFactPayload, { kind: 'REVIEW_FEEDBACK' }>, 'kind' | 'reviews'>;
 type AddFact = (fact: Fact, identity: string) => void;
-/** The ledger as this observation leaves it. */
+/** This epoch's ledger as this observation leaves it. */
 type Ledger = {
   /** Unclaimed facts this observation did not supersede. */
   pending: readonly PREventSummary[];
   /** Facts the recipient has received or is receiving. */
   told: readonly PREventSummary[];
+  /** Facts the recipient has received. */
+  delivered: readonly PREventSummary[];
+  /**
+   * Set when there is no usable baseline: no readable stored observation in
+   * this epoch, or a merged or closed one while the PR is open. The comparison
+   * then restarts, and a fact that holds is stated unless the ledger shows it
+   * was told or queued.
+   */
+  restart: boolean;
 };
+
+const isTerminal = (state: PRObservation['prState']) => state === 'MERGED' || state === 'CLOSED';
 
 export function reducePRObservation(input: {
   target: PRTarget;
-  /** The stored observation of this epoch, or null on its first observation. */
+  /**
+   * The stored observation of this epoch, or null on its first observation or
+   * when the stored one cannot be read.
+   */
   previous: PRStoredObservation | null;
   current: PRObservation;
   transitionSequence: number;
@@ -75,27 +89,32 @@ export function reducePRObservation(input: {
   inFlightEvents?: readonly PREventSummary[];
   hashIdentity?: (identity: string) => string;
 }) {
-  const { target, previous, current, eventEpoch, pendingEvents, deliveredEvents } = input;
+  const { target, previous, current, pendingEvents, deliveredEvents } = input;
   const events: PRFactDraft[] = [];
   let nextTransitionSequence = input.transitionSequence;
-  const prefix = `${target.prId}:epoch:${eventEpoch}:`;
-  const inFlightEvents = input.inFlightEvents ?? [];
-  const known = [...pendingEvents, ...deliveredEvents, ...inFlightEvents];
+  const prefix = `${target.prId}:epoch:${input.eventEpoch}:`;
+  const keyOf = (identity: string) =>
+    `${prefix}${input.hashIdentity ? input.hashIdentity(identity) : identity}`;
+  const known = [...pendingEvents, ...deliveredEvents, ...(input.inFlightEvents ?? [])];
   const observation = factObservation(current);
   // Every identity embeds the sequence after it is advanced, so a key is never generated twice.
   const add: AddFact = (fact, identity) => {
-    const deduplicationKey = `${prefix}${input.hashIdentity ? input.hashIdentity(identity) : identity}`;
+    const deduplicationKey = keyOf(identity);
     if (!known.some((e) => e.deduplicationKey === deduplicationKey)) {
       events.push({ kind: fact.kind, deduplicationKey, payload: { ...fact, target, observation } });
     }
   };
-  const terminal = current.prState === 'MERGED' || current.prState === 'CLOSED';
+  // The last transition this epoch recorded is the PR becoming `state`: no sequence advanced since.
+  const lastTransitionWas = (state: string) =>
+    known.some((e) => e.deduplicationKey === keyOf(`${state}:${input.transitionSequence}`));
+  const terminal = isTerminal(current.prState);
   const supersededEventIds = pendingEvents
     .filter((event) => eventIsSuperseded(event, current, terminal, deliveredEvents))
     .map((event) => event.id);
-  const storedObservation = nextStoredObservation(previous, current, terminal);
+  const ledger = epochLedger(input, prefix, supersededEventIds);
+  const storedObservation = nextStoredObservation(previous, current, terminal, ledger);
   if (terminal) {
-    if (previous?.prState !== current.prState) {
+    if (previous ? previous.prState !== current.prState : !lastTransitionWas(current.prState)) {
       nextTransitionSequence++;
       add(
         { kind: current.prState === 'MERGED' ? 'PR_MERGED' : 'PR_CLOSED' },
@@ -104,22 +123,41 @@ export function reducePRObservation(input: {
     }
     return { events, supersededEventIds, nextTransitionSequence, storedObservation };
   }
-  if (previous && ['MERGED', 'CLOSED'].includes(previous.prState)) {
+  // A reopening is a transition, so a later closure is a new fact even without a baseline.
+  if (previous ? isTerminal(previous.prState) : lastTransitionWas('CLOSED')) {
     nextTransitionSequence++;
   }
-  const ledger: Ledger = {
-    pending: pendingEvents.filter((event) => !supersededEventIds.includes(event.id)),
-    told: [...deliveredEvents, ...inFlightEvents],
-  };
   nextTransitionSequence = addCITransition(input, add, nextTransitionSequence, ledger);
   nextTransitionSequence = addConflictTransition(input, add, nextTransitionSequence, ledger);
   nextTransitionSequence = addReviewTransitions(
     input,
     add,
     nextTransitionSequence,
-    storedObservation.actionableReviews
+    storedObservation.actionableReviews,
+    ledger
   );
   return { events, supersededEventIds, nextTransitionSequence, storedObservation };
+}
+
+/**
+ * The ledger rows of this epoch. The accessor reads no other, so this only
+ * matters to a caller that hands over rows keyed for another epoch or PR: they
+ * describe what an earlier destination was told, not this one.
+ */
+function epochLedger(
+  input: ReductionInput,
+  prefix: string,
+  supersededEventIds: readonly string[]
+): Ledger {
+  const ofEpoch = (event: PREventSummary) => event.deduplicationKey?.startsWith(prefix) ?? true;
+  const delivered = input.deliveredEvents.filter(ofEpoch);
+  return {
+    pending: input.pendingEvents.filter((e) => ofEpoch(e) && !supersededEventIds.includes(e.id)),
+    told: [...delivered, ...(input.inFlightEvents ?? []).filter(ofEpoch)],
+    delivered,
+    restart:
+      !isTerminal(input.current.prState) && (!input.previous || isTerminal(input.previous.prState)),
+  };
 }
 
 /**
@@ -133,12 +171,15 @@ function factObservation(current: PRObservation): PRObservation {
 
 /**
  * What is remembered of the current failure: carried from `previous` while the
- * head and the failing checks are unchanged, and started afresh otherwise.
+ * head and the failing checks are unchanged, and started afresh otherwise. On a
+ * restart the ledger, not the memory, says whether it was announced: a closure
+ * supersedes a queued announcement, and a lost baseline forgets a delivered one.
  */
 function failureMemory(
   previous: PRStoredObservation | null,
   current: PRObservation,
-  terminal: boolean
+  terminal: boolean,
+  ledger: Ledger
 ) {
   const carried =
     previous &&
@@ -152,35 +193,58 @@ function failureMemory(
     !terminal &&
     (isSettledPRFailure(current) ||
       Date.parse(current.observedAt) - Date.parse(since) >= PR_FAILURE_MAX_WAIT_MS);
-  return { since, announced: carried?.announced ?? false, due };
+  const announced = ledger.restart ? failureStated(ledger, current) : (carried?.announced ?? false);
+  return { since, announced, due };
+}
+
+/**
+ * The last CI fact the ledger states for this head reports this failure: it was
+ * told or queued, and no recovery has answered it since.
+ */
+function failureStated(ledger: Ledger, current: PRObservation) {
+  const last = latest(
+    [...ledger.pending, ...ledger.told].filter(
+      (e) =>
+        (e.kind === 'CI_FAILED' || e.kind === 'CI_RECOVERED') &&
+        e.payload.observation.headSha === current.headSha
+    )
+  );
+  return (
+    last?.kind === 'CI_FAILED' &&
+    prFailureSignature(last.payload.observation) === prFailureSignature(current)
+  );
 }
 
 /**
  * The observation to store as the next baseline. An incomplete review read keeps
  * the feedback this epoch already observed, unless it is known to be resolved or
  * was read again; `previous` is null in a new epoch, so nothing crosses one.
+ * Without a stored observation, the feedback this epoch's ledger states is kept,
+ * so the next complete read does not take it for new.
  */
 function nextStoredObservation(
   previous: PRStoredObservation | null,
   current: PRObservation,
-  terminal: boolean
+  terminal: boolean,
+  ledger: Ledger
 ): PRStoredObservation {
   const failure =
-    current.ciStatus === 'FAILURE' ? failureMemory(previous, current, terminal) : null;
+    current.ciStatus === 'FAILURE' ? failureMemory(previous, current, terminal, ledger) : null;
   const stored: PRStoredObservation = failure
     ? {
         ...current,
         ciFailure: { since: failure.since, announced: failure.announced || failure.due },
       }
     : current;
-  if (current.reviewsComplete || !previous) {
+  if (current.reviewsComplete) {
     return stored;
   }
+  const kept = previous ? previous.actionableReviews : statedReviews(ledger);
   return {
     ...stored,
     actionableReviews: [
       ...current.actionableReviews,
-      ...previous.actionableReviews.filter(
+      ...kept.filter(
         (r) =>
           !(
             current.resolvedReviewIds?.includes(r.identity) ||
@@ -189,6 +253,12 @@ function nextStoredObservation(
       ),
     ],
   };
+}
+
+/** Each review the ledger shows told or queued, once. */
+function statedReviews(ledger: Ledger) {
+  const reviews = reviewsOf([...ledger.pending, ...ledger.told]);
+  return reviews.filter((r, i) => reviews.findIndex((o) => sameReview(o, r)) === i);
 }
 
 /** The most recently observed of `events`; ledger order breaks a tie. */
@@ -213,10 +283,8 @@ function sameReview(
   return a.identity === b.identity && a.contentHash === b.contentHash;
 }
 
-function deliveredReviews(deliveredEvents: readonly PREventSummary[]) {
-  return deliveredEvents.flatMap((e) =>
-    e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []
-  );
+function reviewsOf(events: readonly PREventSummary[]) {
+  return events.flatMap((e) => (e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []));
 }
 
 /**
@@ -269,7 +337,7 @@ function eventIsSuperseded(
   // that delivery is received; until then it guards against a cancelled claim.
   // Deliveries received before this event was queued (e.g. a re-opened thread)
   // do not suppress it.
-  const delivered = deliveredReviews(receivedSince(event, deliveredEvents));
+  const delivered = reviewsOf(receivedSince(event, deliveredEvents));
   return (
     (payload.reviews.length > 0 &&
       payload.reviews.every((r) => delivered.some((d) => sameReview(d, r)))) ||
@@ -290,7 +358,7 @@ function addCITransition(input: ReductionInput, add: AddFact, sequence: number, 
         e.payload.observation.headSha === current.headSha &&
         prFailureSignature(e.payload.observation) === signature
     );
-    const failure = failureMemory(previous, current, false);
+    const failure = failureMemory(previous, current, false, ledger);
     if (failure.due && !failure.announced && !queued) {
       sequence++;
       add({ kind: 'CI_FAILED' }, `CI_FAILED:${current.headSha}:${sequence}:${signature}`);
@@ -322,24 +390,47 @@ function addCITransition(input: ReductionInput, add: AddFact, sequence: number, 
   return sequence;
 }
 
+type Review = PRStoredObservation['actionableReviews'][number];
+
+/**
+ * A new head supersedes undelivered feedback, so it is re-emitted; delivered
+ * feedback is unchanged and is not repeated. Feedback frozen in flight is
+ * re-emitted too, because a cancelled claim would otherwise lose it. The
+ * reviews are the stored ones, so feedback an incomplete read kept is also
+ * re-emitted on a new head instead of being adopted by it unannounced.
+ */
+function reviewIsNew(input: ReductionInput, review: Review) {
+  const { previous, current } = input;
+  return (
+    !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
+    (previous.headSha !== current.headSha &&
+      !reviewsOf(input.deliveredEvents).some((r) => sameReview(r, review)))
+  );
+}
+
+/**
+ * On a restart, feedback is stated unless it was delivered, or is queued or in
+ * flight for this head. Feedback in flight for an earlier head is stated again
+ * for the reason `reviewIsNew` gives.
+ */
+function reviewIsStated(ledger: Ledger, current: PRObservation, review: Review) {
+  return [...ledger.pending, ...ledger.told].some(
+    (e) =>
+      reviewsOf([e]).some((r) => sameReview(r, review)) &&
+      (e.payload.observation.headSha === current.headSha || ledger.delivered.includes(e))
+  );
+}
+
 function addReviewTransitions(
   input: ReductionInput,
   add: AddFact,
   sequence: number,
-  actionableReviews: PRStoredObservation['actionableReviews']
+  actionableReviews: readonly Review[],
+  ledger: Ledger
 ) {
-  const { previous, current } = input;
-  // A new head supersedes undelivered feedback, so it is re-emitted; delivered
-  // feedback is unchanged and is not repeated. Feedback frozen in flight is
-  // re-emitted too, because a cancelled claim would otherwise lose it. The
-  // reviews are the stored ones, so feedback an incomplete read kept is also
-  // re-emitted on a new head instead of being adopted by it unannounced.
-  const delivered = deliveredReviews(input.deliveredEvents);
+  const { current } = input;
   for (const review of actionableReviews) {
-    if (
-      !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
-      (previous.headSha !== current.headSha && !delivered.some((r) => sameReview(r, review)))
-    ) {
+    if (ledger.restart ? !reviewIsStated(ledger, current, review) : reviewIsNew(input, review)) {
       sequence++;
       add(
         { kind: 'REVIEW_FEEDBACK', reviews: [review] },
@@ -350,22 +441,38 @@ function addReviewTransitions(
   return sequence;
 }
 
-function addConflictTransition(
-  input: ReductionInput,
-  add: AddFact,
-  sequence: number,
-  ledger: Ledger
-) {
+/**
+ * Whether a conflict fact is due. On a restart the queue is made to agree with
+ * what the recipient believes: a detection when it believes the PR is clean, a
+ * clearance when it believes it conflicted, unless that fact is already queued.
+ */
+function conflictFactIsDue(input: ReductionInput, ledger: Ledger) {
   const { previous, current } = input;
   // The recipient believes the PR is conflicted while the last conflict fact it got says so.
   const told =
     latest(
       ledger.told.filter((e) => e.kind === 'CONFLICT_DETECTED' || e.kind === 'CONFLICT_CLEARED')
     )?.kind === 'CONFLICT_DETECTED';
+  if (ledger.restart) {
+    const kind = current.hasMergeConflict ? 'CONFLICT_DETECTED' : 'CONFLICT_CLEARED';
+    return told !== current.hasMergeConflict && !ledger.pending.some((e) => e.kind === kind);
+  }
   const changed = current.hasMergeConflict !== (previous?.hasMergeConflict ?? false);
   // A new head supersedes an undelivered conflict fact, so it is re-emitted.
   const headMoved = !!previous && previous.headSha !== current.headSha;
-  if (current.hasMergeConflict ? changed || (headMoved && !told) : told && (changed || headMoved)) {
+  return current.hasMergeConflict
+    ? changed || (headMoved && !told)
+    : told && (changed || headMoved);
+}
+
+function addConflictTransition(
+  input: ReductionInput,
+  add: AddFact,
+  sequence: number,
+  ledger: Ledger
+) {
+  const { current } = input;
+  if (conflictFactIsDue(input, ledger)) {
     sequence++;
     add(
       { kind: current.hasMergeConflict ? 'CONFLICT_DETECTED' : 'CONFLICT_CLEARED' },
