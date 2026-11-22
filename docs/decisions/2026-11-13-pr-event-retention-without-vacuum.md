@@ -52,10 +52,11 @@ on a count mismatch. Nothing in tRPC or the client shows delivered history.
 the sequence on 2026-11-22.)
 
 Kept: live, BLOCKED, DISMISSED and unknown-state deliveries, legacy receipt or
-frozen metadata and legacy `MONITORING_ENABLED` rows. Outside ARCHIVED
-workspaces (ARCHIVING can roll back to READY), so is the current epoch, detached
-PRs included because re-attaching reuses the row and its epoch, and all of a
-workspace without a monitoring row, whose epoch is unknown.
+frozen metadata and legacy `MONITORING_ENABLED` rows. In a workspace that is not
+ARCHIVED (ARCHIVING can roll back to READY), the current epoch is kept too,
+including for detached PRs, because re-attaching reuses the row and its epoch;
+and every fact is kept when the workspace has no monitoring row, since its epoch
+is then unknown.
 
 The app does not run `VACUUM`. It rewrites the whole database under an exclusive
 lock and needs temporary space about the size of the database, and enabling
