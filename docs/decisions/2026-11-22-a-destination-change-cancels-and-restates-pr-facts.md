@@ -1,6 +1,6 @@
 # A destination change cancels queued PR facts and restates them
 
-Decided on 2026-11-22 in #PRNUM.
+Decided on 2026-11-22 in #3288.
 
 ## Context
 

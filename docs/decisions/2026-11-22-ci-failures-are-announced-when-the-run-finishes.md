@@ -1,6 +1,6 @@
 # CI failures are announced when the run finishes
 
-Decided on 2026-11-22 in #PRNUM.
+Decided on 2026-11-22 in #3288.
 
 ## Context
 
