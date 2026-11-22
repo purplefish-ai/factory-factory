@@ -111,7 +111,7 @@ describe('check-single-writer', () => {
       `tx.workspacePRDelivery.update({where:{id:'receipt'},data:{state:'PENDING'}});`,
       `tx.workspace.update({where:{id:'w'},data:{prDeliveries:{create:{id:'receipt'}}}});`,
       `tx.workspacePREvent.update({where:{id:'e'},data:{batch:{connect:{id:'receipt'}}}});`,
-    ])('keeps frozen PR delivery writes in the event owner: %s', (mutation) => {
+    ])('keeps frozen PR delivery writes in the delivery owner: %s', (mutation) => {
       const tempRoot = createTempBackend([
         {
           relPath: 'src/backend/services/workspace/resources/other.accessor.ts',
@@ -121,7 +121,7 @@ describe('check-single-writer', () => {
       const result = runChecker(tempRoot);
       expect(result.status).toBe(1);
       expect(result.output).toContain(
-        'workspacePRDelivery is written only by src/backend/services/workspace/resources/workspace-pr-event.accessor.ts'
+        'workspacePRDelivery is written only by src/backend/services/workspace/resources/workspace-pr-delivery.accessor.ts'
       );
     });
 

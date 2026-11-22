@@ -1,3 +1,4 @@
+import { workspacePrDeliveryAccessor } from '@/backend/services/workspace/resources/workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from '@/backend/services/workspace/resources/workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from '@/backend/services/workspace/resources/workspace-pr-monitoring.accessor';
 import {
@@ -11,9 +12,9 @@ import {
  * the rescan sees the rows once they commit; a rollback costs one extra scan.
  */
 async function restoreEventsBackup(
-  ...input: Parameters<typeof workspacePrEventAccessor.restoreBackup>
+  ...input: Parameters<typeof workspacePrDeliveryAccessor.restoreBackup>
 ) {
-  const result = await workspacePrEventAccessor.restoreBackup(...input);
+  const result = await workspacePrDeliveryAccessor.restoreBackup(...input);
   restartReviewListSlimming();
   return result;
 }
@@ -21,13 +22,15 @@ export const workspacePRMonitoringService = {
   runEventRetention: runPREventRetention,
   projectEvents: workspacePrEventAccessor.projectEvents,
   exportEvents: workspacePrEventAccessor.exportEvents,
-  cancelRecoveredDelivery:
-    workspacePrEventAccessor.cancelRecoveredDelivery.bind(workspacePrEventAccessor),
+  cancelRecoveredDelivery: workspacePrDeliveryAccessor.cancelRecoveredDelivery.bind(
+    workspacePrDeliveryAccessor
+  ),
   addEnabledControl: workspacePrEventAccessor.addEnabledControl.bind(workspacePrEventAccessor),
   cancelUndeliverable: workspacePrEventAccessor.cancelUndeliverable.bind(workspacePrEventAccessor),
-  deferBusy: workspacePrEventAccessor.deferBusy.bind(workspacePrEventAccessor),
-  discardBlockedDeliveries:
-    workspacePrEventAccessor.discardBlockedDeliveries.bind(workspacePrEventAccessor),
+  deferBusy: workspacePrDeliveryAccessor.deferBusy.bind(workspacePrDeliveryAccessor),
+  discardBlockedDeliveries: workspacePrDeliveryAccessor.discardBlockedDeliveries.bind(
+    workspacePrDeliveryAccessor
+  ),
   listLegacyRetirementCandidates: workspacePrMonitoringAccessor.listLegacyRetirementCandidates.bind(
     workspacePrMonitoringAccessor
   ),
@@ -46,7 +49,7 @@ export const workspacePRMonitoringService = {
     workspacePrMonitoringAccessor
   ),
   listPending: workspacePrEventAccessor.listPending.bind(workspacePrEventAccessor),
-  claimDelivery: workspacePrEventAccessor.claimDelivery.bind(workspacePrEventAccessor),
-  settleDelivery: workspacePrEventAccessor.settleDelivery.bind(workspacePrEventAccessor),
-  recoverClaim: workspacePrEventAccessor.recoverClaim.bind(workspacePrEventAccessor),
+  claimDelivery: workspacePrDeliveryAccessor.claimDelivery.bind(workspacePrDeliveryAccessor),
+  settleDelivery: workspacePrDeliveryAccessor.settleDelivery.bind(workspacePrDeliveryAccessor),
+  recoverClaim: workspacePrDeliveryAccessor.recoverClaim.bind(workspacePrDeliveryAccessor),
 };

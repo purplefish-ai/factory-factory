@@ -1,12 +1,14 @@
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { workspacePrDeliveryAccessor } from '@/backend/services/workspace/resources/workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from '@/backend/services/workspace/resources/workspace-pr-event.accessor';
 
 /**
  * Bounded retention for the PR fact ledger, in three passes per run:
  * unclaimed facts nobody can read (`pruneTerminalEvents`), settled delivery
  * units nobody reads (`pruneSettledDeliveries`), and the review lists that facts
- * written before #3288 still carry (`slimReviewLists`). See the accessor for
- * each predicate and docs/decisions/2026-11-13-pr-event-retention-without-vacuum.md
+ * written before #3288 still carry (`slimReviewLists`). See the event accessor
+ * (first and last pass) and the delivery accessor (second pass) for each
+ * predicate and docs/decisions/2026-11-13-pr-event-retention-without-vacuum.md
  * for why each is safe.
  */
 export const PR_EVENT_RETENTION = Object.freeze({
@@ -83,7 +85,11 @@ export async function pruneSettledPRDeliveries(
   const result = { deliveries: 0, events: 0, batches: 0, complete: false };
   let afterId = '';
   while (result.batches < maxBatches && !input.signal?.aborted) {
-    const batch = await workspacePrEventAccessor.pruneSettledDeliveries({ before, afterId, limit });
+    const batch = await workspacePrDeliveryAccessor.pruneSettledDeliveries({
+      before,
+      afterId,
+      limit,
+    });
     result.batches++;
     result.deliveries += batch.deliveries;
     result.events += batch.events;

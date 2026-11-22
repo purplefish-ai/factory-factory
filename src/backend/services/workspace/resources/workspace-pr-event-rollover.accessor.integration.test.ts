@@ -5,6 +5,7 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import type { PrismaClient } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -115,8 +116,8 @@ it.each(['DISPATCHING', 'PENDING'] as const)(
   'retries a proven-absent %s claim through transitive identity rollover',
   async (state) => {
     await frozen(state);
-    expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
-    await workspacePrEventAccessor.recoverClaim('frozen', false, identity);
+    expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
+    await workspacePrDeliveryAccessor.recoverClaim('frozen', false, identity);
     expect(await readEvent('event')).toMatchObject({
       state: 'PENDING',
       deliveryId: 'frozen',
@@ -125,13 +126,13 @@ it.each(['DISPATCHING', 'PENDING'] as const)(
       deliveryProviderSessionId: 'live',
       attempts: 1,
     });
-    expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+    expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
       deliveryId: 'frozen',
       text: 'exact original message',
       deliveryProviderSessionId: 'live',
       attempt: 2,
     });
-    expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+    expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
   }
 );
 
@@ -152,12 +153,12 @@ it.each([
 ])('does not rebind an unproven identity lineage %j', async (providerMetadata) => {
   await frozen();
   await db.prisma.agentSession.update({ where: { id: 'main' }, data: { providerMetadata } });
-  expect(await workspacePrEventAccessor.recoverClaim('frozen', false, identity)).toEqual({
+  expect(await workspacePrDeliveryAccessor.recoverClaim('frozen', false, identity)).toEqual({
     count: 0,
     status: 'identity_mismatch',
   });
   expect((await readEvent('event'))?.deliveryProviderSessionId).toBe('original');
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
 });
 
 it.each([
@@ -166,22 +167,24 @@ it.each([
   { ...identity, sessionId: 'other' },
 ])('fences stale receipt recovery identity %j', async (expectedIdentity) => {
   await frozen();
-  expect(await workspacePrEventAccessor.recoverClaim('frozen', false, expectedIdentity)).toEqual({
-    count: 0,
-    status: 'identity_mismatch',
-  });
+  expect(await workspacePrDeliveryAccessor.recoverClaim('frozen', false, expectedIdentity)).toEqual(
+    {
+      count: 0,
+      status: 'identity_mismatch',
+    }
+  );
   expect((await readEvent('event'))?.deliveryProviderSessionId).toBe('original');
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
 });
 
 it('acknowledges receipt in the original identity without retrying in the new identity', async () => {
   await frozen();
-  await workspacePrEventAccessor.recoverClaim('frozen', true);
+  await workspacePrDeliveryAccessor.recoverClaim('frozen', true);
   expect(await readEvent('event')).toMatchObject({
     state: 'DELIVERED',
     deliveryProviderSessionId: 'original',
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
 });
 
 it.each(['DELIVERED', 'CANCELLED'] as const)(
@@ -189,7 +192,7 @@ it.each(['DELIVERED', 'CANCELLED'] as const)(
   async (state) => {
     await frozen();
     await db.prisma.workspacePREvent.update({ where: { id: 'event' }, data: { state } });
-    expect(await workspacePrEventAccessor.recoverClaim('frozen', false, identity)).toEqual({
+    expect(await workspacePrDeliveryAccessor.recoverClaim('frozen', false, identity)).toEqual({
       count: 0,
       status: 'settled',
     });

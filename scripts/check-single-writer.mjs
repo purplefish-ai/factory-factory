@@ -530,7 +530,7 @@ const OWNED_SIDE_TABLES = {
   workspacePRMonitoring:
     'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
   workspacePREvent: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
-  workspacePRDelivery: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
+  workspacePRDelivery: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor.ts',
   workspacePR: 'src/backend/services/workspace/resources/workspace-pr.accessor.ts',
   workspacePRDiscovery:
     'src/backend/services/workspace/resources/workspace-pr-discovery.accessor.ts',

@@ -10,6 +10,7 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import {
   findPRIdsWithoutObservation,
@@ -80,7 +81,7 @@ async function updateBindingEvents(
     await workspacePrEventAccessor.cancelInTransaction(tx, effective.workspaceId);
   }
   if (shouldResume) {
-    await workspacePrEventAccessor.renewRetryAllowance(tx, effective.workspaceId);
+    await workspacePrDeliveryAccessor.renewRetryAllowance(tx, effective.workspaceId);
   }
 }
 
@@ -218,7 +219,7 @@ class WorkspacePrMonitoringAccessor {
           data: { deliveryPauseReason: null, bindingRevision: { increment: 1 } },
         });
         if (resumed.count) {
-          await workspacePrEventAccessor.renewRetryAllowance(tx, config.workspaceId);
+          await workspacePrDeliveryAccessor.renewRetryAllowance(tx, config.workspaceId);
         }
       });
     }

@@ -6,6 +6,7 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PrismaClient } from '@prisma-gen/client';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
 import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
@@ -185,13 +186,13 @@ it('authorizes dedicated claims only for their bound PR and keeps frozen identit
   };
   for (const sessionId of ['main', 'sibling', 'foreign']) {
     expect(
-      await workspacePrEventAccessor.claimDelivery(request, { ...input, sessionId })
+      await workspacePrDeliveryAccessor.claimDelivery(request, { ...input, sessionId })
     ).toBeNull();
   }
   expect(
-    await workspacePrEventAccessor.claimDelivery({ ...request, deliveryMode: 'MAIN' }, input)
+    await workspacePrDeliveryAccessor.claimDelivery({ ...request, deliveryMode: 'MAIN' }, input)
   ).toBeNull();
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     sessionId: 'dedicated',
     deliveryProviderSessionId: 'dedicated-provider',
   });
@@ -207,14 +208,14 @@ it('authorizes dedicated claims only for their bound PR and keeps frozen identit
     deliverySessionId: 'dedicated',
     deliveryText: 'original text',
   });
-  await workspacePrEventAccessor.settleDelivery({
+  await workspacePrDeliveryAccessor.settleDelivery({
     deliveryId: 'frozen',
     sessionId: 'dedicated',
     bindingRevision: 1,
     result: 'retry',
   });
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       { ...request, bindingRevision: 2, deliveryMode: 'MAIN' },
       { ...input, sessionId: 'main' }
     )
@@ -290,19 +291,19 @@ it('rejects dedicated claims for detached targets, disabled monitoring and forei
   };
   const input = { deliveryId: 'frozen', sessionId: 'dedicated', eventIds: [id], text: 'frozen' };
   expect(
-    await workspacePrEventAccessor.claimDelivery({ ...request, workspaceId: 'other' }, input)
+    await workspacePrDeliveryAccessor.claimDelivery({ ...request, workspaceId: 'other' }, input)
   ).toBeNull();
   await db.prisma.workspacePRMonitoring.update({
     where: { workspaceId: 'w' },
     data: { enabled: false },
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
   await db.prisma.workspacePRMonitoring.update({
     where: { workspaceId: 'w' },
     data: { enabled: true },
   });
   await db.prisma.workspacePR.update({ where: { id: 'p' }, data: { detachedAt: new Date() } });
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toBeNull();
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toBeNull();
   expect(await readEvent(id)).toMatchObject({
     state: 'PENDING',
     deliveryId: null,
@@ -343,7 +344,7 @@ it('serializes dedicated PR claims across the workspace and releases the next ba
     { prId: 'p2', sessionId: 'sibling', eventId: secondId, deliveryId: 'second' },
   ];
   const claim = (batch: (typeof batches)[number]) =>
-    workspacePrEventAccessor.claimDelivery(
+    workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: batch.prId, bindingRevision: 1, deliveryMode: 'DEDICATED' },
       {
         sessionId: batch.sessionId,
@@ -364,7 +365,7 @@ it('serializes dedicated PR claims across the workspace and releases the next ba
     attempts: 0,
   });
   expect(
-    await workspacePrEventAccessor.settleDelivery({
+    await workspacePrDeliveryAccessor.settleDelivery({
       deliveryId: winner.deliveryId,
       sessionId: winner.sessionId,
       bindingRevision: 1,
@@ -378,7 +379,7 @@ it('holds a main claim while a dedicated delivery from before the mode switch is
   await switchDedicated();
   const dedicatedId = await fact();
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 1, deliveryMode: 'DEDICATED' },
       { deliveryId: 'dedicated-batch', sessionId: 'dedicated', eventIds: [dedicatedId], text: 'a' }
     )
@@ -409,14 +410,14 @@ it('holds a main claim while a dedicated delivery from before the mode switch is
     throw new Error('Missing main event');
   }
   const claimMain = () =>
-    workspacePrEventAccessor.claimDelivery(
+    workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: null, bindingRevision: 2 },
       { deliveryId: 'main-batch', sessionId: 'main', eventIds: [mainId], text: 'b' }
     );
 
   expect(await claimMain()).toBeNull();
   expect(await readEvent(mainId)).toMatchObject({ state: 'PENDING', deliveryId: null });
-  await workspacePrEventAccessor.settleDelivery({
+  await workspacePrDeliveryAccessor.settleDelivery({
     deliveryId: 'dedicated-batch',
     sessionId: 'dedicated',
     bindingRevision: 1,
@@ -599,7 +600,7 @@ it('cancels unclaimed facts and controls on a mode-only switch and renews the ep
   // Facts of the new epoch are claimed by the restored main recipient.
   const restated = await recoveryAndReviewFacts('restated');
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
       {
         deliveryId: 'rerouted',
@@ -636,7 +637,7 @@ it('rejects incomplete dispatching backup claims before persisting a workspace l
     createdAt: '2026-10-08T00:00:00.000Z',
   };
   await expect(
-    db.prisma.$transaction((tx) => workspacePrEventAccessor.restoreBackup(tx, 'w', [event]))
+    db.prisma.$transaction((tx) => workspacePrDeliveryAccessor.restoreBackup(tx, 'w', [event]))
   ).rejects.toThrow();
   expect(await db.prisma.workspacePREvent.count()).toBe(0);
 });
@@ -649,7 +650,7 @@ it('cancels unclaimed facts but keeps the frozen claim when a dedicated-to-main 
   });
   const frozenId = await fact();
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       {
         workspaceId: 'w',
         prId: 'p',
@@ -705,7 +706,7 @@ it('cancels unclaimed facts but keeps the frozen claim when a dedicated-to-main 
     deliveryText: 'frozen text',
     deliveryBindingRevision: 1,
   });
-  await workspacePrEventAccessor.settleDelivery({
+  await workspacePrDeliveryAccessor.settleDelivery({
     deliveryId: 'old-dedicated',
     sessionId: 'dedicated',
     bindingRevision: 1,
@@ -713,7 +714,7 @@ it('cancels unclaimed facts but keeps the frozen claim when a dedicated-to-main 
   });
   const restated = await recoveryAndReviewFacts('restated');
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: 'p', bindingRevision: 2 },
       {
         deliveryId: 'new-main',
@@ -749,7 +750,7 @@ it('atomically claims all main PR targets and preserves the whole frozen retry s
   const eventIds = await mainBatchFacts();
   const request = { workspaceId: 'w', prId: null, bindingRevision: 0 };
   const input = { deliveryId: 'batch', sessionId: 'main', eventIds, text: 'all facts' };
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     eventIds,
     attempt: 1,
     deliveryProviderSessionId: 'main-provider',
@@ -759,16 +760,16 @@ it('atomically claims all main PR targets and preserves the whole frozen retry s
       (event) => event.deliveryId === 'batch' && event.state === 'DISPATCHING'
     ).length
   ).toBe(2);
-  await workspacePrEventAccessor.settleDelivery({
+  await workspacePrDeliveryAccessor.settleDelivery({
     deliveryId: 'batch',
     sessionId: 'main',
     bindingRevision: 0,
     result: 'retry',
   });
   expect(
-    await workspacePrEventAccessor.claimDelivery(request, { ...input, eventIds: [eventIds[0]!] })
+    await workspacePrDeliveryAccessor.claimDelivery(request, { ...input, eventIds: [eventIds[0]!] })
   ).toBeNull();
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).toMatchObject({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).toMatchObject({
     eventIds,
     text: 'all facts',
     attempt: 2,
@@ -778,7 +779,7 @@ it('rejects an all-PR claim atomically when any target has detached', async () =
   const eventIds = await mainBatchFacts();
   await db.prisma.workspacePR.update({ where: { id: 'p2' }, data: { detachedAt: new Date() } });
   expect(
-    await workspacePrEventAccessor.claimDelivery(
+    await workspacePrDeliveryAccessor.claimDelivery(
       { workspaceId: 'w', prId: null, bindingRevision: 0 },
       { deliveryId: 'batch', sessionId: 'main', eventIds, text: 'all' }
     )
@@ -794,12 +795,14 @@ it('cannot mix fresh events into a frozen main batch', async () => {
     eventIds: [eventIds[0]!],
     text: 'frozen',
   };
-  expect(await workspacePrEventAccessor.claimDelivery(request, input)).not.toBeNull();
-  await workspacePrEventAccessor.settleDelivery({
+  expect(await workspacePrDeliveryAccessor.claimDelivery(request, input)).not.toBeNull();
+  await workspacePrDeliveryAccessor.settleDelivery({
     deliveryId: 'batch',
     sessionId: 'main',
     bindingRevision: 0,
     result: 'retry',
   });
-  expect(await workspacePrEventAccessor.claimDelivery(request, { ...input, eventIds })).toBeNull();
+  expect(
+    await workspacePrDeliveryAccessor.claimDelivery(request, { ...input, eventIds })
+  ).toBeNull();
 });

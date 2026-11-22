@@ -7,8 +7,9 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
-import { findPrunableDeliveryIds } from './workspace-pr-delivery.accessor';
+import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import { findPrunableDeliveryIds } from './workspace-pr-ledger-reads';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({
@@ -179,7 +180,7 @@ async function remaining() {
 }
 
 function prune(limit = 100, afterId = '') {
-  return workspacePrEventAccessor.pruneSettledDeliveries({ before: CUTOFF, afterId, limit });
+  return workspacePrDeliveryAccessor.pruneSettledDeliveries({ before: CUTOFF, afterId, limit });
 }
 
 it('prunes settled units of earlier epochs and of ARCHIVED workspaces with every member', async () => {
