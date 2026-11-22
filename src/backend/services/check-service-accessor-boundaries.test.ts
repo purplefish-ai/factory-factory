@@ -100,13 +100,13 @@ describe('check-service-accessor-boundaries', () => {
   it('tracks delivery reader functions through service aliases into a capsule barrel', () => {
     const result = runChecker([
       {
-        path: 'src/backend/services/workspace/resources/workspace-pr-ledger-reads.ts',
+        path: 'src/backend/services/workspace/resources/workspace-pr-ledger-reads.accessor.ts',
         content: 'export function readDeliveryEvents() {}',
       },
       {
         path: 'src/backend/services/workspace/service/read.ts',
         content:
-          "import {readDeliveryEvents} from '../resources/workspace-pr-ledger-reads'; export {readDeliveryEvents as aliasedReader};",
+          "import {readDeliveryEvents} from '../resources/workspace-pr-ledger-reads.accessor'; export {readDeliveryEvents as aliasedReader};",
       },
       {
         path: 'src/backend/services/workspace/index.ts',
@@ -116,6 +116,21 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('raw persistence accessor');
     expect(result.output).toContain('readDeliveryEvents');
+  });
+
+  it('rejects cross-owner direct imports of the PR ledger read helpers', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/session/service/example.ts',
+        content:
+          "import { findPrunableDeliveryIds } from '@/backend/services/workspace/resources/workspace-pr-ledger-reads.accessor';\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      'src/backend/services/session/service/example.ts: cross-owner raw persistence accessor readDeliveryEvents belongs to workspace'
+    );
   });
 
   it('rejects the PR delivery accessor re-exported from a capsule barrel', () => {

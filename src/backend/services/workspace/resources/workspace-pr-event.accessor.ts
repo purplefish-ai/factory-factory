@@ -25,7 +25,7 @@ import {
   PR_DELIVERY_STATE as DELIVERY,
   PR_EVENT_STATE as EVENT,
   PRUNABLE_FACT_KINDS,
-} from './workspace-pr-ledger-reads';
+} from './workspace-pr-ledger-reads.accessor';
 
 // Positive NULL checks avoid three-valued NOT semantics on optional receipt IDs.
 const unclaimedDeliveryWhere = {

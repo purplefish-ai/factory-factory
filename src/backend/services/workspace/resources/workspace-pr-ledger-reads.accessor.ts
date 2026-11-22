@@ -4,7 +4,8 @@
  * and the SQL that selects retention and review-list slimming candidates.
  * Nothing here writes. The dependency runs one way: `workspace-pr-delivery.accessor.ts`
  * (writes `WorkspacePRDelivery`) imports `workspace-pr-event.accessor.ts`
- * (writes `WorkspacePREvent`), and both import this module.
+ * (writes `WorkspacePREvent`), and both import this module. The `.accessor`
+ * name keeps it under the service accessor boundary check, as before the split.
  */
 import { z } from 'zod';
 import {

@@ -10,7 +10,7 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PrismaClient } from '@prisma-gen/client';
 import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
-import { readDeliveryEvents } from './workspace-pr-ledger-reads';
+import { readDeliveryEvents } from './workspace-pr-ledger-reads.accessor';
 import { workspaceRatchetAccessor } from './workspace-ratchet.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));

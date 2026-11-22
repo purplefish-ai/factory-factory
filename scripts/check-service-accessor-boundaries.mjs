@@ -173,7 +173,7 @@ const ACCESSOR_POLICIES = {
   },
   readDeliveryEvents: {
     owner: 'workspace',
-    module: 'src/backend/services/workspace/resources/workspace-pr-ledger-reads',
+    module: 'src/backend/services/workspace/resources/workspace-pr-ledger-reads.accessor',
   },
   workspacePrDeliveryAccessor: {
     owner: 'workspace',

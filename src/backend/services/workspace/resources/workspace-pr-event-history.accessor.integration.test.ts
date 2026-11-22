@@ -6,7 +6,7 @@ import {
 } from '@/backend/testing/integration-db';
 import type { Prisma, PrismaClient } from '@prisma-gen/client';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
-import { readDeliveryEvents } from './workspace-pr-ledger-reads';
+import { readDeliveryEvents } from './workspace-pr-ledger-reads.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

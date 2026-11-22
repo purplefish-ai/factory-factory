@@ -9,7 +9,7 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import { workspacePrDeliveryAccessor } from './workspace-pr-delivery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
-import { findPrunableDeliveryIds } from './workspace-pr-ledger-reads';
+import { findPrunableDeliveryIds } from './workspace-pr-ledger-reads.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

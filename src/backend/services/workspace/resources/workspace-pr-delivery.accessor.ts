@@ -39,7 +39,7 @@ import {
   PR_DELIVERY_STATE as DELIVERY,
   PR_EVENT_STATE as EVENT,
   PRUNABLE_DELIVERY_STATES,
-} from './workspace-pr-ledger-reads';
+} from './workspace-pr-ledger-reads.accessor';
 
 // Frozen legacy metadata without a receipt cannot authorize another effect.
 const unboundLegacyEvidenceWhere = {

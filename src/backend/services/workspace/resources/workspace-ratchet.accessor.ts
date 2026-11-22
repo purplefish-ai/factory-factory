@@ -5,7 +5,7 @@ import {
   type PRMonitoringProjection,
 } from '@/shared/pr-monitoring';
 import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
-import { PR_DELIVERY_STATE, PR_EVENT_STATE } from './workspace-pr-ledger-reads';
+import { PR_DELIVERY_STATE, PR_EVENT_STATE } from './workspace-pr-ledger-reads.accessor';
 import { projectWorkspacePRCollection } from './workspace-pr.accessor';
 
 /** The legacy toggle name is retained at the API boundary for existing clients. */
