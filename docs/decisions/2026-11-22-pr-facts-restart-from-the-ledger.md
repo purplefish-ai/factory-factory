@@ -1,6 +1,6 @@
 # Without a baseline, PR facts restart from the ledger
 
-Decided on 2026-11-22 in #PR_NUMBER.
+Decided on 2026-11-22 in #3289.
 
 ## Context
 
