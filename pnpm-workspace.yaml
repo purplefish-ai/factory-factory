@@ -21,7 +21,6 @@ trustPolicyExclude:
 
 allowBuilds:
   '@prisma/engines@7.10.1': true
-  better-sqlite3@13.0.3: true
   electron@45.2.1: true
   esbuild@0.28.2: true
   node-pty@1.1.0: true
@@ -37,7 +36,8 @@ overrides:
   # Prisma 7 still pins versions affected by GHSA-ggr8-5vv4-36mx and MySQL2 advisories.
   '@prisma/config>deepmerge-ts': 8.0.2
   # Prisma 7's v12 driver cannot build against Electron 45's V8 headers.
-  '@prisma/adapter-better-sqlite3>better-sqlite3': 13.0.3
+  # Keep Prisma and the app on one native SQLite build so they share file locks.
+  '@prisma/adapter-better-sqlite3>better-sqlite3': 13.2.0
   'prisma>mysql2': 3.24.6
   '@isaacs/brace-expansion': '>=5.0.1'
   '@modelcontextprotocol/sdk>ajv': '>=8.18.0'
