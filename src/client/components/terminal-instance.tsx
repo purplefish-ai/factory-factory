@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useAppearance } from '@/client/components/appearance-provider';
 import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { WORKSPACE_DRAWER_BREAKPOINT } from '@/client/hooks/use-workspace-drawer';
+import { getShortcutEnvironment, matchesShortcut } from '@/client/lib/keyboard-shortcuts';
 import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { scaledTerminalFontSize } from '@/shared/appearance';
 import { readTerminalTheme } from './terminal-theme';
@@ -81,6 +82,22 @@ export function TerminalInstance({
       theme: readTerminalTheme(),
       minimumContrastRatio: 4.5,
     });
+
+    if (getShortcutEnvironment().platform === 'mac') {
+      // xterm 6 sends modified arrows verbatim. Shells bind Meta-b/f to word movement.
+      terminal.attachCustomKeyEventHandler((event) => {
+        if (event.type !== 'keydown' || event.isComposing || event.defaultPrevented) {
+          return true;
+        }
+        const left = matchesShortcut(event, 'terminal.wordBackward');
+        if (!(left || matchesShortcut(event, 'terminal.wordForward'))) {
+          return true;
+        }
+        event.preventDefault();
+        terminal.input(left ? '\x1bb' : '\x1bf');
+        return false;
+      });
+    }
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);

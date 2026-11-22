@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { contrastRatio, parseThemeColor } from '@/client/lib/color-contrast';
+import { getShortcutEnvironment } from '@/client/lib/keyboard-shortcuts';
 import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { Button } from '@/components/ui/button';
@@ -258,5 +259,31 @@ export const ManualFocus: Story = {
     await expect(toggle).toHaveFocus();
     await userEvent.click(canvas.getByRole('application', { name: 'Terminal' }));
     await expect(canvasElement.querySelector('.xterm-helper-textarea')).toHaveFocus();
+  },
+};
+
+export const WordNavigation: Story = {
+  args: { onData: fn(), output: new TerminalOutputStream('$ ') },
+  render: (args) => (
+    <div className="h-[280px] w-[700px]">
+      <TerminalInstance {...args} />
+    </div>
+  ),
+  play: async ({ args, canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('application', { name: 'Terminal' }));
+    const input = within(canvasElement).getByRole('textbox');
+    // xterm reads the native keyCode for Alt-arrow passthrough on non-Mac clients.
+    for (const [key, keyCode] of [
+      ['ArrowLeft', 37],
+      ['ArrowRight', 39],
+    ] as const) {
+      const options = { key, keyCode, altKey: true, bubbles: true, cancelable: true };
+      input.dispatchEvent(new KeyboardEvent('keydown', options));
+      input.dispatchEvent(new KeyboardEvent('keyup', options));
+    }
+    const mac = getShortcutEnvironment().platform === 'mac';
+    await expect(args.onData).toHaveBeenCalledTimes(2);
+    await expect(args.onData).toHaveBeenNthCalledWith(1, mac ? '\x1bb' : '\x1b[1;3D');
+    await expect(args.onData).toHaveBeenNthCalledWith(2, mac ? '\x1bf' : '\x1b[1;3C');
   },
 };
