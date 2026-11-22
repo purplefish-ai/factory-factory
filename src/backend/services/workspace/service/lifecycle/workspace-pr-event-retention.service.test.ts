@@ -166,6 +166,34 @@ it('slims review lists in one pass that resumes across runs and then stops', asy
   expect(slim).toHaveBeenCalledTimes(3);
 });
 
+it('scans again after a restart, even one that lands while a window is in flight', async () => {
+  const slimming = new PRReviewListSlimming();
+  slim.mockResolvedValueOnce({ scanned: 1, lastId: 'a', slimmed: 0 });
+  expect(await slimming.run({ batchSize: 2 })).toMatchObject({ batches: 1, complete: true });
+
+  slimming.restart();
+  slim
+    .mockImplementationOnce(() => {
+      // A restore commits while this window is being read; its end does not count.
+      slimming.restart();
+      return Promise.resolve({ scanned: 1, lastId: 'a', slimmed: 0 });
+    })
+    .mockResolvedValueOnce({ scanned: 2, lastId: 'b', slimmed: 1 })
+    .mockResolvedValueOnce({ scanned: 0, lastId: null, slimmed: 0 });
+
+  expect(await slimming.run({ batchSize: 2 })).toEqual({
+    slimmed: 1,
+    batches: 3,
+    complete: true,
+  });
+  expect(slim.mock.calls).toEqual([
+    [{ afterId: '', limit: 2 }],
+    [{ afterId: '', limit: 2 }],
+    [{ afterId: '', limit: 2 }],
+    [{ afterId: 'b', limit: 2 }],
+  ]);
+});
+
 it('does not start another slimming window after the job signal aborts', async () => {
   const controller = new AbortController();
   slim.mockImplementation(() => {

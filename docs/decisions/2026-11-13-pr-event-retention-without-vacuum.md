@@ -33,26 +33,29 @@ minutes in three passes. Each works in batches of separate short writes, at most
 3. Review lists: facts that parse as PR facts get
    `observation.actionableReviews` set to `[]` and
    `observation.resolvedReviewIds` removed, in SQL, so the rest of the stored
-   text is unchanged. One pass in ID order, 100 rows a window, is done for the
-   life of the process once it reaches the end: facts are no longer written with
-   the list.
+   text is unchanged. One pass in ID order, 100 rows a window, is done once it
+   reaches the end, since facts are no longer written with the list, until a
+   PR-event backup restore starts it again.
 
 Only rows no reader uses are eligible. The reducer (`listForPR`) reads only its
-PR's current-epoch prefix and the epoch only grows. ARCHIVED is final, and
-polling and claims require READY. Every key embeds the PR's transition sequence,
-which only grows, so no pruned key is regenerated. Pending counts,
-`listPending`, receipt recovery and claim transitions read only PENDING,
-DISPATCHING and BLOCKED deliveries, and treat a missing delivery as settled.
-Backup export rejects a delivery with missing members, so the delete re-checks
-each unit and rolls back on a count mismatch. Nothing in tRPC or the client
-shows delivered history. (`CI_RECOVERED` was keyed by head and failure, and so
-kept, until its key gained the sequence on 2026-11-22.)
+PR's current-epoch prefix and the epoch only grows. Turning monitoring off, or
+changing the recipient while it is off, renews nothing: facts from before stay
+in the current epoch, and are kept, until monitoring next turns on and renews it
+(stating afresh every fact that holds). ARCHIVED is final, and polling and
+claims require READY. Every key embeds the PR's transition sequence, which only
+grows, so no pruned key is regenerated. Pending counts, `listPending`, receipt
+recovery and claim transitions read only PENDING, DISPATCHING and BLOCKED
+deliveries, and treat a missing delivery as settled. Backup export rejects a
+delivery with missing members, so the delete re-checks each unit and rolls back
+on a count mismatch. Nothing in tRPC or the client shows delivered history.
+(`CI_RECOVERED` was keyed by head and failure, and so kept, until its key gained
+the sequence on 2026-11-22.)
 
 Kept: live, BLOCKED, DISMISSED and unknown-state deliveries, legacy receipt or
-frozen metadata, legacy `MONITORING_ENABLED` rows, ARCHIVING workspaces (a
-failed archive rolls back to READY), workspaces without a monitoring row, and
-the current epoch of every other workspace, detached PRs included, because
-re-attaching reuses the PR row and its epoch.
+frozen metadata and legacy `MONITORING_ENABLED` rows. Outside ARCHIVED
+workspaces (ARCHIVING can roll back to READY), so is the current epoch, detached
+PRs included because re-attaching reuses the row and its epoch, and all of a
+workspace without a monitoring row, whose epoch is unknown.
 
 The app does not run `VACUUM`. It rewrites the whole database under an exclusive
 lock and needs temporary space about the size of the database, and enabling
@@ -66,9 +69,10 @@ incremental vacuum would itself require a full `VACUUM` first.
   pending facts anyway.
 - A live workspace keeps every delivered fact of its current epoch: about one
   row per CI failure, recovery, conflict change and review comment sent, plus
-  one delivery per update. They go when the epoch renews (a destination change)
-  or the workspace is archived; slimmed, each is a few KB.
+  one delivery per update. They go once the epoch renews (monitoring turns on,
+  the recipient changes while it is on, or the mode changes) or the workspace is
+  archived; slimmed, each is a few KB.
 - A unit with a `recovered:` member (receipt recovery after a detach) is kept
   until its workspace is archived.
-- Each process start reads every payload once more for the review-list pass;
-  this also covers rows a backup import brought in.
+- The review-list pass reads every payload once per process start and again
+  after each PR-event backup restore.

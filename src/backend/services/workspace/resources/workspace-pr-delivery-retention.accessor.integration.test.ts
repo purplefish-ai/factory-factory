@@ -225,12 +225,34 @@ it('prunes settled units of earlier epochs and of ARCHIVED workspaces with every
     state: 'CANCELLED',
     members: [{ id: 'u-archived-cancelled-a', key: 'legacy-key', prId: 'archived-pr' }],
   });
+  // The ARCHIVED branch needs no monitoring row (no epoch is compared).
+  await db.prisma.workspace.create({
+    data: {
+      id: 'archived-unmonitored',
+      projectId: 'project',
+      name: 'archived-unmonitored',
+      status: 'ARCHIVED',
+      prs: { create: { id: 'archived-unmonitored-pr', url: redObservation.url } },
+    },
+  });
+  await createUnit({
+    id: 'u-archived-unmonitored',
+    workspaceId: 'archived-unmonitored',
+    members: [
+      {
+        id: 'u-archived-unmonitored-a',
+        key: 'archived-unmonitored-pr:epoch:0:a',
+        prId: 'archived-unmonitored-pr',
+        workspaceId: 'archived-unmonitored',
+      },
+    ],
+  });
 
   expect(await prune()).toEqual({
-    selected: 7,
+    selected: 8,
     lastId: 'u-two-prs',
-    deliveries: 7,
-    events: 9,
+    deliveries: 8,
+    events: 10,
   });
   expect(await remaining()).toEqual({ deliveries: [], events: [] });
   expect(await prune()).toEqual({ selected: 0, lastId: null, deliveries: 0, events: 0 });

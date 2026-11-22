@@ -1,6 +1,22 @@
 import { workspacePrEventAccessor } from '@/backend/services/workspace/resources/workspace-pr-event.accessor';
 import { workspacePrMonitoringAccessor } from '@/backend/services/workspace/resources/workspace-pr-monitoring.accessor';
-import { runPREventRetention } from './workspace-pr-event-retention.service';
+import {
+  restartReviewListSlimming,
+  runPREventRetention,
+} from './workspace-pr-event-retention.service';
+
+/**
+ * Restored facts may predate #3288 and carry review lists, so the review-list
+ * pass scans again. Queries outside the restore's transaction wait for it, so
+ * the rescan sees the rows once they commit; a rollback costs one extra scan.
+ */
+async function restoreEventsBackup(
+  ...input: Parameters<typeof workspacePrEventAccessor.restoreBackup>
+) {
+  const result = await workspacePrEventAccessor.restoreBackup(...input);
+  restartReviewListSlimming();
+  return result;
+}
 export const workspacePRMonitoringService = {
   runEventRetention: runPREventRetention,
   projectEvents: workspacePrEventAccessor.projectEvents,
@@ -18,7 +34,7 @@ export const workspacePRMonitoringService = {
   restoreConfigBackup: workspacePrMonitoringAccessor.restoreBackup.bind(
     workspacePrMonitoringAccessor
   ),
-  restoreEventsBackup: workspacePrEventAccessor.restoreBackup.bind(workspacePrEventAccessor),
+  restoreEventsBackup,
   get: workspacePrMonitoringAccessor.get.bind(workspacePrMonitoringAccessor),
   setBinding: workspacePrMonitoringAccessor.setBinding.bind(workspacePrMonitoringAccessor),
   pause: workspacePrMonitoringAccessor.pause.bind(workspacePrMonitoringAccessor),

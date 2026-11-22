@@ -108,24 +108,36 @@ export interface SlimReviewListsResult {
  * #3288 carry. Facts written since never carry one, so a pass that reaches the
  * end of the table is complete for the life of the process and later runs do
  * nothing. The cursor survives between runs, so a large ledger is scanned once,
- * a bounded window per batch, across as many runs as it needs. A restarted
- * process scans once more, which also covers rows a backup import brought in.
+ * a bounded window per batch, across as many runs as it needs. A backup restore
+ * can bring old rows back, so it calls `restart`, and the next run scans again.
  */
 export class PRReviewListSlimming {
   private afterId = '';
   private done = false;
+  private generation = 0;
+
+  /** Scan the whole ledger again from the start; a window in flight is discarded. */
+  restart() {
+    this.generation++;
+    this.afterId = '';
+    this.done = false;
+  }
 
   async run(input: Omit<PassInput, 'now'> = {}): Promise<SlimReviewListsResult> {
     const limit = input.batchSize ?? PR_EVENT_RETENTION.batchSize;
     const maxBatches = input.maxBatches ?? PR_EVENT_RETENTION.maxBatchesPerRun;
     const result = { slimmed: 0, batches: 0, complete: this.done };
     while (!this.done && result.batches < maxBatches && !input.signal?.aborted) {
+      const generation = this.generation;
       const batch = await workspacePrEventAccessor.slimReviewLists({
         afterId: this.afterId,
         limit,
       });
       result.batches++;
       result.slimmed += batch.slimmed;
+      if (generation !== this.generation) {
+        continue;
+      }
       if (batch.scanned < limit || !batch.lastId) {
         this.done = true;
       } else {
@@ -138,6 +150,11 @@ export class PRReviewListSlimming {
 }
 
 const processSlimming = new PRReviewListSlimming();
+
+/** Make this process's review-list pass scan the ledger again, after rows were imported. */
+export function restartReviewListSlimming() {
+  processSlimming.restart();
+}
 
 export interface PREventRetentionResult {
   terminal: PrunePREventsResult;
