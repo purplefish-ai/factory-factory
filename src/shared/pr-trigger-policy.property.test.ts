@@ -19,6 +19,13 @@ import type { PRObservation, PRStoredObservation } from './schemas/pr-event.sche
  */
 const SEEDS = 300;
 const STEPS = 60;
+/**
+ * The histories are bounded and synchronous, so the test cannot hang and the
+ * default 5-second timeout would only measure the runner's load. The run takes
+ * about 1 second locally and 2 in CI, where a contended runner has made it take
+ * three times as long; most of it is the checks, which are the point.
+ */
+const TIMEOUT_MS = 30_000;
 
 function random(seed: number) {
   let state = seed;
@@ -187,8 +194,6 @@ type Checked = {
   told: readonly PREventSummary[];
   live: readonly PREventSummary[];
   onHead: (event: PREventSummary) => boolean;
-  /** The reducer had no usable baseline: none at all, or a closed one while the PR is open. */
-  restarted: boolean;
 };
 
 /** Queued facts describe the current head, and no kind is queued twice. */
@@ -301,15 +306,16 @@ function checkFeedback({ ledger, current, live }: Checked) {
 }
 
 /**
- * Nothing is announced that the recipient already received: no feedback (the
- * simulated threads are never re-opened, so it never needs repeating), and,
- * when the reducer restarted, not the failure it was last told of on this head.
- * With a baseline that failure can be announced again after an undelivered one
- * with more failing checks was superseded; that is not checked here.
+ * Nothing is announced that the recipient already holds. No `CI_FAILED` reports
+ * the failure of the last CI fact it was told (delivered or in flight) for this
+ * head; the reducer does repeat one that recurs with identical checks after CI
+ * stopped failing, but here every completion has its own time, so none does. No
+ * feedback it received is queued again; the simulated threads are never
+ * re-opened.
  */
-function checkNoRepeat({ emitted, told, onHead, restarted }: Checked) {
+function checkNoRepeat({ emitted, told, onHead }: Checked) {
   const lastCI = latest(ofKind(told, 'CI_FAILED', 'CI_RECOVERED').filter(onHead));
-  for (const event of ofKind(restarted ? emitted : [], 'CI_FAILED')) {
+  for (const event of ofKind(emitted, 'CI_FAILED')) {
     expect(
       lastCI?.kind === 'CI_FAILED' &&
         prFailureSignature(lastCI.payload.observation) ===
@@ -322,12 +328,7 @@ function checkNoRepeat({ emitted, told, onHead, restarted }: Checked) {
   }
 }
 
-function check(
-  ledger: Ledger,
-  current: PRObservation,
-  emitted: readonly PRFactDraft[],
-  restarted: boolean
-) {
+function check(ledger: Ledger, current: PRObservation, emitted: readonly PRFactDraft[]) {
   const told = [...ledger.delivered, ...ledger.inFlight];
   const checked: Checked = {
     ledger,
@@ -336,7 +337,6 @@ function check(
     told,
     live: [...ledger.pending, ...told],
     onHead: (event) => event.payload.observation.headSha === current.headSha,
-    restarted,
   };
   checkQueue(checked);
   checkClosure(checked);
@@ -371,39 +371,42 @@ function betweenObservations(ledger: Ledger, next: () => number, tick: number) {
   }
 }
 
-it('tells the recipient what is true of the PR, once, for random histories', () => {
-  for (let seed = 1; seed <= SEEDS; seed++) {
-    const next = random(seed);
-    const world: World = {
-      head: 1,
-      checks: [],
-      conflict: false,
-      closed: false,
-      reviews: new Map(),
-      threads: 0,
-    };
-    const ledger: Ledger = {
-      previous: null,
-      pending: [],
-      inFlight: [],
-      delivered: [],
-      sequence: 0,
-      keys: new Set(),
-      failing: null,
-      closedSince: null,
-    };
-    for (let step = 0; step < STEPS; step++) {
-      const tick = step * 3;
-      mutate(world, next, tick);
-      betweenObservations(ledger, next, tick);
-      const current = observation(world, tick + 2, next() >= 0.25);
-      const restarted = current.prState === 'OPEN' && ledger.previous?.prState !== 'OPEN';
-      const emitted = observe(ledger, current, tick + 2);
-      try {
-        check(ledger, current, emitted, restarted);
-      } catch (error) {
-        throw new Error(`seed ${seed}, step ${step}: ${String(error)}`, { cause: error });
+it(
+  'tells the recipient what is true of the PR, once, for random histories',
+  () => {
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const next = random(seed);
+      const world: World = {
+        head: 1,
+        checks: [],
+        conflict: false,
+        closed: false,
+        reviews: new Map(),
+        threads: 0,
+      };
+      const ledger: Ledger = {
+        previous: null,
+        pending: [],
+        inFlight: [],
+        delivered: [],
+        sequence: 0,
+        keys: new Set(),
+        failing: null,
+        closedSince: null,
+      };
+      for (let step = 0; step < STEPS; step++) {
+        const tick = step * 3;
+        mutate(world, next, tick);
+        betweenObservations(ledger, next, tick);
+        const current = observation(world, tick + 2, next() >= 0.25);
+        const emitted = observe(ledger, current, tick + 2);
+        try {
+          check(ledger, current, emitted);
+        } catch (error) {
+          throw new Error(`seed ${seed}, step ${step}: ${String(error)}`, { cause: error });
+        }
       }
     }
-  }
-});
+  },
+  TIMEOUT_MS
+);

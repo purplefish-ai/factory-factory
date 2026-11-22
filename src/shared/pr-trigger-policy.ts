@@ -181,29 +181,50 @@ function failureMemory(
   terminal: boolean,
   ledger: Ledger
 ) {
+  const failing =
+    previous?.ciStatus === 'FAILURE' && previous.headSha === current.headSha ? previous : null;
   const carried =
-    previous &&
-    previous.ciStatus === 'FAILURE' &&
-    previous.headSha === current.headSha &&
-    prFailureSignature(previous) === prFailureSignature(current)
-      ? (previous.ciFailure ?? { since: previous.observedAt, announced: true })
+    failing && prFailureSignature(failing) === prFailureSignature(current)
+      ? (failing.ciFailure ?? { since: failing.observedAt, announced: true })
       : null;
   const since = carried?.since ?? current.observedAt;
   const due =
     !terminal &&
     (isSettledPRFailure(current) ||
       Date.parse(current.observedAt) - Date.parse(since) >= PR_FAILURE_MAX_WAIT_MS);
-  const announced = ledger.restart ? failureStated(ledger, current) : (carried?.announced ?? false);
-  return { since, announced, due };
+  return { since, announced: failureAnnounced(ledger, current, failing, carried), due };
 }
 
 /**
- * The last CI fact the ledger states for this head reports this failure: it was
- * told or queued, and no recovery has answered it since.
+ * Whether the current failure was announced. On a restart the ledger says so.
+ * When the failing checks changed while CI kept failing, the failure is already
+ * announced if the last CI fact the recipient was told for this head reports it:
+ * an announcement of the checks in between was superseded before it arrived. A
+ * queued fact does not count, because a requeued one would only be superseded
+ * again. When CI stopped failing in between, the failure is announced afresh.
  */
-function failureStated(ledger: Ledger, current: PRObservation) {
+function failureAnnounced(
+  ledger: Ledger,
+  current: PRObservation,
+  failing: PRStoredObservation | null,
+  carried: { announced: boolean } | null
+) {
+  if (ledger.restart) {
+    return lastFailureIs([...ledger.pending, ...ledger.told], current);
+  }
+  if (carried) {
+    return carried.announced;
+  }
+  return !!failing && lastFailureIs(ledger.told, current);
+}
+
+/**
+ * The last CI fact among `events` for this head reports this failure, and no
+ * recovery has answered it since.
+ */
+function lastFailureIs(events: readonly PREventSummary[], current: PRObservation) {
   const last = latest(
-    [...ledger.pending, ...ledger.told].filter(
+    events.filter(
       (e) =>
         (e.kind === 'CI_FAILED' || e.kind === 'CI_RECOVERED') &&
         e.payload.observation.headSha === current.headSha
