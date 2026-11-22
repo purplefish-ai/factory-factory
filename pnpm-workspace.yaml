@@ -35,6 +35,8 @@ packageExtensions:
 overrides:
   # Prisma 7 still pins versions affected by GHSA-ggr8-5vv4-36mx and MySQL2 advisories.
   '@prisma/config>deepmerge-ts': 8.0.2
+  # Prisma 7 pins Effect 3.20.0, which is affected by GHSA-7589-6fvf-x4pw.
+  '@prisma/config>effect': 3.22.1
   # Prisma 7's v12 driver cannot build against Electron 45's V8 headers.
   # Keep Prisma and the app on one native SQLite build so they share file locks.
   '@prisma/adapter-better-sqlite3>better-sqlite3': 13.2.0
