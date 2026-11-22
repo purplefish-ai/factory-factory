@@ -37,23 +37,21 @@ export function createPRBackgroundDeliveryPort(
       ) {
         return false;
       }
-      for (const prId of new Set(claimed.map((event) => event.prId))) {
-        if (
-          (await guardPRDelivery(
-            delivery.sessionId,
-            {
-              workspaceId: session.workspaceId,
-              prId,
-              bindingRevision: delivery.bindingRevision,
-              deliveryMode: config?.deliveryMode,
-            },
-            services
-          )) !== 'ready'
-        ) {
-          return false;
-        }
-      }
-      return true;
+      // One evaluation covers every claimed PR, in claim order.
+      const prIds = claimed.map((event) => event.prId);
+      return (
+        (await guardPRDelivery(
+          delivery.sessionId,
+          {
+            workspaceId: session.workspaceId,
+            prId: prIds[0] ?? null,
+            bindingRevision: delivery.bindingRevision,
+            deliveryMode: config?.deliveryMode,
+          },
+          services,
+          prIds
+        )) === 'ready'
+      );
     },
     async complete(delivery) {
       await workspacePRMonitoringService.settleDelivery({ ...delivery, result: 'delivered' });

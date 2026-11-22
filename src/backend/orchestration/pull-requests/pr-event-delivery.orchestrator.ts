@@ -18,43 +18,79 @@ import { RATCHET_DISPATCH_CHANGED } from './ratchet.service';
 
 const logger = createLogger('pr-event-delivery');
 
+type DeliveryGuard = 'ready' | 'blocked' | 'discard';
+type AuthorizedRecipient = NonNullable<Awaited<ReturnType<typeof readAuthorizedRecipient>>>;
+
+/**
+ * Decide once whether `sessionId` may receive `request` now, for every PR in
+ * `prIds` (by default the request's own PR). The binding, the recipient and the
+ * workspace's sessions are read before the worktree check and again after it;
+ * every PR is checked against those reads. The claim transaction rechecks the
+ * database state; a prompt in flight, a pending interaction, another session's
+ * prompt and the worktree directory are checked only here.
+ */
 export async function guardPRDelivery(
   sessionId: string,
   request: PRDeliveryRequest,
-  services: PRDeliveryPorts
-) {
-  if (!request.prId) {
+  services: PRDeliveryPorts,
+  prIds: readonly (string | null)[] = [request.prId]
+): Promise<DeliveryGuard> {
+  const [firstPrId, ...otherPrIds] = [...new Set(prIds)];
+  if (!firstPrId || otherPrIds.some((prId) => !prId)) {
     return 'discard';
   }
-  const {
-    workspacePRMonitoringService,
-    sessionDomainService,
-    acpRuntimeManager,
-    workspacePrSnapshotService,
-  } = services;
-  const initial = await readAuthorizedRecipient(sessionId, request, services);
+  const target = { ...request, prId: firstPrId };
+  const initial = await readAuthorizedRecipient(sessionId, target, services);
   if (!initial) {
     return 'discard';
   }
-  const { config } = initial;
   if (
-    config.deliveryPauseReason ||
-    sessionDomainService.getPendingInteractiveRequest(sessionId) ||
-    acpRuntimeManager.isSessionPromptInFlight(sessionId) ||
+    initial.config.deliveryPauseReason ||
+    isRecipientBusy(sessionId, services) ||
     !(await recipientCanDispatch(request.workspaceId, sessionId, services))
   ) {
     return 'blocked';
   }
-  if (
-    request.prId &&
-    !(await workspacePrSnapshotService.find({
-      workspaceId: request.workspaceId,
-      prId: request.prId,
-    }))
-  ) {
+  if (!(await isPRAttached(request.workspaceId, firstPrId, services))) {
     return 'discard';
   }
-  const worktreePath = initial.session.workspace.worktreePath;
+  if (
+    !(await checkWorktree(sessionId, request, initial.session.workspace.worktreePath, services))
+  ) {
+    return 'blocked';
+  }
+  for (const prId of otherPrIds) {
+    if (
+      !(
+        prId &&
+        (await isCurrentPRRecipient(initial.config, initial.session, prId, services)) &&
+        (await isPRAttached(request.workspaceId, prId, services))
+      )
+    ) {
+      return 'discard';
+    }
+  }
+  return recheckAfterWorktree(sessionId, target, otherPrIds, services);
+}
+
+function isRecipientBusy(sessionId: string, services: PRDeliveryPorts) {
+  return (
+    !!services.sessionDomainService.getPendingInteractiveRequest(sessionId) ||
+    services.acpRuntimeManager.isSessionPromptInFlight(sessionId)
+  );
+}
+
+async function isPRAttached(workspaceId: string, prId: string, services: PRDeliveryPorts) {
+  return !!(await services.workspacePrSnapshotService.find({ workspaceId, prId }));
+}
+
+/** False when the worktree is missing (and delivery is then paused) or cannot be checked. */
+async function checkWorktree(
+  sessionId: string,
+  request: PRDeliveryRequest,
+  worktreePath: string | null,
+  services: PRDeliveryPorts
+) {
   const worktreeAvailable = worktreePath
     ? await stat(worktreePath).then(
         (info) => info.isDirectory(),
@@ -68,10 +104,10 @@ export async function guardPRDelivery(
       )
     : false;
   if (worktreeAvailable === null) {
-    return 'blocked';
+    return false;
   }
   if (!worktreeAvailable) {
-    const paused = await workspacePRMonitoringService.pauseWorkspace(
+    const paused = await services.workspacePRMonitoringService.pauseWorkspace(
       request.workspaceId,
       'SESSION_FAILED',
       request.bindingRevision
@@ -88,31 +124,64 @@ export async function guardPRDelivery(
         worktreePath,
       });
     }
-    return 'blocked';
+    return false;
   }
-  const finalRecipientAllowed = await recipientCanDispatch(
-    request.workspaceId,
-    sessionId,
-    services
-  );
-  const final = await readAuthorizedRecipient(sessionId, request, services);
-  if (!final) {
+  return true;
+}
+
+/** The checks repeated after the asynchronous worktree check and any pause it wrote. */
+async function recheckAfterWorktree(
+  sessionId: string,
+  target: PRDeliveryRequest,
+  otherPrIds: (string | null)[],
+  services: PRDeliveryPorts
+): Promise<DeliveryGuard> {
+  const othersIdle = await recipientCanDispatch(target.workspaceId, sessionId, services);
+  const final = await readAuthorizedRecipient(sessionId, target, services);
+  if (!(final && (await isRecipientForEvery(final, otherPrIds, services)))) {
     return 'discard';
   }
-  const latestConfig = await workspacePRMonitoringService.get(request.workspaceId);
-  if (!matchesBinding(latestConfig, request)) {
+  const config = await readBindingAfterRecipientLookup(final.config, target, services);
+  if (!config) {
     return 'discard';
   }
-  if (
-    !finalRecipientAllowed ||
-    latestConfig.deliveryPauseReason ||
-    sessionDomainService.getPendingInteractiveRequest(sessionId) ||
-    acpRuntimeManager.isSessionPromptInFlight(sessionId)
-  ) {
+  if (!othersIdle || config.deliveryPauseReason || isRecipientBusy(sessionId, services)) {
     return 'blocked';
   }
   return 'ready';
 }
+
+/**
+ * A DEDICATED recipient check awaits the dedicated-conversation lookup, so the
+ * binding read before it may be stale; read it again. A MAIN check awaits
+ * nothing, so its binding read is still the latest. After `validate` there is
+ * no claim transaction left to catch a stale binding.
+ */
+async function readBindingAfterRecipientLookup(
+  config: NonNullable<MonitoringConfig>,
+  request: PRDeliveryRequest,
+  services: PRDeliveryPorts
+) {
+  if ((config.deliveryMode ?? 'MAIN') === 'MAIN') {
+    return config;
+  }
+  const latest = await services.workspacePRMonitoringService.get(request.workspaceId);
+  return matchesBinding(latest, request) ? latest : null;
+}
+
+async function isRecipientForEvery(
+  recipient: AuthorizedRecipient,
+  prIds: (string | null)[],
+  services: PRDeliveryPorts
+) {
+  for (const prId of prIds) {
+    if (!(await isCurrentPRRecipient(recipient.config, recipient.session, prId, services))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function preparePRDelivery(
   {
     sessionId,
@@ -129,41 +198,87 @@ export async function preparePRDelivery(
   }
   const main = (request.deliveryMode ?? 'MAIN') === 'MAIN';
   const candidates = await readDeliveryCandidates(request, main, services);
-  const finalGuard = await guardPRDelivery(sessionId, request, services);
+  // The guard after the refresh still runs before every early return and every
+  // write below. When there is none, only reads and pure steps separate it from
+  // the guard before the claim, so the two are evaluated once, together.
+  const afterRefresh = deferGuard(() => guardPRDelivery(sessionId, request, services));
+  if (candidates.status !== 'ready') {
+    return afterGuard(afterRefresh, () => candidates);
+  }
+  return prepareCandidateBatch(sessionId, request, main, candidates.events, afterRefresh, services);
+}
+
+async function prepareCandidateBatch(
+  sessionId: string,
+  request: PRDeliveryRequest,
+  main: boolean,
+  events: PendingPREvent[],
+  afterRefresh: DeferredGuard,
+  services: PRDeliveryPorts
+): ReturnType<PRBackgroundDeliveryPort['prepare']> {
+  const first = events[0];
+  if (!first) {
+    return afterGuard(afterRefresh, () => ({ status: 'discard' }));
+  }
+  if (events.some((e) => e.deliverySessionId && e.deliverySessionId !== sessionId)) {
+    return afterGuard(afterRefresh, () => ({
+      status: 'blocked',
+      reason: 'Previous recipient delivery needs receipt recovery',
+    }));
+  }
+  if (!(await frozenRetryMatches(first, sessionId, services))) {
+    return afterGuard(afterRefresh, () => pauseFrozenRetry(request, services));
+  }
+  if (events.some((e) => e.attempts >= 3)) {
+    return afterGuard(afterRefresh, () => pauseExhaustedDelivery(request, services));
+  }
+  const rendered = await renderDeliveryBatch(first, events, request, services);
+  if (rendered.undeliverable.length) {
+    const guard = await afterRefresh.evaluate();
+    if (guard !== 'ready') {
+      return blockedGuardResult(guard);
+    }
+    await cancelUndeliverable(request, rendered.undeliverable, rendered.renderError, services);
+  }
+  const batch = rendered.batch;
+  if (!batch) {
+    // Nothing deliverable was left this time; the next wake queues what remains.
+    return afterGuard(afterRefresh, () => ({ status: 'discard' }));
+  }
+  const batchPrIds = batch.events.map((event) => event.prId);
+  const finalGuard = await guardPRDelivery(
+    sessionId,
+    request,
+    services,
+    afterRefresh.evaluated ? batchPrIds : [request.prId, ...batchPrIds]
+  );
   if (finalGuard !== 'ready') {
     return blockedGuardResult(finalGuard);
   }
-  if (candidates.status !== 'ready') {
-    return candidates;
-  }
-  const events = candidates.events;
-  const first = events[0];
-  if (!first) {
-    return { status: 'discard' };
-  }
-  if (events.some((e) => e.deliverySessionId && e.deliverySessionId !== sessionId)) {
-    return { status: 'blocked', reason: 'Previous recipient delivery needs receipt recovery' };
-  }
-  if (!(await validateFrozenRetry(first, sessionId, request, services))) {
-    return {
-      status: 'blocked',
-      reason: 'Frozen PR update belongs to a different or unknown conversation',
-    };
-  }
-  if (await pauseExhaustedDelivery(events, request, services)) {
-    return { status: 'blocked', reason: 'PR update transport failed three times' };
-  }
-  const batch = await buildDeliveryBatch(first, events, request, services);
-  if (!batch) {
-    // Nothing deliverable was left this time; the next wake queues what remains.
-    return { status: 'discard' };
-  }
-  const targetGuard = await guardDeliveryTargets(sessionId, request, batch.events, services);
-  if (targetGuard !== 'ready') {
-    return blockedGuardResult(targetGuard);
-  }
   return claimDeliveryOrWait(sessionId, request, main, batch, services);
 }
+
+type DeferredGuard = { evaluate: () => Promise<DeliveryGuard>; readonly evaluated: boolean };
+function deferGuard(evaluate: () => Promise<DeliveryGuard>): DeferredGuard {
+  let result: Promise<DeliveryGuard> | undefined;
+  return {
+    evaluate: () => {
+      result ??= evaluate();
+      return result;
+    },
+    get evaluated() {
+      return result !== undefined;
+    },
+  };
+}
+async function afterGuard(
+  guard: DeferredGuard,
+  proceed: () => PreparedDelivery | Promise<PreparedDelivery>
+): Promise<PreparedDelivery> {
+  const result = await guard.evaluate();
+  return result === 'ready' ? proceed() : blockedGuardResult(result);
+}
+type PreparedDelivery = Awaited<ReturnType<PRBackgroundDeliveryPort['prepare']>>;
 async function readDeliveryCandidates(
   request: PRDeliveryRequest,
   main: boolean,
@@ -230,19 +345,24 @@ async function refreshDeliveryObservations(
   return refreshed;
 }
 /**
- * Render the batch to freeze. A stored fact that cannot be parsed or rendered is
- * discarded here, so one bad row never holds back the facts queued behind it.
+ * Render the batch to freeze, without writing. A stored fact that cannot be
+ * parsed or rendered is returned as undeliverable for the caller to discard, so
+ * one bad row never holds back the facts queued behind it.
  */
-async function buildDeliveryBatch(
+async function renderDeliveryBatch(
   first: PendingPREvent,
   events: PendingPREvent[],
   request: PRDeliveryRequest,
   services: PRDeliveryPorts
-) {
+): Promise<{
+  batch: { deliveryId: string; text: string; events: PendingPREvent[] } | null;
+  undeliverable: PendingPREvent[];
+  renderError?: unknown;
+}> {
   const settings = await services.userSettingsService.get();
   const deliveryId = first.deliveryId ?? randomUUID();
   if (first.deliveryText !== null && first.deliveryText !== undefined) {
-    return { deliveryId, text: first.deliveryText, events };
+    return { batch: { deliveryId, text: first.deliveryText, events }, undeliverable: [] };
   }
   const parsed = events.map((event) => ({
     event,
@@ -270,39 +390,37 @@ async function buildDeliveryBatch(
       ...facts.filter((fact) => fact.event.prId === facts[0]?.event.prId).map((fact) => fact.event)
     );
   }
-  if (undeliverable.length) {
-    const eventIds = undeliverable.map((event) => event.id);
-    await services.workspacePRMonitoringService.cancelUndeliverable(request.workspaceId, eventIds);
-    logger.error('Discarded stored PR facts that cannot be delivered', {
-      workspaceId: request.workspaceId,
-      eventIds,
-      ...(renderError === undefined ? {} : { error: renderError }),
-    });
-  }
+  const errorField = renderError === undefined ? {} : { renderError };
   if (!batch) {
-    return null;
+    return { batch: null, undeliverable, ...errorField };
   }
   const prIds = batch.prIds;
   return {
-    deliveryId,
-    text: batch.text,
-    events: facts.flatMap(({ event }) => (event.prId && prIds.includes(event.prId) ? [event] : [])),
+    batch: {
+      deliveryId,
+      text: batch.text,
+      events: facts.flatMap(({ event }) =>
+        event.prId && prIds.includes(event.prId) ? [event] : []
+      ),
+    },
+    undeliverable,
+    ...errorField,
   };
 }
 
-async function guardDeliveryTargets(
-  sessionId: string,
+async function cancelUndeliverable(
   request: PRDeliveryRequest,
-  events: PendingPREvent[],
+  undeliverable: PendingPREvent[],
+  renderError: unknown,
   services: PRDeliveryPorts
 ) {
-  for (const prId of new Set(events.map((e) => e.prId))) {
-    const guard = await guardPRDelivery(sessionId, { ...request, prId }, services);
-    if (guard !== 'ready') {
-      return guard;
-    }
-  }
-  return 'ready' as const;
+  const eventIds = undeliverable.map((event) => event.id);
+  await services.workspacePRMonitoringService.cancelUndeliverable(request.workspaceId, eventIds);
+  logger.error('Discarded stored PR facts that cannot be delivered', {
+    workspaceId: request.workspaceId,
+    eventIds,
+    ...(renderError === undefined ? {} : { error: renderError }),
+  });
 }
 async function claimDeliveryOrWait(
   sessionId: string,
@@ -466,49 +584,49 @@ async function resolveRecipient(
   );
   return session?.id ?? null;
 }
-async function validateFrozenRetry(
+async function frozenRetryMatches(
   event: PendingPREvent,
   sessionId: string,
-  request: PRDeliveryRequest,
   services: PRDeliveryPorts
 ) {
   if (!event.deliveryId) {
     return true;
   }
   const session = await services.sessionDataService.findAgentSessionById(sessionId);
-  if (
+  return !!(
     session &&
     event.deliveryProviderSessionId &&
     event.deliveryProvider === session.provider &&
     event.deliveryProviderSessionId === session.providerSessionId
-  ) {
-    return true;
-  }
+  );
+}
+async function pauseFrozenRetry(
+  request: PRDeliveryRequest,
+  services: PRDeliveryPorts
+): Promise<PreparedDelivery> {
   await services.workspacePRMonitoringService.pauseWorkspace(
     request.workspaceId,
     'RECEIPT_UNAVAILABLE',
     request.bindingRevision
   );
-  return false;
+  return {
+    status: 'blocked',
+    reason: 'Frozen PR update belongs to a different or unknown conversation',
+  };
 }
 type PendingPREvent = Awaited<
   ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['listPending']>
 >[number];
 async function pauseExhaustedDelivery(
-  events: { attempts: number }[],
   request: PRDeliveryRequest,
   services: PRDeliveryPorts
-) {
-  const { workspacePRMonitoringService } = services;
-  if (events.some((e) => e.attempts >= 3)) {
-    await workspacePRMonitoringService.pauseWorkspace(
-      request.workspaceId,
-      'DELIVERY_FAILED',
-      request.bindingRevision
-    );
-    return true;
-  }
-  return false;
+): Promise<PreparedDelivery> {
+  await services.workspacePRMonitoringService.pauseWorkspace(
+    request.workspaceId,
+    'DELIVERY_FAILED',
+    request.bindingRevision
+  );
+  return { status: 'blocked', reason: 'PR update transport failed three times' };
 }
 
 function selectDeliveryEvents(
