@@ -99,9 +99,10 @@ export class RatchetService extends EventEmitter {
       name: RETENTION_JOB,
       intervalMs: SERVICE_INTERVAL_MS.prEventRetention,
       run: async (signal) => {
-        const result = await workspacePRMonitoringService.pruneTerminalEvents({ signal });
-        if (result.deleted > 0) {
-          logger.info('Pruned terminal PR events', { ...result });
+        const result = await workspacePRMonitoringService.runEventRetention({ signal });
+        const { terminal, deliveries, reviewLists } = result;
+        if (terminal.deleted > 0 || deliveries.deliveries > 0 || reviewLists.slimmed > 0) {
+          logger.info('Pruned and slimmed PR events', { ...result });
         }
       },
     });

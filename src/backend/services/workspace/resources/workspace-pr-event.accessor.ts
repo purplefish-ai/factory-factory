@@ -11,11 +11,11 @@ import {
 } from '@/shared/pr-monitoring';
 import { prMonitoringEventPayloadSchema } from '@/shared/schemas/pr-event.schema';
 import { prEventBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
-import type {
-  AgentSession,
+import {
+  type AgentSession,
   Prisma,
-  WorkspacePRDelivery,
-  WorkspacePREvent,
+  type WorkspacePRDelivery,
+  type WorkspacePREvent,
 } from '@prisma-gen/client';
 import { backupCollisionsAccessor } from './backup-collisions.accessor';
 import {
@@ -27,8 +27,16 @@ import {
   hasState,
   isQuarantinedDeliveryState,
   parseDeliveryState,
+  carriesReviewListSql,
+  confirmPrunableDeliveryUnits,
+  filterParsedReviewListCarriers,
+  findPrunableDeliveryIds,
+  scanReviewListWindow,
+  withoutReviewListSql,
   PR_DELIVERY_STATE as DELIVERY,
   PR_EVENT_STATE as EVENT,
+  PRUNABLE_DELIVERY_STATES,
+  PRUNABLE_FACT_KINDS,
 } from './workspace-pr-delivery.accessor';
 
 // Frozen legacy metadata without a receipt cannot authorize another effect.
@@ -74,22 +82,6 @@ const unclaimedDeliveryWhere = {
 } satisfies Prisma.WorkspacePREventWhereInput;
 
 /**
- * Every fact kind: each deduplication identity embeds the PR's transition
- * sequence, which is persisted with each accepted observation and only grows,
- * so the reducer can never regenerate a pruned key. Legacy `MONITORING_ENABLED`
- * controls are never pruned.
- */
-const PRUNABLE_FACT_KINDS = [
-  'REVIEW_FEEDBACK',
-  'CI_FAILED',
-  'CI_RECOVERED',
-  'CONFLICT_DETECTED',
-  'CONFLICT_CLEARED',
-  'PR_MERGED',
-  'PR_CLOSED',
-];
-
-/**
  * Facts that were never claimed and can never be delivered: terminal facts,
  * which the reducer, pending counts and delivery never read, and pending facts
  * of ARCHIVED workspaces. ARCHIVED is final, polling observes only READY
@@ -111,6 +103,31 @@ function prunableTerminalEventWhere(before: Date) {
     createdAt: { lt: before },
     ...unclaimedDeliveryWhere,
   } satisfies Prisma.WorkspacePREventWhereInput;
+}
+
+/**
+ * Delete whole settled delivery units, members before their delivery, in the
+ * caller's transaction, after confirming each unit again. A delete count that
+ * differs from the confirmed units throws, so the transaction rolls back
+ * rather than split a delivery from its members.
+ */
+async function deletePrunableDeliveries(tx: Prisma.TransactionClient, ids: string[], before: Date) {
+  const units = await confirmPrunableDeliveryUnits(tx, ids, before);
+  const unitIds = units.map((unit) => unit.id);
+  const memberIds = units.flatMap((unit) => unit.memberIds);
+  if (!unitIds.length) {
+    return { deliveries: 0, events: 0 };
+  }
+  const events = await tx.workspacePREvent.deleteMany({
+    where: { id: { in: memberIds }, batchId: { in: unitIds } },
+  });
+  const removed = await tx.workspacePRDelivery.deleteMany({
+    where: { id: { in: unitIds }, state: { in: PRUNABLE_DELIVERY_STATES } },
+  });
+  if (events.count !== memberIds.length || removed.count !== unitIds.length) {
+    throw new Error('PR delivery retention would split a delivery from its members');
+  }
+  return { deliveries: removed.count, events: events.count };
 }
 
 const legacyFields = [
@@ -629,6 +646,50 @@ class WorkspacePrEventAccessor {
       where: { ...where, id: { in: rows.map((row) => row.id) } },
     });
     return deleted.count;
+  }
+  /**
+   * Delete one bounded batch of settled delivery units that no reader needs:
+   * DELIVERED, CANCELLED or SUPERSEDED deliveries settled before `before`
+   * whose every member is an old PR fact without legacy evidence, of an
+   * ARCHIVED workspace or of an earlier event epoch than its workspace's
+   * current one (see `prunableDeliveryUnitSql`). A delivery and all of its
+   * members go in one transaction or not at all. Deliveries are visited in ID
+   * order after `afterId`; pass `lastId` back to continue.
+   */
+  async pruneSettledDeliveries(input: { before: Date; afterId: string; limit: number }) {
+    const ids = await findPrunableDeliveryIds(prisma, input);
+    const lastId = ids.at(-1) ?? null;
+    if (!lastId) {
+      return { selected: 0, lastId, deliveries: 0, events: 0 };
+    }
+    const deleted = await prisma.$transaction((tx) =>
+      deletePrunableDeliveries(tx, ids, input.before)
+    );
+    return { selected: ids.length, lastId, ...deleted };
+  }
+  /**
+   * Remove the PR's review list from the observation of facts written before
+   * #3288, in one window of `limit` rows in ID order after `afterId`. Only
+   * `observation.actionableReviews` (to `[]`) and `observation.resolvedReviewIds`
+   * (removed) change; a row that does not parse as a PR fact is left alone.
+   * Returns the window size, its last ID (the next cursor) and rows rewritten.
+   */
+  async slimReviewLists(input: { afterId: string; limit: number }) {
+    const window = await scanReviewListWindow(prisma, input);
+    if (!window.carrierIds.length) {
+      return { scanned: window.scanned, lastId: window.lastId, slimmed: 0 };
+    }
+    const slimmed = await prisma.$transaction(async (tx) => {
+      const ids = await filterParsedReviewListCarriers(tx, window.carrierIds);
+      if (!ids.length) {
+        return 0;
+      }
+      return Number(
+        await tx.$executeRaw`UPDATE "WorkspacePREvent" SET "payload" = ${withoutReviewListSql}
+          WHERE "id" IN (${Prisma.join(ids)}) AND ${carriesReviewListSql}`
+      );
+    });
+    return { scanned: window.scanned, lastId: window.lastId, slimmed };
   }
   supersede(tx: Prisma.TransactionClient, ids: string[]) {
     return tx.workspacePREvent.updateMany({
