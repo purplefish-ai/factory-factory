@@ -100,13 +100,13 @@ describe('check-service-accessor-boundaries', () => {
   it('tracks delivery reader functions through service aliases into a capsule barrel', () => {
     const result = runChecker([
       {
-        path: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor.ts',
+        path: 'src/backend/services/workspace/resources/workspace-pr-ledger-reads.ts',
         content: 'export function readDeliveryEvents() {}',
       },
       {
         path: 'src/backend/services/workspace/service/read.ts',
         content:
-          "import {readDeliveryEvents} from '../resources/workspace-pr-delivery.accessor'; export {readDeliveryEvents as aliasedReader};",
+          "import {readDeliveryEvents} from '../resources/workspace-pr-ledger-reads'; export {readDeliveryEvents as aliasedReader};",
       },
       {
         path: 'src/backend/services/workspace/index.ts',
@@ -116,6 +116,25 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('raw persistence accessor');
     expect(result.output).toContain('readDeliveryEvents');
+  });
+
+  it('rejects the PR delivery accessor re-exported from a capsule barrel', () => {
+    const result = runChecker([
+      {
+        path: 'src/backend/services/workspace/resources/workspace-pr-delivery.accessor.ts',
+        content: 'export const workspacePrDeliveryAccessor = {};',
+      },
+      {
+        path: 'src/backend/services/workspace/index.ts',
+        content:
+          "export { workspacePrDeliveryAccessor } from './resources/workspace-pr-delivery.accessor';\n",
+      },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      'capsule barrel exposes raw persistence accessor workspacePrDeliveryAccessor'
+    );
   });
 
   it('allows owner-internal deep accessor imports', () => {
