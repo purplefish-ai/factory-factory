@@ -20,18 +20,28 @@ no previous one it could use, although the epoch's ledger was not empty:
 When `previous` is null, or merged or closed while the PR is open, the
 comparison restarts: every fact that holds now is stated unless this epoch's
 ledger (queued, in-flight and delivered facts) shows the recipient was told it
-or has it queued. The reducer's comments give the rule for each kind. Two parts
-are not obvious:
+or has it queued. A failure is still stated only once it is due under the
+[announcement rule](2026-11-22-ci-failures-are-announced-when-the-run-finishes.md).
+The reducer's comments give the rule for each kind. Two parts are not obvious:
 
 - On a restart the ledger, not the stored `ciFailure.announced`, says whether a
   failure was announced: a closure supersedes a queued announcement that the
-  memory still counts, and a lost baseline forgets a delivered one.
+  memory still counts, and a lost baseline loses the memory of a delivered one,
+  which the ledger still holds.
 - A closure is recognised by the key of the current transition sequence, so a
   reopening advances the sequence even without a baseline and a later closure is
   a new fact.
 
-The ledger counts only rows keyed for this epoch and PR. The accessor reads no
-other, so a new epoch states everything, as before.
+Every decision about what the recipient was told reads only rows keyed for this
+epoch and PR, and a row without a key counts as neither: wrongly counting a row
+loses a fact, wrongly ignoring one repeats it. The accessor reads no other rows,
+so a new epoch states everything, as before.
+
+Feedback in flight for the current head counts as told, as it does with a
+readable baseline. A claim that receipt proves absent is requeued under its key
+on the same head; one cancelled without a replacement belongs to a destination
+that changed, and the new epoch states everything again, or was discarded by the
+user, which by design resends nothing.
 
 The same question settles one case with a baseline. When the stored observation
 is failing on the same head with other failing checks, CI kept failing while the

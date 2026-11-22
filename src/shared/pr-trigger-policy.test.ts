@@ -269,12 +269,13 @@ it('recovers against the latest delivered failure even when ledger reads are uno
   const first = {
     ...reduce(redObservation).events[0]!,
     id: 'first',
-    deduplicationKey: 'first-key',
+    // Keys of this epoch: the reducer reads only those as what the recipient was told.
+    deduplicationKey: 'p:epoch:1:first-key',
   };
   const latest = {
     ...first,
     id: 'latest',
-    deduplicationKey: 'latest-key',
+    deduplicationKey: 'p:epoch:1:latest-key',
     payload: {
       ...first.payload,
       observation: { ...redObservation, observedAt: '2026-10-08T00:02:00.000Z' },
@@ -285,7 +286,10 @@ it('recovers against the latest delivered failure even when ledger reads are uno
       deliveredEvents: [latest, first],
     }).events
   ).toMatchObject([
-    { kind: 'CI_RECOVERED', deduplicationKey: 'p:epoch:1:CI_RECOVERED:head-1:latest-key:1' },
+    {
+      kind: 'CI_RECOVERED',
+      deduplicationKey: 'p:epoch:1:CI_RECOVERED:head-1:p:epoch:1:latest-key:1',
+    },
   ]);
 });
 

@@ -108,10 +108,12 @@ export function reducePRObservation(input: {
   const lastTransitionWas = (state: string) =>
     known.some((e) => e.deduplicationKey === keyOf(`${state}:${input.transitionSequence}`));
   const terminal = isTerminal(current.prState);
+  const ofEpoch = (event: PREventSummary) => event.deduplicationKey?.startsWith(prefix) ?? false;
+  const delivered = deliveredEvents.filter(ofEpoch);
   const supersededEventIds = pendingEvents
-    .filter((event) => eventIsSuperseded(event, current, terminal, deliveredEvents))
+    .filter((event) => eventIsSuperseded(event, current, terminal, delivered))
     .map((event) => event.id);
-  const ledger = epochLedger(input, prefix, supersededEventIds);
+  const ledger = epochLedger(input, ofEpoch, delivered, supersededEventIds);
   const storedObservation = nextStoredObservation(previous, current, terminal, ledger);
   if (terminal) {
     if (previous ? previous.prState !== current.prState : !lastTransitionWas(current.prState)) {
@@ -124,7 +126,10 @@ export function reducePRObservation(input: {
     return { events, supersededEventIds, nextTransitionSequence, storedObservation };
   }
   // A reopening is a transition, so a later closure is a new fact even without a baseline.
-  if (previous ? isTerminal(previous.prState) : lastTransitionWas('CLOSED')) {
+  const reopened = previous
+    ? isTerminal(previous.prState)
+    : lastTransitionWas('CLOSED') || lastTransitionWas('MERGED');
+  if (reopened) {
     nextTransitionSequence++;
   }
   nextTransitionSequence = addCITransition(input, add, nextTransitionSequence, ledger);
@@ -140,17 +145,19 @@ export function reducePRObservation(input: {
 }
 
 /**
- * The ledger rows of this epoch. The accessor reads no other, so this only
- * matters to a caller that hands over rows keyed for another epoch or PR: they
- * describe what an earlier destination was told, not this one.
+ * The ledger rows of this epoch: every decision about what the recipient was
+ * told or has queued reads only these. The accessor reads no other, so this
+ * only matters to a caller that hands over rows keyed for another epoch or PR,
+ * which describe what an earlier destination was told, not this one. A row
+ * without a key is not shown to be this epoch's, so it is not evidence either:
+ * the cost is a fact stated again, not a fact lost.
  */
 function epochLedger(
   input: ReductionInput,
-  prefix: string,
+  ofEpoch: (event: PREventSummary) => boolean,
+  delivered: readonly PREventSummary[],
   supersededEventIds: readonly string[]
 ): Ledger {
-  const ofEpoch = (event: PREventSummary) => event.deduplicationKey?.startsWith(prefix) ?? true;
-  const delivered = input.deliveredEvents.filter(ofEpoch);
   return {
     pending: input.pendingEvents.filter((e) => ofEpoch(e) && !supersededEventIds.includes(e.id)),
     told: [...delivered, ...(input.inFlightEvents ?? []).filter(ofEpoch)],
@@ -370,7 +377,7 @@ function eventIsSuperseded(
   );
 }
 function addCITransition(input: ReductionInput, add: AddFact, sequence: number, ledger: Ledger) {
-  const { previous, current, deliveredEvents } = input;
+  const { previous, current } = input;
   if (current.ciStatus === 'FAILURE') {
     const signature = prFailureSignature(current);
     const queued = ledger.pending.some(
@@ -386,7 +393,7 @@ function addCITransition(input: ReductionInput, add: AddFact, sequence: number, 
     }
   } else if (current.ciStatus === 'SUCCESS') {
     const failure = latest(
-      deliveredEvents.filter(
+      ledger.delivered.filter(
         (e) => e.kind === 'CI_FAILED' && e.payload.observation.headSha === current.headSha
       )
     );
@@ -420,12 +427,12 @@ type Review = PRStoredObservation['actionableReviews'][number];
  * reviews are the stored ones, so feedback an incomplete read kept is also
  * re-emitted on a new head instead of being adopted by it unannounced.
  */
-function reviewIsNew(input: ReductionInput, review: Review) {
+function reviewIsNew(input: ReductionInput, ledger: Ledger, review: Review) {
   const { previous, current } = input;
   return (
     !previous?.actionableReviews.some((r) => sameReview(r, review)) ||
     (previous.headSha !== current.headSha &&
-      !reviewsOf(input.deliveredEvents).some((r) => sameReview(r, review)))
+      !reviewsOf(ledger.delivered).some((r) => sameReview(r, review)))
   );
 }
 
@@ -451,7 +458,9 @@ function addReviewTransitions(
 ) {
   const { current } = input;
   for (const review of actionableReviews) {
-    if (ledger.restart ? !reviewIsStated(ledger, current, review) : reviewIsNew(input, review)) {
+    if (
+      ledger.restart ? !reviewIsStated(ledger, current, review) : reviewIsNew(input, ledger, review)
+    ) {
       sequence++;
       add(
         { kind: 'REVIEW_FEEDBACK', reviews: [review] },

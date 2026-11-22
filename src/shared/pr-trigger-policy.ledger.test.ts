@@ -134,15 +134,19 @@ describe('without a usable baseline, the ledger decides what is restated', () =>
       'CI_FAILED',
     ]);
     // A failure of other checks on the same head is a new announcement too.
-    const changed = { ...again, checks: [{ ...failed, completedAt: at(2) }] };
+    const changed = { ...again, checks: [failed, { ...failed, identity: 'run-3', name: 'lint' }] };
     expect(kindsOf(reduce(changed, null, { deliveredEvents: [announced] }))).toEqual(['CI_FAILED']);
   });
 
   it('keeps a failure announced when the baseline is lost before its run finishes', () => {
     // The failure was announced at the 30-minute limit while a check kept running.
-    const unsettled = { ...redObservation, checks: [failed, running], observedAt: at(40) };
-    const delivered = { deliveredEvents: [{ ...first.events[0]!, id: 'overdue' }] };
-    const lost = reduce(unsettled, null, delivered);
+    const unsettled = { ...redObservation, checks: [failed, running] };
+    const opened = reduce(unsettled);
+    expect(opened.events).toEqual([]);
+    const overdue = reduce({ ...unsettled, observedAt: at(30) }, opened.storedObservation);
+    expect(kindsOf(overdue)).toEqual(['CI_FAILED']);
+    const delivered = { deliveredEvents: [{ ...overdue.events[0]!, id: 'overdue' }] };
+    const lost = reduce({ ...unsettled, observedAt: at(40) }, null, delivered);
     expect(lost.events).toEqual([]);
     expect(lost.storedObservation.ciFailure?.announced).toBe(true);
     const settled = { ...unsettled, checks: [failed], observedAt: at(41) };
@@ -189,10 +193,42 @@ describe('without a usable baseline, the ledger decides what is restated', () =>
     ).toEqual([]);
   });
 
+  it('keeps feedback in flight through a lost baseline and an incomplete read', () => {
+    // The other facts were received; the feedback is claimed but not yet received.
+    const received = facts('told').filter((e) => e.kind !== 'REVIEW_FEEDBACK');
+    const claimed = facts('claimed').filter((e) => e.kind === 'REVIEW_FEEDBACK');
+    const ledger = { ...after, deliveredEvents: received, inFlightEvents: claimed };
+    const unread = { ...open, actionableReviews: [], reviewsComplete: false, observedAt: at(1) };
+    const lost = reduce(unread, null, ledger);
+    expect(lost.events).toEqual([]);
+    expect(lost.storedObservation.actionableReviews).toEqual([review]);
+    // Receipt recovery proves the claim absent and requeues the fact under its key;
+    // the next complete read neither drops nor repeats it.
+    const requeued = claimed.map((e) => ({ ...e, id: 'requeued' }));
+    const read = reduce({ ...open, observedAt: at(2) }, lost.storedObservation, {
+      deliveredEvents: received,
+      pendingEvents: requeued,
+      transitionSequence: lost.nextTransitionSequence,
+    });
+    expect(read).toMatchObject({ events: [], supersededEventIds: [] });
+    // Claimed for an earlier head, a requeued copy would be superseded, so it is stated again.
+    const pushed = { ...unread, headSha: 'head-2' };
+    expect(kindsOf(reduce(pushed, null, ledger))).toContain('REVIEW_FEEDBACK');
+  });
+
   it('ignores ledger rows of another epoch, whose destination was another one', () => {
     expect(kindsOf(reduce(open, null, { eventEpoch: 2, deliveredEvents: facts('old') }))).toEqual(
       everything
     );
+    // Nor does a delivered failure of another epoch get a recovery in this one.
+    const green = { ...redObservation, ciStatus: 'SUCCESS' as const, checks: [] };
+    const old = { eventEpoch: 2, deliveredEvents: facts('old') };
+    expect(reduce(green, redObservation, old).events).toEqual([]);
+  });
+
+  it('does not take a row without a deduplication key for this epoch', () => {
+    const unkeyed = facts('unkeyed').map(({ deduplicationKey: _key, ...e }) => e);
+    expect(kindsOf(reduce(open, null, { deliveredEvents: unkeyed }))).toEqual(everything);
   });
 
   it('reports a merge or closure without a baseline once per transition', () => {
@@ -208,6 +244,15 @@ describe('without a usable baseline, the ledger decides what is restated', () =>
         expect(reduce(ended, null, { hashIdentity, ...sequence, [ledger]: [fact] }).events).toEqual(
           []
         );
+      }
+      // Observed open again without a baseline, as with one, the sequence advances.
+      const open = { ...green, observedAt: at(2) };
+      const after = { hashIdentity, deliveredEvents: [fact] };
+      for (const baseline of [ending.storedObservation, null]) {
+        expect(
+          reduce(open, baseline, { ...after, transitionSequence: ending.nextTransitionSequence })
+            .nextTransitionSequence
+        ).toBe(ending.nextTransitionSequence + 1);
       }
     }
     // Closed, reopened and closed again: the second closure is a new fact.
