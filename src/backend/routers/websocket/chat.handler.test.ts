@@ -37,6 +37,17 @@ function createLogger() {
   };
 }
 
+/** The idle check the handler handed over with its last release. */
+function releasedIdleCheck(
+  domain: Pick<AppContext['services']['sessionDomainService'], 'releaseViewerless'>
+) {
+  const isIdle = vi.mocked(domain.releaseViewerless).mock.calls.at(-1)?.[1];
+  if (!isIdle) {
+    throw new Error('The session was not released');
+  }
+  return isIdle;
+}
+
 function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = sessionEventBus) {
   const logger = createLogger();
 
@@ -379,6 +390,7 @@ describe('createChatUpgradeHandler', () => {
       'session-1',
       expect.any(Function)
     );
+    expect(releasedIdleCheck(sessionDomainService)()).toBe(true);
   });
 
   it.each([false, true])(
@@ -654,7 +666,7 @@ describe('createChatUpgradeHandler', () => {
     );
   });
 
-  it('clears in-memory state when the last viewer disconnects from a stopped session', () => {
+  it('releases the store, idle until a viewer or runtime returns, when the last viewer leaves a stopped session', () => {
     const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
@@ -688,9 +700,20 @@ describe('createChatUpgradeHandler', () => {
       'session-1',
       expect.any(Function)
     );
+    const isIdle = releasedIdleCheck(sessionDomainService);
+    expect(isIdle()).toBe(true);
+    chatConnectionRegistry.register('conn-2', {
+      ws: new MockWebSocket() as unknown as WebSocket,
+      dbSessionId: 'session-1',
+      workingDir: null,
+    });
+    expect(isIdle()).toBe(false);
+    chatConnectionRegistry.unregister('conn-2');
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
+    expect(isIdle()).toBe(false);
   });
 
-  it('does not clear in-memory state when the disconnected session is still running', () => {
+  it('does not release the store when the disconnected session is still running', () => {
     const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
@@ -721,7 +744,7 @@ describe('createChatUpgradeHandler', () => {
     expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
   });
 
-  it('waits for in-flight message handling before clearing disconnected session state', async () => {
+  it('waits for in-flight message handling before releasing disconnected session state', async () => {
     const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);

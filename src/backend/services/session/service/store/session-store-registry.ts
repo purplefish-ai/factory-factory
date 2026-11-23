@@ -16,9 +16,6 @@ export class SessionStoreRegistry {
     ReturnType<typeof setTimeout>
   >();
 
-  /** `onActivate` hears every write that puts a store to use. */
-  constructor(private readonly onActivate: (sessionId: string) => void = () => undefined) {}
-
   isCurrentStore(sessionId: string, store: SessionStore): boolean {
     return this.stores.get(sessionId) === store;
   }
@@ -48,7 +45,6 @@ export class SessionStoreRegistry {
   }
 
   getOrCreateActive(sessionId: string): SessionStore {
-    this.onActivate(sessionId);
     const store = this.getOrCreate(sessionId);
     if (this.preservationOnlyStores.get(sessionId) === store) {
       this.preservationOnlyStores.delete(sessionId);

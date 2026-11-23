@@ -11,9 +11,9 @@ paths that start with `src/` are from the repository root.
 
 The module owns the per-session stores and their registry, how long an idle
 store outlives its last viewer, what a runtime snapshot keeps, which change
-publishes a snapshot and which a smaller delta, replay events, provider history
-and resume fences that outlive store eviction, and the slash-command cache. It
-does not own:
+publishes a snapshot and which a smaller delta, replay events, the provider
+history fences and resume fences that outlive store eviction, and the
+slash-command cache. It does not own:
 
 - Socket subscriptions and delivery to viewers:
   `src/backend/routers/websocket/`, reached through `sessionEventBus`
@@ -35,8 +35,10 @@ directly.
 ## Invariants
 
 - A hydrated store whose last viewer left without a running runtime is kept for
-  10 minutes, at most 12 at once (the oldest is cleared early). A load or any
-  activating write ends the countdown; clearing the session, clearing all
+  10 minutes, at most 12 at once (the oldest is cleared early). A load ends the
+  countdown. A store in use when it ends (a viewer, a running runtime, queued or
+  dispatching work) is not cleared: it counts down again, or, pushed out by the
+  cap, is left to the owner of that use. Clearing the session, clearing all
   sessions and the shutdown step end it without leaving a timer.
   `session-store-retention.test.ts`,
   `src/backend/routers/websocket/chat-load.handler.test.ts`,

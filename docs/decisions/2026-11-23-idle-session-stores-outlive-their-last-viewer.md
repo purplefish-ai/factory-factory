@@ -26,11 +26,15 @@ both numbers.
 
 - Only a store whose history hydration finished is kept; any other is cleared at
   once, as before.
-- A load claims the store and ends its countdown. So does any write that puts
-  the store to use (`getOrCreateActive`), which hands it back to the owners that
-  cleared it before: the next viewer to leave, or the workflow finalizer when a
-  runtime stops. When the countdown ends, the chat handler's condition (no
-  running runtime, no viewer) is checked again before the store is cleared.
+- A load claims the store and ends its countdown. Other writes do not: a write
+  that ended it would leave the store with no countdown and no file check on the
+  next load. Instead, when the countdown ends the store is cleared only if it is
+  unused: the chat handler's condition (no running runtime, no viewer) holds
+  again and, as for the workflow finalizer, it holds no queued or dispatching
+  work. A store in use counts down again; one pushed out by the cap while in use
+  is left to the owner of that use (the next viewer to leave, the finalizer when
+  its runtime stops). A claimed store is discarded by the file check below only
+  if it still holds no queued work.
 - Every clear still goes through `SessionDomainService.clearSession`, so
   `session_cleared` and the projection cache's TTL start when the store is
   actually cleared. `clearSession`, `clearAllSessions`, permanent deletion and
@@ -57,8 +61,9 @@ both numbers.
 - A store kept after its runtime stopped has seen that run, so its file has
   changed and the next load reads the file again; this matches the previous
   behaviour and keeps the store from going stale.
-- Queued work in a kept store, which the disconnect used to drop, now lasts up
-  to 10 minutes and holds an application update until it is cleared.
+- Queued work in a kept store, which the disconnect used to drop, now stays
+  until it is consumed, like queued work in any store without a viewer, and
+  holds an application update until then.
 - Rebuilding a Claude session from an unchanged file produced the same row IDs
   and orders in every measured session; a kept store keeps them by construction,
   including rows added live.

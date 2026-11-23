@@ -131,7 +131,7 @@ export class SessionDomainService extends EventEmitter {
   isMessageAdmissionPending(message: QueuedMessage): boolean {
     return this.pendingAdmissions.has(message);
   }
-  private readonly registry = new SessionStoreRegistry((id) => this.retention.cancel(id));
+  private readonly registry = new SessionStoreRegistry();
   private readonly retention = new SessionStoreRetention(this.registry, (id) =>
     this.clearSession(id, { preserveRejections: true })
   );

@@ -1,5 +1,5 @@
 import type { SessionStoreRegistry } from './session-store-registry';
-import type { HistoryFileIdentity } from './session-store.types';
+import type { HistoryFileIdentity, SessionStore } from './session-store.types';
 
 /** How long an idle session's store outlives its last viewer. */
 export const SESSION_STORE_RETENTION_GRACE_MS = 10 * 60_000;
@@ -9,18 +9,25 @@ export const MAX_RETAINED_SESSION_STORES = 12;
 export interface RetainedStoreClaim {
   /** The history file the store was hydrated from; absent when the read could not identify it. */
   readonly historyFile: HistoryFileIdentity | undefined;
-  /** Clear the claimed store, unless it has been replaced since. */
+  /** Clear the claimed store, unless it has been replaced or holds queued work since. */
   discard(): void;
 }
 
 type Retained = { timer: ReturnType<typeof setTimeout>; isIdle: () => boolean };
 
+/** Queued or dispatching work keeps a store, as it keeps any store without a viewer. */
+function holdsWork(store: SessionStore | undefined): boolean {
+  return Boolean(store && (store.queue.length > 0 || (store.dispatching?.size ?? 0) > 0));
+}
+
 /**
  * Keeps a hydrated store for a grace period after its last viewer leaves, so a
  * viewer that comes back replays it instead of rebuilding it from provider
- * history (which renumbers rows). Every clear goes through `clear`, the session
- * domain's `clearSession`; a load or any write that activates the store ends
- * its countdown. Why and the numbers:
+ * history. Every clear goes through `clear`, the session domain's
+ * `clearSession`. A load ends the countdown. A store in use when it ends (a
+ * viewer, a running runtime, queued work) is not cleared: its countdown starts
+ * again, or, pushed out by the cap, it is left to the owner of that use. Why
+ * and the numbers:
  * docs/decisions/2026-11-23-idle-session-stores-outlive-their-last-viewer.md.
  */
 export class SessionStoreRetention {
@@ -38,9 +45,9 @@ export class SessionStoreRetention {
   ) {}
 
   /**
-   * The last viewer left a session without a running runtime. `isIdle` is asked
-   * again before the store is cleared; a store in use by then is left to the
-   * owner of that use. A store that never finished hydrating is cleared now.
+   * The last viewer left a session without a running runtime. `isIdle` (no
+   * viewer, no running runtime) is asked again before the store is cleared. A
+   * store that never finished hydrating is cleared now.
    */
   release(sessionId: string, isIdle: () => boolean): void {
     this.cancel(sessionId);
@@ -48,14 +55,16 @@ export class SessionStoreRetention {
       this.clear(sessionId);
       return;
     }
-    const timer = setTimeout(() => this.expire(sessionId), this.limits.graceMs);
-    timer.unref();
-    this.retained.set(sessionId, { timer, isIdle });
+    this.retain(sessionId, isIdle);
     for (const oldest of this.retained.keys()) {
       if (this.retained.size <= this.limits.maxRetained) {
         break;
       }
-      this.expire(oldest);
+      const entry = this.retained.get(oldest);
+      this.cancel(oldest);
+      if (entry && this.isUnused(oldest, entry)) {
+        this.clear(oldest);
+      }
     }
   }
 
@@ -85,7 +94,7 @@ export class SessionStoreRetention {
     return {
       historyFile: store.historyFile,
       discard: () => {
-        if (this.registry.isCurrentStore(sessionId, store)) {
+        if (this.registry.isCurrentStore(sessionId, store) && !holdsWork(store)) {
           this.clear(sessionId);
         }
       },
@@ -107,10 +116,25 @@ export class SessionStoreRetention {
     }
   }
 
+  private retain(sessionId: string, isIdle: () => boolean): void {
+    const timer = setTimeout(() => this.expire(sessionId), this.limits.graceMs);
+    timer.unref();
+    this.retained.set(sessionId, { timer, isIdle });
+  }
+
   private expire(sessionId: string): void {
     const entry = this.retained.get(sessionId);
-    if (entry && this.cancel(sessionId) && entry.isIdle()) {
-      this.clear(sessionId);
+    if (!(entry && this.cancel(sessionId))) {
+      return;
     }
+    if (this.isUnused(sessionId, entry)) {
+      this.clear(sessionId);
+    } else {
+      this.retain(sessionId, entry.isIdle);
+    }
+  }
+
+  private isUnused(sessionId: string, entry: Retained): boolean {
+    return entry.isIdle() && !holdsWork(this.registry.getExisting(sessionId));
   }
 }

@@ -77,7 +77,7 @@ describe('retaining an idle store after its last viewer leaves', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('keeps a store that became used again when its grace period ends', () => {
+  it('restarts the countdown of a store in use when its grace period ends', () => {
     const current = hydrate('s1');
     let viewers = 0;
     domain.releaseViewerless('s1', () => viewers === 0);
@@ -86,6 +86,11 @@ describe('retaining an idle store after its last viewer leaves', () => {
     vi.advanceTimersByTime(SESSION_STORE_RETENTION_GRACE_MS);
     expect(current()).toBe(true);
     expect(cleared).toEqual([]);
+    expect(vi.getTimerCount()).toBe(1);
+
+    viewers = 0;
+    vi.advanceTimersByTime(SESSION_STORE_RETENTION_GRACE_MS);
+    expect(cleared).toEqual(['s1']);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -138,7 +143,7 @@ describe('retaining an idle store after its last viewer leaves', () => {
     expect(domain.claimRetainedStore('s1')).toBeUndefined();
   });
 
-  it('stops counting down when the store is used again without a viewer', () => {
+  it('keeps a store holding queued work past its grace period, still claimable', () => {
     const current = hydrate('s1');
     domain.releaseViewerless('s1', idle);
     domain.enqueue('s1', queued('background'));
@@ -146,7 +151,25 @@ describe('retaining an idle store after its last viewer leaves', () => {
     vi.advanceTimersByTime(SESSION_STORE_RETENTION_GRACE_MS * 2);
     expect(current()).toBe(true);
     expect(domain.getQueueLength('s1')).toBe(1);
-    expect(vi.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(1);
+    expect(domain.claimRetainedStore('s1')).toEqual({
+      historyFile,
+      discard: expect.any(Function),
+    });
+  });
+
+  it('leaves a store in use to its owner when the cap pushes it out', () => {
+    const busy = hydrate('s0');
+    domain.releaseViewerless('s0', idle);
+    domain.enqueue('s0', queued('background'));
+    for (let index = 1; index <= MAX_RETAINED_SESSION_STORES; index += 1) {
+      hydrate(`s${index}`);
+      domain.releaseViewerless(`s${index}`, idle);
+    }
+    expect(cleared).toEqual([]);
+    expect(busy()).toBe(true);
+    expect(domain.claimRetainedStore('s0')).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(MAX_RETAINED_SESSION_STORES);
   });
 
   it('claims only retained stores hydrated from a history file', () => {
@@ -179,12 +202,25 @@ describe('retaining an idle store after its last viewer leaves', () => {
     expect(cleared).toEqual(['s1']);
   });
 
+  it('does not discard a claimed store that took on queued work during the check', () => {
+    const current = hydrate('s1');
+    domain.releaseViewerless('s1', idle);
+    const claim = domain.claimRetainedStore('s1');
+    domain.enqueue('s1', queued('background'));
+    claim?.discard();
+    expect(current()).toBe(true);
+    expect(cleared).toEqual([]);
+  });
+
   it('drops the recorded history file when hydration is marked again without one', () => {
     hydrate('s1');
     domain.resetProviderHistory('s1', 'provider-2');
     domain.markHistoryHydrated('s1', 'jsonl');
     domain.releaseViewerless('s1', idle);
-    expect(domain.claimRetainedStore('s1')?.historyFile).toBeUndefined();
+    expect(domain.claimRetainedStore('s1')).toEqual({
+      historyFile: undefined,
+      discard: expect.any(Function),
+    });
   });
 });
 

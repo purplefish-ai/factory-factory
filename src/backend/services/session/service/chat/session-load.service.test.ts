@@ -177,6 +177,15 @@ describe('loading a store retained after its last viewer left', () => {
     expect(test.calls).toEqual(['discard', 'history', 'lifecycle']);
   });
 
+  it('leaves its countdown running when the session is not found', async () => {
+    const test = setup();
+    const claim = vi.spyOn(test.deps.domain, 'claimRetainedStore');
+    test.retain(await historyFile());
+    test.removeSession();
+    await test.service.prepareLoad({ sessionId: 's1' });
+    expect(claim).not.toHaveBeenCalled();
+  });
+
   it('leaves it alone while its runtime is alive', async () => {
     const test = setup();
     test.setRuntime(alive);

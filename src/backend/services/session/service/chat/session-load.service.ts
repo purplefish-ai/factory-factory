@@ -74,15 +74,14 @@ export class SessionLoadService {
     loadRequestId?: string;
   }): Promise<SessionLoadResult> {
     const { sessionId, loadRequestId } = input;
-    const retainedStoreChecked = this.checkRetainedStore(sessionId);
     const session = await this.deps.findSession(sessionId);
-    await retainedStoreChecked;
     if (!session) {
       return {
         status: 'error',
         outcome: { replies: [{ type: 'error', error: { kind: 'session_not_found' } }] },
       };
     }
+    await this.checkRetainedStore(sessionId);
     await this.deps.hydrateProviderHistory(sessionId, session);
     await this.deps.hydrateLifecycleEvents(sessionId);
     return {
