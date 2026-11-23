@@ -8,6 +8,52 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.13] - 2026-11-23
+
+### Added
+
+- Show agent provider notices in the session transcript (#3276)
+
+### Changed
+
+- Reduce chat reload and reconnect traffic by reusing cached images and
+  configuration, sending requested replay data only to the requesting viewer,
+  and skipping unchanged slash-command scans (#3298, #3303, #3308)
+- Resize large still-image attachments in the browser before upload. The 10 MB
+  limit applies after resizing (#3297)
+- Speed up chat by reusing recently viewed idle sessions and reducing database
+  work when accepting, dispatching and processing messages (#3307, #3309, #3310)
+- Reduce bandwidth by compressing tRPC responses and large chat, snapshot and
+  log WebSocket messages, sending only new host load samples during steady
+  polling, and shrinking settings and issue list responses (#3294, #3295, #3296,
+  #3301, #3305)
+- Reduce duplicate workspace reads and idle polling by using live workspace
+  snapshots to keep project, session and run-script data current (#3300, #3302,
+  #3304)
+- Load the Quick Chat transcript renderer when Quick Chat first opens, reducing
+  the JavaScript downloaded when opening the Kanban board (#3299)
+- Reduce database reads during PR update delivery and prune obsolete delivery
+  records and payload data (#3290, #3291, #3292)
+- Update the Claude Agent SDK, SQLite driver and development tooling, and make
+  test fixtures wait for explicit events (#3272, #3273, #3274, #3275, #3282,
+  #3283, #3284, #3285, #3286)
+
+### Fixed
+
+- Preserve message boundaries, tool results, reasoning and queued messages
+  across live Agent Client Protocol (ACP) updates, dispatch and transcript
+  replay (#3277, #3278, #3279, #3280, #3281)
+- Prevent missed, stale and duplicate PR updates across new commits, reopened
+  PRs and unreadable stored observations. Consolidate CI failure notices per run
+  (#3288, #3289)
+- Restore Option–Left Arrow and Option–Right Arrow word movement in terminals on
+  macOS (#3293)
+
+### Security
+
+- Keep the encrypted Deepgram API key out of browser settings responses (#3306)
+- Patch Prisma Config's Effect dependency to address GHSA-7589-6fvf-x4pw (#3287)
+
 ## [0.5.12] - 2026-11-17
 
 ### Changed
