@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -8,6 +9,7 @@ import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-que
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
+import { getLiveWorkspaceSnapshot } from '@/client/lib/workspace-queries';
 import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
 import { useWorkspaceSessions } from '@/client/routes/projects/workspaces/use-workspace-sessions';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
@@ -41,6 +43,7 @@ interface UseWorkspaceDataOptions {
 
 export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
 
   const {
     data: workspace,
@@ -61,8 +64,12 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     // toast reports a failure without repeating on every poll.
     meta: { errorToast: "Couldn't sync pull request status." },
     onSuccess: () => {
-      // Refresh workspace data after PR sync
-      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
+      // The sync publishes PR facts to the snapshot stream, whose deltas update
+      // a streamed workspace's detail; refetch only detail the stream does not
+      // carry, such as an archived workspace or one opened while disconnected.
+      if (!getLiveWorkspaceSnapshot(queryClient, workspaceId)) {
+        runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
+      }
     },
   });
 

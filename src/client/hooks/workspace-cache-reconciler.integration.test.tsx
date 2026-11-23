@@ -118,7 +118,7 @@ afterEach(async () => {
 });
 
 describe('shared project query and live connection lifecycle', () => {
-  it('protects a real initial HTTP response arriving after full and changed snapshots', async () => {
+  it('repairs legacy rows from the initial HTTP response arriving after full and changed snapshots', async () => {
     await fixture();
     channel.onMessage?.({
       type: 'snapshot_full',
@@ -132,15 +132,48 @@ describe('shared project query and live connection lifecycle', () => {
       entry: entry({ name: 'newest' }),
       reviewCount: 4,
     });
-    await waitForRequests(2);
+    // The board's own initial read already carries the legacy rows' metadata.
     requests.events[0]!.resolve(list('old bootstrap'));
-    requests.events[1]!.resolve(list('old repair'));
     await vi.waitFor(() =>
       expect(utils.workspace.listForProject.getData({ projectId: 'proj-1' })).toMatchObject({
         workspaces: [{ name: 'newest', githubIssueNumber: 42 }],
         reviewCount: 4,
       })
     );
+    await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(requests.events).toHaveLength(1);
+  });
+
+  it('repairs once more when the initial HTTP response predates a workspace the full snapshot introduces', async () => {
+    await fixture();
+    channel.onMessage?.({
+      type: 'snapshot_full',
+      projectId: 'proj-1',
+      entries: [entry(), entry({ workspaceId: 'ws-2', name: 'created during read' })],
+    });
+    requests.events[0]!.resolve(list());
+    await waitForRequests(2);
+    requests.events[1]!.resolve({
+      workspaces: [
+        ...list().workspaces,
+        {
+          ...projectSnapshotToWorkspace(entry({ workspaceId: 'ws-2' })),
+          worktreePath: '/actual/worktree-2',
+          githubIssueNumber: 7,
+        },
+      ],
+      reviewCount: 99,
+    });
+    await vi.waitFor(() =>
+      expect(utils.workspace.listForProject.getData({ projectId: 'proj-1' })).toMatchObject({
+        workspaces: [
+          { id: 'ws-1', githubIssueNumber: 42 },
+          { id: 'ws-2', name: 'created during read', githubIssueNumber: 7 },
+        ],
+      })
+    );
+    await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(requests.events).toHaveLength(2);
   });
 
   it('protects an empty full against late HTTP membership', async () => {

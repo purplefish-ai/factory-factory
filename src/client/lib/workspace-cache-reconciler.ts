@@ -41,6 +41,8 @@ export class ProjectWorkspaceCacheReconciler {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private hasBaseline = false;
   private reviewCount: number | undefined;
+  // Rows of the last HTTP list this connection accepted, which supplied their metadata.
+  private httpWorkspaceIds = new Set<string>();
   private archiveSettlementGeneration = 0;
   private readonly httpResults = new WeakMap<
     object,
@@ -164,6 +166,7 @@ export class ProjectWorkspaceCacheReconciler {
     this.entries.clear();
     this.hasBaseline = false;
     this.reviewCount = undefined;
+    this.httpWorkspaceIds.clear();
     notifyLiveSnapshotListeners(this.queryClient);
     return this.connection;
   }
@@ -177,6 +180,7 @@ export class ProjectWorkspaceCacheReconciler {
     this.entries.clear();
     this.hasBaseline = false;
     this.reviewCount = undefined;
+    this.httpWorkspaceIds.clear();
     notifyLiveSnapshotListeners(this.queryClient);
     return true;
   }
@@ -253,6 +257,7 @@ export class ProjectWorkspaceCacheReconciler {
       // Do not dispatch success/idle from an old continuation over a newer fetch.
       throw new CancelledError({ revert: true });
     }
+    this.httpWorkspaceIds = new Set(http.data.workspaces.map((workspace) => workspace.id));
     if (!this.hasBaseline) {
       return replaceEqualDeep(previous, this.applyArchiveOverlay(http.data));
     }
@@ -286,6 +291,11 @@ export class ProjectWorkspaceCacheReconciler {
 
   hasWorkspace(workspaceId: string): boolean {
     return this.entries.has(workspaceId);
+  }
+
+  /** Whether the last HTTP list accepted for this connection included the workspace. */
+  hasHttpMetadata(workspaceId: string): boolean {
+    return this.httpWorkspaceIds.has(workspaceId);
   }
 
   acceptsHttpEpoch(requestEpoch: symbol | undefined): boolean {

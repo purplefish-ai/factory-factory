@@ -50,7 +50,9 @@ readers in `src/client/hooks/` that wrap its options:
   (`src/client/hooks/use-live-workspace-snapshot.ts`). Polls for state the
   stream also carries use them to poll less while the stream is live and to
   refetch when it reports a change: the run-script status stops polling while
-  the script is idle, and the session list drops to the slow tier.
+  the script is idle, and the session list drops to the slow tier. The page-load
+  PR sync skips its `workspace.get` refetch while the stream carries the
+  workspace, since the synced PR facts arrive as deltas.
 
 Other tRPC invalidation, cancellation and cache reads may stay as they are,
 because they reuse the options already installed. Query options carry their key

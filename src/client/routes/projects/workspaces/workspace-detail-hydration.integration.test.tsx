@@ -46,7 +46,24 @@ let initStatus: {
   retryAvailability?: { status: 'AVAILABLE' };
 } = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
 let requests = createTestEventLog<(data: WorkspaceDetail) => void>();
+// Set by tests that need init status to arrive after the detail.
+let initStatusRequests: ReturnType<typeof createTestEventLog<() => void>> | undefined;
+let prSyncs = createTestEventLog<string>();
 const detailKey = getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'query');
+const prUrl = 'https://github.com/org/repo/pull/7';
+const pullRequest = {
+  id: 'pr-7',
+  url: prUrl,
+  number: 7,
+  title: 'Open PR',
+  headRefName: 'feat/test',
+  baseRefName: 'main',
+  state: 'OPEN' as const,
+  reviewState: null,
+  ciStatus: 'SUCCESS' as const,
+  hasMergeConflict: false,
+  syncedAt: null,
+};
 function fetched(overrides: Partial<WorkspaceDetail> = {}) {
   return unsafeCoerce<WorkspaceDetail>({
     ...projectSnapshotToWorkspace(entry()),
@@ -71,9 +88,13 @@ function Harness() {
   });
   return null;
 }
-function fixture(seed?: WorkspaceDetail) {
+function fixture(
+  seed?: WorkspaceDetail,
+  initial: typeof initStatus = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' }
+) {
   requests = createTestEventLog<(data: WorkspaceDetail) => void>();
-  initStatus = { status: 'PROVISIONING', hasWorktreePath: false, initOutput: '' };
+  prSyncs = createTestEventLog<string>();
+  initStatus = initial;
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
@@ -94,7 +115,15 @@ function fixture(seed?: WorkspaceDetail) {
                 requests.record(respond);
                 break;
               case 'workspace.getInitStatus':
-                respond(initStatus);
+                if (initStatusRequests) {
+                  initStatusRequests.record(() => respond(initStatus));
+                } else {
+                  respond(initStatus);
+                }
+                break;
+              case 'workspace.syncPRStatus':
+                prSyncs.record(op.path);
+                respond({ success: true, prState: 'OPEN', previousPrState: 'OPEN' });
                 break;
               case 'workspace.listForProject':
                 respond({ workspaces: [], reviewCount: 0 });
@@ -122,7 +151,19 @@ function fixture(seed?: WorkspaceDetail) {
     )
   );
 }
+/** Lets effects and mutation callbacks that follow the last response run and start any request. */
+async function settle() {
+  await vi.waitFor(() => expect(queryClient.isMutating()).toBe(0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+const readyInitStatus = {
+  status: 'READY',
+  hasWorktreePath: true,
+  initOutput: 'setup complete',
+  retryAvailability: { status: 'AVAILABLE' as const },
+};
 afterEach(async () => {
+  initStatusRequests = undefined;
   flushSync(() => root?.unmount());
   root = undefined;
   await queryClient?.cancelQueries();
@@ -292,5 +333,54 @@ describe('workspace detail route hydration', () => {
     );
     const readyInterval = unsafeCoerce<QueryObserverOptions>(query.options).refetchInterval;
     expect(typeof readyInterval === 'function' ? readyInterval(query) : readyInterval).toBe(false);
+  });
+});
+
+describe('workspace page open requests', () => {
+  it('reads a ready, streamed workspace with an open PR once', async () => {
+    initStatusRequests = createTestEventLog<() => void>();
+    fixture(undefined, readyInitStatus);
+    await requests.waitForCount(1);
+    channel.onMessage!({
+      type: 'snapshot_full',
+      projectId: 'proj-1',
+      entries: [entry({ prUrl, prNumber: 7, prState: 'OPEN', prCiStatus: 'SUCCESS' })],
+    });
+    requests.events[0]!(fetched({ prs: [pullRequest] }));
+    await vi.waitFor(() => expect(latest.workspace?.prs).toHaveLength(1));
+    // The page-load PR sync publishes its result through the snapshot stream.
+    await prSyncs.waitForCount(1);
+    // Init status reports the worktree the loaded detail already has.
+    await initStatusRequests.waitForCount(1);
+    initStatusRequests.events[0]!();
+    await settle();
+    expect(requests.events).toHaveLength(1);
+  });
+
+  it('refreshes detail after a PR sync when no snapshot streams the workspace', async () => {
+    fixture(undefined, readyInitStatus);
+    await requests.waitForCount(1);
+    requests.events[0]!(fetched({ prs: [pullRequest] }));
+    await prSyncs.waitForCount(1);
+    await requests.waitForCount(2);
+    requests.events[1]!(fetched({ prs: [{ ...pullRequest, ciStatus: 'FAILURE' }] }));
+    await settle();
+    expect(requests.events).toHaveLength(2);
+    expect(latest.workspace?.prs[0]?.ciStatus).toBe('FAILURE');
+  });
+
+  it('refetches once when init status reports a worktree the loaded detail lacks', async () => {
+    initStatusRequests = createTestEventLog<() => void>();
+    fixture(undefined, readyInitStatus);
+    await requests.waitForCount(1);
+    requests.events[0]!(fetched({ worktreePath: null }));
+    await vi.waitFor(() => expect(latest.workspace).toBeDefined());
+    await initStatusRequests.waitForCount(1);
+    initStatusRequests.events[0]!();
+    await requests.waitForCount(2);
+    requests.events[1]!(fetched());
+    await settle();
+    expect(requests.events).toHaveLength(2);
+    expect(latest.workspace?.worktreePath).toBe('/ready/worktree');
   });
 });
