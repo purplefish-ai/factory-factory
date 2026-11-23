@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { Query, QueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import {
   mergeProjectSnapshotIntoWorkspaceDetail,
@@ -8,6 +8,7 @@ import { trpc } from '@/client/lib/trpc';
 import {
   getProjectWorkspaceCacheReconciler,
   type ProjectWorkspaceCache,
+  projectWorkspaceDetailQueryFilter,
   projectWorkspaceQueryOptions,
   workspaceDetailCacheOptions,
   workspaceDetailQueryOptions,
@@ -169,4 +170,40 @@ export function cancelProjectWorkspaceList(queryClient: QueryClient, projectId: 
     queryKey: getProjectWorkspaceCacheReconciler(queryClient, projectId).queryKey,
     exact: true,
   });
+}
+
+/**
+ * Restarts the project's list and owned detail reads that are in flight or have
+ * no data, and leaves idle cached data alone. Starting or retiring a snapshot
+ * connection means reads already in flight can no longer commit, and an empty
+ * cache needs a read before any baseline arrives; data that is already cached
+ * waits for the next baseline or the HTTP fallback instead.
+ */
+export function restartPendingProjectWorkspaceReads(
+  queryClient: QueryClient,
+  projectId: string
+): Promise<void> {
+  const needsRead = (query: Query) =>
+    query.state.fetchStatus !== 'idle' || query.state.data === undefined;
+  const details = projectWorkspaceDetailQueryFilter(queryClient, projectId);
+  const cache = queryClient.getQueryCache();
+  // Selected before cancelling, because cancellation leaves a read idle.
+  const pending = new Set([
+    ...cache.findAll({
+      queryKey: getProjectWorkspaceCacheReconciler(queryClient, projectId).queryKey,
+      exact: true,
+      predicate: needsRead,
+    }),
+    ...cache.findAll({
+      queryKey: details.queryKey,
+      predicate: (query) => details.predicate(query) && needsRead(query),
+    }),
+  ]);
+  if (!pending.size) {
+    return Promise.resolve();
+  }
+  const filter = { predicate: (query: Query) => pending.has(query) };
+  // Cancellation takes effect synchronously; the returned promise settles later.
+  void queryClient.cancelQueries(filter);
+  return queryClient.invalidateQueries(filter);
 }

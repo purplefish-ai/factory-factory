@@ -10,9 +10,12 @@ import { type QueryClient, useQueryClient } from '@tanstack/react-query';
  *   list once; complete summaries already carry the authoritative nullable path.
  * - snapshot_full is the (re)connect baseline. Any baseline after a
  *   project's first follows a gap (network reconnect, or a switch away and
- *   back) during which deltas were dropped, and legacy entries don't carry
- *   every DB-backed field, so those baselines additionally invalidate the
- *   workspace caches to let them self-heal.
+ *   back) during which deltas were dropped. It makes complete list rows
+ *   current, so those baselines refetch the list only for legacy entries, and
+ *   refetch detail, which carries database fields no entry has.
+ * - A dropped connection waits for the next baseline rather than reading
+ *   everything over HTTP at once; the HTTP fallback runs when the reconnect
+ *   attempt fails or the server reports snapshot_error.
  *
  * Follows the use-log-stream.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
@@ -32,7 +35,10 @@ import {
   createWorkspaceDetailTransitionScope,
   type ProjectWorkspaceDetailTransitions,
 } from '@/client/lib/workspace-detail-snapshot-transitions';
-import { cancelProjectWorkspaceList } from '@/client/lib/workspace-queries';
+import {
+  cancelProjectWorkspaceList,
+  restartPendingProjectWorkspaceReads,
+} from '@/client/lib/workspace-queries';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -63,20 +69,34 @@ function triggerWorkspaceAttention(workspaceId: string): void {
 }
 
 /**
- * Invalidates the workspace caches after any snapshot_full baseline past a
- * project's first. The snapshot patches keep the UI instant; the refetches
- * restore DB-backed fields the snapshot doesn't carry for this project's
- * owned detail queries, including deliberately opened archived workspaces.
+ * Heals the workspace caches after any snapshot_full baseline past a project's
+ * first, which follows a gap whose deltas were dropped.
+ *
+ * Detail carries database fields no snapshot entry has (description, sessions,
+ * init and run-script state, the initial prompt), so this project's owned
+ * detail, including deliberately opened archived workspaces, is refetched where
+ * mounted and marked stale elsewhere. A complete entry carries every list field,
+ * so the baseline has already made those rows and the membership current; the
+ * list is refetched only for legacy entries. (A missing review count is no
+ * reason: the list reads the same server cache and reports 0 for it.) Both join
+ * a read already in flight, which began under this connection.
  */
 function healWorkspaceCachesAfterReconnect(
   utils: TrpcUtils,
   queryClient: QueryClient,
-  projectId: string
+  message: SnapshotFullMessage
 ): void {
+  const { projectId } = message;
   runInBackground(
-    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId))
+    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId), {
+      cancelRefetch: false,
+    })
   );
-  runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
+  if (!message.entries.every((entry) => isCompleteWorkspaceSnapshot(entry))) {
+    runInBackground(
+      utils.workspace.listForProject.invalidate({ projectId }, undefined, { cancelRefetch: false })
+    );
+  }
 }
 
 function seedPendingRequests(
@@ -324,6 +344,10 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       connection: undefined as WorkspaceConnection | undefined,
       opened: false,
       disposed: false,
+      // A connection dropped and no baseline has arrived since.
+      awaitingBaseline: false,
+      // The HTTP fallback already ran during this gap.
+      fellBack: false,
     }),
     [queryClient, projectId]
   );
@@ -339,6 +363,13 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     runInBackground(cancelProjectWorkspaceList(queryClient, projectId));
     runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
   }, [projectId, queryClient, utils]);
+  // Reads begun under the retired connection can no longer commit, and empty
+  // caches need data before the next baseline; cached data waits for it.
+  const restartPendingHttp = useCallback(() => {
+    if (projectId) {
+      runInBackground(restartPendingProjectWorkspaceReads(queryClient, projectId));
+    }
+  }, [projectId, queryClient]);
   useEffect(() => {
     lifecycle.disposed = false;
     const previousEpoch = lifecycle.owner?.captureEpoch();
@@ -367,19 +398,30 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     }
     lifecycle.connection = lifecycle.owner.beginConnection();
     lifecycle.opened = true;
-    // A reconnect begins a fresh epoch, so pending fallback HTTP must restart
-    // after the new token exists rather than carrying the retired HTTP epoch.
-    fallbackToHttp();
-  }, [lifecycle, fallbackToHttp]);
+    // A reconnect begins a fresh epoch, so pending HTTP must restart after the
+    // new token exists rather than carrying the retired epoch. Cached data is
+    // left for this connection's baseline.
+    restartPendingHttp();
+  }, [lifecycle, restartPendingHttp]);
   const onDisconnected = useCallback(() => {
-    if (
-      !lifecycle.disposed &&
-      lifecycle.connection &&
-      lifecycle.owner?.retireConnection(lifecycle.connection)
-    ) {
-      fallbackToHttp();
+    if (lifecycle.disposed) {
+      return;
     }
-  }, [lifecycle, fallbackToHttp]);
+    const retired = Boolean(
+      lifecycle.connection && lifecycle.owner?.retireConnection(lifecycle.connection)
+    );
+    if (lifecycle.awaitingBaseline && !lifecycle.fellBack) {
+      // The reconnect attempt failed: the stream is down, so HTTP brings the
+      // caches up to date once for this gap.
+      lifecycle.fellBack = true;
+      fallbackToHttp();
+    } else if (retired) {
+      // Usually the transport reconnects within a second or two and the next
+      // baseline heals the gap, so only reads the old connection began restart.
+      lifecycle.awaitingBaseline = true;
+      restartPendingHttp();
+    }
+  }, [lifecycle, fallbackToHttp, restartPendingHttp]);
   const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
 
   const handleMessage = useCallback(
@@ -412,8 +454,10 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
             reconciler,
             connection
           );
+          lifecycle.awaitingBaseline = false;
+          lifecycle.fellBack = false;
           if (baselineProjectsRef.current.has(message.projectId)) {
-            healWorkspaceCachesAfterReconnect(utils, queryClient, message.projectId);
+            healWorkspaceCachesAfterReconnect(utils, queryClient, message);
           } else {
             baselineProjectsRef.current.add(message.projectId);
           }

@@ -140,12 +140,13 @@ describe('project reconnect detail healing with real queries', () => {
     expect(queryClient.getQueryData<WorkspaceDetail>(inactiveB.key)?.description).toBe(
       'Cached inactive-b'
     );
+    // Complete entries already made the list current, so only detail is healed.
     expect(
       queryClient.getQueryState([
         ['workspace', 'listForProject'],
         { input: { projectId: 'proj-1' }, type: 'query' },
       ])?.isInvalidated
-    ).toBe(true);
+    ).toBe(false);
 
     // Check the actual healing predicate against real query objects as well as its effects.
     const filter = invalidations.mock.calls[0]![0]!;
