@@ -38,12 +38,13 @@ panels directly, as permitted by the feature boundary rules. Keep
 viewers out of the public barrel; re-exporting them creates an eager path that
 bypasses the existing route and viewer lazy imports.
 
-The board loads Quick Chat (`lazy-quick-chat-sheet.tsx` in the kanban feature)
-on its first open. Quick Chat renders the chat transcript, and with it the
-Markdown renderer (`streamdown`) and the micromark/remark/rehype pipeline, about
-1 MB raw and 265 KB Brotli that the board itself never shows. A static import of
-the chat feature from any board module brings all of it back, whatever the chunk
-holding it is named after.
+The board opens the Quick Chat sheet and its header at once and loads the body
+(`quick-chat-sheet.tsx` in the kanban feature) inside it on the first open.
+Quick Chat renders the chat transcript, and with it the Markdown renderer
+(`streamdown`) and the micromark/remark/rehype pipeline, about 1 MB raw and 265
+KB Brotli that the board itself never shows. A static import of the chat feature
+from any board module brings all of it back, whatever the chunk holding it is
+named after.
 
 `pnpm check:client-chunks` checks individual chunks, a 1,300,000-byte startup
 static closure and the board's static closure. It parses the emitted JavaScript
@@ -53,12 +54,13 @@ plus summed per-file gzip bytes. The build also emits
 repository-relative source modules and the names of the packages bundled into
 it. The gate validates that manifest and rejects file/diff viewer sources
 anywhere in the startup static graph, including when folded into the entry or a
-shared chunk. It finds the board route's chunk by its source module
-(`src/client/routes/projects/workspaces/list.tsx`), rejects any Markdown package
-in that route's static graph, and budgets the files it adds to startup. Missing
-metadata fails closed. Dynamic imports are excluded. To measure another
-production build, pass its assets directory:
-`pnpm check:client-chunks /tmp/client-build/assets`.
+shared chunk. It rejects the Markdown packages it lists (`streamdown`, `marked`,
+`remend`, `react-markdown`, `unified`, `micromark*`, `remark-*`, `rehype-*` and
+`mdast-util-*`) in the startup static graph and in the board route's, which it
+finds by source module (`src/client/routes/projects/workspaces/list.tsx`), and
+budgets the files the board adds to startup. Missing metadata fails closed.
+Dynamic imports are excluded. To measure another production build, pass its
+assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
 
 ## Compression
 

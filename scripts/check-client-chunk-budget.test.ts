@@ -152,6 +152,8 @@ it('allows viewer source modules in dynamically imported shared chunks', () => {
 
 it.each([
   'streamdown',
+  'marked',
+  'remend',
   'react-markdown',
   'micromark',
   'micromark-util-symbol',
@@ -168,6 +170,24 @@ it.each([
     `shared.js: board route static closure must not contain ${markdownPackage}`
   );
 });
+
+it('rejects a markdown package in the startup static closure', () => {
+  const result = check({ 'index-entry.js': 'import "./shared.js";', 'shared.js': '' }, undefined, {
+    'shared.js': ['streamdown'],
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('shared.js: startup static closure must not contain streamdown');
+});
+
+it.each(['hast-util-to-jsx-runtime', 'remarkable-icons', 'unified-config'])(
+  'allows %s, which only resembles a markdown package, in the board route static closure',
+  (name) => {
+    const result = check({ 'list-board.js': 'import "./shared.js";', 'shared.js': '' }, undefined, {
+      'shared.js': [name],
+    });
+    expect(result.status).toBe(0);
+  }
+);
 
 it('allows markdown packages behind a dynamic import from the board route', () => {
   const result = check(

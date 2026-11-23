@@ -32,7 +32,7 @@ it('contains a failed Quick Chat chunk in the sheet and keeps it closable', asyn
     await act(() => chunk.reject(new Error('Failed to fetch Quick Chat chunk')));
     await waitForReact(() =>
       expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toContain(
-        "Couldn't load Quick Chat"
+        "Couldn't show Quick Chat"
       )
     );
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')];

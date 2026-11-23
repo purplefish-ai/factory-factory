@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, type ReactNode, Suspense, useState } from 'react';
 import { Loading } from '@/client/components/loading';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { Button } from '@/components/ui/button';
@@ -10,33 +10,23 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { useKanbanState } from './kanban-context';
+import { createQuickChatScrollMemory } from './use-quick-chat-scroll';
 
-// Quick Chat renders the chat transcript and its markdown renderer, about half a
-// megabyte the board itself never shows. Load it on the first open.
-const QuickChatSheet = lazy(() =>
-  import('./quick-chat-sheet').then((module) => ({ default: module.QuickChatSheet }))
+// Quick Chat renders the chat transcript and its Markdown renderer, about a megabyte
+// the board itself never shows, so its body loads inside the open sheet.
+const QuickChatSheetBody = lazy(() =>
+  import('./quick-chat-sheet').then((module) => ({ default: module.QuickChatSheetBody }))
 );
 
-interface LazyQuickChatSheetProps {
-  workspaceId: string | null;
-  onClose: () => void;
-}
-
-interface QuickChatFallbackSheetProps {
+interface QuickChatSheetFrameProps {
   open: boolean;
-  /** The workspace name, as the loaded sheet titles it. */
-  title: string;
+  title: ReactNode;
   onClose: () => void;
-  failed?: boolean;
+  children: ReactNode;
 }
 
-/** The sheet shown while Quick Chat loads, or when its chunk fails to load. */
-export function QuickChatFallbackSheet({
-  open,
-  title,
-  onClose,
-  failed,
-}: QuickChatFallbackSheetProps) {
+/** The sheet and its header, which open at once while the body loads. */
+export function QuickChatSheetFrame({ open, title, onClose, children }: QuickChatSheetFrameProps) {
   return (
     <Sheet open={open} onOpenChange={(value) => !value && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col p-0">
@@ -46,56 +36,54 @@ export function QuickChatFallbackSheet({
             Chat with the agent for this workspace
           </SheetDescription>
         </SheetHeader>
-        <div className="flex-1 min-h-0">
-          {failed ? (
-            <div role="alert" className="flex flex-col items-center gap-3 p-4 text-sm">
-              Couldn't load Quick Chat. Reload the app to try again.
-              <Button size="sm" onClick={() => window.location.reload()}>
-                Reload
-              </Button>
-            </div>
-          ) : (
-            <Loading size="compact" message="Loading chat…" />
-          )}
-        </div>
+        {children}
       </SheetContent>
     </Sheet>
   );
 }
 
-function QuickChatFallback({
-  workspaceId,
-  onClose,
-  failed,
-}: LazyQuickChatSheetProps & { failed?: boolean }) {
-  const { workspaces } = useKanbanState();
+/** The body's place while its chunk loads, or after it fails to load or render. */
+export function QuickChatUnavailable({ failed = false }: { failed?: boolean }) {
   return (
-    <QuickChatFallbackSheet
-      open={!!workspaceId}
-      title={workspaces?.find((workspace) => workspace.id === workspaceId)?.name ?? 'Quick Chat'}
-      onClose={onClose}
-      failed={failed}
-    />
+    <div className="flex-1 min-h-0">
+      {failed ? (
+        <div role="alert" className="flex flex-col items-center gap-3 p-4 text-sm">
+          Couldn't show Quick Chat. Reload the app to try again.
+          <Button size="sm" onClick={() => window.location.reload()}>
+            Reload
+          </Button>
+        </div>
+      ) : (
+        <Loading size="compact" message="Loading chat…" />
+      )}
+    </div>
   );
 }
 
+function WorkspaceTitle({ workspaceId }: { workspaceId: string | null }) {
+  const { workspaces } = useKanbanState();
+  return workspaces?.find((workspace) => workspace.id === workspaceId)?.name ?? 'Quick Chat';
+}
+
+interface LazyQuickChatSheetProps {
+  workspaceId: string | null;
+  onClose: () => void;
+}
+
 export function LazyQuickChatSheet({ workspaceId, onClose }: LazyQuickChatSheetProps) {
-  // Once opened the sheet stays mounted: it owns per-session scroll positions across
-  // reopenings and plays its own close animation.
-  const [opened, setOpened] = useState(false);
-  if (workspaceId && !opened) {
-    setOpened(true);
-  }
-  if (!(opened || workspaceId)) {
-    return null;
-  }
+  // The body unmounts on close; scroll positions live here so reopening restores them.
+  const [scrollMemory] = useState(createQuickChatScrollMemory);
   return (
-    <ErrorBoundary
-      fallback={<QuickChatFallback workspaceId={workspaceId} onClose={onClose} failed />}
+    <QuickChatSheetFrame
+      open={!!workspaceId}
+      title={<WorkspaceTitle workspaceId={workspaceId} />}
+      onClose={onClose}
     >
-      <Suspense fallback={<QuickChatFallback workspaceId={workspaceId} onClose={onClose} />}>
-        <QuickChatSheet workspaceId={workspaceId} onClose={onClose} />
-      </Suspense>
-    </ErrorBoundary>
+      <ErrorBoundary fallback={<QuickChatUnavailable failed />}>
+        <Suspense fallback={<QuickChatUnavailable />}>
+          <QuickChatSheetBody workspaceId={workspaceId} scrollMemory={scrollMemory} />
+        </Suspense>
+      </ErrorBoundary>
+    </QuickChatSheetFrame>
   );
 }

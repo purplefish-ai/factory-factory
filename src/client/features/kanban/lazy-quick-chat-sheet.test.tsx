@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, useEffect } from 'react';
+import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { waitForReact } from '@/test-utils/react-act';
 import { LazyQuickChatSheet } from './lazy-quick-chat-sheet';
+import type { QuickChatScrollMemory } from './use-quick-chat-scroll';
 
 const chunk = vi.hoisted(() => {
   let resolve: (module: unknown) => void = () => undefined;
@@ -20,9 +21,15 @@ vi.mock('./kanban-context', () => ({
   useKanbanState: () => ({ workspaces: [{ id: 'w1', name: 'Fix login' }] }),
 }));
 
-const mounts = vi.fn();
-function LoadedQuickChatSheet({ workspaceId }: { workspaceId: string | null }) {
-  useEffect(() => mounts(), []);
+const memories: QuickChatScrollMemory[] = [];
+function LoadedBody({
+  workspaceId,
+  scrollMemory,
+}: {
+  workspaceId: string | null;
+  scrollMemory: QuickChatScrollMemory;
+}) {
+  memories.push(scrollMemory);
   return <output data-testid="quick-chat">{workspaceId ?? 'closed'}</output>;
 }
 
@@ -30,7 +37,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('loads Quick Chat on the first open behind a loading sheet and keeps it mounted after closing', async () => {
+it('opens one sheet at once, loads the body inside it and keeps scroll memory across reopening', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const container = document.createElement('div');
   document.body.append(container);
@@ -38,10 +45,10 @@ it('loads Quick Chat on the first open behind a loading sheet and keeps it mount
   const onClose = vi.fn();
   const render = (workspaceId: string | null) =>
     act(() => root.render(<LazyQuickChatSheet workspaceId={workspaceId} onClose={onClose} />));
-  const loaded = () => document.querySelector('[data-testid="quick-chat"]')?.textContent;
+  const body = () => document.querySelector('[data-testid="quick-chat"]')?.textContent;
   try {
     await render(null);
-    expect(document.body.textContent).toBe('');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(chunk.requested).toBe(false);
 
     await render('w1');
@@ -50,15 +57,17 @@ it('loads Quick Chat on the first open behind a loading sheet and keeps it mount
     expect(dialog?.textContent).toContain('Fix login');
     expect(dialog?.textContent).toContain('Loading chat…');
 
-    await act(() => chunk.resolve({ QuickChatSheet: LoadedQuickChatSheet }));
-    await waitForReact(() => expect(loaded()).toBe('w1'));
-    expect(document.body.textContent).not.toContain('Loading chat…');
+    await act(() => chunk.resolve({ QuickChatSheetBody: LoadedBody }));
+    await waitForReact(() => expect(body()).toBe('w1'));
+    // The loaded body replaces the placeholder inside the same sheet, so it does not slide in twice.
+    expect(document.querySelector('[role="dialog"]')).toBe(dialog);
+    expect(dialog?.textContent).not.toContain('Loading chat…');
 
     await render(null);
-    expect(loaded()).toBe('closed');
+    await waitForReact(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
     await render('w1');
-    expect(loaded()).toBe('w1');
-    expect(mounts).toHaveBeenCalledTimes(1);
+    await waitForReact(() => expect(body()).toBe('w1'));
+    expect(new Set(memories).size).toBe(1);
   } finally {
     await act(() => root.unmount());
     container.remove();

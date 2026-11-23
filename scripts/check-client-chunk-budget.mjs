@@ -17,12 +17,13 @@ const startupLimit = 1_300_000;
 // The board is the page phones open most. Its route chunk is found by source module
 // because the bundler names shared chunks after whichever export it meets first.
 const boardRoute = 'src/client/routes/projects/workspaces/list.tsx';
-// Files the board loads beyond the startup closure: 166,337 bytes when set.
+// Files the board loads beyond the startup closure: 167,089 bytes when set.
 const boardLimit = 185_000;
-// The markdown renderer and its parsing pipeline load where markdown is shown
-// (transcripts, Quick Chat), never with the board itself.
+// The Markdown renderers (streamdown and the marked/remend pair it uses, react-markdown)
+// and the unified pipeline load where Markdown is shown (transcripts, Quick Chat, PR
+// panels), never at startup or with the board.
 const markdownPackage =
-  /^(?:streamdown|react-markdown|unified|micromark(?:-.+)?|remark-.+|rehype-.+|mdast-util-.+)$/;
+  /^(?:streamdown|marked|remend|react-markdown|unified|micromark(?:-.+)?|remark-.+|rehype-.+|mdast-util-.+)$/;
 
 export function checkClientChunkBudget(directory, log = console.log) {
   const files = readdirSync(directory);
@@ -94,6 +95,17 @@ export function checkClientChunkBudget(directory, log = console.log) {
     return visited;
   }
 
+  function rejectMarkdown(file, closureName) {
+    const { chunk, packages } = metadata(file);
+    for (const name of packages) {
+      if (markdownPackage.test(name)) {
+        throw new Error(
+          `${chunk}: ${closureName} static closure must not contain ${name}; load markdown where it renders`
+        );
+      }
+    }
+  }
+
   function measure(closure) {
     let rawBytes = 0;
     let gzipBytes = 0;
@@ -122,6 +134,7 @@ export function checkClientChunkBudget(directory, log = console.log) {
           );
         }
       }
+      rejectMarkdown(file, 'startup');
     }
   );
   const startupSize = measure(startup);
@@ -142,16 +155,9 @@ export function checkClientChunkBudget(directory, log = console.log) {
       `Expected exactly one chunk containing ${boardRoute}; found ${boardChunks.length}`
     );
   }
-  const board = staticClosure(join(directory, boardChunks[0]), (file) => {
-    const { chunk, packages } = metadata(file);
-    for (const name of packages) {
-      if (markdownPackage.test(name)) {
-        throw new Error(
-          `${chunk}: board route static closure must not contain ${name}; load markdown where it renders`
-        );
-      }
-    }
-  });
+  const board = staticClosure(join(directory, boardChunks[0]), (file) =>
+    rejectMarkdown(file, 'board route')
+  );
   const boardOnly = [...board].filter((file) => !startup.has(file));
   const boardSize = measure(boardOnly);
   log(

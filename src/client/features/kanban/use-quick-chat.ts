@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useChatWebSocket, useSessionCollectionCommands } from '@/client/features/chat';
 import { trpc } from '@/client/lib/trpc';
-import { useQuickChatScroll } from './use-quick-chat-scroll';
+import { type QuickChatScrollMemory, useQuickChatScroll } from './use-quick-chat-scroll';
 
 function isPendingCreatedSelection(
   pendingSession: { id: string; workspaceId: string } | null,
@@ -11,7 +11,11 @@ function isPendingCreatedSelection(
   return pendingSession?.workspaceId === workspaceId && pendingSession.id === selectedSessionId;
 }
 
-export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CLAUDE' | 'CODEX') {
+export function useQuickChat(
+  workspaceId: string | null,
+  workspaceProvider?: 'CLAUDE' | 'CODEX',
+  scrollMemory?: QuickChatScrollMemory
+) {
   const {
     data: sessions,
     error: sessionsError,
@@ -76,7 +80,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
     transcriptScroll,
     clearSession: clearScrollSession,
     revokeSession: revokeScrollSession,
-  } = useQuickChatScroll(workspaceId, selectedSessionId, chatState.runtimeSessionId);
+  } = useQuickChatScroll(workspaceId, selectedSessionId, chatState.runtimeSessionId, scrollMemory);
 
   const activeWorkspaceRef = useRef(workspaceId);
   useLayoutEffect(() => {
