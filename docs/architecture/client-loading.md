@@ -38,15 +38,27 @@ panels directly, as permitted by the feature boundary rules. Keep
 viewers out of the public barrel; re-exporting them creates an eager path that
 bypasses the existing route and viewer lazy imports.
 
-`pnpm check:client-chunks` checks both individual chunks and a 1,300,000-byte
-startup static closure. It parses the emitted JavaScript imports and re-exports,
-counts each reachable file once, and reports raw bytes plus summed per-file gzip
-bytes. The build also emits `assets/client-modules.json`, which maps each
-JavaScript chunk to its repository-relative source modules. The gate validates
-that manifest and rejects file/diff viewer sources anywhere in the static graph,
-including when folded into the entry or a shared chunk. Missing metadata fails
-closed. Dynamic imports are excluded. To measure another production build, pass
-its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
+The board loads Quick Chat (`lazy-quick-chat-sheet.tsx` in the kanban feature)
+on its first open. Quick Chat renders the chat transcript, and with it the
+Markdown renderer (`streamdown`) and the micromark/remark/rehype pipeline, about
+1 MB raw and 265 KB Brotli that the board itself never shows. A static import of
+the chat feature from any board module brings all of it back, whatever the chunk
+holding it is named after.
+
+`pnpm check:client-chunks` checks individual chunks, a 1,300,000-byte startup
+static closure and the board's static closure. It parses the emitted JavaScript
+imports and re-exports, counts each reachable file once, and reports raw bytes
+plus summed per-file gzip bytes. The build also emits
+`assets/client-modules.json`, which maps each JavaScript chunk to its
+repository-relative source modules and the names of the packages bundled into
+it. The gate validates that manifest and rejects file/diff viewer sources
+anywhere in the startup static graph, including when folded into the entry or a
+shared chunk. It finds the board route's chunk by its source module
+(`src/client/routes/projects/workspaces/list.tsx`), rejects any Markdown package
+in that route's static graph, and budgets the files it adds to startup. Missing
+metadata fails closed. Dynamic imports are excluded. To measure another
+production build, pass its assets directory:
+`pnpm check:client-chunks /tmp/client-build/assets`.
 
 ## Compression
 
