@@ -166,7 +166,7 @@ function frames(ws: MockWebSocket) {
 }
 
 describe('load-session through the actual chat transport', () => {
-  it('broadcasts replay/runtime before pending configuration and activates initial text after all load updates', async () => {
+  it('sends replay to its requester and runtime to every viewer before pending configuration, and activates initial text after all load updates', async () => {
     const test = setup();
     const config = deferred<typeof EMPTY_CHAT_BAR_CAPABILITIES>();
     const configurationStarted = deferred<void>();
@@ -188,7 +188,8 @@ describe('load-session through the actual chat transport', () => {
       },
       { type: 'session_delta', data: expect.objectContaining({ type: 'session_runtime_updated' }) },
     ]);
-    expect(frames(viewer)).toEqual(frames(requester));
+    // The viewer did not request the replay, and would drop it.
+    expect(frames(viewer)).toEqual(frames(requester).slice(1));
     expect(test.ports.startup.getOrCreateSessionClient).not.toHaveBeenCalled();
     expect(test.ports.dispatch.tryDispatchNextMessage).not.toHaveBeenCalled();
     config.resolve(EMPTY_CHAT_BAR_CAPABILITIES);
@@ -200,7 +201,7 @@ describe('load-session through the actual chat transport', () => {
         .slice(2, 5)
         .map((frame) => frame.data.type)
     ).toEqual(['chat_capabilities', 'config_options_update', 'slash_commands']);
-    expect(frames(viewer)).toEqual(frames(requester));
+    expect(frames(viewer)).toEqual(frames(requester).slice(1));
     const queued = test.domain.peekNextMessage('s1');
     expect(queued).toMatchObject({ id: expect.stringMatching(/^msg-/), text: 'Start once' });
     expect(frames(requester).at(-1)).toMatchObject({
@@ -264,10 +265,7 @@ describe('load-session through the actual chat transport', () => {
     await test.completingLoads.waitForCount(1);
     await test.completingLoads.events[0];
     expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith('s1');
-    expect(frames(viewer)[0]).toMatchObject({
-      type: 'session_replay_batch',
-      loadRequestId: 'disconnected',
-    });
+    expect(frames(viewer).map((frame) => frame.type)).not.toContain('session_replay_batch');
     expect(frames(viewer).at(-1)).toMatchObject({
       type: 'session_delta',
       data: { type: 'message_state_changed', newState: 'ACCEPTED' },

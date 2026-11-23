@@ -13,7 +13,7 @@ import {
   commandNameKey,
   isWorkspaceScopedCommandName,
   scanClaudeGlobalCommandsFromDisk,
-  scanClaudeWorkspaceCommandsFromDisk,
+  workspaceCommandScanCache,
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
@@ -198,7 +198,7 @@ function buildClaudeSlashCommandsForLoad(
   worktreePath: string | null
 ): CommandInfo[] {
   const seen = new Set<string>();
-  const commands = scanClaudeWorkspaceCommandsFromDisk(worktreePath, seen);
+  const commands = workspaceCommandScanCache.scan(worktreePath, seen);
   if (cached) {
     for (const command of cached) {
       if (isWorkspaceScopedCommandName(command.name)) {

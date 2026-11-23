@@ -133,6 +133,41 @@ describe('ChatConnectionRegistry', () => {
     ).toBe(2);
   });
 
+  it('sends a correlated baseline only to the viewer that requested it', () => {
+    const requester = new MockWebSocket();
+    const peer = new MockWebSocket();
+    for (const [id, viewer] of [
+      ['requester', requester],
+      ['peer', peer],
+    ] as const) {
+      registry.register(id, { ws: asWs(viewer), dbSessionId: 's1', workingDir: null });
+    }
+    registry.expectReplay(asWs(requester), 'own');
+    const types = (viewer: MockWebSocket) =>
+      viewer.send.mock.calls.map(([frame]) => JSON.parse(frame).type);
+
+    // Clients drop a correlated baseline they did not request.
+    expect(
+      registry.broadcastToSession(
+        's1',
+        asMessage({ type: 'session_replay_batch', loadRequestId: 'own', replayEvents: [] })
+      )
+    ).toBe(1);
+    expect(
+      registry.broadcastToSession(
+        's1',
+        asMessage({ type: 'session_snapshot', loadRequestId: 'gone', messages: [] })
+      )
+    ).toBe(0);
+    expect(types(requester)).toEqual(['session_replay_batch']);
+    expect(types(peer)).toEqual([]);
+
+    expect(
+      registry.broadcastToSession('s1', asMessage({ type: 'session_snapshot', messages: [] }))
+    ).toBe(2);
+    expect(types(peer)).toEqual(['session_snapshot']);
+  });
+
   it('requires an own replay to unblock state but keeps independent notifications available', () => {
     const viewer = new MockWebSocket();
     registry.configure({

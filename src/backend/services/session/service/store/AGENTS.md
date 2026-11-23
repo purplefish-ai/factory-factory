@@ -69,6 +69,12 @@ directly.
   as a `transcript_message_committed` delta with the remaining queue or a
   dispatched state with the user message. `session-domain.state-deltas.test.ts`,
   `../dispatch/session-dispatch.service.test.ts`.
+- A load rescans a worktree's slash commands unless the worktree resolves to the
+  same root and no directory the last scan listed or command file it read has
+  changed (inode, size, modification or change time), so an added, edited or
+  removed command, or a link target that appears, shows on the next load. A scan
+  whose newest change is under two seconds old is not reused.
+  `slash-command-workspace-cache.test.ts`.
 
 ## Map
 
@@ -93,4 +99,4 @@ directly.
   replay a load sends.
 - `session-resume-fence.ts`: resume authorization that survives eviction.
 - `slash-command-cache.service.ts`, `slash-command-disk-scanner.ts`: slash
-  commands read from disk.
+  commands read from disk, and the per-worktree scan cache.
