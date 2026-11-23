@@ -140,8 +140,13 @@ function repairProjectListMetadata(
   unrepaired: (entries: readonly WorkspaceSnapshotEntry[]) => WorkspaceSnapshotEntry[],
   release: (entries: readonly WorkspaceSnapshotEntry[]) => void
 ): void {
+  // A failed read rejects, releasing the rows for a later message instead of
+  // retrying the read straight away.
   const refetch = () =>
-    utils.workspace.listForProject.invalidate({ projectId }, undefined, { cancelRefetch: false });
+    utils.workspace.listForProject.invalidate({ projectId }, undefined, {
+      cancelRefetch: false,
+      throwOnError: true,
+    });
   void refetch().then(
     () => {
       const missed = unrepaired(entries);

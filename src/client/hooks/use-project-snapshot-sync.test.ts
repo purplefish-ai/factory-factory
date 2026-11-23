@@ -573,6 +573,13 @@ describe('useProjectSnapshotSync', () => {
     });
   });
 
+  // A failed repair read rejects, so its rows are released rather than read again at once.
+  const repairListRead = [
+    joinListRead[0],
+    undefined,
+    { ...joinListRead[2], throwOnError: true },
+  ] as const;
+
   describe('cache invalidation strategy', () => {
     it('snapshot_changed and snapshot_removed do not invalidate caches for a known workspace', () => {
       // Seed the list cache with the entry's workspace id so it is already
@@ -636,7 +643,7 @@ describe('useProjectSnapshotSync', () => {
             : { type, workspaceId: 'ws-1', entry: ready }
         );
         expect(cache.workspaces[0]).toMatchObject({ status: 'READY', worktreePath: null });
-        expect(mockListInvalidate).toHaveBeenCalledWith(...joinListRead);
+        expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
         onMessage({ type: 'snapshot_changed', workspaceId: 'ws-1', entry: ready });
         expect(mockListInvalidate).toHaveBeenCalledTimes(1);
         finishRefetch();
@@ -711,7 +718,7 @@ describe('useProjectSnapshotSync', () => {
       });
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith(...joinListRead);
+      expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
     });
 
     it('invalidates when snapshot_full introduces a workspace the cache has never seen', () => {
@@ -724,7 +731,7 @@ describe('useProjectSnapshotSync', () => {
         entries: [makeEntry({ workspaceId: 'ws-new' })],
       });
 
-      expect(mockListInvalidate).toHaveBeenCalledWith(...joinListRead);
+      expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
     });
 
     it('the initial snapshot_full baseline does not invalidate caches', () => {
