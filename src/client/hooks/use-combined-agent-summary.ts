@@ -3,15 +3,20 @@ import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 
 type Summary = { totalCount: number; failedCount: number };
-/** A refresh failure preserves one complete snapshot, never a partial fresh sum. */
+/**
+ * A refresh failure preserves one complete snapshot, never a partial fresh sum.
+ * No stream pushes these counts. This device's own changes invalidate them
+ * (`agent-query-cache.ts`), so the poll only catches runs that fail and
+ * automations changed elsewhere, which nobody waits on: the slow tier suffices.
+ */
 export function useCombinedAgentSummary(projectId: string | undefined) {
   const scheduled = trpc.periodicTask.navigationSummary.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.activity }
+    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.background }
   );
   const event = trpc.automation.navigationSummary.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.activity }
+    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.background }
   );
   const successful = useRef(new Map<string, Summary>());
   const [combined, setCombined] = useState<{ projectId: string; summary: Summary }>();

@@ -42,6 +42,11 @@ readers in `src/client/hooks/` that wrap its options:
 - Key operations: `resetWorkspaceDetail`, `invalidateWorkspaceDetail`,
   `cancelWorkspaceDetail`, `refetchActiveWorkspaceDetail`,
   `getCachedWorkspaceDetails`, `cancelProjectWorkspaceList`.
+- Live stream reads: `getLiveWorkspaceSnapshot` and
+  `subscribeLiveWorkspaceSnapshots`, read through `useLiveWorkspaceSnapshot`
+  (`src/client/hooks/use-live-workspace-snapshot.ts`). Polls for state the
+  stream also carries (run-script status, the session list) use them to stop
+  polling while the stream is live and to refetch when it reports a change.
 
 Other tRPC invalidation, cancellation and cache reads may stay as they are,
 because they reuse the options already installed. Query options carry their key
@@ -67,6 +72,11 @@ for `useQuery`; never pass it to a raw QueryClient fetch or write.
   `workspace-cache-reconciler.test.ts`.
 - HTTP that began under a retired connection never commits.
   `workspace-cache-reconciler.test.ts`.
+- A live stream entry is readable only while a connection with a full baseline
+  is current, so a poll gated on it resumes while the socket is down.
+  `workspace-cache-reconciler.test.ts`,
+  `src/client/features/workspace/use-run-script-status.test.tsx`,
+  `src/client/routes/projects/workspaces/use-workspace-sessions.test.tsx`.
 - An archive's success is not undone by an overlapping archive's failure or by a
   later accepted base while the overlap is pending.
   `workspace-archive-operation.test.ts`,

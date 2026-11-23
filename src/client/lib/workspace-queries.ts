@@ -14,6 +14,12 @@ import {
 } from '@/client/lib/workspace-cache-reconciler';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
+/** Live stream reads for deciding whether a workspace's own polls are needed. */
+export {
+  getLiveWorkspaceSnapshot,
+  subscribeLiveWorkspaceSnapshots,
+} from '@/client/lib/workspace-cache-reconciler';
+
 /**
  * The only place that builds options, fetches and writes for the
  * `workspace.get` and `workspace.listForProject` cache keys.

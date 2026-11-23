@@ -4,7 +4,6 @@ import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
 import { IconButton } from '@/client/components/icon-button';
 import { runInBackground } from '@/client/lib/background-task';
-import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import {
   ContextMenu,
@@ -13,6 +12,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
+import { useRunScriptStatus } from './use-run-script-status';
 import { useWorkspacePanelActions } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
@@ -25,18 +25,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
 
   const utils = trpc.useUtils();
 
-  // Query run script status (React Query automatically deduplicates with same key)
-  const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
-    { workspaceId },
-    {
-      refetchInterval: (query) => {
-        // Poll more frequently when running
-        return query.state.data?.status === 'RUNNING'
-          ? POLL_INTERVAL_MS.runningProcess
-          : POLL_INTERVAL_MS.localStatus;
-      },
-    }
-  );
+  const { data: status, refetch } = useRunScriptStatus(workspaceId);
 
   // Mutations
   // Failures surface through the app's fallback mutation error toast.
@@ -65,6 +54,13 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     },
   });
 
+  // The stream carries the status, not the saved commands, so read them afresh
+  // before showing them: another device may have changed them.
+  const openSetupPanel = () => {
+    setSetupPanelOpen(true);
+    runInBackground(refetch());
+  };
+
   const panelProps = {
     open: setupPanelOpen,
     onOpenChange: setSetupPanelOpen,
@@ -80,7 +76,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     return (
       <>
         <DevServerSetupPanel {...panelProps} />
-        <IconButton label="Setup dev server" size="icon-sm" onClick={() => setSetupPanelOpen(true)}>
+        <IconButton label="Setup dev server" size="icon-sm" onClick={openSetupPanel}>
           <PlayIcon className="text-success" weight="fill" />
         </IconButton>
       </>
@@ -138,7 +134,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
           </span>
         </ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={() => setSetupPanelOpen(true)}>
+          <ContextMenuItem onClick={openSetupPanel}>
             <PencilIcon className="mr-2 h-4 w-4" />
             Edit dev server configuration
           </ContextMenuItem>

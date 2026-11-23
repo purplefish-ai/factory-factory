@@ -2,8 +2,10 @@ import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it } from 'vitest';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import {
+  getLiveWorkspaceSnapshot,
   getProjectWorkspaceCacheReconciler,
   projectWorkspaceQueryOptions,
+  subscribeLiveWorkspaceSnapshots,
 } from '@/client/lib/workspace-cache-reconciler';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
@@ -309,5 +311,64 @@ describe('project workspace HTTP/stream commit ownership', () => {
     const separate = fixture();
     expect(separate.owner).not.toBe(a.owner);
     expect(getProjectWorkspaceCacheReconciler(a.client, 'proj-1')).toBe(a.owner);
+  });
+});
+
+describe('live workspace snapshots', () => {
+  it('reads an entry only while a connection with a baseline is current', () => {
+    const f = fixture();
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBeUndefined();
+    f.owner.apply(f.token, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: entry() });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBeUndefined();
+
+    const running = entry({ runScriptStatus: 'RUNNING' });
+    f.owner.apply(f.token, { type: 'snapshot_full', projectId: 'proj-1', entries: [running] });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBe(running);
+
+    const idle = entry({ runScriptStatus: 'IDLE' });
+    f.owner.apply(f.token, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: idle });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBe(idle);
+
+    f.owner.apply(f.token, { type: 'snapshot_removed', workspaceId: 'ws-1' });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBeUndefined();
+
+    f.owner.apply(f.token, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: idle });
+    f.owner.retireConnection(f.token);
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBeUndefined();
+
+    const next = f.owner.beginConnection();
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBeUndefined();
+    f.owner.apply(next, { type: 'snapshot_full', projectId: 'proj-1', entries: [idle] });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-1')).toBe(idle);
+  });
+
+  it('finds the entry in any project of the same QueryClient and no other', () => {
+    const f = fixture();
+    const other = getProjectWorkspaceCacheReconciler(f.client, 'proj-2');
+    const otherToken = other.beginConnection();
+    const elsewhere = entry({ workspaceId: 'ws-2', projectId: 'proj-2' });
+    other.apply(otherToken, { type: 'snapshot_full', projectId: 'proj-2', entries: [elsewhere] });
+    expect(getLiveWorkspaceSnapshot(f.client, 'ws-2')).toBe(elsewhere);
+    expect(getLiveWorkspaceSnapshot(fixture().client, 'ws-2')).toBeUndefined();
+  });
+
+  it('notifies subscribers of its QueryClient on connection changes and applied messages', () => {
+    const f = fixture();
+    const separate = fixture();
+    const calls: string[] = [];
+    const unsubscribe = subscribeLiveWorkspaceSnapshots(f.client, () => calls.push('f'));
+    subscribeLiveWorkspaceSnapshots(separate.client, () => calls.push('separate'));
+
+    f.owner.apply(f.token, { type: 'snapshot_full', projectId: 'proj-1', entries: [entry()] });
+    f.owner.apply(f.token, { type: 'snapshot_changed', workspaceId: 'ws-1', entry: entry() });
+    f.owner.apply(f.token, { type: 'snapshot_full', projectId: 'proj-2', entries: [] });
+    f.owner.retireConnection(f.token);
+    f.owner.retireConnection(f.token);
+    f.owner.beginConnection();
+    expect(calls).toEqual(['f', 'f', 'f', 'f']);
+
+    unsubscribe();
+    f.owner.beginConnection();
+    expect(calls).toHaveLength(4);
   });
 });

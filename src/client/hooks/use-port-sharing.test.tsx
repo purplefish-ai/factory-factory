@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useRunScriptLaunch } from '@/client/features/workspace/use-run-script-launch';
@@ -19,9 +20,18 @@ function Status() {
   return <output>{String(usePortSharing())}</output>;
 }
 
-function RunLink() {
+function RunLinkContent() {
   const launch = useRunScriptLaunch('workspace-1');
   return launch ? <a href={launch.href}>Run</a> : null;
+}
+
+/** The launch hook reads the snapshot stream through the QueryClient. */
+function RunLink() {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <RunLinkContent />
+    </QueryClientProvider>
+  );
 }
 
 afterEach(() => {
