@@ -43,6 +43,19 @@ describe('summarizeHostLoad', () => {
     expect(summarizeHostLoad(slow).cpu.tone).toBe('danger');
   });
 
+  it('counts the same samples when polls arrive a little early or late', () => {
+    const at = (times: number[], cpu: number[]) =>
+      times.map((time, index) => ({ at: time, cpuPercent: cpu[index] ?? 0, memoryPercent: 30 }));
+    // A phone poll a little early: the previous reading must still stay out.
+    expect(summarizeHostLoad(at([0, 14_800], [10, 97])).cpu.tone).toBe('danger');
+    // Desktop polls a little late: still the last three readings, not two.
+    expect(summarizeHostLoad(at([0, 5200, 10_400], [99, 99, 10])).cpu.tone).toBe('neutral');
+    // Desktop polls a little early: still three, not four.
+    expect(summarizeHostLoad(at([0, 4900, 9800, 14_700], [10, 99, 99, 99])).cpu.tone).toBe(
+      'danger'
+    );
+  });
+
   it('is neutral with no samples', () => {
     expect(summarizeHostLoad([]).tone).toBe('neutral');
   });

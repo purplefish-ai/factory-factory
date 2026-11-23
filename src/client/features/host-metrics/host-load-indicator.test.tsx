@@ -43,8 +43,11 @@ function createHostServer(initial: Sample[]) {
     holdMetrics: false,
     breakdown: undefined as unknown,
     breakdownFails: false,
+    /** Keeps at most 60 samples and five minutes, as the service does. */
     take(next: Sample) {
-      server.window = [...server.window, next].slice(-60);
+      server.window = [...server.window, next]
+        .slice(-60)
+        .filter((entry) => entry.at > next.at - 5 * 60_000);
     },
     restart(fresh: Sample[]) {
       server.window = fresh;

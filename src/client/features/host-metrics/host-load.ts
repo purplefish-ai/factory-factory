@@ -12,11 +12,13 @@ export type HostLoadTone = Extract<StatusTone, 'neutral' | 'warning' | 'danger'>
 const WARNING_PERCENT = 80;
 const DANGER_PERCENT = 95;
 /**
- * Long enough to ignore one busy tick: three samples at the desktop poll rate.
- * At a phone's slower rate one sample covers it, because each CPU reading is
- * the average since the previous one.
+ * Long enough to ignore one busy tick: the last three samples at the desktop
+ * poll rate, which cover about fifteen seconds of CPU because each reading is
+ * the average since the previous one. At a phone's 15-second rate the latest
+ * sample alone covers that. The edge sits halfway between sample gaps, so a
+ * poll a little early or late does not change which samples count.
  */
-const RECENT_MS = 15_000;
+const RECENT_MS = 12_500;
 
 type Reading = 'cpuPercent' | 'memoryPercent';
 

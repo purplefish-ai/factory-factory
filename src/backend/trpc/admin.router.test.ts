@@ -117,11 +117,17 @@ function createCaller(
   };
 
   const hostMetricsService = {
-    getHistoryAfter: vi.fn(async (after?: number) => ({
-      samples: [{ at: 2, cpuPercent: 12, memoryPercent: 34 }],
-      since: after ?? null,
-      oldestAt: 1,
-    })),
+    getHistoryAfter: vi.fn((after?: number) => {
+      const window = [
+        { at: 1, cpuPercent: 10, memoryPercent: 33 },
+        { at: 2, cpuPercent: 12, memoryPercent: 34 },
+      ];
+      return Promise.resolve(
+        after === undefined
+          ? { samples: window, since: null, oldestAt: 1 }
+          : { samples: window.filter((sample) => sample.at > after), since: after, oldestAt: 1 }
+      );
+    }),
   };
 
   const logger = {
@@ -285,7 +291,10 @@ describe('adminRouter', () => {
     const { caller, hostMetricsService } = createCaller();
 
     await expect(caller.getHostMetrics()).resolves.toEqual({
-      samples: [{ at: 2, cpuPercent: 12, memoryPercent: 34 }],
+      samples: [
+        { at: 1, cpuPercent: 10, memoryPercent: 33 },
+        { at: 2, cpuPercent: 12, memoryPercent: 34 },
+      ],
       since: null,
       oldestAt: 1,
     });
