@@ -142,7 +142,7 @@ function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
 
 class SlashCommandCacheService {
   async getCachedCommands(provider: SessionProvider): Promise<CommandInfo[] | null> {
-    const settings = await userSettingsService.get();
+    const settings = await userSettingsService.getSlashCommandCache();
     const versionedCommandsByProvider = toVersionedProviderCommandMap(settings.cachedSlashCommands);
     if (versionedCommandsByProvider) {
       return versionedCommandsByProvider[provider] ?? null;
@@ -161,7 +161,7 @@ class SlashCommandCacheService {
 
     try {
       for (let attempt = 0; attempt < SLASH_COMMAND_CACHE_UPDATE_MAX_ATTEMPTS; attempt += 1) {
-        const settings = await userSettingsService.get();
+        const settings = await userSettingsService.getSlashCommandCache();
         const existingMap = toVersionedProviderCommandMap(settings.cachedSlashCommands) ?? {};
         const legacyMap = toProviderCommandMap(settings.cachedSlashCommands);
         if (!existingMap.CODEX && legacyMap?.CODEX) {
