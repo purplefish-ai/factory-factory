@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { CachedMetadataOfferSchema } from '@/shared/acp-protocol/protocol/cached-metadata';
 
 // ============================================================================
 // Attachment Schema
@@ -86,6 +87,8 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('load_session'),
     loadRequestId: z.string().min(1).max(128).optional(),
+    /** Metadata deltas the client holds; matching ones come back as acknowledgements. */
+    cachedMetadata: CachedMetadataOfferSchema.optional(),
   }),
 
   // Respond to a permission request

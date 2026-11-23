@@ -214,6 +214,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           }
           if (message.type === 'load_session') {
             chatConnectionRegistry.expectReplay(ws, message.loadRequestId);
+            chatConnectionRegistry.offerCachedMetadata(ws, message.cachedMetadata);
           }
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);

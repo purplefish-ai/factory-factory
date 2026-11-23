@@ -177,6 +177,8 @@ function createSessionEventAction(event: SessionDeltaEvent): ChatAction | null {
     case 'config_option_applied':
       return { type: 'CONFIG_OPTION_APPLIED', payload: { requestId: event.requestId } };
     // Browser-level events are dispatched by the transport, not the reducer.
+    // The socket hook replaces cached-metadata acknowledgements with their deltas.
+    case 'cached_metadata':
     case 'subagents_changed':
     case 'workspace_notification_request':
       return null;

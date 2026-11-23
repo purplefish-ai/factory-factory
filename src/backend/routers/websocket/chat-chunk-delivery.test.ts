@@ -6,6 +6,7 @@ import { SessionEventBus } from '@/backend/services/session';
 import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { prepareCacheableMetadata } from './chat-cached-metadata';
 import {
   attachChatTransport,
   ChatConnectionRegistry,
@@ -331,4 +332,46 @@ it('sends a published serialization as-is and serializes other payloads itself',
   test.bus.publishToSession('s1', replay, serialized);
   test.bus.publishToSession('s1', delta);
   expect(test.viewer.frames).toEqual([serialized, JSON.stringify(delta)]);
+});
+
+it('queues a cached-metadata acknowledgement behind the replay it follows, per viewer', async () => {
+  const test = setup();
+  const commands: WebSocketMessage = {
+    type: 'session_delta',
+    data: {
+      type: 'slash_commands',
+      slashCommands: Array.from({ length: 40 }, (_, index) => ({
+        name: `command-${index}`,
+        description: 'A command described at realistic length',
+      })),
+    },
+  };
+  const digest = prepareCacheableMetadata(commands)?.digest;
+  expect(digest).toEqual(expect.stringMatching(/^v1:/));
+  test.registry.offerCachedMetadata(test.viewer.socket(), { digests: [digest ?? ''] });
+  const peer = new Viewer();
+  test.registry.register('peer', { ws: peer.socket(), dbSessionId: 's1', workingDir: null });
+
+  const replay = batch();
+  for (const frame of frameSessionReplay(replay)) {
+    test.bus.publishToSession('s1', frame.payload, frame.json);
+  }
+  test.bus.publishToSession('s1', commands);
+  expect(peer.frames.map((frame) => JSON.parse(frame))).toEqual([
+    { type: 'session_delta', data: { ...commands.data, digest } },
+  ]);
+  for (let guard = 0; test.viewer.writes.length && guard < 100; guard++) {
+    await test.viewer.flush();
+  }
+  const assembler = new SessionReplayAssembler();
+  const received = test.viewer.frames
+    .map((frame) => assembler.accept(JSON.parse(frame)))
+    .filter((value) => value !== null);
+  expect(received).toEqual([
+    replay,
+    {
+      type: 'session_delta',
+      data: { type: 'cached_metadata', deltaType: 'slash_commands', digest },
+    },
+  ]);
 });

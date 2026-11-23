@@ -2,6 +2,7 @@ import type { AcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import type { CachedMetadataDeltaType } from './cached-metadata';
 import type { AskUserQuestion } from './interaction';
 import type { AgentMessage, ChatMessage } from './messages';
 import type { CommandInfo } from './models';
@@ -179,12 +180,24 @@ interface WebSocketMessagePayloadByType {
   };
   slash_commands: {
     slashCommands: CommandInfo[];
+    /** Content digest the client may offer in a later `load_session`. */
+    digest?: string;
   };
   chat_capabilities: {
     capabilities: ChatBarCapabilities;
   };
   config_options_update: {
     configOptions: ChatConfigOption[];
+    /** Content digest the client may offer in a later `load_session`. */
+    digest?: string;
+  };
+  /**
+   * Stands in for a `deltaType` delta whose content has `digest`, which the
+   * client offered in its latest `load_session` on this connection.
+   */
+  cached_metadata: {
+    deltaType: CachedMetadataDeltaType;
+    digest: string;
   };
   steer_settled: { requestId: string };
   config_option_applied: { requestId: string };

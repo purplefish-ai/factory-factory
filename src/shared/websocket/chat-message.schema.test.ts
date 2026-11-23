@@ -96,6 +96,22 @@ describe('ChatMessageSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it.each([
+    ['no digests', [], true],
+    ['sixteen digests', Array.from({ length: 16 }, (_, index) => `v1:${index}`), true],
+    ['seventeen digests', Array.from({ length: 17 }, (_, index) => `v1:${index}`), false],
+    ['an empty digest', [''], false],
+    ['an oversized digest', ['x'.repeat(129)], false],
+  ])('bounds the cached metadata a load offers: %s', (_label, digests, accepted) => {
+    expect(
+      ChatMessageSchema.safeParse({
+        type: 'load_session',
+        loadRequestId: 'load-123',
+        cachedMetadata: { digests },
+      }).success
+    ).toBe(accepted);
+  });
+
   it('accepts resume_queued_messages', () => {
     const result = ChatMessageSchema.safeParse({
       type: 'resume_queued_messages',
