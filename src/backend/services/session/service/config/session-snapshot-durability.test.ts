@@ -62,6 +62,7 @@ function fixture() {
   let failures = 0;
   const failedWrite = vi.fn();
   const accessor = {
+    findConfigSnapshotState: vi.fn(() => Promise.resolve(structuredClone(row))),
     findById: vi.fn(() => Promise.resolve(structuredClone(row))),
     updateIfProviderIdentity: vi.fn((_id: string, expected: typeof row, update: object) => {
       if (failures > 0) {
@@ -236,7 +237,7 @@ describe('durable final launch snapshot with production repository CAS', () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
     const readingStarted = createDeferred<void>();
-    f.accessor.findById.mockImplementationOnce(() => {
+    f.accessor.findConfigSnapshotState.mockImplementationOnce(() => {
       readingStarted.resolve();
       return reading.promise;
     });
@@ -268,14 +269,14 @@ describe('durable final launch snapshot with production repository CAS', () => {
     const f = fixture();
     const reading = createDeferred<typeof f.row>();
     const readingStarted = createDeferred<void>();
-    f.accessor.findById.mockResolvedValueOnce(structuredClone(f.row)).mockImplementationOnce(() => {
+    f.accessor.findConfigSnapshotState.mockImplementationOnce(() => {
       readingStarted.resolve();
       return reading.promise;
     });
     f.install();
     f.service.applyConfigOptionsUpdateDelta('session-1', f.handle, options('low'));
     await readingStarted.promise;
-    expect(f.accessor.findById).toHaveBeenCalledTimes(2);
+    expect(f.accessor.findConfigSnapshotState).toHaveBeenCalledOnce();
     let finished = false;
     const final = f.final().then(() => {
       finished = true;

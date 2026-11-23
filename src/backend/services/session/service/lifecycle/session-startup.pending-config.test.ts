@@ -256,8 +256,7 @@ describe('real supervisor and startup configuration phase ordering', () => {
       expect(source?.()).toBe(true);
       const reading = gate();
       // Hold the repository's own post-read/pre-CAS boundary, after storage's read.
-      h.accessor.findById.mockImplementationOnce(() => Promise.resolve(h.row()));
-      h.accessor.findById.mockImplementationOnce(async () => {
+      h.accessor.findConfigSnapshotState.mockImplementationOnce(async () => {
         const row = h.row();
         await reading.wait();
         return row;

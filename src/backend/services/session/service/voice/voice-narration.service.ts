@@ -265,6 +265,10 @@ class VoiceNarrationService {
     return this.connections.get(sessionId) === ws;
   }
 
+  hasAnyActiveConnection(): boolean {
+    return this.connections.size > 0;
+  }
+
   /**
    * True while a `/voice` connection is open for this session — i.e. voice
    * mode is on. Used to suppress the workspace-complete chime, which would

@@ -102,9 +102,10 @@ function setup(provider: ChatProvider) {
   };
   const repository = {
     getSessionById: async () => session,
-    updateSession: (_id: string, update: object, assertCurrent?: () => void) => {
+    reconcileConfigSnapshot: (_id: string, update: object, assertCurrent?: () => void) => {
       assertCurrent?.();
-      return Promise.resolve(Object.assign(session, update));
+      Object.assign(session, update);
+      return Promise.resolve();
     },
   };
   const configService = new SessionConfigService({

@@ -44,6 +44,13 @@ its first full snapshot only when the store has no entries for the project.
 - Reconciliation removes an entry missing from its read only if the store has
   observed nothing for it since the read began.
   `snapshot-reconciliation.streaming.test.ts`.
+- Runtime, activity and pending-request events in one workspace share an
+  authoritative session read. The first event with a known workspace ID starts a
+  fixed 150 ms window. Events for an uncached session share a workspace ID
+  lookup, then start or join the window when it resolves. Active and idle
+  notifications still publish immediately. Reads carry their start time for
+  ordering against reconciliation, and workspace removal or collector stop
+  invalidates outstanding reads. `event-collector.session-refresh.test.ts`.
 - Every snapshot input field is either compared by drift detection or
   deliberately excluded. `snapshot-reconciliation-field-contract.test.ts`.
 - The PR projection worker loads only `@/shared/core` at runtime; reads,

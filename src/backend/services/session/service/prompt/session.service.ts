@@ -284,7 +284,7 @@ export class SessionService {
     const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
     const minutes = permit
       ? permit.execution.turnLimitMinutes
-      : (await userSettingsService.get()).turnLimitMinutes;
+      : await userSettingsService.getTurnLimitMinutes();
     this.assertPromptGeneration(sessionId, stopGeneration);
     const timeoutMs = turnLimitMs(minutes);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);

@@ -104,7 +104,7 @@ import {
 } from '@/backend/services/session/service/composition/session-services';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { workspaceDataService } from '@/backend/services/workspace';
-import { mockCreatedAcpClient } from './session-lifecycle.test-helpers';
+import { mockCreatedAcpClient, mockLifecycleUserSettings } from './session-lifecycle.test-helpers';
 
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',
@@ -115,7 +115,7 @@ const getAcpProcessorState = () => acpEventProcessor;
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+    mockLifecycleUserSettings(userSettingsService);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();

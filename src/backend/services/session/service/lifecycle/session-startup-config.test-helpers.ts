@@ -46,6 +46,7 @@ export function setupStartupConfig(
   };
   let writes = 0;
   const accessor = {
+    findConfigSnapshotState: vi.fn(() => Promise.resolve(structuredClone(row))),
     findById: vi.fn(() => Promise.resolve(structuredClone(row))),
     update: vi.fn((_id: string, data: Partial<AgentSessionRecord>) => {
       row = { ...row, ...structuredClone(data), updatedAt: new Date(row.updatedAt.getTime() + 1) };
@@ -83,6 +84,9 @@ export function setupStartupConfig(
   );
   h.repository.getSessionById.mockImplementation(repository.getSessionById.bind(repository));
   h.repository.updateSession.mockImplementation(repository.updateSession.bind(repository));
+  h.repository.reconcileConfigSnapshot.mockImplementation(
+    repository.reconcileConfigSnapshot.bind(repository)
+  );
   h.repository.acknowledgeStartupConfiguration.mockImplementation(
     repository.acknowledgeStartupConfiguration.bind(repository)
   );

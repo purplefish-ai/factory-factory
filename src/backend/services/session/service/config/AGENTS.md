@@ -67,7 +67,13 @@ shutdown.
   `session-queued-settings.accepted.test.ts`.
 - A configuration snapshot is persisted and published only while it is the
   latest accepted one, whether it came from a native observation, an RPC result
-  or startup. `session.config.service.authority.test.ts`,
+  or startup. Repeated observations retain the durable capture time when the
+  snapshot and model agree. Snapshot persistence runs in order for each session,
+  including retries. Startup can pass a superseded read. Once a write is issued,
+  the next observation waits for it before reading the durable row. Required
+  startup and launch writes still commit.
+  `session-config-snapshot-persistence.integration.test.ts`,
+  `session.config.service.authority.test.ts`,
   `session.config.service.authority-startup.test.ts`,
   `session-config-commit-authority.test.ts`.
 - Reading an inactive session's configuration never persists anything, and a

@@ -78,7 +78,7 @@ vi.mock('@/backend/services/run-script', () => ({
 
 vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
-    findAgentSessionById: vi.fn().mockResolvedValue({ id: 's-1', workspaceId: 'ws-1' }),
+    findWorkspaceIdForSession: vi.fn().mockResolvedValue('ws-1'),
     findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
   },
   chatEventForwarderService: {
@@ -1071,7 +1071,7 @@ describe('configureEventCollector', () => {
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it('workspace active transition performs one session summary query', () => {
+  it('workspace active transition performs one session summary query', async () => {
     configureEventCollector();
 
     const sessionActivityCall = vi
@@ -1090,6 +1090,7 @@ describe('configureEventCollector', () => {
 
     sessionActivityHandler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
     activeHandler({ workspaceId: 'ws-1' });
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
@@ -1121,8 +1122,7 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
-    await Promise.resolve();
-    vi.advanceTimersByTime(150);
+    await vi.advanceTimersByTimeAsync(150);
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
@@ -1143,10 +1143,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
-      id: 's-1',
-      workspaceId: 'ws-1',
-    } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
+    vi.mocked(sessionDataService.findWorkspaceIdForSession).mockResolvedValue('ws-1');
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([sessionRecord]);
 
     configureEventCollector();
@@ -1159,7 +1156,7 @@ describe('configureEventCollector', () => {
     handler({ sessionId: 's-1' });
     await vi.advanceTimersByTimeAsync(150);
 
-    expect(sessionDataService.findAgentSessionById).toHaveBeenCalledWith('s-1');
+    expect(sessionDataService.findWorkspaceIdForSession).toHaveBeenCalledWith('s-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
@@ -1179,10 +1176,7 @@ describe('configureEventCollector', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
-      id: 's-1',
-      workspaceId: 'ws-1',
-    } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
+    vi.mocked(sessionDataService.findWorkspaceIdForSession).mockResolvedValue('ws-1');
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([sessionRecord]);
     vi.mocked(computePendingRequestType).mockReturnValue('permission_request');
     const request = { requestId: 'r-1', toolName: 'Bash', toolUseId: 't-1', input: {} };
@@ -1205,7 +1199,7 @@ describe('configureEventCollector', () => {
       sessionId: string;
     }) => void;
     runtimeHandler({ sessionId: 's-1' });
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(150);
     handler({ sessionId: 's-1' });
     await vi.advanceTimersByTimeAsync(0);
     expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);

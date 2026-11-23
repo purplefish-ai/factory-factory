@@ -139,6 +139,12 @@ export interface AgentSessionAccessor {
   createWithinWorkspaceLimit(
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation>;
+  findWorkspaceMetadataContext(
+    id: string
+  ): Promise<Pick<AgentSession, 'workspaceId' | 'provider' | 'codexAccountId'> | null>;
+  findConfigSnapshotState(
+    id: string
+  ): Promise<(ProviderIdentityExpectation & { model: string }) | null>;
   findWorkspaceIdForSession(id: string): Promise<string | null>;
   findDispatchWorkspace(id: string): Promise<AgentSessionRecordWithWorkspace['workspace'] | null>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
@@ -213,6 +219,20 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return this.runWorkspaceAcquisition(data.workspaceId, () =>
       this.doCreateWithinWorkspaceLimit(data)
     );
+  }
+
+  findWorkspaceMetadataContext(id: string) {
+    return prisma.agentSession.findUnique({
+      where: { id },
+      select: { workspaceId: true, provider: true, codexAccountId: true },
+    });
+  }
+
+  findConfigSnapshotState(id: string) {
+    return prisma.agentSession.findUnique({
+      where: { id },
+      select: { model: true, providerSessionId: true, providerMetadata: true, updatedAt: true },
+    });
   }
 
   async findWorkspaceIdForSession(id: string) {

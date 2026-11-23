@@ -82,7 +82,7 @@ it.each([
       codexModelCatalogService: unsafeCoerce({}),
       repository: unsafeCoerce({
         getSessionById: async () => ({ id: 'session-1', providerMetadata: null }),
-        updateSession: async () => ({}),
+        reconcileConfigSnapshot: vi.fn(),
       }),
       runtimeManager: unsafeCoerce({
         getClient: () => handle,

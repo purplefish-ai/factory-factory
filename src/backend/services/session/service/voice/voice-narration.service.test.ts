@@ -319,6 +319,7 @@ describe('voiceNarrationService', () => {
   it('isCurrentConnection is true only for the connection currently registered', () => {
     const firstWs = createFakeClientWs();
     const secondWs = createFakeClientWs();
+    expect(voiceNarrationService.hasAnyActiveConnection()).toBe(false);
     register('sess-current', firstWs as never);
 
     expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(true);
@@ -329,7 +330,10 @@ describe('voiceNarrationService', () => {
     expect(voiceNarrationService.isCurrentConnection('sess-current', firstWs as never)).toBe(false);
     expect(voiceNarrationService.isCurrentConnection('sess-current', secondWs as never)).toBe(true);
 
+    unregister('sess-current', firstWs as never);
+    expect(voiceNarrationService.hasAnyActiveConnection()).toBe(true);
     unregister('sess-current', secondWs as never);
+    expect(voiceNarrationService.hasAnyActiveConnection()).toBe(false);
   });
 
   it('cancelNarration clears the active narration and queued clauses, and clears client playback', async () => {

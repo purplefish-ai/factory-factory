@@ -602,10 +602,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
 
   if (configService.getWorkspaceMetadataConfig().enabled) {
     services.workspaceMetadata = new WorkspaceMetadataOrchestrator({
-      findSession: async (id) => {
-        const session = await services.sessionDataService.findAgentSessionById(id);
-        return session ? { ...session, codexAccountId: session.codexAccountId ?? null } : null;
-      },
+      findSession: (id) => services.sessionDataService.findWorkspaceMetadataContext(id),
       history: (id) => sessionInterceptorBridge.getSessionConversationHistory(id, ''),
       findWorkspace: (id) => services.workspaceDataService.findMetadataContext(id),
       reserve: (id, requestId) => services.workspaceDataService.reserveMetadata(id, requestId),

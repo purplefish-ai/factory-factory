@@ -84,6 +84,10 @@ class SessionDataImplementation {
 
   // Agent sessions
 
+  findWorkspaceMetadataContext(id: string) {
+    return agentSessionAccessor.findWorkspaceMetadataContext(id);
+  }
+
   findWorkspaceIdForSession(id: string) {
     return agentSessionAccessor.findWorkspaceIdForSession(id);
   }

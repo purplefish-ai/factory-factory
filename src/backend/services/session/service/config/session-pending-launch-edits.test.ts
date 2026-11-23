@@ -65,6 +65,7 @@ function fixture(provider: 'CLAUDE' | 'CODEX', applied = false) {
     ),
   };
   const accessor = {
+    findConfigSnapshotState: () => Promise.resolve(structuredClone(session)),
     findById: () => Promise.resolve(structuredClone(session)),
     update: repository.updateSession,
     updateIfProviderIdentity: (_id: string, expected: typeof session, data: object) => {

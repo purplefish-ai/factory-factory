@@ -24,6 +24,7 @@ vi.mock('@/backend/services/settings', () => ({
 describe('SessionConfigService', () => {
   const codexModelCatalogService = { getModels: vi.fn() };
   const repository = {
+    reconcileConfigSnapshot: vi.fn(),
     getSessionById: vi.fn(),
     updateSession: vi.fn(),
   };

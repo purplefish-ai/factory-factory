@@ -319,17 +319,15 @@ class UserSettingsAccessor {
    * Creates default settings if they don't exist.
    */
   async get(): Promise<UserSettingsRecord> {
-    const userId = 'default';
-
     const existing = await prisma.userSettings.findUnique({
-      where: { userId },
+      where: { userId: 'default' },
       omit: BACKEND_ONLY_COLUMNS,
     });
+    return existing ?? this.createDefaultSettings();
+  }
 
-    if (existing) {
-      return existing;
-    }
-
+  private async createDefaultSettings(): Promise<UserSettingsRecord> {
+    const userId = 'default';
     try {
       return await prisma.userSettings.create({
         data: {
@@ -366,6 +364,14 @@ class UserSettingsAccessor {
 
       return settings;
     }
+  }
+
+  async getTurnLimitMinutes(): Promise<number | null> {
+    const settings = await prisma.userSettings.findUnique({
+      where: { userId: 'default' },
+      select: { turnLimitMinutes: true },
+    });
+    return (settings ?? (await this.createDefaultSettings())).turnLimitMinutes;
   }
 
   async getDefaultSessionProvider(): Promise<SessionProvider> {

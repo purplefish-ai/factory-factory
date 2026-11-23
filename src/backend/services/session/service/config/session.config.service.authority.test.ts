@@ -21,7 +21,7 @@ describe('accepted configuration commit authority', () => {
       return Promise.resolve();
     };
     h.hooks.read = async (number) => {
-      if (number === 3) {
+      if (number === 2) {
         await retry.wait();
       }
     };
@@ -41,7 +41,7 @@ describe('accepted configuration commit authority', () => {
     const h = setupAuthority();
     const read = gate();
     h.hooks.read = async (number) => {
-      if (number === 2) {
+      if (number === 1) {
         await read.wait();
       }
     };
@@ -54,40 +54,26 @@ describe('accepted configuration commit authority', () => {
     expect(h.row().model).toBe('third');
   });
 
-  it.each(['newer-first', 'older-first'] as const)(
-    'preserves the newer accepted configuration with already issued SQL: %s',
-    async (order) => {
-      const h = setupAuthority();
-      const oldSql = gate();
-      const newSql = gate();
-      h.hooks.cas = async (number) => {
-        if (number === 1) {
-          await oldSql.wait();
-        }
-        if (number === 2 && order === 'older-first') {
-          await newSql.wait();
-        }
-      };
-      h.native('second');
-      await oldSql.started;
-      const setting = h.service.setSessionModel('session', 'third');
-      if (order === 'newer-first') {
-        await setting;
-        oldSql.release();
-      } else {
-        await newSql.started;
-        oldSql.release();
-        await settleConfig();
-        newSql.release();
-        await setting;
+  it('reads the newer accepted configuration after an already issued write settles', async () => {
+    const h = setupAuthority();
+    const oldSql = gate();
+    h.hooks.cas = async (number) => {
+      if (number === 1) {
+        await oldSql.wait();
       }
-      await settleConfig();
-      expect(h.row().model).toBe('third');
-      expect(parseAcpConfigSnapshot(h.row().providerMetadata)?.observedModelId).toBe('third');
-      expect(h.accessor.update).not.toHaveBeenCalled();
-      expect(h.models()).toEqual(['second', 'third']);
-    }
-  );
+    };
+    h.native('second');
+    await oldSql.started;
+    const setting = h.service.setSessionModel('session', 'third');
+    await settleConfig();
+    expect(h.casModels).toEqual(['second']);
+    oldSql.release();
+    await setting;
+    expect(h.row().model).toBe('third');
+    expect(parseAcpConfigSnapshot(h.row().providerMetadata)?.observedModelId).toBe('third');
+    expect(h.accessor.update).not.toHaveBeenCalled();
+    expect(h.models()).toEqual(['second', 'third']);
+  });
 
   it.each(['model', 'mode', 'reasoning'] as const)(
     'captures current handle options after a delayed %s RPC continuation',
@@ -134,14 +120,14 @@ describe('accepted configuration commit authority', () => {
     }
   );
 
-  it('does not publish an obsolete edit after a delayed final repository reread', async () => {
+  it('does not publish an obsolete edit after a delayed guarded write returns', async () => {
     const h = setupAuthority();
     const reread = gate();
-    h.hooks.read = async (number) => {
-      if (number === 3) {
-        await reread.wait();
-      }
-    };
+    const reconcile = h.repository.reconcileConfigSnapshot.bind(h.repository);
+    vi.spyOn(h.repository, 'reconcileConfigSnapshot').mockImplementationOnce(async (...args) => {
+      await reconcile(...args);
+      await reread.wait();
+    });
     const setting = h.service.setSessionModel('session', 'second');
     await reread.started;
     h.native('third');
@@ -217,7 +203,7 @@ describe('accepted configuration commit authority', () => {
       return Promise.resolve();
     };
     h.hooks.read = async (number) => {
-      if (number === 3) {
+      if (number === 2) {
         await retry.wait();
       }
     };
@@ -239,7 +225,7 @@ describe('accepted configuration commit authority', () => {
     const h = setupAuthority();
     const read = gate();
     h.hooks.read = async (number) => {
-      if (number === 2) {
+      if (number === 1) {
         await read.wait();
       }
     };

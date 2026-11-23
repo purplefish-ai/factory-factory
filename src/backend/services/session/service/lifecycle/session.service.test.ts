@@ -110,15 +110,15 @@ import {
   createDeferredCall,
   mockCreatedAcpClient,
   mockActivePromptClient,
+  mockLifecycleUserSettings,
   nextPromptClientLookup,
 } from './session-lifecycle.test-helpers';
-
 const getAcpProcessorState = () => acpEventProcessor;
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+    mockLifecycleUserSettings(userSettingsService);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();

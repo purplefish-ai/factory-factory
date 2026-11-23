@@ -11,6 +11,7 @@ const { mockSessionDataService, mockSessionEventBus, mockVoiceNarrationService }
     },
     mockVoiceNarrationService: {
       hasActiveConnection: vi.fn(),
+      hasAnyActiveConnection: vi.fn(() => true),
     },
   })
 );
@@ -81,13 +82,14 @@ describe('chatEventForwarderService workspace notifications', () => {
 
   it('publishes the notification when no session has an active voice connection', async () => {
     mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([{ id: 'session-1' }]);
-    mockVoiceNarrationService.hasActiveConnection.mockReturnValue(false);
+    mockVoiceNarrationService.hasAnyActiveConnection.mockReturnValueOnce(false);
     const published = deferred();
     mockSessionEventBus.publishToAllClients.mockImplementationOnce(() => published.resolve());
 
     handler(baseData());
 
     await published.promise;
+    expect(mockSessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
     expect(mockSessionEventBus.publishToAllClients).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'workspace_notification_request',

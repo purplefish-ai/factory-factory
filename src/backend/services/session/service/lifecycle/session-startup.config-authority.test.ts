@@ -49,8 +49,8 @@ describe('final startup configuration durability and access', () => {
       try {
         await startupSql.started;
         h.native();
-        await replacementSql.started;
         startupSql.release();
+        await replacementSql.started;
         await settleConfig();
         expect(h.complete).not.toHaveBeenCalled();
         expect(h.sendSessionMessage).not.toHaveBeenCalled();

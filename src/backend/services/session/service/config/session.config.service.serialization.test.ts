@@ -62,7 +62,8 @@ function fixture() {
   const persisted: string[] = [];
   const repository = {
     getSessionById: vi.fn().mockResolvedValue(session),
-    updateSession: vi.fn((_id: string, update: { model?: string }) => {
+    updateSession: vi.fn(),
+    reconcileConfigSnapshot: vi.fn((_id: string, update: { model?: string }) => {
       if (update.model) {
         persisted.push(update.model);
       }
@@ -321,7 +322,7 @@ describe('configuration transaction ordering', () => {
     const f = fixture();
     const persisting = createDeferred<typeof f.session>();
     const persistenceStarted = createDeferred<void>();
-    f.repository.updateSession.mockImplementationOnce(() => {
+    f.repository.reconcileConfigSnapshot.mockImplementationOnce(() => {
       persistenceStarted.resolve();
       return persisting.promise;
     });
@@ -420,6 +421,7 @@ describe('configuration transaction ordering', () => {
     expect((await results).map((result) => result.status)).toEqual(['rejected', 'rejected']);
     expect(f.rpc).toHaveBeenCalledOnce();
     expect(f.repository.updateSession).not.toHaveBeenCalled();
+    expect(f.repository.reconcileConfigSnapshot).not.toHaveBeenCalled();
     expect(f.emitted).toEqual([]);
   });
 

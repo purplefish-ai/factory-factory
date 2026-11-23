@@ -4,6 +4,7 @@ import {
   createTestProcessHandle,
   createDeferred,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
@@ -59,16 +60,21 @@ function setup(eventAuthority?: Pick<EventSessionAuthority, 'assertOrdinary'>) {
       applyOption(id, value)
     ),
   };
-  const repository = { getSessionById: vi.fn().mockResolvedValue(session), updateSession: vi.fn() };
+  const accessor = {
+    findById: vi.fn().mockResolvedValue(session),
+    findConfigSnapshotState: vi.fn().mockResolvedValue(session),
+    updateIfProviderIdentity: vi.fn().mockResolvedValue(1),
+  };
+  const repository = new SessionRepository(unsafeCoerce(accessor));
   const domain = { emitDelta: vi.fn() };
   const service = new SessionConfigService({
     eventAuthority,
     runtimeManager: unsafeCoerce(runtime),
-    repository: unsafeCoerce(repository),
+    repository,
     codexModelCatalogService: { getModels: vi.fn() },
     sessionDomainService: unsafeCoerce(domain),
   });
-  return { handle, session, runtime, repository, domain, service };
+  return { handle, session, runtime, accessor, domain, service };
 }
 
 describe('public native config readiness', () => {
@@ -102,7 +108,7 @@ describe('public native config readiness', () => {
       expect(rpc).toHaveBeenCalled();
       const replacement = createTestProcessHandle({ providerSessionId: 'replacement' });
       h.runtime.getClient.mockReturnValue(replacement);
-      h.repository.getSessionById.mockResolvedValue({
+      h.accessor.findById.mockResolvedValue({
         ...h.session,
         providerSessionId: 'replacement',
       });
@@ -118,7 +124,7 @@ describe('public native config readiness', () => {
       ]);
       expect(await setting).toBeInstanceOf(Error);
       expect(h.domain.emitDelta).not.toHaveBeenCalled();
-      expect(h.repository.updateSession).not.toHaveBeenCalled();
+      expect(h.accessor.updateIfProviderIdentity).not.toHaveBeenCalled();
     }
   );
 
@@ -128,10 +134,7 @@ describe('public native config readiness', () => {
       const h = setup();
       const reading = createDeferred<typeof h.session>();
       const startedReading = Promise.withResolvers<void>();
-      if (kind === 'generic') {
-        h.repository.getSessionById.mockResolvedValueOnce(h.session);
-      }
-      h.repository.getSessionById.mockImplementationOnce(() => {
+      h.accessor.findConfigSnapshotState.mockImplementationOnce(() => {
         startedReading.resolve();
         return reading.promise;
       });
@@ -141,11 +144,11 @@ describe('public native config readiness', () => {
           : h.service.setSessionReasoningEffort('session', 'high')
       ).catch((error: unknown) => error);
       await startedReading.promise;
-      expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 2 : 1);
+      expect(h.accessor.findConfigSnapshotState).toHaveBeenCalledOnce();
       h.runtime.getClient.mockReturnValue(createTestProcessHandle({ providerSessionId: 'thread' }));
       reading.resolve(h.session);
       expect(await setting).toBeInstanceOf(Error);
-      expect(h.repository.updateSession).not.toHaveBeenCalled();
+      expect(h.accessor.updateIfProviderIdentity).not.toHaveBeenCalled();
       expect(h.domain.emitDelta).not.toHaveBeenCalled();
     }
   );
@@ -156,25 +159,24 @@ describe('public native config readiness', () => {
       const h = setup();
       const reading = createDeferred<typeof h.session>();
       const startedReading = Promise.withResolvers<void>();
-      if (kind === 'generic') {
-        h.repository.getSessionById.mockResolvedValueOnce(h.session);
-      }
-      h.repository.getSessionById.mockResolvedValueOnce(h.session).mockImplementationOnce(() => {
-        startedReading.resolve();
-        return reading.promise;
-      });
-      h.repository.updateSession.mockRejectedValueOnce(new Error('Storage unavailable'));
+      h.accessor.findConfigSnapshotState
+        .mockResolvedValueOnce(h.session)
+        .mockImplementationOnce(() => {
+          startedReading.resolve();
+          return reading.promise;
+        });
+      h.accessor.updateIfProviderIdentity.mockRejectedValueOnce(new Error('Storage unavailable'));
       const setting = (
         kind === 'generic'
           ? h.service.setSessionConfigOption('session', 'mode', 'read-only')
           : h.service.setSessionReasoningEffort('session', 'high')
       ).catch((error: unknown) => error);
       await startedReading.promise;
-      expect(h.repository.getSessionById).toHaveBeenCalledTimes(kind === 'generic' ? 3 : 2);
+      expect(h.accessor.findConfigSnapshotState).toHaveBeenCalledTimes(2);
       h.runtime.getClient.mockReturnValue(createTestProcessHandle({ providerSessionId: 'thread' }));
       reading.resolve(h.session);
       expect(await setting).toBeInstanceOf(Error);
-      expect(h.repository.updateSession).toHaveBeenCalledOnce();
+      expect(h.accessor.updateIfProviderIdentity).toHaveBeenCalledOnce();
       expect(h.domain.emitDelta).not.toHaveBeenCalled();
     }
   );
@@ -218,7 +220,7 @@ describe('public native config readiness', () => {
       await Promise.resolve();
       expect(h.runtime.setSessionModel).not.toHaveBeenCalled();
       expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
-      expect(h.repository.updateSession).not.toHaveBeenCalled();
+      expect(h.accessor.updateIfProviderIdentity).not.toHaveBeenCalled();
       h.handle.completeConfiguration();
       await setting;
       if (kind === 'model') {
@@ -226,8 +228,9 @@ describe('public native config readiness', () => {
       } else {
         expect(h.runtime.setConfigOption).toHaveBeenCalledWith('session', 'reasoning', 'high');
       }
-      expect(h.repository.updateSession).toHaveBeenCalledWith(
+      expect(h.accessor.updateIfProviderIdentity).toHaveBeenCalledWith(
         'session',
+        expect.objectContaining({ providerSessionId: 'thread' }),
         expect.objectContaining({
           providerMetadata: expect.objectContaining({
             acpConfigSnapshot: expect.objectContaining({
@@ -241,8 +244,7 @@ describe('public native config readiness', () => {
               ]),
             }),
           }),
-        }),
-        expect.any(Function)
+        })
       );
     }
   );
@@ -262,8 +264,9 @@ describe('public native config readiness', () => {
     h.handle.completeConfiguration();
     await setting;
     expect(h.runtime.setSessionMode).toHaveBeenCalledWith('session', 'read-only');
-    expect(h.repository.updateSession).toHaveBeenCalledWith(
+    expect(h.accessor.updateIfProviderIdentity).toHaveBeenCalledWith(
       'session',
+      expect.objectContaining({ providerSessionId: 'thread' }),
       expect.objectContaining({
         providerMetadata: expect.objectContaining({
           acpConfigSnapshot: expect.objectContaining({
@@ -277,8 +280,7 @@ describe('public native config readiness', () => {
             ]),
           }),
         }),
-      }),
-      expect.any(Function)
+      })
     );
   });
 
@@ -304,7 +306,7 @@ describe('public native config readiness', () => {
   it('rechecks a new configuration barrier after asynchronous reviewer validation', async () => {
     const h = setup();
     const validating = createDeferred<typeof h.session>();
-    h.repository.getSessionById.mockReturnValueOnce(validating.promise);
+    h.accessor.findById.mockReturnValueOnce(validating.promise);
     const setting = h.service.setSessionConfigOption('session', 'mode', 'read-only');
     const configuration = h.handle.beginConfiguration();
     validating.resolve(h.session);
@@ -334,7 +336,7 @@ it.each(['model', 'generic', 'reasoning'] as const)(
     expect(h.runtime.setSessionModel).not.toHaveBeenCalled();
     expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
-    expect(h.repository.updateSession).not.toHaveBeenCalled();
+    expect(h.accessor.updateIfProviderIdentity).not.toHaveBeenCalled();
     fenced = false;
     await edit();
     expect(

@@ -44,7 +44,7 @@ const image: AgentContentItem = {
 };
 
 beforeEach(() => {
-  vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+  vi.spyOn(userSettingsService, 'getTurnLimitMinutes').mockResolvedValue(null);
 });
 
 describe('SessionService steering conversion', () => {

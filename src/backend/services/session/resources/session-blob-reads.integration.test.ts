@@ -115,3 +115,10 @@ it('reads current dispatch policy in one query without reading session metadata'
   await expect(read()).resolves.toMatchObject({ status: 'ARCHIVING' });
   await expect(agentSessionAccessor.findDispatchWorkspace('missing')).resolves.toBeNull();
 });
+
+it('schedules workspace metadata with only the workspace, provider and account', async () => {
+  await expect(
+    expectSingleNarrowRead(() => agentSessionAccessor.findWorkspaceMetadataContext('s'))
+  ).resolves.toEqual({ workspaceId: 'w', provider: 'CLAUDE', codexAccountId: null });
+  await expect(agentSessionAccessor.findWorkspaceMetadataContext('missing')).resolves.toBeNull();
+});

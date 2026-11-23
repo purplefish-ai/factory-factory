@@ -78,7 +78,7 @@ function installRuntimeQuiescence(harness: LifecycleHarness) {
 describe('SessionStartupCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+    vi.spyOn(userSettingsService, 'getTurnLimitMinutes').mockResolvedValue(null);
     vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue(null);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });
