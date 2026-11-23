@@ -804,6 +804,25 @@ describe('useProjectSnapshotSync', () => {
       expect(mockQueryInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).not.toHaveBeenCalled();
     });
+
+    it('heals the list after a later baseline with one legacy entry among complete ones', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const baseline = {
+        type: 'snapshot_full' as const,
+        projectId: 'proj-1',
+        entries: [
+          complete({ workspaceId: 'ws-2' }),
+          makeEntry(),
+          complete({ workspaceId: 'ws-3' }),
+        ],
+        reviewCount: 0,
+      };
+      onMessage(baseline);
+      mockListInvalidate.mockClear();
+      onMessage(baseline);
+      expect(mockListInvalidate).toHaveBeenCalledExactlyOnceWith(...joinListRead);
+    });
   });
 
   // ===========================================================================

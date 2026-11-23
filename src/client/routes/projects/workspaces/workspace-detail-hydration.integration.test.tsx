@@ -187,14 +187,21 @@ describe('workspace detail route hydration', () => {
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
       // The drop restarts only the read the retired connection began.
       channel.onDisconnected?.();
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      await requests.waitForCount(2);
+      expect(requests.events).toHaveLength(2);
+      // The failed reconnect attempt falls back for this project's detail and
+      // list (one invalidation each), restarting the pending detail once more.
+      channel.onDisconnected?.();
+      expect(invalidate).toHaveBeenCalledTimes(3);
+      await requests.waitForCount(3);
+      // Other projects' and unassociated detail keep loading through both.
       expect(signals['ws-b']![0]!.aborted).toBe(false);
       expect(signals['ws-c']![0]!.aborted).toBe(false);
       expect(signals['ws-b']).toHaveLength(1);
       expect(signals['ws-c']).toHaveLength(1);
-      expect(invalidate).toHaveBeenCalledTimes(1);
-      await requests.waitForCount(2);
-      expect(requests.events).toHaveLength(2);
-      requests.events[1]!(fetched({ name: 'A fallback' }));
+      expect(requests.events).toHaveLength(3);
+      requests.events[2]!(fetched({ name: 'A fallback' }));
       await vi.waitFor(() => expect(latest.workspace?.name).toBe('A fallback'));
       complete['ws-b']!(fetched({ id: 'ws-b', projectId: 'proj-2', worktreePath: '/project-b' }));
       complete['ws-c']!(

@@ -40,8 +40,8 @@ readers in `src/client/hooks/` that wrap its options:
 - Writers: `setProjectWorkspaceList` for optimistic rows, `seedWorkspaceDetail`
   for creation seeds, `mergeWorkspaceDetailSnapshot` for stream merges.
 - Connection changes: `restartPendingProjectWorkspaceReads` restarts a project's
-  list and owned detail reads that are in flight or empty and leaves cached data
-  for the next baseline.
+  list and owned detail reads that are in flight or have no data, and leaves
+  cached data for the next baseline.
 - Key operations: `resetWorkspaceDetail`, `invalidateWorkspaceDetail`,
   `cancelWorkspaceDetail`, `refetchActiveWorkspaceDetail`,
   `getCachedWorkspaceDetails`, `cancelProjectWorkspaceList`.
