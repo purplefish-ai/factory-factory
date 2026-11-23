@@ -49,7 +49,8 @@ describe('summarizeHostLoad', () => {
     // A phone poll a little early: the previous reading must still stay out.
     expect(summarizeHostLoad(at([0, 14_800], [10, 97])).cpu.tone).toBe('danger');
     // Desktop polls a little late: still the last three readings, not two.
-    expect(summarizeHostLoad(at([0, 5200, 10_400], [99, 99, 10])).cpu.tone).toBe('neutral');
+    // Three readings average 96 (danger); the last two alone would be 94.5 (warning).
+    expect(summarizeHostLoad(at([0, 5200, 10_400], [99, 99, 90])).cpu.tone).toBe('danger');
     // Desktop polls a little early: still three, not four.
     expect(summarizeHostLoad(at([0, 4900, 9800, 14_700], [10, 99, 99, 99])).cpu.tone).toBe(
       'danger'
