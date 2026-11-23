@@ -1,10 +1,9 @@
-import { userSettingsAccessor } from '@/backend/services/settings/resources/user-settings.accessor';
-import type {
-  Prisma,
-  SessionPermissionPreset,
-  SessionProvider,
-  UserSettings,
-} from '@prisma-gen/client';
+import {
+  type SlashCommandCacheState,
+  type UserSettingsRecord,
+  userSettingsAccessor,
+} from '@/backend/services/settings/resources/user-settings.accessor';
+import type { Prisma, SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 
 export interface UpdateUserSettingsInput {
   turnLimitMinutes?: number | null;
@@ -42,11 +41,12 @@ export interface UpdateUserSettingsInput {
 }
 
 class UserSettingsService {
-  get(): Promise<UserSettings> {
+  /** Settings without the slash-command cache; procedures return this to clients. */
+  get(): Promise<UserSettingsRecord> {
     return userSettingsAccessor.get();
   }
 
-  update(data: UpdateUserSettingsInput): Promise<UserSettings> {
+  update(data: UpdateUserSettingsInput): Promise<UserSettingsRecord> {
     return userSettingsAccessor.update(data);
   }
 
@@ -58,8 +58,12 @@ class UserSettingsService {
     return userSettingsAccessor.getWorkspaceOrder(projectId);
   }
 
-  updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
+  updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettingsRecord> {
     return userSettingsAccessor.updateWorkspaceOrder(projectId, workspaceIds);
+  }
+
+  getSlashCommandCache(): Promise<SlashCommandCacheState> {
+    return userSettingsAccessor.getSlashCommandCache();
   }
 
   compareAndSetCachedSlashCommands(

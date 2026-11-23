@@ -71,7 +71,6 @@ describe('sessionProviderResolverService', () => {
       childWorkspacesEnabled: true,
       notificationSoundPath: null,
       workspaceOrder: null,
-      cachedSlashCommands: null,
       ratchetEnabled: false,
       ratchetReplyToPrComments: true,
       ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
