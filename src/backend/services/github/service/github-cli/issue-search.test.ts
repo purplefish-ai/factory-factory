@@ -20,7 +20,6 @@ describe('GitHub issue search', () => {
       {
         number: 42,
         title: 'Fix search',
-        body: 'Details',
         url: 'https://github.com/org/repo/issues/42',
         state: 'CLOSED',
         createdAt: '2026-01-01T00:00:00Z',
@@ -81,7 +80,34 @@ describe('GitHub issue search', () => {
       '--limit',
       '20',
       '--json',
-      'number,title,body,url,state,createdAt,author',
+      'number,title,url,state,createdAt,author',
+    ]);
+  });
+
+  it('leaves issue bodies out of text search results', async () => {
+    const exec = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify([
+        {
+          number: 7,
+          title: 'Polish search',
+          body: 'Long details',
+          url: 'https://github.com/org/repo/issues/7',
+          state: 'OPEN',
+          createdAt: '2026-01-01T00:00:00Z',
+          author: { login: 'martin' },
+        },
+      ]),
+      stderr: '',
+    });
+    expect(await searchIssues(exec, 'org', 'repo', 'polish', 20)).toEqual([
+      {
+        number: 7,
+        title: 'Polish search',
+        url: 'https://github.com/org/repo/issues/7',
+        state: 'OPEN',
+        createdAt: '2026-01-01T00:00:00Z',
+        author: { login: 'martin' },
+      },
     ]);
   });
 

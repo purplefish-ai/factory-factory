@@ -8,7 +8,6 @@ const response = {
     {
       number: 7,
       title: 'Retained issue',
-      body: '',
       url: 'https://github.com/acme/repo/issues/7',
       createdAt: '2026-11-04T12:00:00Z',
       author: { login: 'octocat' },

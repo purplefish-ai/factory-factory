@@ -22,7 +22,6 @@ const issues: NormalizedIssue[] = [
     title: 'Retained issue',
     displayId: '#7',
     provider: 'github',
-    body: '',
     url: 'https://github.com/acme/repo/issues/7',
     author: 'octocat',
     createdAt: '2026-11-04T12:00:00Z',

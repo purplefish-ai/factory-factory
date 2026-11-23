@@ -27,7 +27,9 @@ import {
   type SessionOutboundEvent,
 } from '@/backend/services/session';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
+import type { CachedMetadataOffer } from '@/shared/acp-protocol/protocol/cached-metadata';
 import type { SessionReplayChunk } from '@/shared/acp-protocol/protocol/replay-frame-schema';
+import { type CacheableMetadataFrames, prepareCacheableMetadata } from './chat-cached-metadata';
 import { ChatReplayDelivery } from './chat-replay-delivery';
 import { serializeChatFrame } from './message-utils';
 
@@ -76,6 +78,8 @@ export class ChatConnectionRegistry {
   private readonly blockedBaselines = new WeakSet<WebSocket>();
   private readonly pendingReplays = new WeakMap<WebSocket, { loadRequestId: string }>();
   private readonly expectedReplays = new WeakMap<WebSocket, string | undefined>();
+  /** Metadata digests each viewer offered with its latest load. */
+  private readonly offeredMetadata = new WeakMap<WebSocket, ReadonlySet<string>>();
   private maxFrameBytes = MAX_WEBSOCKET_STATEFUL_FRAME_BYTES;
   private chatWsMsgCounter = 0;
   private logger: ChatRegistryLogger = NOOP_LOGGER;
@@ -129,6 +133,7 @@ export class ChatConnectionRegistry {
     this.expectedReplays.delete(ws);
     this.incompleteLoads.delete(ws);
     this.blockedBaselines.delete(ws);
+    this.offeredMetadata.delete(ws);
   }
 
   get(connectionId: string): ConnectionInfo | undefined {
@@ -158,6 +163,19 @@ export class ChatConnectionRegistry {
     }
     this.incompleteLoads.add(ws);
     this.expectedReplays.set(ws, loadRequestId);
+  }
+
+  /**
+   * Record the metadata a viewer holds, replacing its previous offer. While
+   * the connection lasts, a slash command or config option delta whose digest
+   * it offered reaches it as a `cached_metadata` acknowledgement instead.
+   */
+  offerCachedMetadata(ws: WebSocket, offer: CachedMetadataOffer | undefined): void {
+    if (offer && offer.digests.length > 0) {
+      this.offeredMetadata.set(ws, new Set(offer.digests));
+    } else {
+      this.offeredMetadata.delete(ws);
+    }
   }
 
   /** Count connections currently viewing a specific DB session. */
@@ -199,8 +217,10 @@ export class ChatConnectionRegistry {
       });
     }
     const incoming = this.incomingReplays.get(dbSessionId);
-    const wire = serialized ?? payload;
-    const sent = this.broadcaster.broadcastWith(dbSessionId, wire, (ws, message) => {
+    const metadata = this.cacheableMetadata(dbSessionId, payload, serialized);
+    const wire = metadata?.full ?? serialized ?? payload;
+    const sent = this.broadcaster.broadcastWith(dbSessionId, wire, (ws, full) => {
+      const message = this.acknowledgementFor(ws, metadata) ?? full;
       if (payload.type === 'session_replay_chunk') {
         return this.sendChunk(ws, payload, message, incoming, written);
       }
@@ -246,6 +266,26 @@ export class ChatConnectionRegistry {
     }
 
     return sent;
+  }
+
+  /** Digesting serializes the delta again; skip it when nobody would receive it. */
+  private cacheableMetadata(
+    dbSessionId: string,
+    payload: WebSocketMessage,
+    serialized: string | undefined
+  ): CacheableMetadataFrames | null {
+    return this.broadcaster.hasSubscribers(dbSessionId)
+      ? prepareCacheableMetadata(payload, serialized)
+      : null;
+  }
+
+  private acknowledgementFor(
+    ws: WebSocket,
+    metadata: CacheableMetadataFrames | null
+  ): string | undefined {
+    return metadata && this.offeredMetadata.get(ws)?.has(metadata.digest)
+      ? metadata.acknowledgement
+      : undefined;
   }
 
   private enqueueAfterReplay(

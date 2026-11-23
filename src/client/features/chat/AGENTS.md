@@ -23,8 +23,7 @@ provider notice and tool renderers (`agent-activity/`). It does not own:
   `src/client/routes/projects/workspaces/`.
 - Quick chat: `src/client/features/kanban/`. Sub-agent transcripts:
   `src/client/features/subagents/`. Saved main-chat positions and closed-session
-  transcripts: `src/client/features/workspace/`.
-- Remembered disclosure choices:
+  transcripts: `src/client/features/workspace/`. Remembered disclosure choices:
   `src/client/hooks/use-remembered-disclosure.ts`.
 
 ## Public surface
@@ -117,4 +116,5 @@ The barrel is `index.ts`. Callers in routes and other features must:
 
 - [Chat frames are validated in full](../../../../docs/decisions/2026-11-13-chat-frames-are-validated-in-full.md)
 - [Targeted session-state deltas](../../../../docs/decisions/2026-11-13-targeted-session-state-deltas.md)
+- [Chat metadata is acknowledged per viewer](../../../../docs/decisions/2026-11-23-chat-metadata-is-acknowledged-per-viewer.md)
 - [Message rows offer no rewind](../../../../docs/decisions/2026-11-13-message-rows-offer-no-rewind.md)

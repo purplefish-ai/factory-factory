@@ -45,9 +45,7 @@ export const handlers: StoryTrpcHandlers = {
       {
         number: 7,
         title: 'Support keyboard shortcuts on the board',
-        body: '',
         url: 'https://github.com/purplefish-ai/factory-factory/issues/7',
-        state: 'OPEN',
         createdAt: '2026-10-01T12:00:00Z',
         author: { login: 'martin' },
       },

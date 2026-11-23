@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { brotliCompressSync } from 'node:zlib';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WebSocket } from 'ws';
+import { WebSocket, type WebSocketServer } from 'ws';
 import { deferred } from '@/test-utils/deferred';
 
 const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
@@ -37,7 +37,12 @@ const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/backend/routers/websocket', () => ({
+vi.mock('@/backend/routers/websocket', async () => ({
+  createWebSocketServers: (
+    await vi.importActual<typeof import('./routers/websocket/websocket-servers')>(
+      './routers/websocket/websocket-servers'
+    )
+  ).createWebSocketServers,
   createChatUpgradeHandler: handlerFactories.chat,
   createTerminalUpgradeHandler: handlerFactories.terminal,
   createSetupTerminalUpgradeHandler: handlerFactories.setupTerminal,
@@ -267,6 +272,41 @@ describe('server websocket upgrade routing', () => {
 
     expect(handlers.setupTerminal).toHaveBeenCalledOnce();
     expect(handlers.postRunLogs).toHaveBeenCalledOnce();
+  });
+
+  it('hands the JSON channels a compressing server and the interactive and audio channels a plain one', () => {
+    const server = createTestServer();
+    const socket = { destroy: vi.fn() };
+    const channels = [
+      ['/chat', handlers.chat],
+      ['/snapshots', handlers.snapshots],
+      ['/dev-logs', handlers.devLogs],
+      ['/post-run-logs', handlers.postRunLogs],
+      ['/terminal', handlers.terminal],
+      ['/setup-terminal', handlers.setupTerminal],
+      ['/voice', handlers.voice],
+    ] as const;
+
+    for (const [path] of channels) {
+      const request = { headers: { host: 'localhost:3001' }, url: `${path}?workspaceId=ws-1` };
+      server.getHttpServer().emit('upgrade', request, socket, Buffer.alloc(0));
+    }
+
+    const compresses = Object.fromEntries(
+      channels.map(([path, handler]) => {
+        const wss: WebSocketServer = handler.mock.calls[0]?.[4];
+        return [path, wss.options.perMessageDeflate !== false];
+      })
+    );
+    expect(compresses).toEqual({
+      '/chat': true,
+      '/snapshots': true,
+      '/dev-logs': true,
+      '/post-run-logs': true,
+      '/terminal': false,
+      '/setup-terminal': false,
+      '/voice': false,
+    });
   });
 
   it('destroys socket for unknown upgrade paths', () => {

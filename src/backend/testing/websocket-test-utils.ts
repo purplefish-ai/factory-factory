@@ -2,7 +2,8 @@ import type { ClientRequestArgs, IncomingMessage } from 'node:http';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket, type WebSocketServer } from 'ws';
+import { createWebSocketServers } from '@/backend/routers/websocket/websocket-servers';
 
 export type UpgradeHandler = (
   request: IncomingMessage,
@@ -18,11 +19,16 @@ export interface WebSocketTestServer {
   port: number;
 }
 
+/**
+ * Accepts upgrades on one path with the server production uses for it, so a
+ * client that offers permessage-deflate gets it where production gives it.
+ */
 export async function createWebSocketTestServer(
   handler: UpgradeHandler,
   allowedPath: string
 ): Promise<WebSocketTestServer> {
-  const wss = new WebSocketServer({ noServer: true });
+  const servers = createWebSocketServers();
+  const wss = servers.forPath(allowedPath);
   const wsAliveMap = new WeakMap<WebSocket, boolean>();
   const server: HttpServer = createServer();
 
@@ -45,21 +51,18 @@ export async function createWebSocketTestServer(
   return {
     port: (address as AddressInfo).port,
     close: () =>
-      new Promise<void>((resolve, reject) => {
-        wss.close((wssError) => {
-          if (wssError) {
-            reject(wssError);
-            return;
-          }
-          server.close((serverError) => {
-            if (serverError) {
-              reject(serverError);
-              return;
-            }
-            resolve();
-          });
-        });
-      }),
+      servers.close().then(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            server.close((serverError) => {
+              if (serverError) {
+                reject(serverError);
+                return;
+              }
+              resolve();
+            });
+          })
+      ),
   };
 }
 

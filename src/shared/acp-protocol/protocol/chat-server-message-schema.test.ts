@@ -85,6 +85,26 @@ describe('ChatServerMessageSchema', () => {
       },
       { type: 'session_delta', data: { type: 'task_notification', message: 'Indexing' } },
       {
+        type: 'session_delta',
+        data: {
+          type: 'slash_commands',
+          slashCommands: [{ name: 'review', description: 'Review' }],
+          digest: 'v1:commands',
+        },
+      },
+      {
+        type: 'session_delta',
+        data: {
+          type: 'config_options_update',
+          configOptions: [{ id: 'fast', name: 'Fast', type: 'boolean', currentValue: true }],
+          digest: 'v1:options',
+        },
+      },
+      {
+        type: 'session_delta',
+        data: { type: 'cached_metadata', deltaType: 'slash_commands', digest: 'v1:commands' },
+      },
+      {
         type: 'session_snapshot',
         messages: [
           { id: 'u1', source: 'user', text: 'hi', timestamp: runtime.updatedAt, order: 0 },
@@ -117,6 +137,15 @@ describe('ChatServerMessageSchema', () => {
     ['agent message without order', { type: 'agent_message', data: { type: 'result' } }],
     ['agent message with an unknown payload', { type: 'agent_message', order: 1, data: {} }],
     ['runtime without a phase', { type: 'session_runtime_updated', sessionRuntime: {} }],
+    ['cached metadata without a digest', { type: 'cached_metadata', deltaType: 'slash_commands' }],
+    [
+      'cached metadata for another delta type',
+      { type: 'cached_metadata', deltaType: 'chat_capabilities', digest: 'v1:x' },
+    ],
+    [
+      'slash commands with an oversized digest',
+      { type: 'slash_commands', slashCommands: [], digest: 'x'.repeat(129) },
+    ],
     ['unknown type', { type: 'not_real' }],
     ['retired type', { type: 'status_update', permissionMode: 'default' }],
   ])('rejects a %s', (_label, frame) => {

@@ -51,6 +51,21 @@ interface UpdateUserSettingsInput {
 // Type for workspace order storage: { [projectId]: workspaceId[] }
 export type WorkspaceOrderMap = Record<string, string[]>;
 
+/**
+ * Settings reads run on every page load and session start, and procedures
+ * return them to the browser. The slash-command cache is a large provider blob
+ * only the backend reads, so every settings read leaves it out and the cache
+ * has its own finder.
+ */
+const WITHOUT_SLASH_COMMAND_CACHE = { cachedSlashCommands: true } as const;
+
+export type UserSettingsRecord = Omit<UserSettings, keyof typeof WITHOUT_SLASH_COMMAND_CACHE>;
+
+export interface SlashCommandCacheState {
+  cachedSlashCommands: Prisma.JsonValue | null;
+  updatedAt: Date;
+}
+
 const WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS = 5;
 
 function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderMap {
@@ -291,11 +306,12 @@ class UserSettingsAccessor {
    * Get user settings for the default user.
    * Creates default settings if they don't exist.
    */
-  async get(): Promise<UserSettings> {
+  async get(): Promise<UserSettingsRecord> {
     const userId = 'default';
 
     const existing = await prisma.userSettings.findUnique({
       where: { userId },
+      omit: WITHOUT_SLASH_COMMAND_CACHE,
     });
 
     if (existing) {
@@ -320,6 +336,7 @@ class UserSettingsAccessor {
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
         },
+        omit: WITHOUT_SLASH_COMMAND_CACHE,
       });
     } catch (error) {
       if (!isUniqueConstraintError(error)) {
@@ -328,6 +345,7 @@ class UserSettingsAccessor {
 
       const settings = await prisma.userSettings.findUnique({
         where: { userId },
+        omit: WITHOUT_SLASH_COMMAND_CACHE,
       });
 
       if (!settings) {
@@ -347,7 +365,7 @@ class UserSettingsAccessor {
    * Update user settings for the default user.
    * Uses upsert to avoid race conditions.
    */
-  async update(data: UpdateUserSettingsInput): Promise<UserSettings> {
+  async update(data: UpdateUserSettingsInput): Promise<UserSettingsRecord> {
     const userId = 'default';
     const { normalizedClaudeModel, normalizedCodexModel } = normalizeDefaultSessionModels(data);
     const normalizedClaudeEffort = normalizeOptionalEffort(data.defaultClaudeReasoningEffort);
@@ -376,7 +394,23 @@ class UserSettingsAccessor {
         normalizedReviewerClaudeModel,
         normalizedReviewerCodexModel
       ),
+      omit: WITHOUT_SLASH_COMMAND_CACHE,
     });
+  }
+
+  /**
+   * Read the slash-command cache with the `updatedAt` its compare-and-set
+   * write expects, creating the default settings first if needed.
+   */
+  async getSlashCommandCache(): Promise<SlashCommandCacheState> {
+    const where = { userId: 'default' };
+    const select = { cachedSlashCommands: true, updatedAt: true } as const;
+    const existing = await prisma.userSettings.findUnique({ where, select });
+    if (existing) {
+      return existing;
+    }
+    await this.get();
+    return await prisma.userSettings.findUniqueOrThrow({ where, select });
   }
 
   async compareAndSetCachedSlashCommands(
@@ -402,7 +436,10 @@ class UserSettingsAccessor {
   /**
    * Update the workspace order for a specific project.
    */
-  async updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
+  async updateWorkspaceOrder(
+    projectId: string,
+    workspaceIds: string[]
+  ): Promise<UserSettingsRecord> {
     const userId = 'default';
 
     for (let attempt = 0; attempt < WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS; attempt += 1) {
@@ -426,6 +463,7 @@ class UserSettingsAccessor {
       if (result.count === 1) {
         return await prisma.userSettings.findUniqueOrThrow({
           where: { userId },
+          omit: WITHOUT_SLASH_COMMAND_CACHE,
         });
       }
     }

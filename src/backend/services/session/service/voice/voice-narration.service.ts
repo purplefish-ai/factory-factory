@@ -41,10 +41,9 @@ import {
   type SessionOutboundEvent,
   sessionEventBus,
 } from '@/backend/services/session/service/event-bus/session-event-bus';
-import { userSettingsService } from '@/backend/services/settings';
+import { type UserSettingsRecord, userSettingsService } from '@/backend/services/settings';
 import { normalizeDeepgramTtsSpeed } from '@/shared/deepgram-voices';
 import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema';
-import type { UserSettings } from '@prisma-gen/client';
 
 const logger = createLogger('voice-narration');
 
@@ -109,7 +108,7 @@ interface TurnState {
    * and DB load for no benefit. Reset at the next turn's WORKING transition
    * so a settings change takes effect from the following turn on.
    */
-  voiceSettings: { settings: UserSettings; apiKey: string } | null;
+  voiceSettings: { settings: UserSettingsRecord; apiKey: string } | null;
   /**
    * Bumped on every WORKING transition. `TurnState` is reused in place
    * across turns (reset, not replaced), so a settings lookup started by one
@@ -643,6 +642,10 @@ class VoiceNarrationService {
       });
       const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
         headers: { Authorization: `Token ${apiKey}` },
+        // Audio gains nothing from deflate, and `ws` sizes its process-wide
+        // zlib limiter from the first PerMessageDeflate created; the
+        // WebSocket servers' `concurrencyLimit` must be that one.
+        perMessageDeflate: false,
       });
       active.socket = ttsSocket;
 

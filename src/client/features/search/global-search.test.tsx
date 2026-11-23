@@ -17,15 +17,15 @@ vi.mock('@/client/features/kanban', () => ({
     open,
     onOpenChange,
   }: {
-    issue: { displayId: string; body: string };
+    issue: { displayId: string; url: string };
     projectId: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
   }) =>
     open && (
       <div role="dialog">
-        Launch {projectId} {issue.displayId} {issue.body}
-        <textarea aria-label="Launch prompt" defaultValue={issue.body} />
+        Launch {projectId} {issue.displayId} {issue.url}
+        <textarea aria-label="Launch prompt" defaultValue={issue.url} />
         <button type="button" onClick={() => onOpenChange(false)}>
           Close launch
         </button>
@@ -114,7 +114,7 @@ async function key(keyValue: string, modifiers: KeyboardEventInit = {}) {
 }
 
 describe('GlobalSearch', () => {
-  it('opens the issue launch flow with the selected project and full issue', async () => {
+  it('opens the issue launch flow with the selected project and issue', async () => {
     issueQuery.mockReturnValue({
       data: {
         results: [
@@ -131,7 +131,6 @@ describe('GlobalSearch', () => {
             githubIssue: {
               number: 42,
               title: 'Fix search',
-              body: 'Full issue details',
               url: 'https://github.com/org/repo/issues/42',
               state: 'OPEN',
               createdAt: '2026-01-01T00:00:00Z',
@@ -161,7 +160,7 @@ describe('GlobalSearch', () => {
     expect(issueOption).toBeDefined();
     await act(() => issueOption?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-      'Launch p1 #42 Full issue details'
+      'Launch p1 #42 https://github.com/org/repo/issues/42'
     );
     expect(document.querySelector('output')?.textContent).toBe('/projects/factory/workspaces/ws');
     const prompt = document.querySelector('textarea')!;

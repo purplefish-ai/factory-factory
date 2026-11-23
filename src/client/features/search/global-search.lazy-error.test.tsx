@@ -38,7 +38,6 @@ vi.mock('@/client/lib/trpc', () => ({
                 githubIssue: {
                   number: 42,
                   title: 'Fix search',
-                  body: 'Details',
                   url: 'https://github.com/org/repo/issues/42',
                   state: 'OPEN',
                   createdAt: '2026-01-01T00:00:00Z',

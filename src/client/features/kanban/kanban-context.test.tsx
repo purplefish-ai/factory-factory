@@ -492,9 +492,7 @@ describe('KanbanProvider archive failure handling', () => {
       {
         number: 42,
         title: 'Fix the thing',
-        body: '',
         url: 'https://github.com/org/repo/issues/42',
-        state: 'OPEN',
         createdAt: '2026-01-01T00:00:00Z',
         author: { login: 'octocat' },
       },
@@ -515,9 +513,7 @@ describe('KanbanProvider archive failure handling', () => {
       {
         number: 42,
         title: 'Fix the thing',
-        body: '',
         url: 'https://github.com/example/repo/issues/42',
-        state: 'OPEN',
         createdAt: '2026-01-01T00:00:00Z',
         author: { login: 'octocat' },
       },
@@ -545,9 +541,7 @@ describe('KanbanProvider archive failure handling', () => {
       {
         number: 42,
         title: 'Issue',
-        body: '',
         url: 'https://github.com/example/repo/issues/42',
-        state: 'OPEN',
         createdAt: '2026-01-01T00:00:00Z',
         author: { login: 'user' },
       },

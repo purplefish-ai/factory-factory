@@ -18,6 +18,7 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { chatCachedMetadata, type OfferedMetadata } from './chat-cached-metadata';
 import { readChatFrame, reportInvalidReplayFrame } from './chat-frame-diagnostics';
 import type {
   AcpConfigOption,
@@ -39,6 +40,18 @@ import {
 import { useTranscriptHistory, type TranscriptHistoryControls } from './use-transcript-history';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
+
+/**
+ * A load belongs to the connection that sent it: replayed on a later socket,
+ * its metadata offer would no longer match what that connection resolves.
+ */
+function sendLoadSession(send: WebSocketSend, loadRequestId: string, offered: OfferedMetadata) {
+  const cachedMetadata = offered.offer;
+  send(
+    { type: 'load_session', loadRequestId, ...(cachedMetadata ? { cachedMetadata } : {}) },
+    { queuePolicy: 'drop' }
+  );
+}
 
 // =============================================================================
 // Types
@@ -181,6 +194,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
+  // Metadata this connection offered in its loads; acknowledgements resolve against it.
+  const offeredMetadataRef = useRef<OfferedMetadata | null>(null);
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
@@ -207,7 +222,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const hydratedSessionIdRef = useLatestRef(chat.hydratedSessionId);
 
   const scheduleLoadRetry = useCallback(
-    (loadGeneration: number, loadRequestId: string, retryAttempt = 1) => {
+    (loadGeneration: number, loadRequestId: string, offered: OfferedMetadata, retryAttempt = 1) => {
       clearLoadTimeout();
       loadTimeoutRef.current = setTimeout(() => {
         const decision = evaluateLoadSessionRetry({
@@ -229,8 +244,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           return;
         }
 
-        sendRef.current({ type: 'load_session', loadRequestId });
-        scheduleLoadRetry(loadGeneration, loadRequestId, retryAttempt + 1);
+        sendLoadSession(sendRef.current, loadRequestId, offered);
+        scheduleLoadRetry(loadGeneration, loadRequestId, offered, retryAttempt + 1);
       }, LOAD_SESSION_RETRY_TIMEOUT_MS);
     },
     [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout]
@@ -298,7 +313,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       if (data === null || handleLoadError(data) || !admitHydrationBatch(data)) {
         return;
       }
-      chat.handleMessage(data);
+      const message = chatCachedMetadata.accept(data, offeredMetadataRef.current);
+      if (message) {
+        chat.handleMessage(message);
+      }
     },
     [admitHydrationBatch, chat.handleMessage, handleLoadError]
   );
@@ -322,13 +340,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     exhaustedLoadRequestIdRef.current = null;
     currentLoadRequestIdRef.current = loadRequestId;
-    scheduleLoadRetry(loadGeneration, loadRequestId);
-    sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
+    const offered = chatCachedMetadata.offer();
+    offeredMetadataRef.current = offered;
+    scheduleLoadRetry(loadGeneration, loadRequestId, offered);
+    sendLoadSession(sendRef.current, loadRequestId, offered); // Hydrates via snapshot or replay batch
   }, [chat.dispatch, clearConnectLoadingTimeout, dbSessionId, scheduleLoadRetry]);
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     replayAssembler.current.reset();
+    offeredMetadataRef.current = null;
     chat.dispatch({ type: 'CONNECTION_CHANGED' });
     chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;

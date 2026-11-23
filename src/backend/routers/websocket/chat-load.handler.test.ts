@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
@@ -10,6 +11,7 @@ import {
   SessionLoadService,
   sessionEventBus,
 } from '@/backend/services/session';
+import type { CommandInfo } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createTestEventLog } from '@/test-utils/test-event-log';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -35,13 +37,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup() {
+interface SessionMetadataFixture {
+  provider: 'CLAUDE' | 'CODEX';
+  configOptions: SessionConfigOption[];
+}
+
+const DEFAULT_SESSION: SessionMetadataFixture = {
+  provider: 'CODEX',
+  configOptions: [
+    { id: 'model', name: 'Model', type: 'select', currentValue: 'chosen', options: [] },
+  ],
+};
+
+function setup(
+  metadata: {
+    sessions?: Record<string, SessionMetadataFixture>;
+    claudeCommands?: CommandInfo[];
+  } = {}
+) {
+  const sessions = metadata.sessions ?? {};
+  const sessionFixture = (sessionId: string) => sessions[sessionId] ?? DEFAULT_SESSION;
   const ports = createChatRouterServices(sessionCommandFactories);
   const domain = new SessionDomainService();
   const hydrate = vi.fn(async (): Promise<void> => undefined);
   const capabilities = vi.fn(async () => EMPTY_CHAT_BAR_CAPABILITIES);
-  const findSession = vi.fn(async (_sessionId: string) => ({
-    provider: 'CODEX' as const,
+  const findSession = vi.fn(async (sessionId: string) => ({
+    provider: sessionFixture(sessionId).provider,
     providerSessionId: null,
     providerMetadata: null,
     status: 'IDLE',
@@ -59,19 +80,17 @@ function setup() {
     }),
     domain,
     config: {
-      getSessionConfigProjection: async () => {
+      getSessionConfigProjection: async (sessionId) => {
         const value = await capabilities();
         return {
           currentProjection: () => ({
             capabilities: value,
-            configOptions: [
-              { id: 'model', name: 'Model', type: 'select', currentValue: 'chosen', options: [] },
-            ],
+            configOptions: sessionFixture(sessionId).configOptions,
           }),
         };
       },
     },
-    getCachedCommands: async () => [],
+    getCachedCommands: async () => metadata.claudeCommands ?? [],
     tryDispatchNextMessage: ports.dispatch.tryDispatchNextMessage,
   });
   const completingLoads = createTestEventLog<Promise<void>>();
@@ -109,7 +128,7 @@ function setup() {
   });
   applications.push(app);
   const handler = createChatUpgradeHandler(app);
-  const connect = (id: string) => {
+  const connect = (id: string, sessionId = 's1') => {
     const ws = new MockWebSocket();
     const wss = unsafeCoerce<WebSocketServer>({
       handleUpgrade: (
@@ -126,7 +145,7 @@ function setup() {
       }),
       unsafeCoerce({ write: vi.fn(), destroy: vi.fn() }),
       Buffer.alloc(0),
-      new URL(`http://localhost/chat?connectionId=${id}&sessionId=s1`),
+      new URL(`http://localhost/chat?connectionId=${id}&sessionId=${sessionId}`),
       wss,
       new WeakMap()
     );
@@ -305,5 +324,219 @@ describe('load-session through the actual chat transport', () => {
     ).toEqual(['first', 'second']);
     expect(test.domain.getQueueLength('s1')).toBe(1);
     expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+const claudeCommands: CommandInfo[] = Array.from({ length: 60 }, (_, index) => ({
+  name: `review-${index}`,
+  description: `Review step ${index}, described at the length of a real command`,
+  argumentHint: '[path]',
+}));
+
+function selectOption(id: string, currentValue = 'value-0'): SessionConfigOption {
+  return {
+    id,
+    name: id,
+    type: 'select',
+    currentValue,
+    options: Array.from({ length: 30 }, (_, index) => ({
+      value: `value-${index}`,
+      name: `Value ${index}`,
+      description: 'An option described at the length of a real model entry',
+    })),
+  };
+}
+
+const claudeSession: SessionMetadataFixture = {
+  provider: 'CLAUDE',
+  configOptions: [selectOption('model'), selectOption('effort')],
+};
+const codexSession: SessionMetadataFixture = {
+  provider: 'CODEX',
+  configOptions: [selectOption('model', 'value-3'), selectOption('thought_level')],
+};
+const METADATA_TYPES = new Set(['slash_commands', 'config_options_update', 'cached_metadata']);
+
+interface MetadataFrame {
+  bytes: number;
+  data: {
+    type: string;
+    digest?: string;
+    deltaType?: string;
+    slashCommands?: CommandInfo[];
+    configOptions?: SessionConfigOption[];
+  };
+}
+
+function metadataFrames(ws: MockWebSocket): MetadataFrame[] {
+  return ws.send.mock.calls.flatMap(([raw]) => {
+    const frame = JSON.parse(raw);
+    return frame.type === 'session_delta' && METADATA_TYPES.has(frame.data.type)
+      ? [{ bytes: Buffer.byteLength(raw), data: frame.data }]
+      : [];
+  });
+}
+
+function digestsOf(frames: MetadataFrame[]): string[] {
+  return frames.flatMap((frame) => (frame.data.digest ? [frame.data.digest] : []));
+}
+
+function totalBytes(frames: MetadataFrame[]): number {
+  return frames.reduce((sum, frame) => sum + frame.bytes, 0);
+}
+
+async function loadSession(
+  test: ReturnType<typeof setup>,
+  ws: MockWebSocket,
+  loadRequestId: string,
+  digests?: string[]
+) {
+  const index = test.completingLoads.events.length;
+  ws.send.mockClear();
+  ws.emit(
+    'message',
+    JSON.stringify({
+      type: 'load_session',
+      loadRequestId,
+      ...(digests ? { cachedMetadata: { digests } } : {}),
+    })
+  );
+  await test.completingLoads.waitForCount(index + 1);
+  await test.completingLoads.events[index];
+  return metadataFrames(ws);
+}
+
+function disconnect(ws: MockWebSocket) {
+  ws.readyState = WS_READY_STATE.CLOSED;
+  ws.emit('close');
+}
+
+describe('slash commands and config options a viewer already holds', () => {
+  it('sends them whole on first connect and only acknowledges them on an unchanged reconnect', async () => {
+    const test = setup({ sessions: { s1: claudeSession }, claudeCommands });
+    const phone = test.connect('phone');
+    const first = await loadSession(test, phone, 'first');
+    expect(first.map((frame) => frame.data.type)).toEqual([
+      'config_options_update',
+      'slash_commands',
+    ]);
+    expect(first[0]?.data.configOptions).toEqual(claudeSession.configOptions);
+    expect(first[1]?.data.slashCommands).toEqual(claudeCommands);
+    const digests = digestsOf(first);
+    expect(digests).toEqual([expect.stringMatching(/^v1:/), expect.stringMatching(/^v1:/)]);
+
+    disconnect(phone);
+    const resumed = test.connect('phone');
+    const second = await loadSession(test, resumed, 'second', digests);
+    expect(second.map((frame) => frame.data)).toEqual([
+      { type: 'cached_metadata', deltaType: 'config_options_update', digest: digests[0] },
+      { type: 'cached_metadata', deltaType: 'slash_commands', digest: digests[1] },
+    ]);
+    // Acknowledgements keep the position of the deltas they replace.
+    expect(
+      resumed.send.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((frame) => frame.type === 'session_delta')
+        .map((frame) => frame.data.type)
+        .slice(-3)
+    ).toEqual(['chat_capabilities', 'cached_metadata', 'cached_metadata']);
+    expect(totalBytes(first)).toBeGreaterThan(10_000);
+    expect(totalBytes(second)).toBeLessThan(400);
+  });
+
+  it('sends a changed value whole even when the viewer offers its previous digest', async () => {
+    const commands = [...claudeCommands];
+    const test = setup({ sessions: { s1: claudeSession }, claudeCommands: commands });
+    const phone = test.connect('phone');
+    const digests = digestsOf(await loadSession(test, phone, 'first'));
+    commands.push({ name: 'deploy', description: 'Added while the phone was asleep' });
+
+    disconnect(phone);
+    const resumed = test.connect('phone');
+    const [config, slash] = await loadSession(test, resumed, 'second', digests);
+    expect(config?.data).toEqual({
+      type: 'cached_metadata',
+      deltaType: 'config_options_update',
+      digest: digests[0],
+    });
+    expect(slash?.data.type).toBe('slash_commands');
+    expect(slash?.data.slashCommands).toEqual(commands);
+    expect(slash?.data.digest).toEqual(expect.stringMatching(/^v1:/));
+    expect(slash?.data.digest).not.toBe(digests[1]);
+  });
+
+  it('decides per viewer, so a second tab without the digest still receives the payload', async () => {
+    const test = setup({ sessions: { s1: claudeSession }, claudeCommands });
+    const desktop = test.connect('desktop');
+    const digests = digestsOf(await loadSession(test, desktop, 'desktop-load'));
+    const phone = test.connect('phone');
+    await loadSession(test, phone, 'phone-first');
+    desktop.send.mockClear();
+
+    const phoneFrames = await loadSession(test, phone, 'phone-again', digests);
+    expect(phoneFrames.map((frame) => frame.data.type)).toEqual([
+      'cached_metadata',
+      'cached_metadata',
+    ]);
+    // The desktop tab offered nothing with its load, so it gets the whole payload.
+    expect(metadataFrames(desktop).map((frame) => frame.data)).toEqual([
+      {
+        type: 'config_options_update',
+        configOptions: claudeSession.configOptions,
+        digest: digests[0],
+      },
+      { type: 'slash_commands', slashCommands: claudeCommands, digest: digests[1] },
+    ]);
+  });
+
+  it('matches content rather than session, across providers', async () => {
+    const test = setup({
+      sessions: { claude: claudeSession, codex: codexSession },
+      claudeCommands,
+    });
+    const claudeTab = test.connect('tab', 'claude');
+    const claudeDigests = digestsOf(await loadSession(test, claudeTab, 'claude-first'));
+
+    disconnect(claudeTab);
+    const codexTab = test.connect('tab', 'codex');
+    const codexFrames = await loadSession(test, codexTab, 'codex-first', claudeDigests);
+    expect(codexFrames.map((frame) => frame.data.type)).toEqual([
+      'config_options_update',
+      'slash_commands',
+    ]);
+    expect(codexFrames[0]?.data.configOptions).toEqual(codexSession.configOptions);
+    expect(codexFrames[1]?.data).toEqual({ type: 'slash_commands', slashCommands: [] });
+    const codexDigests = digestsOf(codexFrames);
+    expect(codexDigests).toHaveLength(1);
+
+    disconnect(codexTab);
+    const back = test.connect('tab', 'claude');
+    const backFrames = await loadSession(test, back, 'claude-again', [
+      ...codexDigests,
+      ...claudeDigests,
+    ]);
+    expect(backFrames.map((frame) => frame.data)).toEqual([
+      { type: 'cached_metadata', deltaType: 'config_options_update', digest: claudeDigests[0] },
+      { type: 'cached_metadata', deltaType: 'slash_commands', digest: claudeDigests[1] },
+    ]);
+  });
+
+  it('acknowledges a digest offered after a server restart', async () => {
+    const before = setup({ sessions: { s1: claudeSession }, claudeCommands });
+    const digests = digestsOf(await loadSession(before, before.connect('phone'), 'before'));
+    disposeChatTransportForApplication(before.app);
+
+    const after = setup({ sessions: { s1: claudeSession }, claudeCommands });
+    const frames = await loadSession(after, after.connect('phone'), 'after', digests);
+    expect(frames.map((frame) => frame.data.type)).toEqual(['cached_metadata', 'cached_metadata']);
+  });
+
+  it('sends small metadata whole and without a digest', async () => {
+    const test = setup();
+    const frames = await loadSession(test, test.connect('phone'), 'small', ['v1:unrelated']);
+    expect(frames.map((frame) => frame.data)).toEqual([
+      { type: 'config_options_update', configOptions: DEFAULT_SESSION.configOptions },
+      { type: 'slash_commands', slashCommands: [] },
+    ]);
   });
 });

@@ -19,7 +19,6 @@ import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
-import { WebSocketServer } from 'ws';
 import { CHAT_IMAGE_ROUTE } from '@/shared/chat-image-ref';
 import type { Application } from './app-context';
 import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
@@ -46,6 +45,7 @@ import {
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
   createVoiceUpgradeHandler,
+  createWebSocketServers,
   disposeChatTransportForApplication,
   disposeSnapshotsHandlerState,
 } from './routers/websocket';
@@ -101,7 +101,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
   // Create HTTP server and WebSocket server
   const server = createHttpServer(app);
-  const wss = new WebSocketServer({ noServer: true });
+  const websocketServers = createWebSocketServers();
   const chatUpgradeHandler = createChatUpgradeHandler(application);
   const terminalUpgradeHandler = createTerminalUpgradeHandler(application);
   const setupTerminalUpgradeHandler = createSetupTerminalUpgradeHandler(application);
@@ -189,14 +189,7 @@ export function createServer(application: Application, requestedPort?: number): 
     ]);
   };
 
-  const closeWebSocketServer = async (): Promise<void> => {
-    for (const ws of wss.clients) {
-      ws.terminate();
-    }
-    await new Promise<void>((resolve) => {
-      wss.close(() => resolve());
-    });
-  };
+  const closeWebSocketServer = (): Promise<void> => websocketServers.close();
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -205,7 +198,7 @@ export function createServer(application: Application, requestedPort?: number): 
   const wsAliveMap = new WeakMap<import('ws').WebSocket, boolean>();
 
   const heartbeatInterval = setInterval(() => {
-    wss.clients.forEach((ws) => {
+    websocketServers.clients().forEach((ws) => {
       if (wsAliveMap.get(ws) === false) {
         logger.info('Terminating unresponsive WebSocket connection');
         ws.terminate();
@@ -380,7 +373,14 @@ export function createServer(application: Application, requestedPort?: number): 
 
     const upgradeHandler = websocketUpgradeHandlers.get(url.pathname);
     if (upgradeHandler) {
-      upgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      upgradeHandler(
+        request,
+        socket,
+        head,
+        url,
+        websocketServers.forPath(url.pathname),
+        wsAliveMap
+      );
       return;
     }
 

@@ -14,6 +14,7 @@ import {
   OutboundAttachmentSchema,
 } from '@/shared/websocket/chat-message.schema';
 import { ArchivedAgentMessageSchema, ArchivedChatMessageSchema } from './archived-message-schema';
+import { CACHED_METADATA_DELTA_TYPES, CachedMetadataDigestSchema } from './cached-metadata';
 import type { AskUserQuestion } from './interaction';
 import type { CommandInfo } from './models';
 import { SessionReplayChunkSchema } from './replay-frame-schema';
@@ -253,11 +254,21 @@ export const SessionDeltaEventSchema = z.discriminatedUnion('type', [
     sessionCount: z.number().optional(),
     finishedAt: z.string().optional(),
   }),
-  z.object({ type: z.literal('slash_commands'), slashCommands: z.array(CommandInfoSchema) }),
+  z.object({
+    type: z.literal('slash_commands'),
+    slashCommands: z.array(CommandInfoSchema),
+    digest: CachedMetadataDigestSchema.optional(),
+  }),
   z.object({ type: z.literal('chat_capabilities'), capabilities: ChatBarCapabilitiesSchema }),
   z.object({
     type: z.literal('config_options_update'),
     configOptions: z.array(ConfigOptionSchema),
+    digest: CachedMetadataDigestSchema.optional(),
+  }),
+  z.object({
+    type: z.literal('cached_metadata'),
+    deltaType: z.enum(CACHED_METADATA_DELTA_TYPES),
+    digest: CachedMetadataDigestSchema,
   }),
   z.object({ type: z.literal('steer_settled'), requestId: z.string().min(1) }),
   z.object({ type: z.literal('config_option_applied'), requestId: z.string() }),

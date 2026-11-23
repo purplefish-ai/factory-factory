@@ -25,10 +25,12 @@ const FakeDeepgramSocket = vi.hoisted(() => {
     readyState = FakeDeepgramSocket.CONNECTING;
     sentMessages: string[] = [];
     url: string;
+    options: unknown;
     private listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
-    constructor(url: string, _options?: unknown) {
+    constructor(url: string, options?: unknown) {
       this.url = url;
+      this.options = options;
       FakeDeepgramSocket.instances.push(this);
     }
 
@@ -286,6 +288,9 @@ describe('voiceNarrationService', () => {
       'wss://api.deepgram.com/v2/speak?model=flux-haley-en&encoding=linear16&sample_rate=24000&speed=1'
     );
     expect(mockCryptoService.decrypt).toHaveBeenCalledWith('enc:dg_secret');
+    // Audio gains nothing from deflate, and a client `PerMessageDeflate` made
+    // first would size ws's process-wide zlib limiter for the server too.
+    expect(ttsSocket.options).toMatchObject({ perMessageDeflate: false });
 
     ttsSocket.emit('open');
     expect(JSON.parse(ttsSocket.sentMessages[0] as string)).toEqual({

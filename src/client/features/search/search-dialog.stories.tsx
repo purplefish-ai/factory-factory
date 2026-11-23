@@ -213,7 +213,6 @@ const githubIssues = {
       githubIssue: {
         number: 42,
         title: 'Improve search keyboard navigation',
-        body: 'Details',
         url: 'https://github.com/purplefish-ai/factory-factory/issues/42',
         state: 'OPEN' as const,
         createdAt: '2026-01-01T00:00:00Z',

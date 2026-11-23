@@ -1024,9 +1024,7 @@ describe('GitHubCLIService', () => {
           {
             number: 1,
             title: 'Issue 1',
-            body: 'body',
             url: 'https://github.com/o/r/issues/1',
-            state: 'OPEN',
             createdAt: '2026-02-01T00:00:00Z',
             author: { login: 'alice' },
           },
@@ -1040,9 +1038,7 @@ describe('GitHubCLIService', () => {
         {
           number: 1,
           title: 'Issue 1',
-          body: 'body',
           url: 'https://github.com/o/r/issues/1',
-          state: 'OPEN',
           createdAt: '2026-02-01T00:00:00Z',
           author: { login: 'alice' },
         },
