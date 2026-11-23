@@ -123,18 +123,57 @@ function maybeTriggerPendingRequestAttention(
 }
 
 /**
+ * Refetches the project list for legacy rows whose metadata only HTTP supplies,
+ * then releases the rows `unrepaired` still reports so a later message can
+ * retry them.
+ *
+ * The refetch joins a list request already in flight rather than cancelling it.
+ * On page open the first snapshot often lands while the board's own read is
+ * pending, and that read already carries these rows; cancelling it downloaded
+ * the list twice. A joined read can predate a row (a workspace created or made
+ * ready after it was read), so rows it did not repair get one fresh read.
+ */
+function repairProjectListMetadata(
+  utils: TrpcUtils,
+  projectId: string,
+  entries: readonly WorkspaceSnapshotEntry[],
+  unrepaired: (entries: readonly WorkspaceSnapshotEntry[]) => WorkspaceSnapshotEntry[],
+  release: (entries: readonly WorkspaceSnapshotEntry[]) => void
+): void {
+  // A failed read rejects, releasing the rows for a later message instead of
+  // retrying the read straight away.
+  const refetch = () =>
+    utils.workspace.listForProject.invalidate({ projectId }, undefined, {
+      cancelRefetch: false,
+      throwOnError: true,
+    });
+  void refetch().then(
+    () => {
+      const missed = unrepaired(entries);
+      if (missed.length) {
+        void refetch().then(
+          () => release(unrepaired(missed)),
+          () => release(missed)
+        );
+      }
+    },
+    () => release(entries)
+  );
+}
+
+/**
  * Legacy snapshot entries carry only live fields. Mutation-sourced fields —
  * including `githubIssueNumber` and `linearIssueId`, which the Todo column
  * matches issues against — fall back to nulls for a workspace no fetch has
  * returned yet, so the workspace lands on the board while its issue is still
  * in Todo. Invalidating once at the point of introduction repairs every such
  * field rather than the two that happen to hurt. `alreadyInvalidated` caps it
- * at one invalidation per previously-unseen workspace id, so a burst of
- * snapshot messages for the same new workspace doesn't trigger a refetch
- * storm.
+ * at one repair per previously-unseen workspace id, so a burst of snapshot
+ * messages for the same new workspace doesn't trigger a refetch storm.
  */
 function invalidateForUnknownWorkspaces(
   utils: TrpcUtils,
+  reconciler: ProjectWorkspaceCacheReconciler,
   projectId: string,
   entriesToCheck: WorkspaceSnapshotEntry[],
   knownWorkspaceIds: Set<string>,
@@ -159,16 +198,22 @@ function invalidateForUnknownWorkspaces(
     alreadyInvalidated.add(entry.workspaceId);
   }
 
-  // Releasing the marks on failure is what keeps the guard from turning a
-  // transient error into permanent staleness. Without it, a refetch that fails
-  // leaves these workspaces marked as repaired forever, so their issue-link
-  // fields stay null and their issues sit in Todo alongside the board card
-  // until something else forces a refetch.
-  void utils.workspace.listForProject.invalidate({ projectId }).catch(() => {
-    for (const entry of introduced) {
-      alreadyInvalidated.delete(entry.workspaceId);
+  // Releasing the marks when the repair fails is what keeps the guard from
+  // turning a transient error into permanent staleness. Without it, these
+  // workspaces stay marked as repaired forever, so their issue-link fields stay
+  // null and their issues sit in Todo alongside the board card until something
+  // else forces a refetch.
+  repairProjectListMetadata(
+    utils,
+    projectId,
+    introduced,
+    (entries) => entries.filter((entry) => !reconciler.hasHttpMetadata(entry.workspaceId)),
+    (entries) => {
+      for (const entry of entries) {
+        alreadyInvalidated.delete(entry.workspaceId);
+      }
     }
-  });
+  );
 }
 
 /** Legacy snapshots omit the worktree path required for PR review. */
@@ -198,21 +243,20 @@ function healReadyWorktreePaths(
   for (const entry of missingPaths) {
     repairedWorkspaceIds.add(entry.workspaceId);
   }
-  void utils.workspace.listForProject.invalidate({ projectId }).then(
-    () => {
+  repairProjectListMetadata(
+    utils,
+    projectId,
+    missingPaths,
+    (pending) => {
       const refreshedById = new Map(
         utils.workspace.listForProject
           .getData({ projectId })
           ?.workspaces.map((workspace) => [workspace.id, workspace])
       );
-      for (const entry of missingPaths) {
-        if (!refreshedById.get(entry.workspaceId)?.worktreePath) {
-          repairedWorkspaceIds.delete(entry.workspaceId);
-        }
-      }
+      return pending.filter((entry) => !refreshedById.get(entry.workspaceId)?.worktreePath);
     },
-    () => {
-      for (const entry of missingPaths) {
+    (pending) => {
+      for (const entry of pending) {
         repairedWorkspaceIds.delete(entry.workspaceId);
       }
     }
@@ -244,6 +288,7 @@ function applySnapshotFullMessage(
 
   invalidateForUnknownWorkspaces(
     utils,
+    reconciler,
     message.projectId,
     entries,
     knownWorkspaceIds,
@@ -284,7 +329,14 @@ function applySnapshotChangedMessage(
 
   reconciler.apply(connection, message);
 
-  invalidateForUnknownWorkspaces(utils, projectId, [entry], knownWorkspaceIds, alreadyInvalidated);
+  invalidateForUnknownWorkspaces(
+    utils,
+    reconciler,
+    projectId,
+    [entry],
+    knownWorkspaceIds,
+    alreadyInvalidated
+  );
 
   healReadyWorktreePaths(utils, projectId, [entry], knownWorkspaceIds, repairedWorktreePaths);
 

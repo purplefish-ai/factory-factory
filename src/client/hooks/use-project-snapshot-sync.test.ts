@@ -573,6 +573,13 @@ describe('useProjectSnapshotSync', () => {
     });
   });
 
+  // A failed repair read rejects, so its rows are released rather than read again at once.
+  const repairListRead = [
+    joinListRead[0],
+    undefined,
+    { ...joinListRead[2], throwOnError: true },
+  ] as const;
+
   describe('cache invalidation strategy', () => {
     it('snapshot_changed and snapshot_removed do not invalidate caches for a known workspace', () => {
       // Seed the list cache with the entry's workspace id so it is already
@@ -636,7 +643,7 @@ describe('useProjectSnapshotSync', () => {
             : { type, workspaceId: 'ws-1', entry: ready }
         );
         expect(cache.workspaces[0]).toMatchObject({ status: 'READY', worktreePath: null });
-        expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+        expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
         onMessage({ type: 'snapshot_changed', workspaceId: 'ws-1', entry: ready });
         expect(mockListInvalidate).toHaveBeenCalledTimes(1);
         finishRefetch();
@@ -645,34 +652,55 @@ describe('useProjectSnapshotSync', () => {
       }
     );
 
-    it.each(['rejects', 'resolves without updating the cache'] as const)(
-      'retries a worktree-path repair when invalidation %s',
-      async (result) => {
-        let cache = {
-          workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
-          reviewCount: 0,
-        };
-        mockGetData.mockImplementation(() => cache);
-        mockSetData.mockImplementation((_key, updater) => {
-          cache = updater(cache);
-        });
-        mockListInvalidate.mockImplementationOnce(() =>
-          result === 'rejects' ? Promise.reject(new Error('network')) : Promise.resolve()
-        );
-        useProjectSnapshotSync('proj-1');
-        const onMessage = capturedOptions!.onMessage!;
-        const message = {
-          type: 'snapshot_changed' as const,
-          workspaceId: 'ws-1',
-          entry: makeEntry({ status: 'READY' }),
-        };
-        onMessage(message);
-        await Promise.resolve();
-        await Promise.resolve();
-        onMessage(message);
-        expect(mockListInvalidate).toHaveBeenCalledTimes(2);
-      }
-    );
+    it('retries a worktree-path repair when invalidation rejects', async () => {
+      let cache = {
+        workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
+        reviewCount: 0,
+      };
+      mockGetData.mockImplementation(() => cache);
+      mockSetData.mockImplementation((_key, updater) => {
+        cache = updater(cache);
+      });
+      mockListInvalidate.mockImplementationOnce(() => Promise.reject(new Error('network')));
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const message = {
+        type: 'snapshot_changed' as const,
+        workspaceId: 'ws-1',
+        entry: makeEntry({ status: 'READY' }),
+      };
+      onMessage(message);
+      await Promise.resolve();
+      await Promise.resolve();
+      onMessage(message);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+    });
+
+    it('reads once more, then releases the repair, when a joined read lacks the worktree path', async () => {
+      let cache = {
+        workspaces: [projectSnapshotToWorkspace(makeEntry({ status: 'NEW' }))],
+        reviewCount: 0,
+      };
+      mockGetData.mockImplementation(() => cache);
+      mockSetData.mockImplementation((_key, updater) => {
+        cache = updater(cache);
+      });
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const message = {
+        type: 'snapshot_changed' as const,
+        workspaceId: 'ws-1',
+        entry: makeEntry({ status: 'READY' }),
+      };
+      onMessage(message);
+      // The joined read predates the path, so one fresh read follows it.
+      await vi.waitFor(() => expect(mockListInvalidate).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(mockListInvalidate).toHaveBeenCalledTimes(2);
+      // Neither read had the path, so a later message may try again.
+      onMessage(message);
+      expect(mockListInvalidate).toHaveBeenCalledTimes(3);
+    });
 
     it('invalidates the project list once when snapshot_changed introduces an unknown workspace', () => {
       useProjectSnapshotSync('proj-1');
@@ -690,7 +718,7 @@ describe('useProjectSnapshotSync', () => {
       });
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
     });
 
     it('invalidates when snapshot_full introduces a workspace the cache has never seen', () => {
@@ -703,7 +731,7 @@ describe('useProjectSnapshotSync', () => {
         entries: [makeEntry({ workspaceId: 'ws-new' })],
       });
 
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListInvalidate).toHaveBeenCalledWith(...repairListRead);
     });
 
     it('the initial snapshot_full baseline does not invalidate caches', () => {

@@ -94,31 +94,32 @@ export function useWorkspaceInitStatus(
     [initStatus, initStatusError]
   );
 
-  const prevInitStatusRef = useRef<string | undefined>(undefined);
-  const prevHasWorktreePathRef = useRef(false);
+  // The last init status seen for this workspace; none until its first status loads.
+  const previousInitRef = useRef<
+    { workspaceId: string; status: string; hasWorktreePath: boolean } | undefined
+  >(undefined);
   const hasWorktreePath = workspaceInitStatus?.hasWorktreePath ?? false;
 
   useEffect(() => {
     const currentStatus = workspaceInitStatus?.status;
-    const prevStatus = prevInitStatusRef.current;
+    if (currentStatus === undefined) {
+      return;
+    }
+    const previous =
+      previousInitRef.current?.workspaceId === workspaceId ? previousInitRef.current : undefined;
+    previousInitRef.current = { workspaceId, status: currentStatus, hasWorktreePath };
 
-    // Invalidate workspace data when worktree becomes available so worktreePath,
-    // agentSessions, etc. refresh immediately and the chat UI can connect.
-    if (hasWorktreePath && !prevHasWorktreePathRef.current) {
+    // Refresh workspace data when the worktree or READY appears while the page
+    // is open, so worktreePath, agentSessions, etc. refresh and the chat UI can
+    // connect. The detail read when the page opened already reflects the first
+    // status, so that status refreshes only a detail still missing its worktree.
+    const becameAvailable = previous
+      ? (hasWorktreePath && !previous.hasWorktreePath) ||
+        (currentStatus === 'READY' && previous.status !== 'READY')
+      : (hasWorktreePath || currentStatus === 'READY') && !workspace?.worktreePath;
+    if (becameAvailable) {
       runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
     }
-    prevHasWorktreePathRef.current = hasWorktreePath;
-
-    if (currentStatus === 'READY') {
-      const isTransitionToReady = prevStatus !== undefined && prevStatus !== 'READY';
-      const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
-
-      if (isTransitionToReady || isStaleOnFirstLoad) {
-        runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
-      }
-    }
-
-    prevInitStatusRef.current = currentStatus;
   }, [workspaceInitStatus?.status, hasWorktreePath, workspaceId, utils, workspace?.worktreePath]);
 
   const status = workspaceInitStatus?.status;
