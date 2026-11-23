@@ -2,10 +2,11 @@
 
 ## Context
 
-Every `load_session` ends with a `config_options_update` and a `slash_commands`
-delta. On a real install they measured 20,865 and 42,340 bytes, and a phone
-reconnects, and so loads again, each time it resumes. The content rarely
-changes, and sessions often share it.
+A completed `load_session` publishes the session's `config_options_update`
+delta, unless it has no config options, and its `slash_commands` delta, always
+for Claude and for Codex while no process is alive. On a real install they
+measured 20,865 and 42,340 bytes, and a phone reconnects, and so loads again,
+each time it resumes. The content rarely changes, and sessions often share it.
 
 ## Decision
 
@@ -29,8 +30,8 @@ the acknowledgement with its copy before the reducer sees it.
 ## Consequences
 
 - An unchanged reconnect receives about 300 bytes of acknowledgements instead of
-  the payloads; the first load of new content carries 58 more bytes for the
-  digest.
+  the payloads; a delta whose content is new carries 58 more bytes for its
+  digest, 116 bytes when both are new.
 - The slash commands an alive session's replay carries are not digested: replay
   events stay unchanged.
 - A later `load_session` extension adds named, optional fields beside
