@@ -21,7 +21,10 @@ export type PersistAcpConfigSnapshotParams = {
 
 /** A superseded read can release its place before I/O returns. An issued write must settle. */
 class SnapshotTurn {
-  readonly completion = Promise.withResolvers<void>();
+  finish!: () => void;
+  readonly completion = new Promise<void>((resolve) => {
+    this.finish = resolve;
+  });
   private reading = false;
   private revoked?: { reason: unknown };
 
@@ -43,7 +46,7 @@ class SnapshotTurn {
         this.assertCurrent();
       } catch (reason) {
         this.revoked = { reason };
-        this.completion.resolve();
+        this.finish();
       }
     }
   }
@@ -77,11 +80,11 @@ export class SessionConfigSnapshotPersistence {
     try {
       if (previous) {
         previous.releaseObsoleteRead();
-        await previous.completion.promise;
+        await previous.completion;
       }
       await this.write(sessionId, params, snapshot, turn);
     } finally {
-      turn.completion.resolve();
+      turn.finish();
       if (this.turns.get(sessionId) === turn) {
         this.turns.delete(sessionId);
       }
