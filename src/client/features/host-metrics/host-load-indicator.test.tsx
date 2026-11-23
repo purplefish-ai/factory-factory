@@ -1,93 +1,241 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
-import { flushSync } from 'react-dom';
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
+import { observable } from '@trpc/server/observable';
+import { act, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { createAppQueryClient } from '@/client/lib/query-client';
+import { trpc } from '@/client/lib/trpc';
 import { HostLoadIndicator, HostLoadIndicatorView } from './host-load-indicator';
 
-const queryMocks = vi.hoisted(() => ({
-  useQuery: vi.fn(),
-  useBreakdownQuery: vi.fn(),
-  data: undefined as
-    | { samples: { at: number; cpuPercent: number; memoryPercent: number }[] }
-    | undefined,
-  isMobile: false,
-  breakdown: undefined as unknown,
-  breakdownError: false,
-}));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    admin: {
-      getHostMetrics: {
-        useQuery: (...args: unknown[]) => {
-          queryMocks.useQuery(...args);
-          return { data: queryMocks.data };
-        },
-      },
-      getHostLoadBreakdown: {
-        useQuery: (...args: unknown[]) => {
-          queryMocks.useBreakdownQuery(...args);
-          return { data: queryMocks.breakdown, isError: queryMocks.breakdownError };
-        },
-      },
-    },
-  },
-}));
-vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => queryMocks.isMobile }));
+const env = vi.hoisted(() => ({ isMobile: false }));
+vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => env.isMobile }));
 
-let root: Root | undefined;
-afterEach(() => {
-  flushSync(() => root?.unmount());
-  document.body.innerHTML = '';
-  queryMocks.data = undefined;
-  queryMocks.isMobile = false;
-  queryMocks.breakdown = undefined;
-  queryMocks.breakdownError = false;
+interface Sample {
+  at: number;
+  cpuPercent: number;
+  memoryPercent: number;
+}
+
+const sample = (at: number, cpuPercent = 10, memoryPercent = 30): Sample => ({
+  at,
+  cpuPercent,
+  memoryPercent,
 });
 
-function render(element: ReturnType<typeof createElement>) {
+const busy = [sample(1, 97, 40), sample(2, 98, 41), sample(3, 99, 42)];
+
+const cursorSchema = z.object({ after: z.number() }).optional();
+
+/**
+ * A fake backend that answers `admin.getHostMetrics` as the server does: only
+ * the samples after a cursor it still holds, otherwise its whole window.
+ */
+function createHostServer(initial: Sample[]) {
+  const server = {
+    window: initial,
+    requests: [] as Array<{ path: string; input: unknown }>,
+    /** Leave host metrics requests unanswered while set. */
+    holdMetrics: false,
+    breakdown: undefined as unknown,
+    breakdownFails: false,
+    take(next: Sample) {
+      server.window = [...server.window, next].slice(-60);
+    },
+    restart(fresh: Sample[]) {
+      server.window = fresh;
+    },
+    metricsRequests() {
+      return server.requests.filter((request) => request.path === 'admin.getHostMetrics');
+    },
+    breakdownRequests() {
+      return server.requests.filter((request) => request.path === 'admin.getHostLoadBreakdown');
+    },
+  };
+  const historyAfter = (input: unknown) => {
+    const after = cursorSchema.parse(input)?.after;
+    const cursor = server.window.findIndex((entry) => entry.at === after);
+    const oldestAt = server.window[0]?.at ?? 0;
+    return after !== undefined && cursor !== -1
+      ? { samples: server.window.slice(cursor + 1), since: after, oldestAt }
+      : { samples: server.window, since: null, oldestAt };
+  };
+  const client = trpc.createClient({
+    links: [
+      () =>
+        ({ op }) =>
+          observable((observer) => {
+            server.requests.push({ path: op.path, input: op.input });
+            if (op.path === 'admin.getHostMetrics') {
+              if (!server.holdMetrics) {
+                observer.next({ result: { data: historyAfter(op.input) } });
+                observer.complete();
+              }
+              return;
+            }
+            if (server.breakdownFails) {
+              observer.error(new TRPCClientError('ps failed'));
+              return;
+            }
+            observer.next({ result: { data: server.breakdown } });
+            observer.complete();
+          }),
+    ],
+  });
+  return Object.assign(server, { client });
+}
+
+let root: Root | undefined;
+let queryClient: QueryClient | undefined;
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+});
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = undefined;
+  queryClient?.clear();
+  queryClient = undefined;
+  document.body.innerHTML = '';
+  env.isMobile = false;
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+/**
+ * Lets React Query's timers and React run for `ms` of fake time, then a few
+ * turns more, so a poll fired at the end commits and renders. Fake timers run
+ * a zero-delay timeout one millisecond later, as Node does.
+ */
+async function tick(ms = 0) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+  for (let turn = 0; turn < 3; turn++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  }
+}
+
+function render(element: ReactElement) {
   const container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  flushSync(() => root?.render(element));
+  act(() => root?.render(element));
   return container;
 }
 
-const busy = [
-  { at: 1, cpuPercent: 97, memoryPercent: 40 },
-  { at: 2, cpuPercent: 98, memoryPercent: 41 },
-  { at: 3, cpuPercent: 99, memoryPercent: 42 },
-];
+async function renderIndicator(server: ReturnType<typeof createHostServer>) {
+  const client = createAppQueryClient();
+  client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retry: false } });
+  queryClient = client;
+  const container = render(
+    <trpc.Provider client={server.client} queryClient={client}>
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <HostLoadIndicator />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </trpc.Provider>
+  );
+  await tick();
+  return container;
+}
+
+const label = (container: HTMLElement) =>
+  container.querySelector('button')?.getAttribute('aria-label');
+
+async function open(container: HTMLElement) {
+  act(() => container.querySelector('button')?.click());
+  await tick();
+}
 
 describe('HostLoadIndicator', () => {
-  it('polls host load at the local-status cadence', () => {
-    render(createElement(HostLoadIndicator));
+  it('asks only for samples newer than its latest one after the first poll', async () => {
+    const server = createHostServer([sample(0), sample(5000), sample(10_000)]);
+    const container = await renderIndicator(server);
 
-    expect(queryMocks.useQuery).toHaveBeenCalledWith(undefined, { refetchInterval: 5000 });
+    server.take(sample(15_000, 55, 44));
+    await tick(5000);
+
+    expect(server.metricsRequests().map((request) => request.input)).toEqual([
+      undefined,
+      { after: 10_000 },
+    ]);
+    expect(label(container)).toBe('Computer load: CPU 55%, memory 44%');
+
+    server.take(sample(20_000, 60, 45));
+    await tick(5000);
+
+    expect(server.metricsRequests().at(-1)?.input).toEqual({ after: 15_000 });
+    expect(label(container)).toBe('Computer load: CPU 60%, memory 45%');
   });
 
-  it('reads the process breakdown only while the details are open', () => {
-    queryMocks.data = { samples: busy };
-    const container = render(createElement(HostLoadIndicator));
+  it('starts over from the whole window after the server restarted', async () => {
+    const server = createHostServer([sample(200_000, 90), sample(205_000, 90)]);
+    const container = await renderIndicator(server);
 
-    expect(queryMocks.useBreakdownQuery).toHaveBeenLastCalledWith(undefined, {
-      enabled: false,
-      refetchInterval: 5000,
-    });
+    server.restart([sample(100_000, 7, 20)]);
+    await tick(5000);
+    server.take(sample(105_000, 8, 21));
+    await tick(5000);
 
-    flushSync(() => container.querySelector('button')?.click());
-
-    expect(queryMocks.useBreakdownQuery).toHaveBeenLastCalledWith(undefined, {
-      enabled: true,
-      refetchInterval: 5000,
-    });
+    expect(server.metricsRequests().map((request) => request.input)).toEqual([
+      undefined,
+      { after: 205_000 },
+      { after: 100_000 },
+    ]);
+    expect(label(container)).toBe('Computer load: CPU 8%, memory 21%');
   });
 
-  it('shows the breakdown the query returns once opened', () => {
-    queryMocks.data = { samples: busy };
-    queryMocks.breakdown = {
+  it('polls every 5 seconds on desktop', async () => {
+    const server = createHostServer([sample(0)]);
+    await renderIndicator(server);
+
+    await tick(15_000);
+
+    expect(server.metricsRequests()).toHaveLength(4);
+  });
+
+  it('polls every 15 seconds on a phone, and every 5 while the details are open', async () => {
+    env.isMobile = true;
+    const server = createHostServer([sample(0)]);
+    const container = await renderIndicator(server);
+
+    await tick(5000);
+    expect(server.metricsRequests()).toHaveLength(1);
+    await tick(10_000);
+    expect(server.metricsRequests()).toHaveLength(2);
+
+    await open(container);
+    await tick(5000);
+
+    expect(server.metricsRequests()).toHaveLength(3);
+  });
+
+  it('reads the process breakdown only while the details are open, every 5 seconds', async () => {
+    const server = createHostServer(busy);
+    const container = await renderIndicator(server);
+    await tick(5000);
+
+    expect(server.breakdownRequests()).toHaveLength(0);
+
+    await open(container);
+    expect(server.breakdownRequests()).toHaveLength(1);
+    await tick(5000);
+    expect(server.breakdownRequests()).toHaveLength(2);
+  });
+
+  it('shows the breakdown the query returns once opened', async () => {
+    const server = createHostServer(busy);
+    server.breakdown = {
       byCpu: [
         {
           key: 'app:Google Chrome',
@@ -101,50 +249,49 @@ describe('HostLoadIndicator', () => {
       ],
       byMemory: [],
     };
-    const container = render(createElement(MemoryRouter, null, createElement(HostLoadIndicator)));
+    const container = await renderIndicator(server);
 
-    flushSync(() => container.querySelector('button')?.click());
+    await open(container);
 
     expect(document.body.textContent).toContain('Google Chrome41%');
   });
 
-  it('says so when the process list cannot be read, instead of loading forever', () => {
-    queryMocks.data = { samples: busy };
-    queryMocks.breakdownError = true;
-    const container = render(createElement(HostLoadIndicator));
+  it('says so when the process list cannot be read, instead of loading forever', async () => {
+    const server = createHostServer(busy);
+    server.breakdownFails = true;
+    const container = await renderIndicator(server);
 
-    flushSync(() => container.querySelector('button')?.click());
+    await open(container);
 
     expect(document.body.textContent).toContain('Could not read the process list');
   });
 
-  it('renders nothing until the first sample arrives', () => {
-    queryMocks.data = { samples: [] };
+  it('renders nothing until the first sample arrives', async () => {
+    const server = createHostServer(busy);
+    server.holdMetrics = true;
 
-    expect(render(createElement(HostLoadIndicator)).childElementCount).toBe(0);
+    expect((await renderIndicator(server)).childElementCount).toBe(0);
   });
 
-  it('names the current readings for assistive technology', () => {
-    queryMocks.data = { samples: busy };
+  it('names the current readings for assistive technology', async () => {
+    const container = await renderIndicator(createHostServer(busy));
 
-    const button = render(createElement(HostLoadIndicator)).querySelector('button');
-
-    expect(button?.getAttribute('aria-label')).toBe('Computer load: CPU 99%, memory 42%');
+    expect(label(container)).toBe('Computer load: CPU 99%, memory 42%');
   });
 
-  it('shows both readings on one line with a level bar each, on desktop and on phones', () => {
+  it('shows both readings on one line with a level bar each, on desktop and on phones', async () => {
     for (const isMobile of [false, true]) {
-      queryMocks.data = { samples: busy };
-      queryMocks.isMobile = isMobile;
+      env.isMobile = isMobile;
 
-      const button = render(createElement(HostLoadIndicator)).querySelector('button');
+      const button = (await renderIndicator(createHostServer(busy))).querySelector('button');
 
       const readings = [...(button?.querySelectorAll('[data-slot="host-load-value"]') ?? [])].map(
         (value) => value.textContent
       );
       expect(readings).toEqual(['99%', '42%']);
       expect(button?.querySelectorAll('[data-slot="host-load-level"]')).toHaveLength(2);
-      flushSync(() => root?.unmount());
+      act(() => root?.unmount());
+      queryClient?.clear();
     }
   });
 
@@ -163,7 +310,7 @@ describe('HostLoadIndicator', () => {
       createElement(HostLoadIndicatorView, { samples: busy, compact: true })
     );
 
-    flushSync(() => container.querySelector('button')?.click());
+    act(() => container.querySelector('button')?.click());
 
     expect(document.body.textContent).toContain('CPU');
     expect(document.body.textContent).toContain('99%');

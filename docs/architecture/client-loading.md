@@ -246,14 +246,14 @@ tight poll whose next tick is the retry.
 
 Polling intervals come from the `POLL_INTERVAL_MS` tiers in the same module,
 chosen by what the user is waiting for: `progress` (1 s), `runningProcess` (2
-s), `capture` (3 s), `localStatus` (5 s), `activity` (10 s), `workspaceContext`
-(15 s), `background` (30 s), `external` (60 s) and `releaseCheck` (1 h).
-`factory/named-query-options` rejects numeric `refetchInterval` values,
-`refetchOnWindowFocus: false` and literal `retry` values outside `QueryClient`
-defaults. It checks the literal written at the option, not what an identifier
-resolves to, so define any other interval as a tier rather than a local
-constant. `REVIEW_REQUESTS_POLL_MS` is the deliberate exception: it matches the
-server's review-request cache lifetime.
+s), `capture` (3 s), `localStatus` (5 s), `activity` (10 s), `glanceStatus` (15
+s), `workspaceContext` (15 s), `background` (30 s), `external` (60 s) and
+`releaseCheck` (1 h). `factory/named-query-options` rejects numeric
+`refetchInterval` values, `refetchOnWindowFocus: false` and literal `retry`
+values outside `QueryClient` defaults. It checks the literal written at the
+option, not what an identifier resolves to, so define any other interval as a
+tier rather than a local constant. `REVIEW_REQUESTS_POLL_MS` is the deliberate
+exception: it matches the server's review-request cache lifetime.
 
 ## User settings and settings sections
 

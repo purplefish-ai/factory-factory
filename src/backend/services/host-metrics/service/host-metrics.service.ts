@@ -19,6 +19,20 @@ export interface HostMetricsSample {
   memoryPercent: number;
 }
 
+/**
+ * A reader's view of the history. With a cursor still in the window, only the
+ * samples taken after it; otherwise the whole window. Readers merge the samples
+ * into what they hold and drop anything older than `oldestAt`, so they hold the
+ * same window as the service.
+ */
+export interface HostMetricsHistory {
+  samples: HostMetricsSample[];
+  /** The cursor the samples continue from, or `null` when they are the whole window. */
+  since: number | null;
+  /** When the oldest sample still in the window was taken. */
+  oldestAt: number;
+}
+
 export interface CpuTimes {
   idle: number;
   total: number;
@@ -43,15 +57,18 @@ const TOP_PROCESS_GROUPS = 5;
 
 /**
  * Sampling is driven by reads, not a timer: the header polls every 5 seconds
- * while a tab is visible, so a sample is taken only when someone is looking.
- * The minimum gap sits just under that poll so each poll gets a fresh point,
- * while several open tabs share one sample.
+ * while a tab is visible (every 15 on a phone with the details closed), so a
+ * sample is taken only when someone is looking. The minimum gap sits just
+ * under the fastest poll so each poll gets a fresh point, while several open
+ * tabs share one sample.
  */
 const MIN_SAMPLE_GAP_MS = 4000;
 /** A gap this long means nobody was watching; old points would draw a false line. */
 const STALE_AFTER_MS = 30_000;
-/** Five minutes at the header's poll rate. */
+/** Five minutes at the fastest poll rate. */
 const HISTORY_CAPACITY = 60;
+/** The popover's "Last 5 minutes", when samples are taken more slowly than every 5 seconds. */
+const HISTORY_WINDOW_MS = 5 * 60_000;
 /** CPU usage needs two readings; on a cold start, wait this long for the second. */
 const CPU_PRIME_MS = 250;
 
@@ -173,6 +190,21 @@ export class HostMetricsService {
     return this.inFlight;
   }
 
+  /**
+   * The history a reader does not have yet. `after` is the time of the newest
+   * sample the reader holds; when that sample has left the window, or the
+   * history restarted, the reader gets the whole window instead.
+   */
+  async getHistoryAfter(after?: number): Promise<HostMetricsHistory> {
+    const samples = await this.getHistory();
+    const oldestAt = samples[0]?.at ?? this.now();
+    const cursor = samples.findIndex((sample) => sample.at === after);
+    if (after !== undefined && cursor !== -1) {
+      return { samples: samples.slice(cursor + 1), since: after, oldestAt };
+    }
+    return { samples, since: null, oldestAt };
+  }
+
   private async sample(): Promise<HostMetricsSample[]> {
     const last = this.samples.at(-1);
     if (!last || this.now() - last.at > STALE_AFTER_MS) {
@@ -184,9 +216,10 @@ export class HostMetricsService {
     const cpuTimes = this.readCpuTimes();
     const cpuPercent = this.cpuBaseline ? cpuPercentBetween(this.cpuBaseline, cpuTimes) : 0;
     this.cpuBaseline = cpuTimes;
-    this.samples = [...this.samples, { at: this.now(), cpuPercent, memoryPercent }].slice(
-      -HISTORY_CAPACITY
-    );
+    const at = this.now();
+    this.samples = [...this.samples, { at, cpuPercent, memoryPercent }]
+      .slice(-HISTORY_CAPACITY)
+      .filter((sample) => sample.at > at - HISTORY_WINDOW_MS);
     return this.samples;
   }
 }

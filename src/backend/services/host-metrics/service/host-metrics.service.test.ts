@@ -163,6 +163,19 @@ describe('HostMetricsService', () => {
     expect(samples).toHaveLength(60);
   });
 
+  it('keeps only five minutes of samples when they are taken slowly', async () => {
+    const harness = createHarness();
+    for (let index = 0; index < 30; index += 1) {
+      await harness.service.getHistory();
+      harness.advance(15_000);
+    }
+
+    const samples = await harness.service.getHistory();
+
+    expect(samples).toHaveLength(20);
+    expect(samples.at(-1)!.at - samples[0]!.at).toBeLessThan(5 * 60_000);
+  });
+
   it('starts a fresh history after nobody has read it for a while', async () => {
     const harness = createHarness();
     await harness.service.getHistory();
@@ -176,6 +189,82 @@ describe('HostMetricsService', () => {
 
     expect(samples).toEqual([expect.objectContaining({ cpuPercent: 0 })]);
     expect(harness.sleep).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HostMetricsService.getHistoryAfter', () => {
+  async function historyOfThree() {
+    const harness = createHarness();
+    for (let index = 0; index < 3; index += 1) {
+      await harness.service.getHistory();
+      harness.advance(5000);
+    }
+    return { harness, samples: await harness.service.getHistory() };
+  }
+
+  it('sends the whole window to a reader without a cursor', async () => {
+    const { harness, samples } = await historyOfThree();
+
+    await expect(harness.service.getHistoryAfter()).resolves.toEqual({
+      samples,
+      since: null,
+      oldestAt: samples[0]!.at,
+    });
+  });
+
+  it('sends only the samples taken after a cursor still in the window', async () => {
+    const { harness, samples } = await historyOfThree();
+    const cursor = samples[1]!.at;
+
+    await expect(harness.service.getHistoryAfter(cursor)).resolves.toEqual({
+      samples: samples.slice(2),
+      since: cursor,
+      oldestAt: samples[0]!.at,
+    });
+  });
+
+  it('takes a due sample before answering, so each poll gets the new point', async () => {
+    const { harness, samples } = await historyOfThree();
+    harness.advance(5000);
+
+    const history = await harness.service.getHistoryAfter(samples.at(-1)!.at);
+
+    expect(history.samples).toHaveLength(1);
+    expect(history.samples[0]!.at).toBeGreaterThan(samples.at(-1)!.at);
+    expect(history.since).toBe(samples.at(-1)!.at);
+  });
+
+  it('sends nothing new when the reader already has the latest sample', async () => {
+    const { harness, samples } = await historyOfThree();
+
+    await expect(harness.service.getHistoryAfter(samples.at(-1)!.at)).resolves.toEqual({
+      samples: [],
+      since: samples.at(-1)!.at,
+      oldestAt: samples[0]!.at,
+    });
+  });
+
+  it('sends the whole window when the cursor has left it or came from another history', async () => {
+    const { harness, samples } = await historyOfThree();
+
+    for (const cursor of [samples[0]!.at - 5000, samples[0]!.at + 1]) {
+      await expect(harness.service.getHistoryAfter(cursor)).resolves.toEqual({
+        samples,
+        since: null,
+        oldestAt: samples[0]!.at,
+      });
+    }
+  });
+
+  it('sends the whole fresh window after the history restarted', async () => {
+    const { harness, samples } = await historyOfThree();
+    harness.advance(60_000);
+
+    const history = await harness.service.getHistoryAfter(samples.at(-1)!.at);
+
+    expect(history.since).toBeNull();
+    expect(history.samples).toHaveLength(1);
+    expect(history.oldestAt).toBe(history.samples[0]!.at);
   });
 });
 
