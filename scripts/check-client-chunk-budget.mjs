@@ -17,7 +17,7 @@ const startupLimit = 1_300_000;
 // The board is the page phones open most. Its route chunk is found by source module
 // because the bundler names shared chunks after whichever export it meets first.
 const boardRoute = 'src/client/routes/projects/workspaces/list.tsx';
-// Files the board loads beyond the startup closure: 166,246 bytes when set.
+// Files the board loads beyond the startup closure: 166,337 bytes when set.
 const boardLimit = 185_000;
 // The markdown renderer and its parsing pipeline load where markdown is shown
 // (transcripts, Quick Chat), never with the board itself.

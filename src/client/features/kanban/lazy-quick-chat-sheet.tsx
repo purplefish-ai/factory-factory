@@ -63,8 +63,23 @@ export function QuickChatFallbackSheet({
   );
 }
 
-export function LazyQuickChatSheet({ workspaceId, onClose }: LazyQuickChatSheetProps) {
+function QuickChatFallback({
+  workspaceId,
+  onClose,
+  failed,
+}: LazyQuickChatSheetProps & { failed?: boolean }) {
   const { workspaces } = useKanbanState();
+  return (
+    <QuickChatFallbackSheet
+      open={!!workspaceId}
+      title={workspaces?.find((workspace) => workspace.id === workspaceId)?.name ?? 'Quick Chat'}
+      onClose={onClose}
+      failed={failed}
+    />
+  );
+}
+
+export function LazyQuickChatSheet({ workspaceId, onClose }: LazyQuickChatSheetProps) {
   // Once opened the sheet stays mounted: it owns per-session scroll positions across
   // reopenings and plays its own close animation.
   const [opened, setOpened] = useState(false);
@@ -74,14 +89,11 @@ export function LazyQuickChatSheet({ workspaceId, onClose }: LazyQuickChatSheetP
   if (!(opened || workspaceId)) {
     return null;
   }
-  const fallback = {
-    open: !!workspaceId,
-    title: workspaces?.find((workspace) => workspace.id === workspaceId)?.name ?? 'Quick Chat',
-    onClose,
-  };
   return (
-    <ErrorBoundary fallback={<QuickChatFallbackSheet {...fallback} failed />}>
-      <Suspense fallback={<QuickChatFallbackSheet {...fallback} />}>
+    <ErrorBoundary
+      fallback={<QuickChatFallback workspaceId={workspaceId} onClose={onClose} failed />}
+    >
+      <Suspense fallback={<QuickChatFallback workspaceId={workspaceId} onClose={onClose} />}>
         <QuickChatSheet workspaceId={workspaceId} onClose={onClose} />
       </Suspense>
     </ErrorBoundary>
