@@ -23,7 +23,12 @@ class FakeWorker {
   }
 }
 
-const request = { maxEdge: 2576, outputType: 'image/jpeg', quality: 0.85 } as const;
+const request = {
+  maxEdge: 2576,
+  maxPixels: 3_750_656,
+  outputType: 'image/jpeg',
+  quality: 0.85,
+} as const;
 const photo = () => new File(['jpeg'], 'photo.jpg', { type: 'image/jpeg' });
 
 function stubMainThreadCanvas(width: number, height: number) {
@@ -141,6 +146,19 @@ describe('resizeImage', () => {
     const file = photo();
     await expect(resizeImage(file, request)).resolves.toBeInstanceOf(Blob);
     expect(decode).toHaveBeenLastCalledWith(file);
+  });
+
+  it('gives up on a stuck main-thread decode so later images are not blocked', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', undefined);
+    const { decode } = stubMainThreadCanvas(4000, 3000);
+    decode.mockReturnValueOnce(new Promise(() => undefined));
+    const rejection = expect(resizeImage(photo(), request)).rejects.toThrow(
+      'Image resize timed out'
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+    await expect(resizeImage(photo(), request)).resolves.toBeInstanceOf(Blob);
   });
 
   it('rejects when the main thread cannot decode images', async () => {

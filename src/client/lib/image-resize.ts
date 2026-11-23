@@ -8,17 +8,17 @@ import {
 const UNSUPPORTED = Symbol('unsupported');
 
 /** A stuck decode must not block later attachments; the caller keeps the original. */
-const WORKER_TIMEOUT_MS = 30_000;
+const RESIZE_TIMEOUT_MS = 30_000;
 
 let queue: Promise<unknown> = Promise.resolve();
 
 /**
- * Resizes an image whose longest edge exceeds `request.maxEdge` and encodes it
- * as `request.outputType`; resolves null when it already fits and rejects when
- * it cannot be decoded. Runs in a worker with OffscreenCanvas where the browser
- * has one, otherwise on the main thread. Images are resized one at a time so a
- * multi-photo selection does not hold several decoded photos in a phone's
- * memory at once.
+ * Resizes an image that exceeds the request's limits and encodes it as
+ * `request.outputType`; resolves null when it already fits and rejects when it
+ * cannot be decoded or takes longer than 30 seconds. Runs in a worker with
+ * OffscreenCanvas where the browser has one, otherwise on the main thread.
+ * Images are resized one at a time so a multi-photo selection does not hold
+ * several decoded photos in a phone's memory at once.
  */
 export function resizeImage(file: Blob, request: ResizeRequest): Promise<Blob | null> {
   const result = queue.then(async () => {
@@ -49,7 +49,7 @@ function resizeInWorker(
     const timeout = setTimeout(() => {
       worker.terminate();
       reject(new Error('Image resize timed out'));
-    }, WORKER_TIMEOUT_MS);
+    }, RESIZE_TIMEOUT_MS);
     const stop = () => {
       clearTimeout(timeout);
       worker.terminate();
@@ -114,5 +114,14 @@ function resizeOnMainThread(file: Blob, request: ResizeRequest): Promise<Blob | 
   if (typeof createImageBitmap !== 'function') {
     return Promise.reject(new Error('Image decoding unavailable'));
   }
-  return resizeOnSurface(file, request, elementSurface);
+  // The decode cannot be cancelled here, but a stuck one stops holding the queue.
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Image resize timed out')),
+      RESIZE_TIMEOUT_MS
+    );
+    resizeOnSurface(file, request, elementSurface)
+      .then(resolve, reject)
+      .finally(() => clearTimeout(timeout));
+  });
 }

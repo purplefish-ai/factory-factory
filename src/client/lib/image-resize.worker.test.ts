@@ -5,6 +5,7 @@ import './image-resize.worker';
 const request = {
   file: new File(['png'], 'shot.png', { type: 'image/png' }),
   maxEdge: 2576,
+  maxPixels: 3_750_656,
   outputType: 'image/png',
   quality: 0.85,
 };
@@ -78,6 +79,19 @@ describe('image resize worker', () => {
   it('asks for the main-thread fallback without OffscreenCanvas', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn());
     vi.stubGlobal('OffscreenCanvas', undefined);
+    expect(await send(request)).toEqual({ status: 'unsupported' });
+  });
+
+  it('asks for the main-thread fallback when OffscreenCanvas has no 2D context', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn());
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        getContext() {
+          return null;
+        }
+      }
+    );
     expect(await send(request)).toEqual({ status: 'unsupported' });
   });
 

@@ -5,6 +5,7 @@ import { downscaleDimensions } from './image-downscale-plan';
 export const resizeRequestSchema = z.object({
   file: z.instanceof(Blob),
   maxEdge: z.number().int().positive(),
+  maxPixels: z.number().int().positive(),
   outputType: z.enum(['image/jpeg', 'image/png']),
   quality: z.number().min(0).max(1),
 });
@@ -39,8 +40,8 @@ async function decodeOriented(file: Blob): Promise<ImageBitmap> {
 }
 
 /**
- * Resizes `file` to fit `request.maxEdge` and encodes it, or returns null when
- * it already fits. Throws when the image cannot be decoded or encoded.
+ * Resizes `file` to fit the request's limits and encodes it, or returns null
+ * when it already fits. Throws when the image cannot be decoded or encoded.
  */
 export async function resizeOnSurface(
   file: Blob,
@@ -49,7 +50,7 @@ export async function resizeOnSurface(
 ): Promise<Blob | null> {
   const bitmap = await decodeOriented(file);
   try {
-    const target = downscaleDimensions(bitmap.width, bitmap.height, request.maxEdge);
+    const target = downscaleDimensions(bitmap.width, bitmap.height, request);
     if (!target) {
       return null;
     }

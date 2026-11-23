@@ -11,12 +11,12 @@ import {
 } from '@/lib/image-utils';
 import {
   DOWNSCALE_JPEG_QUALITY,
-  DOWNSCALE_MAX_EDGE,
-  downscaleOutputType,
+  DOWNSCALE_LIMITS,
   keepsOriginal,
-  MAX_DOWNSCALE_INPUT_SIZE,
   nameForType,
+  planDownscale,
 } from './image-downscale-plan';
+import { IMAGE_HEADER_BYTES, type ImageHeader, readImageHeader } from './image-header';
 import { resizeImage } from './image-resize';
 
 interface AttachmentConversionError {
@@ -47,20 +47,28 @@ interface UploadImage {
   name: string;
 }
 
+async function readHeader(file: File): Promise<ImageHeader | null> {
+  try {
+    return readImageHeader(new Uint8Array(await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer()));
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Shrinks an image whose longest edge exceeds the cap. Any failure, or a
- * result that is not smaller, keeps the original as it was before downscaling.
+ * Shrinks an image that exceeds the cap. Any failure, or a result that is not
+ * smaller, keeps the original as it was before downscaling.
  */
 async function downscaleForUpload(file: File, type: string, name: string): Promise<UploadImage> {
   const original = { blob: file, type, name };
-  const outputType = downscaleOutputType(type);
-  if (!outputType || file.size > MAX_DOWNSCALE_INPUT_SIZE) {
+  const outputType = planDownscale(type, await readHeader(file));
+  if (!outputType) {
     return original;
   }
   let resized: Blob | null;
   try {
     resized = await resizeImage(file, {
-      maxEdge: DOWNSCALE_MAX_EDGE,
+      ...DOWNSCALE_LIMITS,
       outputType,
       quality: DOWNSCALE_JPEG_QUALITY,
     });

@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileToBase64, MAX_IMAGE_SIZE, MAX_TEXT_FILE_SIZE, readTextFile } from '@/lib/image-utils';
 import { collectAttachments } from './attachment-file-conversion';
-import {
-  DOWNSCALE_JPEG_QUALITY,
-  DOWNSCALE_MAX_EDGE,
-  MAX_DOWNSCALE_INPUT_SIZE,
-} from './image-downscale-plan';
+import { DOWNSCALE_JPEG_QUALITY, DOWNSCALE_LIMITS } from './image-downscale-plan';
+import { gifHeader, jpegHeader, pngHeader, webpHeader } from './image-header.test-helpers';
 import { resizeImage } from './image-resize';
 
 vi.mock('@/lib/image-utils', async (importOriginal) => ({
@@ -201,38 +198,51 @@ describe('image downscale before upload', () => {
     return file;
   };
   const encoded = (size: number, type: string) => sized(new File(['small'], 'x', { type }), size);
+  const oversized: Record<string, Uint8Array<ArrayBuffer>> = {
+    'image/jpeg': jpegHeader(4032, 3024),
+    'image/jpg': jpegHeader(4032, 3024),
+    'image/png': pngHeader(5120, 2880),
+    'image/webp': webpHeader('VP8X', 4032, 3024),
+    'image/gif': gifHeader(),
+  };
+  const photo = (name: string, type: string, header = oversized[type]) =>
+    new File([header ?? new Uint8Array()], name, { type });
 
   it.each([
     ['image/jpeg', 'image/jpeg'],
     ['image/jpg', 'image/jpeg'],
     ['image/png', 'image/png'],
     ['image/webp', 'image/png'],
-  ])('asks for %s to be resized as %s', async (type, outputType) => {
-    const file = image('photo', type);
+  ])('asks for an oversized %s to be resized as %s', async (type, outputType) => {
+    const file = photo('photo', type);
     await collectAttachments({ mode: 'images-only', files: [file] });
     expect(resizeImage).toHaveBeenCalledWith(file, {
-      maxEdge: DOWNSCALE_MAX_EDGE,
+      maxEdge: DOWNSCALE_LIMITS.maxEdge,
+      maxPixels: DOWNSCALE_LIMITS.maxPixels,
       outputType,
       quality: DOWNSCALE_JPEG_QUALITY,
     });
   });
 
   it.each([
-    ['an animated-capable GIF', image('anim.gif', 'image/gif')],
-    [
-      'an input too large to decode',
-      sized(image('huge.jpg', 'image/jpeg'), MAX_DOWNSCALE_INPUT_SIZE + 1),
-    ],
+    ['a GIF', photo('anim.gif', 'image/gif')],
+    ['an animated WebP', photo('anim.webp', 'image/webp', webpHeader('VP8X', 4000, 3000, true))],
+    ['an animated PNG', photo('anim.png', 'image/png', pngHeader(4000, 3000, { animated: true }))],
+    ['an image within the cap', photo('small.jpg', 'image/jpeg', jpegHeader(2576, 1449))],
+    ['an image too large to decode', photo('huge.png', 'image/png', pngHeader(10_000, 10_000))],
+    ['an unreadable image', image('broken.png')],
   ])('does not decode %s', async (_label, file) => {
-    await collectAttachments({ mode: 'images-only', files: [file] });
+    const result = await collectAttachments({ mode: 'images-only', files: [file] });
     expect(resizeImage).not.toHaveBeenCalled();
+    expect(fileToBase64).toHaveBeenCalledWith(file);
+    expect(result.attachments).toHaveLength(1);
   });
 
   it('uploads the resized image with its own size', async () => {
     const resized = encoded(1_200_000, 'image/jpeg');
     vi.mocked(resizeImage).mockResolvedValueOnce(resized);
     vi.mocked(fileToBase64).mockResolvedValueOnce('resized-base64');
-    const file = sized(image('IMG_0001.JPG', 'image/jpeg'), 4_000_000);
+    const file = sized(photo('IMG_0001.JPG', 'image/jpeg'), 4_000_000);
     const result = await collectAttachments({ mode: 'images-only', files: [file] });
     expect(fileToBase64).toHaveBeenCalledWith(resized);
     expect(result.attachments[0]).toMatchObject({
@@ -245,7 +255,7 @@ describe('image downscale before upload', () => {
 
   it('renames an image whose format changed', async () => {
     vi.mocked(resizeImage).mockResolvedValueOnce(encoded(10, 'image/png'));
-    const file = sized(image('render.webp', 'image/webp'), 20);
+    const file = sized(photo('render.webp', 'image/webp'), 20);
     const result = await collectAttachments({ mode: 'images-only', files: [file] });
     expect(result.attachments[0]).toMatchObject({
       name: 'render.png',
@@ -256,12 +266,12 @@ describe('image downscale before upload', () => {
 
   it.each([
     ['is not smaller', () => Promise.resolve(encoded(100, 'image/png'))],
-    ['is within the cap', () => Promise.resolve(null)],
+    ['fits after all once orientated', () => Promise.resolve(null)],
     ['cannot be decoded', () => Promise.reject(new Error('decode failed'))],
     ['comes back in another format', () => Promise.resolve(encoded(10, 'image/webp'))],
   ])('keeps the original when the resized image %s', async (_label, resize) => {
     vi.mocked(resizeImage).mockImplementationOnce(resize);
-    const file = sized(image('shot.png'), 100);
+    const file = sized(photo('shot.png', 'image/png'), 100);
     const result = await collectAttachments({ mode: 'images-only', files: [file] });
     expect(fileToBase64).toHaveBeenCalledWith(file);
     expect(result.attachments[0]).toMatchObject({ name: 'shot.png', type: 'image/png', size: 100 });
@@ -269,7 +279,7 @@ describe('image downscale before upload', () => {
 
   it('accepts a large photo that downscales under the upload limit', async () => {
     vi.mocked(resizeImage).mockResolvedValueOnce(encoded(2_000_000, 'image/jpeg'));
-    const file = sized(image('big.jpg', 'image/jpeg'), MAX_IMAGE_SIZE * 2);
+    const file = sized(photo('big.jpg', 'image/jpeg'), MAX_IMAGE_SIZE * 2);
     const result = await collectAttachments({ mode: 'images-and-text', files: [file] });
     expect(result.errors).toEqual([]);
     expect(result.attachments[0]?.size).toBe(2_000_000);
@@ -277,7 +287,7 @@ describe('image downscale before upload', () => {
 
   it('rejects a large image that cannot be downscaled under the limit', async () => {
     vi.mocked(resizeImage).mockResolvedValueOnce(encoded(12 * 1024 * 1024, 'image/png'));
-    const file = sized(image('big.png'), MAX_IMAGE_SIZE * 2);
+    const file = sized(photo('big.png', 'image/png'), MAX_IMAGE_SIZE * 2);
     const result = await collectAttachments({ mode: 'images-and-text', files: [file] });
     expect(result.errors).toEqual([
       { fileName: 'big.png', message: 'File too large: 12.0 MB (max 10.0 MB)' },
@@ -288,7 +298,7 @@ describe('image downscale before upload', () => {
   it('downscales pasted images before naming them', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(7);
     vi.mocked(resizeImage).mockResolvedValueOnce(encoded(10, 'image/png'));
-    const file = sized(image('', 'image/webp'), 20);
+    const file = sized(photo('', 'image/webp'), 20);
     const result = await collectAttachments({
       mode: 'clipboard-images',
       images: [{ file, type: 'image/webp' }],
