@@ -19,7 +19,12 @@ export const COMPRESSION_THRESHOLD_BYTES = 1024;
 const BROTLI_QUALITY = 4;
 const GZIP_LEVEL = 4;
 
-const COMPRESSIBLE_TYPE = /^application\/jsonl?\s*(?:;|$)/i;
+// tRPC streams jsonl as `application/json` by default, or as its configured
+// `jsonl.contentType`: `application/jsonl` or `application/x-ndjson`.
+const COMPRESSIBLE_TYPE = /^application\/(?:jsonl?|x-ndjson)\s*(?:;|$)/i;
+
+/** Statuses whose response never carries a body. */
+const BODYLESS_STATUSES = new Set([204, 205, 304]);
 
 type Callback = (error?: Error | null) => void;
 type Compressor = BrotliCompress | Gzip;
@@ -35,11 +40,24 @@ interface Chunk {
 type State =
   | { kind: 'undecided' }
   | { kind: 'identity' }
-  | { kind: 'buffering'; encoding: ContentEncoding; chunks: Buffer[]; size: number }
+  | {
+      kind: 'buffering';
+      encoding: ContentEncoding;
+      chunks: Buffer[];
+      size: number;
+      /** Callbacks of held writes, called once their bytes are passed on. */
+      callbacks: Callback[];
+    }
   | { kind: 'compressing'; encoding: ContentEncoding; compressor: Compressor };
 
 function isCallback(value: unknown): value is Callback {
   return typeof value === 'function';
+}
+
+function callAll(callbacks: readonly Callback[], error?: Error | null): void {
+  for (const callback of callbacks) {
+    callback(error);
+  }
 }
 
 function writeArguments(
@@ -93,7 +111,7 @@ function isCompressible(req: Request, res: Response): boolean {
   if (req.method === 'HEAD' || res.headersSent) {
     return false;
   }
-  if (res.statusCode < 200 || res.statusCode === 204 || res.statusCode === 304) {
+  if (res.statusCode < 200 || BODYLESS_STATUSES.has(res.statusCode)) {
     return false;
   }
   if (res.getHeader('content-encoding') !== undefined) {
@@ -111,6 +129,7 @@ function isDeclaredStream(res: Response): boolean {
 class CompressingResponse {
   private state: State = { kind: 'undecided' };
   private ended = false;
+  private finished = false;
   private endCallback: Callback | undefined;
   private readonly write: Response['write'];
   private readonly end: Response['end'];
@@ -152,13 +171,19 @@ class CompressingResponse {
     this.state =
       this.accepted === null
         ? { kind: 'identity' }
-        : { kind: 'buffering', encoding: this.accepted, chunks: [], size: 0 };
+        : { kind: 'buffering', encoding: this.accepted, chunks: [], size: 0, callbacks: [] };
   }
 
-  private buffer(chunk: Buffer | null): void {
-    if (this.state.kind === 'buffering' && chunk !== null) {
+  private buffer(chunk: Buffer | null, done: Callback | undefined): void {
+    if (this.state.kind !== 'buffering') {
+      return;
+    }
+    if (chunk !== null) {
       this.state.chunks.push(chunk);
       this.state.size += chunk.length;
+    }
+    if (done) {
+      this.state.callbacks.push(done);
     }
   }
 
@@ -167,7 +192,7 @@ class CompressingResponse {
       return;
     }
     const { res } = this;
-    const { encoding, chunks } = this.state;
+    const { encoding, chunks, callbacks } = this.state;
     res.setHeader('Content-Encoding', encoding);
     res.removeHeader('Content-Length');
     const compressor = createCompressor(encoding);
@@ -178,32 +203,29 @@ class CompressingResponse {
     });
     res.on('drain', () => compressor.resume());
     compressor.on('drain', () => res.emit('drain'));
-    compressor.on('end', () => this.end(this.endCallback));
+    compressor.on('end', () => {
+      this.finished = true;
+      this.end(this.endCallback);
+    });
     compressor.on('error', (error) => res.destroy(error));
-    for (const chunk of chunks) {
-      compressor.write(chunk);
-    }
+    chunks.forEach((chunk, index) => {
+      const isLast = index === chunks.length - 1;
+      compressor.write(chunk, isLast ? (error) => callAll(callbacks, error) : undefined);
+    });
     this.state = { kind: 'compressing', encoding, compressor };
   }
 
   private onWrite(chunk: Chunk): boolean {
     this.decide();
     if (this.state.kind === 'buffering') {
-      this.buffer(toBuffer(chunk));
+      this.buffer(toBuffer(chunk), chunk.done);
       if (this.state.size >= COMPRESSION_THRESHOLD_BYTES) {
         this.startCompressing();
-      }
-      if (chunk.done) {
-        process.nextTick(chunk.done);
       }
       return true;
     }
     if (this.state.kind === 'compressing') {
-      const { compressor } = this.state;
-      // After a disconnect the writer is aborting; drop what it still sends.
-      return (
-        compressor.destroyed || compressor.write(toBuffer(chunk) ?? Buffer.alloc(0), chunk.done)
-      );
+      return this.state.compressor.write(toBuffer(chunk) ?? Buffer.alloc(0), chunk.done);
     }
     return chunk.encoding === undefined
       ? this.write(chunk.data, chunk.done)
@@ -218,12 +240,15 @@ class CompressingResponse {
     this.decide();
     let remaining = this.state.kind === 'identity' ? null : toBuffer(chunk);
     if (this.state.kind === 'buffering') {
-      this.buffer(remaining);
+      this.buffer(remaining, undefined);
       remaining = null;
       if (this.state.size < COMPRESSION_THRESHOLD_BYTES) {
-        const body = Buffer.concat(this.state.chunks);
+        const { chunks, callbacks } = this.state;
         this.state = { kind: 'identity' };
-        return this.end(body, chunk.done);
+        return this.end(Buffer.concat(chunks), (error?: Error | null) => {
+          callAll(callbacks, error);
+          chunk.done?.(error);
+        });
       }
       this.startCompressing();
     }
@@ -271,11 +296,20 @@ class CompressingResponse {
     }
   }
 
+  /**
+   * After a disconnect, later writes go straight to the closed response, as
+   * they would without this middleware, so no compressor starts or lingers.
+   */
   private onClose(): void {
-    if (this.state.kind === 'compressing') {
-      this.state.compressor.destroy();
-    } else if (this.state.kind === 'buffering') {
-      this.state.chunks = [];
+    const { state } = this;
+    this.state = { kind: 'identity' };
+    if (state.kind === 'buffering') {
+      callAll(state.callbacks, new Error('The response closed before the write was sent'));
+    } else if (state.kind === 'compressing') {
+      state.compressor.destroy();
+      if (this.ended && !this.finished) {
+        this.end(this.endCallback);
+      }
     }
   }
 }

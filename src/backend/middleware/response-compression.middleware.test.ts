@@ -63,7 +63,36 @@ function createHarness() {
   app.get('/plain', createResponseCompression(), (_req, res) => {
     res.type('text/plain').send('y'.repeat(5000));
   });
-  return { app, router, slowGate, slowSignals };
+  app.get('/ndjson', createResponseCompression(), (_req, res) => {
+    res.type('application/x-ndjson').send(`${JSON.stringify(largeList)}\n`);
+  });
+  app.get('/reset', createResponseCompression(), (_req, res) => {
+    // Not `send`, which strips a 205 body itself.
+    res.status(205).type('json').end(JSON.stringify(largeList));
+  });
+  const writeCallback = { headersSent: deferred(), sentWhenCalled: false };
+  app.get('/write-callback', createResponseCompression(), (_req, res) => {
+    res.type('json');
+    res.write('{"value":', () => {
+      writeCallback.sentWhenCalled = res.headersSent;
+      writeCallback.headersSent.resolve();
+    });
+    setTimeout(() => res.end('1}'), 20);
+  });
+  const lateWrite: { done: Deferred; encoding?: ReturnType<express.Response['getHeader']> } = {
+    done: deferred(),
+  };
+  app.get('/late-write', createResponseCompression(), (_req, res) => {
+    res.type('json');
+    res.write('[');
+    res.once('close', () => {
+      res.write(JSON.stringify(largeList));
+      res.end(']');
+      lateWrite.encoding = res.getHeader('content-encoding');
+      lateWrite.done.resolve();
+    });
+  });
+  return { app, router, slowGate, slowSignals, writeCallback, lateWrite };
 }
 
 const servers: Server[] = [];
@@ -332,6 +361,56 @@ describe('createResponseCompression', () => {
 
     expect(response.headers['content-encoding']).toBeUndefined();
     expect(response.body.toString('utf8')).toBe('y'.repeat(5000));
+  });
+
+  it('compresses NDJSON, the other content type tRPC can stream as', async () => {
+    const server = await listen(createHarness().app);
+
+    const response = await rawRequest(server, '/ndjson', { 'accept-encoding': 'br' });
+
+    expect(response.headers['content-encoding']).toBe('br');
+    expect(decode(response)).toBe(`${JSON.stringify(largeList)}\n`);
+  });
+
+  it('leaves a 205 Reset Content response alone', async () => {
+    const server = await listen(createHarness().app);
+
+    const response = await rawRequest(server, '/reset', { 'accept-encoding': 'br' });
+
+    expect(response.status).toBe(205);
+    expect(response.headers['content-encoding']).toBeUndefined();
+  });
+
+  it('calls a held write back only once its bytes have gone out', async () => {
+    const harness = createHarness();
+    const server = await listen(harness.app);
+
+    const response = await rawRequest(server, '/write-callback', { 'accept-encoding': 'br' });
+    await harness.writeCallback.headersSent.promise;
+
+    expect(response.body.toString('utf8')).toBe('{"value":1}');
+    expect(harness.writeCallback.sentWhenCalled).toBe(true);
+  });
+
+  it('starts no compression for writes after the client has gone', async () => {
+    const harness = createHarness();
+    const server = await listen(harness.app);
+    const { port } = server.address() as AddressInfo;
+
+    const req = request({
+      host: '127.0.0.1',
+      port,
+      path: '/late-write',
+      headers: { 'accept-encoding': 'br' },
+    });
+    req.on('error', () => undefined);
+    req.end();
+    // The handler holds its first byte, so no response arrives; give it time to write it.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    req.destroy();
+    await harness.lateWrite.done.promise;
+
+    expect(harness.lateWrite.encoding).toBeUndefined();
   });
 
   it('aborts the stream when the client disconnects and keeps serving', async () => {
