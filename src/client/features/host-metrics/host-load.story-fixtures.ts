@@ -7,6 +7,12 @@ export function hostLoadHistory(cpu: number, memory: number, count = 60) {
   }));
 }
 
+/** An `admin.getHostMetrics` answer carrying the whole window, as every first poll gets. */
+export function hostLoadWindowResponse(cpu: number, memory: number) {
+  const samples = hostLoadHistory(cpu, memory);
+  return { samples, since: null, oldestAt: samples[0]?.at ?? 0 };
+}
+
 const GB = 1024 ** 3;
 const group = (
   key: string,

@@ -78,10 +78,16 @@ export const adminRouter = router({
     };
   }),
 
-  /** Recent whole-machine CPU and memory load, oldest first, for the header sparkline. */
-  getHostMetrics: publicProcedure.query(async ({ ctx }) => ({
-    samples: await ctx.appContext.services.hostMetricsService.getHistory(),
-  })),
+  /**
+   * Recent whole-machine CPU and memory load, oldest first, for the header
+   * sparkline. A poll passes the time of its newest sample as `after` and gets
+   * only what is new, unless that sample has left the window.
+   */
+  getHostMetrics: publicProcedure
+    .input(z.object({ after: z.number().int().nonnegative() }).optional())
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.hostMetricsService.getHistoryAfter(input?.after)
+    ),
 
   /** What is using the machine: the heaviest workspaces, apps and processes. */
   getHostLoadBreakdown: publicProcedure.query(({ ctx }) =>

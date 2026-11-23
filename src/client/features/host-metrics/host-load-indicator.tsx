@@ -9,10 +9,12 @@ import { cn } from '@/lib/utils';
 import {
   type HostLoadSample,
   type HostLoadTone,
+  type SparklinePoint,
   sparklinePoints,
   summarizeHostLoad,
 } from './host-load';
 import { type HostLoadBreakdown, HostLoadBreakdownView } from './host-load-breakdown';
+import { useHostLoadSamples } from './use-host-load-samples';
 
 const SPARK_HEIGHT = 14;
 /**
@@ -30,7 +32,7 @@ function Sparkline({
   width,
   tone,
 }: {
-  values: readonly number[];
+  values: readonly SparklinePoint[];
   width: number;
   tone: StatusTone;
 }) {
@@ -124,7 +126,7 @@ function MetricRow({
 }: {
   metric: keyof typeof CALM_TONES;
   label: string;
-  values: readonly number[];
+  values: readonly SparklinePoint[];
   percent: number;
   tone: HostLoadTone;
 }) {
@@ -163,8 +165,8 @@ export function HostLoadIndicatorView({
   onOpenChange,
 }: HostLoadIndicatorViewProps) {
   const summary = summarizeHostLoad(samples);
-  const cpuValues = samples.map((sample) => sample.cpuPercent);
-  const memoryValues = samples.map((sample) => sample.memoryPercent);
+  const cpuValues = samples.map(({ at, cpuPercent }) => ({ at, value: cpuPercent }));
+  const memoryValues = samples.map(({ at, memoryPercent }) => ({ at, value: memoryPercent }));
   const label = `Computer load: CPU ${summary.cpu.percent}%, memory ${summary.memory.percent}%`;
 
   return (
@@ -200,24 +202,26 @@ export function HostLoadIndicatorView({
 
 /**
  * Polls only while the tab is visible; React Query pauses intervals in the
- * background. The process breakdown runs `ps`, so it is read only while open.
+ * background. A phone shows two numbers at a glance, so it polls more slowly
+ * until the graphs are open. The process breakdown runs `ps`, so it is read
+ * only while open.
  */
 export function HostLoadIndicator() {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
-  const { data } = trpc.admin.getHostMetrics.useQuery(undefined, {
-    refetchInterval: POLL_INTERVAL_MS.localStatus,
-  });
+  const { data: samples } = useHostLoadSamples(
+    isMobile && !open ? POLL_INTERVAL_MS.glanceStatus : POLL_INTERVAL_MS.localStatus
+  );
   const breakdown = trpc.admin.getHostLoadBreakdown.useQuery(undefined, {
     enabled: open,
     refetchInterval: POLL_INTERVAL_MS.localStatus,
   });
-  if (!data || data.samples.length === 0) {
+  if (!samples || samples.length === 0) {
     return null;
   }
   return (
     <HostLoadIndicatorView
-      samples={data.samples}
+      samples={samples}
       compact={isMobile}
       breakdown={breakdown.data}
       // The poll keeps retrying while open, so a failure shows as a message, not forever loading.

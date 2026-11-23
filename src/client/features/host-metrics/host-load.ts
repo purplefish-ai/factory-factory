@@ -1,6 +1,8 @@
 import type { StatusTone } from '@/client/lib/status-tones';
 
 export interface HostLoadSample {
+  /** Epoch milliseconds, on the server's clock. */
+  at: number;
   cpuPercent: number;
   memoryPercent: number;
 }
@@ -9,14 +11,23 @@ export type HostLoadTone = Extract<StatusTone, 'neutral' | 'warning' | 'danger'>
 
 const WARNING_PERCENT = 80;
 const DANGER_PERCENT = 95;
-/** About fifteen seconds at one tab's poll rate: long enough to ignore one busy tick. */
-const RECENT_SAMPLES = 3;
+/**
+ * Long enough to ignore one busy tick: the last three samples at the desktop
+ * poll rate, which cover about fifteen seconds of CPU because each reading is
+ * the average since the previous one. At a phone's 15-second rate the latest
+ * sample alone covers that. The edge sits halfway between sample gaps, so a
+ * poll a little early or late does not change which samples count.
+ */
+const RECENT_MS = 12_500;
 
-function recentAverage(samples: readonly HostLoadSample[], key: keyof HostLoadSample): number {
-  const recent = samples.slice(-RECENT_SAMPLES);
-  if (recent.length === 0) {
+type Reading = 'cpuPercent' | 'memoryPercent';
+
+function recentAverage(samples: readonly HostLoadSample[], key: Reading): number {
+  const latest = samples.at(-1);
+  if (!latest) {
     return 0;
   }
+  const recent = samples.filter((sample) => sample.at > latest.at - RECENT_MS);
   return recent.reduce((sum, sample) => sum + sample[key], 0) / recent.length;
 }
 
@@ -52,22 +63,40 @@ export function summarizeHostLoad(samples: readonly HostLoadSample[]): HostLoadS
   };
 }
 
+export interface SparklinePoint {
+  at: number;
+  value: number;
+}
+
 /**
- * SVG points for a 0–100% series stretched across `width`. The scale is fixed
- * rather than fitted, so a quiet machine draws a low line instead of an
- * alarming zoomed-in one.
+ * SVG points for a 0–100% series stretched across `width`, each placed by when
+ * it was taken, so readings polled at different rates share one time axis. The
+ * scale is fixed rather than fitted, so a quiet machine draws a low line
+ * instead of an alarming zoomed-in one.
  */
-export function sparklinePoints(values: readonly number[], width: number, height: number): string {
-  if (values.length === 0) {
+export function sparklinePoints(
+  points: readonly SparklinePoint[],
+  width: number,
+  height: number
+): string {
+  const first = points[0];
+  const last = points.at(-1);
+  if (!(first && last)) {
     return '';
   }
-  const series = values.length === 1 ? [values[0] ?? 0, values[0] ?? 0] : values;
-  const step = width / (series.length - 1);
+  const span = last.at - first.at;
+  const series =
+    span > 0
+      ? points.map((point) => ({ x: ((point.at - first.at) / span) * width, value: point.value }))
+      : [
+          { x: 0, value: last.value },
+          { x: width, value: last.value },
+        ];
   return series
-    .map((value, index) => {
+    .map(({ x, value }) => {
       const clamped = Math.min(100, Math.max(0, value));
       const y = height - (clamped / 100) * height;
-      return `${(index * step).toFixed(1)},${y.toFixed(1)}`;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
 }

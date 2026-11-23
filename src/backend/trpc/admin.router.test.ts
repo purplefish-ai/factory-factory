@@ -117,7 +117,17 @@ function createCaller(
   };
 
   const hostMetricsService = {
-    getHistory: vi.fn(async () => [{ at: 1, cpuPercent: 12, memoryPercent: 34 }]),
+    getHistoryAfter: vi.fn((after?: number) => {
+      const window = [
+        { at: 1, cpuPercent: 10, memoryPercent: 33 },
+        { at: 2, cpuPercent: 12, memoryPercent: 34 },
+      ];
+      return Promise.resolve(
+        after === undefined
+          ? { samples: window, since: null, oldestAt: 1 }
+          : { samples: window.filter((sample) => sample.at > after), since: after, oldestAt: 1 }
+      );
+    }),
   };
 
   const logger = {
@@ -187,6 +197,7 @@ function createCaller(
     cliHealthService,
     acpRuntimeManager,
     terminalService,
+    hostMetricsService,
     logger,
   };
 }
@@ -276,12 +287,36 @@ describe('adminRouter', () => {
     });
   });
 
-  it('returns host load history', async () => {
-    const { caller } = createCaller();
+  it('returns the whole host load window to a first read', async () => {
+    const { caller, hostMetricsService } = createCaller();
 
     await expect(caller.getHostMetrics()).resolves.toEqual({
-      samples: [{ at: 1, cpuPercent: 12, memoryPercent: 34 }],
+      samples: [
+        { at: 1, cpuPercent: 10, memoryPercent: 33 },
+        { at: 2, cpuPercent: 12, memoryPercent: 34 },
+      ],
+      since: null,
+      oldestAt: 1,
     });
+    expect(hostMetricsService.getHistoryAfter).toHaveBeenCalledWith(undefined);
+  });
+
+  it("passes the reader's latest sample time so only newer samples are sent", async () => {
+    const { caller, hostMetricsService } = createCaller();
+
+    await expect(caller.getHostMetrics({ after: 1 })).resolves.toEqual({
+      samples: [{ at: 2, cpuPercent: 12, memoryPercent: 34 }],
+      since: 1,
+      oldestAt: 1,
+    });
+    expect(hostMetricsService.getHistoryAfter).toHaveBeenCalledWith(1);
+  });
+
+  it.each([-1, 1.5, Number.NaN])('rejects a host load cursor of %s', async (after) => {
+    const { caller, hostMetricsService } = createCaller();
+
+    await expect(caller.getHostMetrics({ after })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(hostMetricsService.getHistoryAfter).not.toHaveBeenCalled();
   });
 
   it('updates and reports rate limiting data', async () => {

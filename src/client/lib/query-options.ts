@@ -18,6 +18,12 @@ export const POLL_INTERVAL_MS = {
   localStatus: 5000,
   /** Lists and details that change as agents work: projects, sessions, agents, runs, logs. */
   activity: 10_000,
+  /**
+   * Local machine state a phone shows only at a glance: the header's host load
+   * while its details are closed. Keep it under the host metrics service's
+   * 30-second staleness reset, or every poll would restart the history.
+   */
+  glanceStatus: 15_000,
   /** Secondary workspace context: inbox, unread counts, workspace family, git changes. */
   workspaceContext: 15_000,
   /** Views that rarely change while open: the file tree, provider usage. */
