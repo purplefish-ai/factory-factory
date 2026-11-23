@@ -6,17 +6,26 @@ import {
   prFailureSignature,
   reducePRObservation,
 } from './pr-trigger-policy';
-import type { PREventSummary } from './pr-trigger-policy.types';
+import type { PREventSummary, PRFactDraft } from './pr-trigger-policy.types';
 import type { PRObservation, PRStoredObservation } from './schemas/pr-event.schema';
 
 /**
- * Replays random histories of one open PR (pushes, check results, conflicts,
- * review threads) against a ledger whose facts are claimed and received at
- * random, and checks after every observation that the recipient has been told,
- * or has queued, exactly what is true now. A failure names the seed to replay.
+ * Replays random histories of one PR (pushes, check results, conflicts, review
+ * threads, closing and reopening) against a ledger whose facts are claimed and
+ * received at random, and whose stored observation is lost at random (as when
+ * another build wrote it), and checks after every observation that the
+ * recipient has been told, or has queued, exactly what is true now. A failure
+ * names the seed to replay.
  */
 const SEEDS = 300;
 const STEPS = 60;
+/**
+ * The histories are bounded and synchronous, so the test cannot hang and the
+ * default 5-second timeout would only measure the runner's load. The run takes
+ * about 1 second locally and 2 in CI, where a contended runner has made it take
+ * three times as long; most of it is the checks, which are the point.
+ */
+const TIMEOUT_MS = 30_000;
 
 function random(seed: number) {
   let state = seed;
@@ -33,6 +42,7 @@ type World = {
   head: number;
   checks: Check[];
   conflict: boolean;
+  closed: boolean;
   /** Open review threads by identity, with the revision of their text. */
   reviews: Map<string, number>;
   threads: number;
@@ -46,6 +56,8 @@ type Ledger = {
   keys: Set<string>;
   /** The failure observed without interruption, and when it was first seen. */
   failing: { key: string; since: number } | null;
+  /** When the PR was first observed closed since it was last observed open. */
+  closedSince: string | null;
 };
 
 const time = (tick: number) => new Date(Date.UTC(2026, 9, 8) + tick * 60_000);
@@ -78,8 +90,21 @@ function changeReview(world: World, pick: Pick) {
 
 function mutate(world: World, next: () => number, tick: number) {
   const pick: Pick = (items) => items[Math.floor(next() * items.length)];
-  const action = pick(['push', 'check', 'check', 'check', 'conflict', 'review', 'review', 'none']);
-  if (action === 'push') {
+  const action = pick([
+    'push',
+    'check',
+    'check',
+    'check',
+    'conflict',
+    'review',
+    'review',
+    'close',
+    'none',
+  ]);
+  if (action === 'close' || (world.closed && next() < 0.3)) {
+    world.closed = !world.closed;
+  } else if (action === 'push' && !world.closed) {
+    // GitHub does not move the head of a closed PR.
     world.head++;
     world.checks = next() < 0.2 ? [] : world.checks.map((c) => ({ ...c, state: 'running' }));
   } else if (action === 'check') {
@@ -107,6 +132,7 @@ function observation(world: World, tick: number, reviewsRead: boolean): PRObserv
     ...redObservation,
     headSha: `head-${world.head}`,
     observedAt: time(tick).toISOString(),
+    prState: world.closed ? 'CLOSED' : 'OPEN',
     ciStatus: deriveCiStatusFromCheckRollup(checks),
     hasMergeConflict: world.conflict,
     checks,
@@ -156,13 +182,15 @@ const latest = (events: readonly PREventSummary[]) =>
       a.payload.observation.observedAt.localeCompare(b.payload.observation.observedAt)
     )
     .at(-1);
-const reviewsIn = (events: readonly PREventSummary[]) =>
+const reviewKey = (r: { identity: string; contentHash: string }) =>
+  `${r.identity}:${r.contentHash}`;
+const reviewsIn = (events: readonly (PREventSummary | PRFactDraft)[]) =>
   events.flatMap((e) => (e.payload.kind === 'REVIEW_FEEDBACK' ? e.payload.reviews : []));
 
 type Checked = {
   ledger: Ledger;
   current: PRObservation;
-  emitted: readonly { kind: string }[];
+  emitted: readonly PRFactDraft[];
   told: readonly PREventSummary[];
   live: readonly PREventSummary[];
   onHead: (event: PREventSummary) => boolean;
@@ -171,7 +199,13 @@ type Checked = {
 /** Queued facts describe the current head, and no kind is queued twice. */
 function checkQueue({ ledger, onHead }: Checked) {
   expect(ledger.pending.every(onHead)).toBe(true);
-  for (const kind of ['CI_FAILED', 'CI_RECOVERED', 'CONFLICT_DETECTED', 'CONFLICT_CLEARED']) {
+  for (const kind of [
+    'CI_FAILED',
+    'CI_RECOVERED',
+    'CONFLICT_DETECTED',
+    'CONFLICT_CLEARED',
+    'PR_CLOSED',
+  ]) {
     expect(ofKind(ledger.pending, kind).length).toBeLessThanOrEqual(1);
   }
 }
@@ -191,13 +225,33 @@ function checkConflict({ ledger, current, told }: Checked) {
   }
 }
 
-/** A failing run is announced once it finishes or has waited long enough, not before. */
-function checkFailure({ ledger, current, emitted, live, onHead }: Checked) {
-  const signature = prFailureSignature(current);
-  const key = current.ciStatus === 'FAILURE' ? `${current.headSha}:${signature}` : null;
+/** A closing is stated once, and nothing else stays queued while the PR is closed. */
+function checkClosure({ ledger, current, live }: Checked) {
+  if (current.prState === 'OPEN') {
+    ledger.closedSince = null;
+    expect(ofKind(ledger.pending, 'PR_CLOSED')).toEqual([]);
+    return;
+  }
+  ledger.closedSince ??= current.observedAt;
+  const since = ledger.closedSince;
+  expect(ledger.pending.every((e) => e.kind === 'PR_CLOSED')).toBe(true);
+  expect(
+    ofKind(live, 'PR_CLOSED').filter((e) => e.payload.observation.observedAt >= since)
+  ).toHaveLength(1);
+}
+
+/** Follows the failure observed without interruption, whether the PR is open or closed. */
+function trackFailure({ ledger, current }: Checked) {
+  const key =
+    current.ciStatus === 'FAILURE' ? `${current.headSha}:${prFailureSignature(current)}` : null;
   if (key !== (ledger.failing?.key ?? null)) {
     ledger.failing = key ? { key, since: Date.parse(current.observedAt) } : null;
   }
+}
+
+/** A failing run is announced once it finishes or has waited long enough, not before. */
+function checkFailure({ ledger, current, emitted, live, onHead }: Checked) {
+  const signature = prFailureSignature(current);
   if (!ledger.failing) {
     return;
   }
@@ -251,7 +305,30 @@ function checkFeedback({ ledger, current, live }: Checked) {
   }
 }
 
-function check(ledger: Ledger, current: PRObservation, emitted: readonly { kind: string }[]) {
+/**
+ * Nothing is announced that the recipient already holds. No `CI_FAILED` reports
+ * the failure of the last CI fact it was told (delivered or in flight) for this
+ * head; the reducer does repeat one that recurs with identical checks after CI
+ * stopped failing, but here every completion has its own time, so none does. No
+ * feedback it received is queued again; the simulated threads are never
+ * re-opened.
+ */
+function checkNoRepeat({ emitted, told, onHead }: Checked) {
+  const lastCI = latest(ofKind(told, 'CI_FAILED', 'CI_RECOVERED').filter(onHead));
+  for (const event of ofKind(emitted, 'CI_FAILED')) {
+    expect(
+      lastCI?.kind === 'CI_FAILED' &&
+        prFailureSignature(lastCI.payload.observation) ===
+          prFailureSignature(event.payload.observation)
+    ).toBe(false);
+  }
+  const received = new Set(reviewsIn(told.filter((e) => e.deliveredAt)).map(reviewKey));
+  for (const review of reviewsIn(ofKind(emitted, 'REVIEW_FEEDBACK'))) {
+    expect(received.has(reviewKey(review))).toBe(false);
+  }
+}
+
+function check(ledger: Ledger, current: PRObservation, emitted: readonly PRFactDraft[]) {
   const told = [...ledger.delivered, ...ledger.inFlight];
   const checked: Checked = {
     ledger,
@@ -262,47 +339,74 @@ function check(ledger: Ledger, current: PRObservation, emitted: readonly { kind:
     onHead: (event) => event.payload.observation.headSha === current.headSha,
   };
   checkQueue(checked);
+  checkClosure(checked);
+  trackFailure(checked);
+  checkNoRepeat(checked);
+  if (current.prState === 'CLOSED') {
+    return;
+  }
   checkConflict(checked);
   checkFailure(checked);
   checkRecovery(checked);
   checkFeedback(checked);
 }
 
-it('tells the recipient what is true of the PR, once, for random histories', () => {
-  for (let seed = 1; seed <= SEEDS; seed++) {
-    const next = random(seed);
-    const world: World = { head: 1, checks: [], conflict: false, reviews: new Map(), threads: 0 };
-    const ledger: Ledger = {
-      previous: null,
-      pending: [],
-      inFlight: [],
-      delivered: [],
-      sequence: 0,
-      keys: new Set(),
-      failing: null,
-    };
-    for (let step = 0; step < STEPS; step++) {
-      const tick = step * 3;
-      mutate(world, next, tick);
-      const delivery = next();
-      if (delivery < 0.25 && ledger.inFlight.length === 0) {
-        // Claim: the queued facts are frozen into one delivery.
-        ledger.inFlight = ledger.pending;
-        ledger.pending = [];
-      } else if (delivery < 0.5) {
-        // Receipt: the frozen delivery reached the recipient.
-        ledger.delivered.push(
-          ...ledger.inFlight.map((e) => ({ ...e, deliveredAt: time(tick + 1) }))
-        );
-        ledger.inFlight = [];
-      }
-      const current = observation(world, tick + 2, next() >= 0.25);
-      const emitted = observe(ledger, current, tick + 2);
-      try {
-        check(ledger, current, emitted);
-      } catch (error) {
-        throw new Error(`seed ${seed}, step ${step}: ${String(error)}`, { cause: error });
+/** What happens to the ledger between two observations. */
+function betweenObservations(ledger: Ledger, next: () => number, tick: number) {
+  const delivery = next();
+  if (delivery < 0.25 && ledger.inFlight.length === 0) {
+    // Claim: the queued facts are frozen into one delivery.
+    ledger.inFlight = ledger.pending;
+    ledger.pending = [];
+  } else if (delivery < 0.5) {
+    // Receipt: the frozen delivery reached the recipient.
+    ledger.delivered.push(...ledger.inFlight.map((e) => ({ ...e, deliveredAt: time(tick + 1) })));
+    ledger.inFlight = [];
+  }
+  if (next() < 0.1) {
+    // The stored observation cannot be read, so the reducer has no baseline,
+    // and the wait of a failure that is still running starts again.
+    ledger.previous = null;
+    ledger.failing = null;
+  }
+}
+
+it(
+  'tells the recipient what is true of the PR, once, for random histories',
+  () => {
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const next = random(seed);
+      const world: World = {
+        head: 1,
+        checks: [],
+        conflict: false,
+        closed: false,
+        reviews: new Map(),
+        threads: 0,
+      };
+      const ledger: Ledger = {
+        previous: null,
+        pending: [],
+        inFlight: [],
+        delivered: [],
+        sequence: 0,
+        keys: new Set(),
+        failing: null,
+        closedSince: null,
+      };
+      for (let step = 0; step < STEPS; step++) {
+        const tick = step * 3;
+        mutate(world, next, tick);
+        betweenObservations(ledger, next, tick);
+        const current = observation(world, tick + 2, next() >= 0.25);
+        const emitted = observe(ledger, current, tick + 2);
+        try {
+          check(ledger, current, emitted);
+        } catch (error) {
+          throw new Error(`seed ${seed}, step ${step}: ${String(error)}`, { cause: error });
+        }
       }
     }
-  }
-});
+  },
+  TIMEOUT_MS
+);
