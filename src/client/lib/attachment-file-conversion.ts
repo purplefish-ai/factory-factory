@@ -9,6 +9,15 @@ import {
   MAX_TEXT_FILE_SIZE,
   readTextFile,
 } from '@/lib/image-utils';
+import {
+  DOWNSCALE_JPEG_QUALITY,
+  DOWNSCALE_MAX_EDGE,
+  downscaleOutputType,
+  keepsOriginal,
+  MAX_DOWNSCALE_INPUT_SIZE,
+  nameForType,
+} from './image-downscale-plan';
+import { resizeImage } from './image-resize';
 
 interface AttachmentConversionError {
   fileName: string;
@@ -32,6 +41,38 @@ function validateSize(size: number, limit: number, label: string): void {
   }
 }
 
+interface UploadImage {
+  blob: Blob;
+  type: string;
+  name: string;
+}
+
+/**
+ * Shrinks an image whose longest edge exceeds the cap. Any failure, or a
+ * result that is not smaller, keeps the original as it was before downscaling.
+ */
+async function downscaleForUpload(file: File, type: string, name: string): Promise<UploadImage> {
+  const original = { blob: file, type, name };
+  const outputType = downscaleOutputType(type);
+  if (!outputType || file.size > MAX_DOWNSCALE_INPUT_SIZE) {
+    return original;
+  }
+  let resized: Blob | null;
+  try {
+    resized = await resizeImage(file, {
+      maxEdge: DOWNSCALE_MAX_EDGE,
+      outputType,
+      quality: DOWNSCALE_JPEG_QUALITY,
+    });
+  } catch {
+    return original;
+  }
+  if (!resized || resized.type !== outputType || keepsOriginal(file.size, resized.size)) {
+    return original;
+  }
+  return { blob: resized, type: outputType, name: nameForType(name, type, outputType) };
+}
+
 async function imageAttachment(
   file: File,
   type: string,
@@ -40,11 +81,16 @@ async function imageAttachment(
   if (!isSupportedImageType(type)) {
     throw new Error(`Unsupported file type: ${type}`);
   }
-  validateSize(file.size, MAX_IMAGE_SIZE, clipboard ? 'Image' : 'File');
+  const name = clipboard
+    ? file.name || `pasted-image-${Date.now()}.${type.split('/')[1]}`
+    : file.name;
+  const upload = await downscaleForUpload(file, type, name);
+  // The limit applies to what is uploaded, so a large photo that shrinks under it is accepted.
+  validateSize(upload.blob.size, MAX_IMAGE_SIZE, clipboard ? 'Image' : 'File');
 
   let data: string;
   try {
-    data = await fileToBase64(file);
+    data = await fileToBase64(upload.blob);
   } catch (error) {
     if (!clipboard) {
       throw error;
@@ -55,9 +101,9 @@ async function imageAttachment(
 
   return {
     id: generateAttachmentId(),
-    name: clipboard ? file.name || `pasted-image-${Date.now()}.${type.split('/')[1]}` : file.name,
-    type,
-    size: file.size,
+    name: upload.name,
+    type: upload.type,
+    size: upload.blob.size,
     data,
     contentType: 'image',
   };

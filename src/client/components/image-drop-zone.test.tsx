@@ -135,7 +135,7 @@ describe('ImageDropZone', () => {
     try {
       await render();
       drag('drop', [image()]);
-      expect(finishRead).toBeDefined();
+      await vi.waitFor(() => expect(finishRead).toBeDefined());
       for (const identity of identities) {
         await render(identity);
       }
@@ -157,7 +157,7 @@ describe('ImageDropZone', () => {
     try {
       await render();
       drag('drop', [image()]);
-      expect(finishRead).toBeDefined();
+      await vi.waitFor(() => expect(finishRead).toBeDefined());
       await render('chat-a', true);
       await act(async () => finishRead!());
       expect(attachments).toHaveLength(1);

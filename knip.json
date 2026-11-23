@@ -12,7 +12,8 @@
         "electron/main/index.ts!",
         "electron/preload/index.cts!",
         "src/client/main.tsx!",
-        "src/client/features/workspace/diff-highlight.worker.ts!"
+        "src/client/features/workspace/diff-highlight.worker.ts!",
+        "src/client/lib/image-resize.worker.ts!"
       ],
       "project": [
         "src/**/*.{ts,tsx,css,mdx}!",
