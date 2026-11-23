@@ -79,9 +79,11 @@ function createHarness() {
     });
     setTimeout(() => res.end('1}'), 20);
   });
-  const lateWrite: { done: Deferred; encoding?: ReturnType<express.Response['getHeader']> } = {
-    done: deferred(),
-  };
+  const lateWrite: {
+    started: Deferred;
+    done: Deferred;
+    encoding?: ReturnType<express.Response['getHeader']>;
+  } = { started: deferred(), done: deferred() };
   app.get('/late-write', createResponseCompression(), (_req, res) => {
     res.type('json');
     res.write('[');
@@ -91,6 +93,7 @@ function createHarness() {
       lateWrite.encoding = res.getHeader('content-encoding');
       lateWrite.done.resolve();
     });
+    lateWrite.started.resolve();
   });
   return { app, router, slowGate, slowSignals, writeCallback, lateWrite };
 }
@@ -405,8 +408,8 @@ describe('createResponseCompression', () => {
     });
     req.on('error', () => undefined);
     req.end();
-    // The handler holds its first byte, so no response arrives; give it time to write it.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // The middleware holds the handler's first byte, so no response arrives.
+    await harness.lateWrite.started.promise;
     req.destroy();
     await harness.lateWrite.done.promise;
 
