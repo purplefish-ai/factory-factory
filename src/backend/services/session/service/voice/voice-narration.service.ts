@@ -41,7 +41,7 @@ import {
   type SessionOutboundEvent,
   sessionEventBus,
 } from '@/backend/services/session/service/event-bus/session-event-bus';
-import { type UserSettingsRecord, userSettingsService } from '@/backend/services/settings';
+import { userSettingsService, type VoiceSettings } from '@/backend/services/settings';
 import { normalizeDeepgramTtsSpeed } from '@/shared/deepgram-voices';
 import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema';
 
@@ -108,7 +108,7 @@ interface TurnState {
    * and DB load for no benefit. Reset at the next turn's WORKING transition
    * so a settings change takes effect from the following turn on.
    */
-  voiceSettings: { settings: UserSettingsRecord; apiKey: string } | null;
+  voiceSettings: { settings: VoiceSettings; apiKey: string } | null;
   /**
    * Bumped on every WORKING transition. `TurnState` is reused in place
    * across turns (reset, not replaced), so a settings lookup started by one
@@ -578,7 +578,7 @@ class VoiceNarrationService {
       let cached = turn.voiceSettings;
       if (!cached) {
         const generation = turn.generation;
-        const settings = await userSettingsService.get();
+        const settings = await userSettingsService.getVoiceSettings();
         if (active.cancelled) {
           this.settleNarration(sessionId, ws, turn, active);
           return;

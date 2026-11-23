@@ -6,7 +6,7 @@ const mockCryptoService = vi.hoisted(() => ({
 }));
 
 const mockUserSettingsQueryService = vi.hoisted(() => ({
-  get: vi.fn(),
+  getVoiceSettings: vi.fn(),
   update: vi.fn(),
 }));
 
@@ -31,7 +31,7 @@ describe('voiceRouter', () => {
 
   describe('getConfig', () => {
     it('never returns the stored key, only enabled and hasApiKey', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
         voiceTtsModel: 'flux-haley-en',
@@ -45,7 +45,7 @@ describe('voiceRouter', () => {
     });
 
     it('reports hasApiKey false when no key is stored', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: null,
         voiceTtsModel: 'flux-haley-en',
@@ -58,7 +58,7 @@ describe('voiceRouter', () => {
     });
 
     it('also returns the configured TTS model and speed', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
         voiceTtsModel: 'flux-jack-en',
@@ -158,7 +158,7 @@ describe('voiceRouter', () => {
     it.each([true, false])(
       'preserves enabled=%s when saving an unrelated setting',
       async (enabled) => {
-        mockUserSettingsQueryService.get.mockResolvedValue({
+        mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
           voiceModeEnabled: enabled,
           deepgramApiKeyEncrypted: 'encrypted:dg_secret',
           voiceTtsModel: 'flux-haley-en',
@@ -176,7 +176,7 @@ describe('voiceRouter', () => {
 
     it('encrypts and persists a newly provided key', async () => {
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_new',
       });
@@ -193,7 +193,7 @@ describe('voiceRouter', () => {
 
     it('leaves the stored key untouched when no apiKey is provided', async () => {
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: 'encrypted:dg_existing',
       });
@@ -209,7 +209,7 @@ describe('voiceRouter', () => {
 
     it('trims whitespace from a copy-pasted key before encrypting it', async () => {
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_new',
       });
@@ -221,7 +221,7 @@ describe('voiceRouter', () => {
 
     it('persists and returns ttsModel and ttsSpeed when provided', async () => {
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_existing',
         voiceTtsModel: 'flux-priya-en',
@@ -258,7 +258,7 @@ describe('voiceRouter', () => {
       // persisting it verbatim would later serialize as "0.5000000005" and
       // make Deepgram 400 every TTS connection with SPEED_INCREMENT_INVALID.
       mockUserSettingsQueryService.update.mockResolvedValue(undefined);
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: null,
         voiceTtsModel: 'flux-haley-en',
@@ -282,7 +282,7 @@ describe('voiceRouter', () => {
 
   describe('mintGrantToken', () => {
     it('throws when voice mode is disabled, even if a key is configured', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: false,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
@@ -293,7 +293,7 @@ describe('voiceRouter', () => {
     });
 
     it('throws when no key is configured', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: null,
       });
@@ -305,7 +305,7 @@ describe('voiceRouter', () => {
     });
 
     it('decrypts the stored key and returns the minted grant token', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
@@ -328,7 +328,7 @@ describe('voiceRouter', () => {
     });
 
     it("throws with Deepgram's raw error detail for an unrecognized failure", async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
@@ -344,7 +344,7 @@ describe('voiceRouter', () => {
     });
 
     it('throws a friendly, actionable message for a 403 INSUFFICIENT_PERMISSIONS response', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
@@ -361,7 +361,7 @@ describe('voiceRouter', () => {
     });
 
     it('throws a friendly, actionable message for a 401 INVALID_AUTH response', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });
@@ -377,7 +377,7 @@ describe('voiceRouter', () => {
     });
 
     it('throws a friendly, actionable message for a 400 BAD_REQUEST response (malformed/whitespace-padded key)', async () => {
-      mockUserSettingsQueryService.get.mockResolvedValue({
+      mockUserSettingsQueryService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'encrypted:dg_secret',
       });

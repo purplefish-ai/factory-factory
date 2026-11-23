@@ -86,7 +86,6 @@ describe('sessionProviderResolverService', () => {
       reviewerCodexModel: null,
       postReviewToGitHub: true,
       voiceModeEnabled: false,
-      deepgramApiKeyEncrypted: null,
       voiceTtsModel: 'flux-haley-en',
       voiceTtsSpeed: 1,
       voiceUtteranceEndMs: 1000,

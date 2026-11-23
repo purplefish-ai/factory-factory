@@ -120,7 +120,7 @@ async function validateDeepgramApiKey(apiKey: string): Promise<{ valid: boolean;
 export const voiceRouter = router({
   /** Current voice mode config. Never returns the plaintext/encrypted key. */
   getConfig: publicProcedure.query(async ({ ctx }) => {
-    const settings = await ctx.appContext.services.userSettingsQueryService.get();
+    const settings = await ctx.appContext.services.userSettingsQueryService.getVoiceSettings();
     return {
       enabled: settings.voiceModeEnabled,
       hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
@@ -200,7 +200,7 @@ export const voiceRouter = router({
         voiceUtteranceEndMs: input.utteranceEndMs,
         voiceBargeInSustainedMs: input.bargeInSustainedMs,
       });
-      const settings = await userSettingsQueryService.get();
+      const settings = await userSettingsQueryService.getVoiceSettings();
       return {
         enabled: settings.voiceModeEnabled,
         hasApiKey: Boolean(settings.deepgramApiKeyEncrypted),
@@ -217,7 +217,7 @@ export const voiceRouter = router({
    */
   mintGrantToken: trustedLocalProcedure.mutation(async ({ ctx }) => {
     const { cryptoService, userSettingsQueryService } = ctx.appContext.services;
-    const settings = await userSettingsQueryService.get();
+    const settings = await userSettingsQueryService.getVoiceSettings();
     if (!settings.voiceModeEnabled) {
       throw new Error('Voice mode is disabled');
     }

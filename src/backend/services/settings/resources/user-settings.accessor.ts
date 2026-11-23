@@ -53,18 +53,30 @@ export type WorkspaceOrderMap = Record<string, string[]>;
 
 /**
  * Settings reads run on every page load and session start, and procedures
- * return them to the browser. The slash-command cache is a large provider blob
- * only the backend reads, so every settings read leaves it out and the cache
- * has its own finder.
+ * return them to the browser. Every settings read leaves out the columns only
+ * the backend reads, each of which has its own finder: the slash-command
+ * cache, a large provider blob, and the encrypted Deepgram key, a secret.
  */
-const WITHOUT_SLASH_COMMAND_CACHE = { cachedSlashCommands: true } as const;
+const BACKEND_ONLY_COLUMNS = { cachedSlashCommands: true, deepgramApiKeyEncrypted: true } as const;
 
-export type UserSettingsRecord = Omit<UserSettings, keyof typeof WITHOUT_SLASH_COMMAND_CACHE>;
+export type UserSettingsRecord = Omit<UserSettings, keyof typeof BACKEND_ONLY_COLUMNS>;
 
 export interface SlashCommandCacheState {
   cachedSlashCommands: Prisma.JsonValue | null;
   updatedAt: Date;
 }
+
+const VOICE_SETTINGS_COLUMNS = {
+  voiceModeEnabled: true,
+  deepgramApiKeyEncrypted: true,
+  voiceTtsModel: true,
+  voiceTtsSpeed: true,
+  voiceUtteranceEndMs: true,
+  voiceBargeInSustainedMs: true,
+} as const;
+
+/** Voice mode configuration, including the encrypted key; never sent to clients. */
+export type VoiceSettings = Pick<UserSettings, keyof typeof VOICE_SETTINGS_COLUMNS>;
 
 const WORKSPACE_ORDER_UPDATE_MAX_ATTEMPTS = 5;
 
@@ -311,7 +323,7 @@ class UserSettingsAccessor {
 
     const existing = await prisma.userSettings.findUnique({
       where: { userId },
-      omit: WITHOUT_SLASH_COMMAND_CACHE,
+      omit: BACKEND_ONLY_COLUMNS,
     });
 
     if (existing) {
@@ -336,7 +348,7 @@ class UserSettingsAccessor {
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
         },
-        omit: WITHOUT_SLASH_COMMAND_CACHE,
+        omit: BACKEND_ONLY_COLUMNS,
       });
     } catch (error) {
       if (!isUniqueConstraintError(error)) {
@@ -345,7 +357,7 @@ class UserSettingsAccessor {
 
       const settings = await prisma.userSettings.findUnique({
         where: { userId },
-        omit: WITHOUT_SLASH_COMMAND_CACHE,
+        omit: BACKEND_ONLY_COLUMNS,
       });
 
       if (!settings) {
@@ -394,7 +406,7 @@ class UserSettingsAccessor {
         normalizedReviewerClaudeModel,
         normalizedReviewerCodexModel
       ),
-      omit: WITHOUT_SLASH_COMMAND_CACHE,
+      omit: BACKEND_ONLY_COLUMNS,
     });
   }
 
@@ -405,6 +417,21 @@ class UserSettingsAccessor {
   async getSlashCommandCache(): Promise<SlashCommandCacheState> {
     const where = { userId: 'default' };
     const select = { cachedSlashCommands: true, updatedAt: true } as const;
+    const existing = await prisma.userSettings.findUnique({ where, select });
+    if (existing) {
+      return existing;
+    }
+    await this.get();
+    return await prisma.userSettings.findUniqueOrThrow({ where, select });
+  }
+
+  /**
+   * Read the voice mode configuration with the encrypted Deepgram key,
+   * creating the default settings first if needed.
+   */
+  async getVoiceSettings(): Promise<VoiceSettings> {
+    const where = { userId: 'default' };
+    const select = VOICE_SETTINGS_COLUMNS;
     const existing = await prisma.userSettings.findUnique({ where, select });
     if (existing) {
       return existing;
@@ -463,7 +490,7 @@ class UserSettingsAccessor {
       if (result.count === 1) {
         return await prisma.userSettings.findUniqueOrThrow({
           where: { userId },
-          omit: WITHOUT_SLASH_COMMAND_CACHE,
+          omit: BACKEND_ONLY_COLUMNS,
         });
       }
     }

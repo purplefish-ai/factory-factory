@@ -2,6 +2,7 @@ import {
   type SlashCommandCacheState,
   type UserSettingsRecord,
   userSettingsAccessor,
+  type VoiceSettings,
 } from '@/backend/services/settings/resources/user-settings.accessor';
 import type { Prisma, SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 
@@ -41,7 +42,10 @@ export interface UpdateUserSettingsInput {
 }
 
 class UserSettingsService {
-  /** Settings without the slash-command cache; procedures return this to clients. */
+  /**
+   * Settings without the slash-command cache or the encrypted Deepgram key;
+   * procedures return this to clients.
+   */
   get(): Promise<UserSettingsRecord> {
     return userSettingsAccessor.get();
   }
@@ -64,6 +68,11 @@ class UserSettingsService {
 
   getSlashCommandCache(): Promise<SlashCommandCacheState> {
     return userSettingsAccessor.getSlashCommandCache();
+  }
+
+  /** Voice mode configuration with the encrypted Deepgram key, for backend use only. */
+  getVoiceSettings(): Promise<VoiceSettings> {
+    return userSettingsAccessor.getVoiceSettings();
   }
 
   compareAndSetCachedSlashCommands(
