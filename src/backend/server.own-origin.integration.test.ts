@@ -19,6 +19,9 @@ vi.mock('@/backend/routers/websocket', async () => {
   const { createWebSocketUpgradeHandler } = await vi.importActual<
     typeof import('./routers/websocket/upgrade-utils')
   >('./routers/websocket/upgrade-utils');
+  const { createWebSocketServers } = await vi.importActual<
+    typeof import('./routers/websocket/websocket-servers')
+  >('./routers/websocket/websocket-servers');
   const createChannel = (application: Application) =>
     createWebSocketUpgradeHandler({
       connectionName: 'chat',
@@ -27,6 +30,7 @@ vi.mock('@/backend/routers/websocket', async () => {
       onOpen: (ws) => ws.close(1000, 'opened'),
     });
   return {
+    createWebSocketServers,
     createChatUpgradeHandler: createChannel,
     createTerminalUpgradeHandler: createChannel,
     createSetupTerminalUpgradeHandler: createChannel,

@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Application } from '@/backend/app-context';
 import { deferred } from '@/test-utils/deferred';
 
-vi.mock('@/backend/routers/websocket', () => ({
+vi.mock('@/backend/routers/websocket', async () => ({
+  createWebSocketServers: (
+    await vi.importActual<typeof import('./routers/websocket/websocket-servers')>(
+      './routers/websocket/websocket-servers'
+    )
+  ).createWebSocketServers,
   createChatUpgradeHandler: vi.fn(() => vi.fn()),
   createTerminalUpgradeHandler: vi.fn(() => vi.fn()),
   createSetupTerminalUpgradeHandler: vi.fn(() => vi.fn()),
