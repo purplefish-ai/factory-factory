@@ -159,7 +159,7 @@ describe('shared project query and live connection lifecycle', () => {
     });
   });
 
-  it('invalidates fallback once per disconnect and rejects retired callbacks before a lower-version baseline', async () => {
+  it('falls back once when the reconnect attempt fails and rejects retired callbacks before a lower-version baseline', async () => {
     await fixture();
     requests.events[0]!.resolve(list());
     await vi.waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -169,6 +169,10 @@ describe('shared project query and live connection lifecycle', () => {
       entries: [entry({ name: 'old', version: 99 })],
     });
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    // The drop leaves idle cached data for the next baseline.
+    channel.onDisconnected?.();
+    expect(invalidate).not.toHaveBeenCalled();
+    // The failed reconnect attempt falls back to HTTP for detail and list, once.
     channel.onDisconnected?.();
     channel.onDisconnected?.();
     expect(invalidate).toHaveBeenCalledTimes(2);
@@ -181,8 +185,9 @@ describe('shared project query and live connection lifecycle', () => {
       ).toBe('fallback')
     );
     channel.onConnected?.();
-    // Reconnect starts a distinct generation and restarts fallback requests once.
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    // Reconnect starts a distinct generation. Nothing is in flight, so the
+    // cached fallback result waits for the baseline instead of being read again.
+    expect(invalidate).toHaveBeenCalledTimes(2);
     channel.onMessage?.({
       type: 'snapshot_full',
       projectId: 'proj-1',

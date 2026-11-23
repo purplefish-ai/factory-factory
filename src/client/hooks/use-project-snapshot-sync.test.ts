@@ -69,6 +69,8 @@ vi.mock('@trpc/react-query', () => ({
   ],
 }));
 const mockGlobalDispatchEvent = vi.fn();
+// Metadata repairs join a list read already in flight instead of cancelling it.
+const joinListRead = [{ projectId: 'proj-1' }, undefined, { cancelRefetch: false }] as const;
 
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -738,12 +740,16 @@ describe('useProjectSnapshotSync', () => {
 
       expect(mockWorkspaceGetInvalidate).not.toHaveBeenCalled();
       expect(mockQueryInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockQueryInvalidate).toHaveBeenCalledWith({
-        queryKey: [['workspace', 'get'], { input: undefined, type: 'query' }],
-        predicate: expect.any(Function),
-      });
+      expect(mockQueryInvalidate).toHaveBeenCalledWith(
+        {
+          queryKey: [['workspace', 'get'], { input: undefined, type: 'query' }],
+          predicate: expect.any(Function),
+        },
+        { cancelRefetch: false }
+      );
+      // The legacy entry lacks list metadata, so the list is read as well.
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListInvalidate).toHaveBeenCalledWith(...joinListRead);
 
       onMessage({
         type: 'snapshot_full',
@@ -761,7 +767,7 @@ describe('useProjectSnapshotSync', () => {
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-1',
-        entries: [],
+        entries: [makeEntry()],
       });
 
       // Another project's first baseline neither heals nor counts as proj-1's.
@@ -773,14 +779,30 @@ describe('useProjectSnapshotSync', () => {
       expectNoInvalidations();
       expect(mockSetData).toHaveBeenCalledTimes(1);
 
-      // Returning to proj-1 (its second baseline) heals proj-1 only.
+      // Returning to proj-1 (its second baseline) heals proj-1 only; its legacy
+      // entry needs list metadata.
       onMessage({
         type: 'snapshot_full',
         projectId: 'proj-1',
-        entries: [],
+        entries: [makeEntry()],
       });
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
-      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListInvalidate).toHaveBeenCalledWith(...joinListRead);
+    });
+
+    it('heals only detail after a later baseline whose entries are all complete', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+      const baseline = {
+        type: 'snapshot_full' as const,
+        projectId: 'proj-1',
+        entries: [complete({ workspaceId: 'ws-1' })],
+        reviewCount: 0,
+      };
+      onMessage(baseline);
+      onMessage(baseline);
+      expect(mockQueryInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).not.toHaveBeenCalled();
     });
   });
 

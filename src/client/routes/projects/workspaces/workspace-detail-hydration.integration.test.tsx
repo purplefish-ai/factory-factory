@@ -185,13 +185,13 @@ describe('workspace detail route hydration', () => {
     const unsubscribe = observers.map((observer) => observer.subscribe(() => undefined));
     try {
       const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-      channel.onDisconnected?.();
+      // The drop restarts only the read the retired connection began.
       channel.onDisconnected?.();
       expect(signals['ws-b']![0]!.aborted).toBe(false);
       expect(signals['ws-c']![0]!.aborted).toBe(false);
       expect(signals['ws-b']).toHaveLength(1);
       expect(signals['ws-c']).toHaveLength(1);
-      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(invalidate).toHaveBeenCalledTimes(1);
       await requests.waitForCount(2);
       expect(requests.events).toHaveLength(2);
       requests.events[1]!(fetched({ name: 'A fallback' }));
