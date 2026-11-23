@@ -64,9 +64,7 @@ function githubQueryResult() {
         {
           number: 42,
           title: 'GitHub issue',
-          body: 'GitHub body',
           url: 'https://github.com/purplefish-ai/factory-factory/issues/42',
-          state: 'OPEN',
           createdAt: '2026-07-17T10:00:00.000Z',
           author: { login: 'octocat' },
         },
@@ -87,9 +85,7 @@ function linearQueryResult() {
           id: 'linear-42',
           identifier: 'FF-42',
           title: 'Linear issue',
-          description: 'Linear body',
           url: 'https://linear.app/factory/issue/FF-42',
-          state: 'Todo',
           createdAt: '2026-07-17T11:00:00.000Z',
           creatorName: null,
         },
@@ -148,16 +144,20 @@ describe('useProjectIssues', () => {
     expect(resultRef.current).toMatchObject({
       isLoading: true,
       refetch: githubRefetch,
-      issues: [
-        {
-          id: '42',
-          displayId: '#42',
-          title: 'GitHub issue',
-          provider: 'github',
-          githubIssueNumber: 42,
-        },
-      ],
     });
+    // The polled list carries no bodies; the board renders every field below.
+    expect(resultRef.current?.issues).toStrictEqual([
+      {
+        id: '42',
+        displayId: '#42',
+        title: 'GitHub issue',
+        url: 'https://github.com/purplefish-ai/factory-factory/issues/42',
+        createdAt: '2026-07-17T10:00:00.000Z',
+        author: 'octocat',
+        provider: 'github',
+        githubIssueNumber: 42,
+      },
+    ]);
     expect(mocks.shouldSyncHealth).toHaveBeenCalledWith(githubHealth, null);
     expect(mocks.syncHealth).toHaveBeenCalledWith(mocks.checkCLIHealth, githubHealth);
   });
@@ -176,18 +176,20 @@ describe('useProjectIssues', () => {
     expect(resultRef.current).toMatchObject({
       isLoading: false,
       refetch: linearRefetch,
-      issues: [
-        {
-          id: 'linear-42',
-          displayId: 'FF-42',
-          title: 'Linear issue',
-          author: 'Unknown',
-          provider: 'linear',
-          linearIssueId: 'linear-42',
-          linearIssueIdentifier: 'FF-42',
-        },
-      ],
     });
+    expect(resultRef.current?.issues).toStrictEqual([
+      {
+        id: 'linear-42',
+        displayId: 'FF-42',
+        title: 'Linear issue',
+        url: 'https://linear.app/factory/issue/FF-42',
+        createdAt: '2026-07-17T11:00:00.000Z',
+        author: 'Unknown',
+        provider: 'linear',
+        linearIssueId: 'linear-42',
+        linearIssueIdentifier: 'FF-42',
+      },
+    ]);
     expect(mocks.shouldSyncHealth).not.toHaveBeenCalled();
     expect(mocks.syncHealth).not.toHaveBeenCalled();
   });
@@ -240,7 +242,7 @@ describe('useProjectIssues', () => {
   it('reconciles provider results with newer linked-workspace state', () => {
     render('project-1', IssueProvider.GITHUB, [{ githubIssueNumber: 42, linearIssueId: null }]);
 
-    expect(resultRef.current?.issues).toEqual([]);
+    expect(resultRef.current?.issues).toStrictEqual([]);
   });
   it('distinguishes a disconnected integration from an empty assigned list', () => {
     mocks.githubUseQuery.mockReturnValue({

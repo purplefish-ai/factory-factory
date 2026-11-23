@@ -162,6 +162,14 @@ describe('LinearClientService', () => {
   });
 
   describe('listMyIssues', () => {
+    // The list leaves out descriptions and workflow state names: the board
+    // renders neither, and each state name is another Linear request.
+    const stateRead = vi.fn((state: { name: string } | null) => Promise.resolve(state));
+
+    beforeEach(() => {
+      stateRead.mockClear();
+    });
+
     it('returns normalized issues with fallbacks', async () => {
       const assignedIssues = vi.fn().mockResolvedValue({
         pageInfo: { hasNextPage: false, endCursor: null },
@@ -173,7 +181,9 @@ describe('LinearClientService', () => {
             description: null,
             url: 'https://linear.app/example/issue/ENG-1',
             createdAt: new Date('2024-01-01T00:00:00.000Z'),
-            state: Promise.resolve({ name: 'Todo' }),
+            get state() {
+              return stateRead({ name: 'Todo' });
+            },
             creator: Promise.resolve({ displayName: 'Alice', name: 'Alice A.' }),
           },
           {
@@ -183,7 +193,9 @@ describe('LinearClientService', () => {
             description: 'Has details',
             url: 'https://linear.app/example/issue/ENG-2',
             createdAt: new Date('2024-01-02T00:00:00.000Z'),
-            state: Promise.resolve(null),
+            get state() {
+              return stateRead(null);
+            },
             creator: Promise.resolve({ displayName: null, name: 'Bob' }),
           },
         ],
@@ -194,6 +206,7 @@ describe('LinearClientService', () => {
 
       const result = await linearClientService.listMyIssues('linear-api-key', 'team-1');
 
+      expect(stateRead).not.toHaveBeenCalled();
       expect(assignedIssues).toHaveBeenCalledWith({
         filter: {
           team: { id: { eq: 'team-1' } },
@@ -206,9 +219,7 @@ describe('LinearClientService', () => {
           id: 'issue-1',
           identifier: 'ENG-1',
           title: 'First issue',
-          description: '',
           url: 'https://linear.app/example/issue/ENG-1',
-          state: 'Todo',
           createdAt: '2024-01-01T00:00:00.000Z',
           creatorName: 'Alice',
         },
@@ -216,9 +227,7 @@ describe('LinearClientService', () => {
           id: 'issue-2',
           identifier: 'ENG-2',
           title: 'Second issue',
-          description: 'Has details',
           url: 'https://linear.app/example/issue/ENG-2',
-          state: 'Unknown',
           createdAt: '2024-01-02T00:00:00.000Z',
           creatorName: 'Bob',
         },
@@ -238,7 +247,9 @@ describe('LinearClientService', () => {
               description: null,
               url: 'https://linear.app/example/issue/ENG-50',
               createdAt: new Date('2024-02-01T00:00:00.000Z'),
-              state: Promise.resolve({ name: 'Todo' }),
+              get state() {
+                return stateRead({ name: 'Todo' });
+              },
               creator: Promise.resolve(null),
             },
           ],
@@ -253,7 +264,9 @@ describe('LinearClientService', () => {
               description: 'Page two',
               url: 'https://linear.app/example/issue/ENG-51',
               createdAt: new Date('2024-02-02T00:00:00.000Z'),
-              state: Promise.resolve({ name: 'Todo' }),
+              get state() {
+                return stateRead({ name: 'Todo' });
+              },
               creator: Promise.resolve({ displayName: 'Casey', name: 'Casey C.' }),
             },
           ],
@@ -264,6 +277,7 @@ describe('LinearClientService', () => {
 
       const result = await linearClientService.listMyIssues('linear-api-key', 'team-1');
 
+      expect(stateRead).not.toHaveBeenCalled();
       expect(assignedIssues).toHaveBeenNthCalledWith(1, {
         filter: {
           team: { id: { eq: 'team-1' } },
@@ -284,9 +298,7 @@ describe('LinearClientService', () => {
           id: 'issue-50',
           identifier: 'ENG-50',
           title: 'Boundary issue',
-          description: '',
           url: 'https://linear.app/example/issue/ENG-50',
-          state: 'Todo',
           createdAt: '2024-02-01T00:00:00.000Z',
           creatorName: null,
         },
@@ -294,9 +306,7 @@ describe('LinearClientService', () => {
           id: 'issue-51',
           identifier: 'ENG-51',
           title: 'Overflow issue',
-          description: 'Page two',
           url: 'https://linear.app/example/issue/ENG-51',
-          state: 'Todo',
           createdAt: '2024-02-02T00:00:00.000Z',
           creatorName: 'Casey',
         },

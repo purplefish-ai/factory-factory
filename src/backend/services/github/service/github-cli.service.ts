@@ -28,6 +28,8 @@ import {
 import { ReviewRequestCache } from './github-cli/review-request-cache';
 import { listReviewRequests } from './github-cli/review-requests';
 import {
+  ISSUE_LIST_FIELDS,
+  issueListItemSchema,
   issueSchema,
   openPullRequestsGraphQLSchema,
   type ResolvedReviewThreadsPage,
@@ -40,6 +42,8 @@ import type {
   GitHubCLIErrorType,
   GitHubCLIHealthStatus,
   GitHubIssue,
+  GitHubIssueListItem,
+  GitHubIssueSearchResult,
   OpenPullRequest,
   PRInfo,
   PRObservationDetails,
@@ -85,7 +89,10 @@ class GitHubCLIService {
   /** Keep recovery after `gh auth login` or an install prompt. */
   private readonly UNHEALTHY_CACHE_TTL_MS = 30_000;
 
-  private readonly issueCache = new Map<string, { issues: GitHubIssue[]; fetchedAt: number }>();
+  private readonly issueCache = new Map<
+    string,
+    { issues: GitHubIssueListItem[]; fetchedAt: number }
+  >();
   private readonly issueRefreshInFlight = new Set<string>();
   private readonly ISSUE_CACHE_TTL_MS = 60_000;
 
@@ -409,7 +416,7 @@ class GitHubCLIService {
   }
 
   /**
-   * List open issues for a repository.
+   * List open issues for a repository, without bodies: `getIssue` reads one.
    * Results are cached for 60 s (stale-while-revalidate).
    * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
    */
@@ -417,7 +424,7 @@ class GitHubCLIService {
     owner: string,
     repo: string,
     options: { limit?: number; assignee?: string } = {}
-  ): Promise<GitHubIssue[]> {
+  ): Promise<GitHubIssueListItem[]> {
     const { limit = 50, assignee } = options;
     const cacheKey = `${owner}/${repo}?limit=${limit}&assignee=${assignee ?? ''}`;
     const now = Date.now();
@@ -447,7 +454,12 @@ class GitHubCLIService {
     return issues;
   }
 
-  searchIssues(owner: string, repo: string, query: string, limit = 30): Promise<GitHubIssue[]> {
+  searchIssues(
+    owner: string,
+    repo: string,
+    query: string,
+    limit = 30
+  ): Promise<GitHubIssueSearchResult[]> {
     return searchIssues((args, options) => this.exec(args, options), owner, repo, query, limit);
   }
 
@@ -455,7 +467,7 @@ class GitHubCLIService {
     owner: string,
     repo: string,
     options: { limit?: number; assignee?: string } = {}
-  ): Promise<GitHubIssue[]> {
+  ): Promise<GitHubIssueListItem[]> {
     const { limit = 50, assignee } = options;
     try {
       const args = [
@@ -466,7 +478,7 @@ class GitHubCLIService {
         '--state',
         'open',
         '--json',
-        'number,title,body,url,state,createdAt,author',
+        ISSUE_LIST_FIELDS,
         '--limit',
         String(limit),
       ];
@@ -477,7 +489,7 @@ class GitHubCLIService {
 
       const { stdout } = await this.exec(args, { timeout: GH_TIMEOUT_MS.default });
 
-      return parseGhJson(issueSchema.array(), stdout, 'listIssues');
+      return parseGhJson(issueListItemSchema.array(), stdout, 'listIssues');
     } catch (error) {
       throwIfGitHubConnectivityError(error, { owner, repo });
       const errorType = classifyError(error);

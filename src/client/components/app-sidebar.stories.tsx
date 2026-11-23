@@ -148,7 +148,6 @@ function SidebarStory({
                   {
                     number: 42,
                     title: 'Fix login redirect',
-                    body: '',
                     url: 'https://github.com/acme/repo/issues/42',
                     createdAt: '2026-11-01T12:00:00Z',
                     author: { login: 'octocat' },

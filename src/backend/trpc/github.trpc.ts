@@ -38,8 +38,8 @@ export const githubRouter = router({
     ),
 
   /**
-   * List open issues assigned to the current user for a project's repository.
-   * Used by the Kanban board to populate the Issues column.
+   * List open issues assigned to the current user for a project's repository,
+   * without bodies. The Kanban board and sidebar poll it for their Issues lists.
    */
   listIssuesForProject: publicProcedure
     .input(z.object({ projectId: z.string() }))
@@ -102,10 +102,7 @@ export const githubRouter = router({
       }
     }),
 
-  /**
-   * Get detailed information for a specific GitHub issue.
-   * Used by the Kanban board to show issue details in the side panel.
-   */
+  /** Get one GitHub issue, including its body, which the issue lists leave out. */
   getIssue: publicProcedure
     .input(
       z.object({
