@@ -164,6 +164,7 @@ describe('getClipboardImages', () => {
     );
     const pending = getClipboardImages(createClipboardEvent(items));
     expired = true;
+    await vi.waitFor(() => expect(fileToBase64).toHaveBeenCalledOnce());
     finish('first');
     const result = await pending;
     expect(result.attachments.map(({ name }) => name)).toEqual(['first.png', 'second.png']);

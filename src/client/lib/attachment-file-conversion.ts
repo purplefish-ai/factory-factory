@@ -9,6 +9,15 @@ import {
   MAX_TEXT_FILE_SIZE,
   readTextFile,
 } from '@/lib/image-utils';
+import {
+  DOWNSCALE_JPEG_QUALITY,
+  DOWNSCALE_LIMITS,
+  keepsOriginal,
+  nameForType,
+  planDownscale,
+} from './image-downscale-plan';
+import { IMAGE_HEADER_READS, type ImageHeader, INCOMPLETE, readImageHeader } from './image-header';
+import { resizeImage } from './image-resize';
 
 interface AttachmentConversionError {
   fileName: string;
@@ -32,6 +41,56 @@ function validateSize(size: number, limit: number, label: string): void {
   }
 }
 
+interface UploadImage {
+  blob: Blob;
+  type: string;
+  name: string;
+}
+
+/** Reads a short prefix, and a longer one only when metadata pushes the header past it. */
+async function readHeader(file: File): Promise<ImageHeader | null> {
+  try {
+    for (const length of IMAGE_HEADER_READS) {
+      const header = readImageHeader(new Uint8Array(await file.slice(0, length).arrayBuffer()));
+      if (header !== INCOMPLETE) {
+        return header;
+      }
+      if (length >= file.size) {
+        return null;
+      }
+    }
+  } catch {
+    // An unreadable prefix uploads the file unchanged.
+  }
+  return null;
+}
+
+/**
+ * Shrinks an image that exceeds the cap. Any failure, or a result that is not
+ * smaller, keeps the original as it was before downscaling.
+ */
+async function downscaleForUpload(file: File, type: string, name: string): Promise<UploadImage> {
+  const original = { blob: file, type, name };
+  const outputType = planDownscale(type, await readHeader(file));
+  if (!outputType) {
+    return original;
+  }
+  let resized: Blob | null;
+  try {
+    resized = await resizeImage(file, {
+      ...DOWNSCALE_LIMITS,
+      outputType,
+      quality: DOWNSCALE_JPEG_QUALITY,
+    });
+  } catch {
+    return original;
+  }
+  if (!resized || resized.type !== outputType || keepsOriginal(file.size, resized.size)) {
+    return original;
+  }
+  return { blob: resized, type: outputType, name: nameForType(name, type, outputType) };
+}
+
 async function imageAttachment(
   file: File,
   type: string,
@@ -40,11 +99,16 @@ async function imageAttachment(
   if (!isSupportedImageType(type)) {
     throw new Error(`Unsupported file type: ${type}`);
   }
-  validateSize(file.size, MAX_IMAGE_SIZE, clipboard ? 'Image' : 'File');
+  const name = clipboard
+    ? file.name || `pasted-image-${Date.now()}.${type.split('/')[1]}`
+    : file.name;
+  const upload = await downscaleForUpload(file, type, name);
+  // The limit applies to what is uploaded, so a large photo that shrinks under it is accepted.
+  validateSize(upload.blob.size, MAX_IMAGE_SIZE, clipboard ? 'Image' : 'File');
 
   let data: string;
   try {
-    data = await fileToBase64(file);
+    data = await fileToBase64(upload.blob);
   } catch (error) {
     if (!clipboard) {
       throw error;
@@ -55,9 +119,9 @@ async function imageAttachment(
 
   return {
     id: generateAttachmentId(),
-    name: clipboard ? file.name || `pasted-image-${Date.now()}.${type.split('/')[1]}` : file.name,
-    type,
-    size: file.size,
+    name: upload.name,
+    type: upload.type,
+    size: upload.blob.size,
     data,
     contentType: 'image',
   };

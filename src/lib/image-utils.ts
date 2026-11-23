@@ -65,11 +65,11 @@ export function isSupportedTextFile(filename: string): boolean {
 }
 
 /**
- * Convert a File to a base64 encoded string.
+ * Convert a File or Blob to a base64 encoded string.
  * Reads the file as a data URL and strips the prefix (e.g., "data:image/png;base64,"),
  * returning only the base64-encoded payload.
  */
-export function fileToBase64(file: File): Promise<string> {
+export function fileToBase64(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

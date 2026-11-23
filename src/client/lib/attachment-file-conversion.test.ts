@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileToBase64, MAX_IMAGE_SIZE, MAX_TEXT_FILE_SIZE, readTextFile } from '@/lib/image-utils';
 import { collectAttachments } from './attachment-file-conversion';
+import { DOWNSCALE_JPEG_QUALITY, DOWNSCALE_LIMITS } from './image-downscale-plan';
+import { gifHeader, jpegHeader, pngHeader, webpHeader } from './image-header.test-helpers';
+import { resizeImage } from './image-resize';
 
 vi.mock('@/lib/image-utils', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/image-utils')>()),
   fileToBase64: vi.fn().mockResolvedValue('base64'),
   readTextFile: vi.fn().mockResolvedValue('text content'),
 }));
+vi.mock('./image-resize', () => ({ resizeImage: vi.fn().mockResolvedValue(null) }));
 
 const image = (name = 'shot.png', type = 'image/png') => new File(['img'], name, { type });
 const text = (name = 'notes.md', type = '') => new File(['notes'], name, { type });
@@ -130,7 +134,7 @@ describe('attachment conversion', () => {
       mode: 'images-only',
       files: [image('first.png'), image('second.png')],
     });
-    expect(fileToBase64).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(fileToBase64).toHaveBeenCalledTimes(2));
     finishSecond('second');
     finishFirst('first');
     const result = await pending;
@@ -153,7 +157,7 @@ describe('attachment conversion', () => {
           ? { mode, images: files.map((file) => ({ file, type: file.type })) }
           : { mode, files }
       );
-      expect(fileToBase64).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(fileToBase64).toHaveBeenCalledTimes(1));
       finish('first');
       const result = await pending;
       expect(fileToBase64).toHaveBeenCalledTimes(2);
@@ -185,5 +189,135 @@ describe('attachment conversion', () => {
 
   it.each(['images-only', 'images-and-text'] as const)('handles empty %s batches', async (mode) => {
     expect(await collectAttachments({ mode, files: [] })).toEqual({ attachments: [], errors: [] });
+  });
+});
+
+describe('image downscale before upload', () => {
+  const sized = (file: File, size: number) => {
+    Object.defineProperty(file, 'size', { value: size, configurable: true });
+    return file;
+  };
+  const encoded = (size: number, type: string) => sized(new File(['small'], 'x', { type }), size);
+  const oversized: Record<string, Uint8Array<ArrayBuffer>> = {
+    'image/jpeg': jpegHeader(4032, 3024),
+    'image/jpg': jpegHeader(4032, 3024),
+    'image/png': pngHeader(5120, 2880),
+    'image/webp': webpHeader('VP8X', 4032, 3024),
+    'image/gif': gifHeader(),
+  };
+  const photo = (name: string, type: string, header = oversized[type]) =>
+    new File([header ?? new Uint8Array()], name, { type });
+
+  it.each([
+    ['image/jpeg', 'image/jpeg'],
+    ['image/jpg', 'image/jpeg'],
+    ['image/png', 'image/png'],
+    ['image/webp', 'image/png'],
+  ])('asks for an oversized %s to be resized as %s', async (type, outputType) => {
+    const file = photo('photo', type);
+    await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(resizeImage).toHaveBeenCalledWith(file, {
+      maxEdge: DOWNSCALE_LIMITS.maxEdge,
+      maxPixels: DOWNSCALE_LIMITS.maxPixels,
+      outputType,
+      quality: DOWNSCALE_JPEG_QUALITY,
+    });
+  });
+
+  it.each([
+    ['a GIF', photo('anim.gif', 'image/gif')],
+    ['an animated WebP', photo('anim.webp', 'image/webp', webpHeader('VP8X', 4000, 3000, true))],
+    ['an animated PNG', photo('anim.png', 'image/png', pngHeader(4000, 3000, { animated: true }))],
+    ['an image within the cap', photo('small.jpg', 'image/jpeg', jpegHeader(2576, 1449))],
+    ['an image too large to decode', photo('huge.png', 'image/png', pngHeader(10_000, 10_000))],
+    ['an unreadable image', image('broken.png')],
+    [
+      'a PNG cut off before its image data',
+      photo('cut.png', 'image/png', pngHeader(5120, 2880).subarray(0, 60)),
+    ],
+  ])('does not decode %s', async (_label, file) => {
+    const result = await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(resizeImage).not.toHaveBeenCalled();
+    expect(fileToBase64).toHaveBeenCalledWith(file);
+    expect(result.attachments).toHaveLength(1);
+  });
+
+  it('reads further for a header behind large metadata', async () => {
+    const file = photo('icc.png', 'image/png', pngHeader(5120, 2880, { metadataBytes: 100_000 }));
+    await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(resizeImage).toHaveBeenCalledOnce();
+  });
+
+  it('uploads the resized image with its own size', async () => {
+    const resized = encoded(1_200_000, 'image/jpeg');
+    vi.mocked(resizeImage).mockResolvedValueOnce(resized);
+    vi.mocked(fileToBase64).mockResolvedValueOnce('resized-base64');
+    const file = sized(photo('IMG_0001.JPG', 'image/jpeg'), 4_000_000);
+    const result = await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(fileToBase64).toHaveBeenCalledWith(resized);
+    expect(result.attachments[0]).toMatchObject({
+      name: 'IMG_0001.JPG',
+      type: 'image/jpeg',
+      size: 1_200_000,
+      data: 'resized-base64',
+    });
+  });
+
+  it('renames an image whose format changed', async () => {
+    vi.mocked(resizeImage).mockResolvedValueOnce(encoded(10, 'image/png'));
+    const file = sized(photo('render.webp', 'image/webp'), 20);
+    const result = await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(result.attachments[0]).toMatchObject({
+      name: 'render.png',
+      type: 'image/png',
+      size: 10,
+    });
+  });
+
+  it.each([
+    ['is not smaller', () => Promise.resolve(encoded(100, 'image/png'))],
+    ['fits after all once orientated', () => Promise.resolve(null)],
+    ['cannot be decoded', () => Promise.reject(new Error('decode failed'))],
+    ['comes back in another format', () => Promise.resolve(encoded(10, 'image/webp'))],
+  ])('keeps the original when the resized image %s', async (_label, resize) => {
+    vi.mocked(resizeImage).mockImplementationOnce(resize);
+    const file = sized(photo('shot.png', 'image/png'), 100);
+    const result = await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(fileToBase64).toHaveBeenCalledWith(file);
+    expect(result.attachments[0]).toMatchObject({ name: 'shot.png', type: 'image/png', size: 100 });
+  });
+
+  it('accepts a large photo that downscales under the upload limit', async () => {
+    vi.mocked(resizeImage).mockResolvedValueOnce(encoded(2_000_000, 'image/jpeg'));
+    const file = sized(photo('big.jpg', 'image/jpeg'), MAX_IMAGE_SIZE * 2);
+    const result = await collectAttachments({ mode: 'images-and-text', files: [file] });
+    expect(result.errors).toEqual([]);
+    expect(result.attachments[0]?.size).toBe(2_000_000);
+  });
+
+  it('rejects a large image that cannot be downscaled under the limit', async () => {
+    vi.mocked(resizeImage).mockResolvedValueOnce(encoded(12 * 1024 * 1024, 'image/png'));
+    const file = sized(photo('big.png', 'image/png'), MAX_IMAGE_SIZE * 2);
+    const result = await collectAttachments({ mode: 'images-and-text', files: [file] });
+    expect(result.errors).toEqual([
+      { fileName: 'big.png', message: 'File too large: 12.0 MB (max 10.0 MB)' },
+    ]);
+    expect(fileToBase64).not.toHaveBeenCalled();
+  });
+
+  it('downscales pasted images before naming them', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(7);
+    vi.mocked(resizeImage).mockResolvedValueOnce(encoded(10, 'image/png'));
+    const file = sized(photo('', 'image/webp'), 20);
+    const result = await collectAttachments({
+      mode: 'clipboard-images',
+      images: [{ file, type: 'image/webp' }],
+    });
+    expect(result.attachments[0]).toMatchObject({
+      name: 'pasted-image-7.png',
+      type: 'image/png',
+      size: 10,
+    });
+    now.mockRestore();
   });
 });
