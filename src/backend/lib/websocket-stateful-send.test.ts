@@ -119,6 +119,20 @@ describe('stateful viewer delivery', () => {
     viewer.emit('close');
   });
 
+  it('holds an authoritative frame within the ordinary budget to that budget', () => {
+    vi.useFakeTimers();
+    const viewer = new Viewer();
+    viewer.bufferedAmount = 900 * 1024;
+    expect(
+      sendStateful(viewer.socket(), 'x'.repeat(200 * 1024), logger, 'baseline', {
+        allowLargeFrame: true,
+      })
+    ).toBe(false);
+    expect(viewer.sent).toEqual([]);
+    expect(viewer.close).toHaveBeenCalledTimes(1);
+    viewer.emit('close');
+  });
+
   it('does not grant a large frame exemption to a connection that has used its backlog budget', () => {
     vi.useFakeTimers();
     const viewer = new Viewer();

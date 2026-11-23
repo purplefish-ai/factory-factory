@@ -189,6 +189,7 @@ export function sendStateful(
   let large = largeFrames.get(ws);
   const isLargeFrame = bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;
   const allowLarge =
+    isLargeFrame &&
     options.allowLargeFrame === true &&
     large === undefined &&
     ws.bufferedAmount < MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;

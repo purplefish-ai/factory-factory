@@ -26,7 +26,9 @@ import { type PerMessageDeflateOptions, type WebSocket, WebSocketServer } from '
  *   sends a compressed message (Chromium compresses every message it sends).
  * - `concurrencyLimit` caps concurrent zlib jobs from `ws` so they hold at
  *   most half of the default four threadpool threads. `ws` keeps this limiter
- *   process-wide and sizes it from the first instance created.
+ *   process-wide and sizes it from the first instance created, so the
+ *   backend's one `ws` client (Deepgram text-to-speech) negotiates no
+ *   compression and never creates one.
  *
  * Byte budgets (`bufferedAmount`) count a frame at its uncompressed size while
  * it waits for zlib and at its compressed size once it is queued on the socket.

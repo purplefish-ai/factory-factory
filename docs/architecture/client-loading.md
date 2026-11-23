@@ -73,12 +73,10 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   saves nothing. The port-share proxy and health routes are not compressed
   either. A possible follow-up is compressing the tRPC jsonl stream with a flush
   per line.
-- WebSockets on `/chat`, `/snapshots`, `/dev-logs` and `/post-run-logs`
-  negotiate `permessage-deflate` without context takeover; frames under 4 KiB,
-  such as live chat deltas, go out uncompressed. `/terminal`, `/setup-terminal`
-  and `/voice` never negotiate it. `createWebSocketServers` in
-  `src/backend/routers/websocket/websocket-servers.ts` records the reasons and
-  the memory each compressing connection holds.
+- Some WebSocket channels negotiate `permessage-deflate` for large frames; the
+  `PER_MESSAGE_DEFLATE` and `COMPRESSED_PATHS` comments in
+  `src/backend/routers/websocket/websocket-servers.ts` give which, why, and the
+  memory each compressing connection holds.
 
 Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
 siblings do not match their name patterns. A cold load of the startup closure
