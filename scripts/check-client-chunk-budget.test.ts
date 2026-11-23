@@ -12,26 +12,41 @@ afterEach(() => {
   }
 });
 
-function check(chunks: Record<string, string>, sourceModules?: Record<string, string[]> | null) {
+const BOARD_ROUTE = 'src/client/routes/projects/workspaces/list.tsx';
+
+function check(
+  chunks: Record<string, string>,
+  sourceModules?: Record<string, string[]> | null,
+  packages: Record<string, string[]> = {}
+) {
   const root = mkdtempSync(join(tmpdir(), 'ff-client-budget-'));
   directories.push(root);
   const assets = join(root, 'dist/client/assets');
   mkdirSync(assets, { recursive: true });
   const files = {
-    'index-entry.js': '',
+    'index-entry.js': 'import("./list-board.js");',
     'file-viewer-lazy.js': '',
     'diff-highlight.worker-lazy.js': '',
+    'list-board.js': '',
     ...chunks,
   };
   for (const [name, source] of Object.entries(files)) {
     writeFileSync(join(assets, name), source);
   }
   if (sourceModules !== null) {
+    // Every fixture has a board route chunk unless the test names its modules.
+    const modules = {
+      ...(sourceModules ?? Object.fromEntries(Object.keys(files).map((name) => [name, []]))),
+      'list-board.js': sourceModules?.['list-board.js'] ?? [BOARD_ROUTE],
+    };
     writeFileSync(
       join(assets, 'client-modules.json'),
       JSON.stringify({
-        version: 1,
-        modules: sourceModules ?? Object.fromEntries(Object.keys(files).map((name) => [name, []])),
+        version: 2,
+        modules,
+        packages: Object.fromEntries(
+          Object.keys(modules).map((name) => [name, packages[name] ?? []])
+        ),
       })
     );
   }
@@ -133,6 +148,63 @@ it('allows viewer source modules in dynamically imported shared chunks', () => {
   );
   expect(result.status).toBe(0);
   expect(result.stdout).toContain('startup static closure: 1 JS files');
+});
+
+it.each([
+  'streamdown',
+  'react-markdown',
+  'micromark',
+  'micromark-util-symbol',
+  'remark-gfm',
+  'rehype-raw',
+  'unified',
+  'mdast-util-to-hast',
+])('rejects the markdown package %s in the board route static closure', (markdownPackage) => {
+  const result = check({ 'list-board.js': 'import "./shared.js";', 'shared.js': '' }, undefined, {
+    'shared.js': ['@phosphor-icons/react', markdownPackage],
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(
+    `shared.js: board route static closure must not contain ${markdownPackage}`
+  );
+});
+
+it('allows markdown packages behind a dynamic import from the board route', () => {
+  const result = check(
+    { 'list-board.js': 'import("./quick-chat.js");', 'quick-chat.js': '' },
+    undefined,
+    { 'quick-chat.js': ['streamdown', 'micromark'] }
+  );
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('board route static closure: 1 JS files beyond startup');
+});
+
+it('rejects a board route static closure over its budget', () => {
+  const result = check({
+    'list-board.js': 'import "./board-only.js";',
+    'board-only.js': `/*${'a'.repeat(900_000)}*/`,
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toMatch(
+    /board route static closure: \d+ bytes exceeds the \d+ byte budget/
+  );
+});
+
+it('counts only board route files that startup does not already load', () => {
+  const shared = `/*${'a'.repeat(900_000)}*/`;
+  const result = check({
+    'index-entry.js': 'import "./shared.js"; import("./list-board.js");',
+    'list-board.js': 'import "./shared.js";',
+    'shared.js': shared,
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('board route static closure: 1 JS files beyond startup');
+});
+
+it('fails closed when no chunk contains the board route', () => {
+  const result = check({}, { 'index-entry.js': [], 'list-board.js': [] });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain(`Expected exactly one chunk containing ${BOARD_ROUTE}`);
 });
 
 it('fails closed without the source module manifest', () => {
