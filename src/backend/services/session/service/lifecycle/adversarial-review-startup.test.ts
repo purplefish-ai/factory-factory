@@ -548,7 +548,7 @@ describe('adversarial review startup permissions', () => {
   it('persists and emits repaired permissions on an existing review client', async () => {
     const harness = createHarness('CODEX');
     harness.runtimeManager.getClient.mockReturnValue(harness.handle);
-    const persist = harness.repository.updateSession;
+    const persist = harness.repository.reconcileConfigSnapshot;
     await start(harness, 'chat auto-start');
     expect(persist).toHaveBeenCalledWith(
       harness.session.id,

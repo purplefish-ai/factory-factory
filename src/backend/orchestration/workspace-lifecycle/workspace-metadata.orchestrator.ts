@@ -30,7 +30,6 @@ type MetadataWorkspace = {
 };
 interface Dependencies {
   findSession(id: string): Promise<{
-    id: string;
     workspaceId: string;
     provider: 'CLAUDE' | 'CODEX';
     codexAccountId: string | null;

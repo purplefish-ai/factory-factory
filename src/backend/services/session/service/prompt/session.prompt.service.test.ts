@@ -13,7 +13,7 @@ import { userSettingsService } from '@/backend/services/settings';
 import { SessionService } from './session.service';
 
 vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: { get: vi.fn(async () => ({ turnLimitMinutes: null })) },
+  userSettingsService: { getTurnLimitMinutes: vi.fn(async () => null) },
 }));
 
 function createPromptService(eventAuthority?: EventSessionAuthority) {
@@ -398,7 +398,7 @@ describe('SessionService prompt coordination', () => {
   });
 
   it.each(['CLAUDE', 'CODEX'])('applies a configured turn limit to %s', async (provider) => {
-    vi.mocked(userSettingsService.get).mockResolvedValueOnce({ turnLimitMinutes: 30 } as never);
+    vi.mocked(userSettingsService.getTurnLimitMinutes).mockResolvedValueOnce(30);
     const { service, runtimeManager, acpEventProcessor } = createPromptService();
     acpEventProcessor.getProvider.mockReturnValue(provider);
     runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
@@ -410,16 +410,28 @@ describe('SessionService prompt coordination', () => {
     );
   });
 
+  it('propagates a settings read failure before starting the turn', async () => {
+    const error = new Error('settings read failed');
+    vi.mocked(userSettingsService.getTurnLimitMinutes).mockRejectedValueOnce(error);
+    const { service, runtimeManager, acpEventProcessor } = createPromptService();
+
+    await expect(service.sendSessionMessage('session-1', 'continue')).rejects.toBe(error);
+    expect(acpEventProcessor.beginPromptTurn).not.toHaveBeenCalled();
+    expect(runtimeManager.sendPrompt).not.toHaveBeenCalled();
+  });
+
   it('does not dispatch after the lifecycle changes during the settings read', async () => {
-    const settings = createDeferredCall<Awaited<ReturnType<typeof userSettingsService.get>>>();
-    vi.mocked(userSettingsService.get).mockClear().mockImplementationOnce(settings.run);
+    const settings = createDeferredCall<number | null>();
+    vi.mocked(userSettingsService.getTurnLimitMinutes)
+      .mockClear()
+      .mockImplementationOnce(settings.run);
     const { service, runtimeManager, isGenerationCurrent } = createPromptService();
     const sending = service.sendSessionMessage('session-1', 'continue');
     const rejected = expect(sending).rejects.toThrow('Session lifecycle changed');
     await settings.entered;
-    expect(userSettingsService.get).toHaveBeenCalled();
+    expect(userSettingsService.getTurnLimitMinutes).toHaveBeenCalled();
     isGenerationCurrent.mockReturnValue(false);
-    settings.resolve({ turnLimitMinutes: null } as never);
+    settings.resolve(null);
     await rejected;
     expect(runtimeManager.sendPrompt).not.toHaveBeenCalled();
   });
@@ -833,6 +845,7 @@ it.each(['stop', 'evidence', 'read-timeout'] as const)(
             reasoningEffort: null,
             codexAccountId: null,
             startupModePreset: 'non_interactive',
+            turnLimitMinutes: 10,
             accessMode: 'bypassPermissions',
             planModeEnabled: false,
           },
@@ -840,6 +853,12 @@ it.each(['stop', 'evidence', 'read-timeout'] as const)(
       ).rejects.toBe(timeout);
       await vi.runAllTimersAsync();
       await pending;
+      expect(h.runtimeManager.sendPrompt).toHaveBeenCalledWith(
+        'session-1',
+        [{ type: 'text', text: 'initial' }],
+        600_000,
+        expect.any(Object)
+      );
       expect(h.runtimeManager.stopAndQuiesceObserved).toHaveBeenCalledOnce();
       expect(h.lifecycleEventService.record).toHaveBeenCalledWith(
         expect.objectContaining({ reason: 'PROMPT_TIMEOUT' })

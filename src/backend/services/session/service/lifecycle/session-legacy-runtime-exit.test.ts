@@ -115,7 +115,7 @@ const getAcpProcessorState = () => acpEventProcessor;
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+    vi.spyOn(userSettingsService, 'getTurnLimitMinutes').mockResolvedValue(null);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();

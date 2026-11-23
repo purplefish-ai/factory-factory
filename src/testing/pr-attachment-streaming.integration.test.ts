@@ -143,7 +143,7 @@ describe('PR attachment streaming', () => {
       } as unknown as EventCollectorDependencies;
       collector = createEventCollectorOrchestrator(dependencies);
       collector.start();
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(150);
       expect(findSessions).toHaveBeenCalledWith('ws-1');
       expect(logger.warn).not.toHaveBeenCalled();
       ratchetEvents.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: 'ws-1' });

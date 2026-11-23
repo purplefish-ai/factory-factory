@@ -112,6 +112,10 @@ export function setupAuthority(runtimeManager?: AcpRuntimeManager) {
   };
   const casModels: (string | undefined)[] = [];
   const accessor = {
+    findConfigSnapshotState: vi.fn(async (id: string) => {
+      await hooks.read(++reads);
+      return structuredClone(readRow(id));
+    }),
     findById: vi.fn(async (id: string) => {
       await hooks.read(++reads);
       return structuredClone(readRow(id));

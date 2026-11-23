@@ -31,6 +31,7 @@ function setup() {
     },
   };
   const repository = {
+    reconcileConfigSnapshot: vi.fn(),
     getSessionById: vi.fn().mockResolvedValue(session),
     updateSession: vi
       .fn()

@@ -76,6 +76,7 @@ export type LifecycleHarness = {
     | 'getWorkspaceById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
+    | 'reconcileConfigSnapshot'
     | 'acknowledgeStartupConfiguration'
     | 'updatePendingLaunchConfiguration'
     | 'updateSessionIfStatus'
@@ -572,6 +573,7 @@ export function createLifecycleHarness(
       async () => undefined
     ),
     updateSession: vi.fn<SessionRepository['updateSession']>(async () => session),
+    reconcileConfigSnapshot: vi.fn<SessionRepository['reconcileConfigSnapshot']>(),
     acknowledgeStartupConfiguration: vi.fn<SessionRepository['acknowledgeStartupConfiguration']>(
       (id, data, _intent, guard): Promise<AgentSessionRecord> =>
         repository.updateSession(id, data, guard)
@@ -592,6 +594,7 @@ export function createLifecycleHarness(
     | 'getWorkspaceById'
     | 'markWorkspaceHasHadSessions'
     | 'updateSession'
+    | 'reconcileConfigSnapshot'
     | 'acknowledgeStartupConfiguration'
     | 'updatePendingLaunchConfiguration'
     | 'updateSessionIfStatus'

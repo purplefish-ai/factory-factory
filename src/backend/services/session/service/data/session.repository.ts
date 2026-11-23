@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+import { z } from 'zod';
 import {
   type AgentSessionRecord,
   type AgentSessionSummaryRecord,
@@ -35,7 +37,10 @@ type SessionUpdateData = Partial<
 
 type ConditionalSessionUpdateData = Omit<SessionUpdateData, 'providerSessionId'>;
 
+type ConfigSnapshotState = ProviderIdentityExpectation & Pick<AgentSessionRecord, 'model'>;
+
 type SessionAccessor = {
+  findConfigSnapshotState(id: string): Promise<ConfigSnapshotState | null>;
   updateIfProviderIdentity(
     id: string,
     expected: ProviderIdentityExpectation,
@@ -63,6 +68,8 @@ type WorkspaceAccessor = {
 };
 
 export class SessionRepository {
+  private readonly snapshotWrites = new Map<string, number>();
+
   constructor(
     private readonly sessions: SessionAccessor = agentSessionAccessor,
     private readonly workspaces: WorkspaceAccessor = workspaceDataService
@@ -70,6 +77,39 @@ export class SessionRepository {
 
   getSessionById(sessionId: string): Promise<AgentSessionRecord | null> {
     return this.sessions.findById(sessionId);
+  }
+
+  async reconcileConfigSnapshot(
+    sessionId: string,
+    data: { providerMetadata: Prisma.JsonObject; model?: string },
+    assertCurrent?: () => void
+  ): Promise<void> {
+    // An older CAS already submitted to SQLite can still land after this read.
+    const writeInFlight = this.snapshotWrites.has(sessionId);
+    const current = await this.sessions.findConfigSnapshotState(sessionId);
+    assertCurrent?.();
+    if (!current) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    const incoming = requireMatchingSnapshot(sessionId, current, data.providerMetadata);
+    const durable = isMetadataRecord(current.providerMetadata) ? current.providerMetadata : {};
+    const saved = durable.acpConfigSnapshot;
+    if (
+      !writeInFlight &&
+      isMetadataRecord(saved) &&
+      (data.model === undefined ||
+        (current.model === data.model && durable.observedModelId === data.model)) &&
+      equalSnapshotContent(saved, incoming)
+    ) {
+      return;
+    }
+    const count = await this.writeSnapshot(sessionId, current, {
+      ...data,
+      providerMetadata: { ...durable, ...data.providerMetadata },
+    });
+    if (count !== 1) {
+      throw new Error(`Stale provider metadata reconciliation for session ${sessionId}`);
+    }
   }
 
   getSessionsByWorkspaceId(workspaceId: string): Promise<AgentSessionSummaryRecord[]> {
@@ -183,13 +223,7 @@ export class SessionRepository {
     if (!current.providerSessionId && data.providerSessionId) {
       throw new Error('Initial provider identity must be persisted before its config snapshot');
     }
-    const snapshot = metadata.acpConfigSnapshot;
-    if (
-      !(current.providerSessionId && isMetadataRecord(snapshot)) ||
-      snapshot.providerSessionId !== current.providerSessionId
-    ) {
-      throw new Error(`Stale provider config snapshot for session ${sessionId}`);
-    }
+    requireMatchingSnapshot(sessionId, current, metadata);
     const currentMetadata = current.providerMetadata;
     const durableMetadata = isMetadataRecord(currentMetadata) ? currentMetadata : {};
     const { providerSessionId: _identity, ...guardedData } = data;
@@ -199,7 +233,7 @@ export class SessionRepository {
     const mergedMetadata = mergeSnapshotMetadata(durableMetadata, metadata, launchChange);
     assertCurrent?.();
     if (
-      (await this.sessions.updateIfProviderIdentity(sessionId, current, {
+      (await this.writeSnapshot(sessionId, current, {
         ...guardedData,
         providerMetadata: mergedMetadata,
       })) !== 1
@@ -216,6 +250,24 @@ export class SessionRepository {
     return persisted;
   }
 
+  private async writeSnapshot(
+    sessionId: string,
+    expected: ProviderIdentityExpectation,
+    update: ConditionalSessionUpdateData
+  ): Promise<number> {
+    this.snapshotWrites.set(sessionId, (this.snapshotWrites.get(sessionId) ?? 0) + 1);
+    try {
+      return await this.sessions.updateIfProviderIdentity(sessionId, expected, update);
+    } finally {
+      const remaining = (this.snapshotWrites.get(sessionId) ?? 1) - 1;
+      if (remaining === 0) {
+        this.snapshotWrites.delete(sessionId);
+      } else {
+        this.snapshotWrites.set(sessionId, remaining);
+      }
+    }
+  }
+
   deleteSession(sessionId: string): Promise<AgentSessionRecord> {
     return this.sessions.delete(sessionId).then((session) => {
       sessionDomainService.forgetProviderHistoryIdentity(sessionId);
@@ -229,6 +281,31 @@ export class SessionRepository {
 }
 
 export const sessionRepository = new SessionRepository();
+
+function requireMatchingSnapshot(
+  sessionId: string,
+  current: ProviderIdentityExpectation,
+  metadata: Prisma.JsonObject
+): Prisma.JsonObject {
+  const snapshot = metadata.acpConfigSnapshot;
+  if (
+    !(current.providerSessionId && isMetadataRecord(snapshot)) ||
+    snapshot.providerSessionId !== current.providerSessionId
+  ) {
+    throw new Error(`Stale provider config snapshot for session ${sessionId}`);
+  }
+  return snapshot;
+}
+
+function equalSnapshotContent(saved: Prisma.JsonObject, incoming: Prisma.JsonObject): boolean {
+  const { capturedAt: _previousTime, ...previous } = saved;
+  const { capturedAt: _captureTime, ...next } = incoming;
+  // SQLite omits undefined option fields and can reorder object keys.
+  return (
+    isDeepStrictEqual(previous, next) ||
+    isDeepStrictEqual(previous, z.json().parse(JSON.parse(JSON.stringify(next))))
+  );
+}
 
 function mergeSnapshotMetadata(
   durable: Prisma.JsonObject,

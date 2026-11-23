@@ -10,10 +10,10 @@ vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));
 
 it('publishes the superseding native selection before acknowledging a settled edit', async () => {
   const h = setupAuthority();
-  const reread = gate();
-  h.hooks.read = async (number) => {
-    if (number === 3) {
-      await reread.wait();
+  const writing = gate();
+  h.hooks.cas = async (number) => {
+    if (number === 1) {
+      await writing.wait();
     }
   };
   const handler = createSetConfigOptionHandler({ sessionConfigService: h.service });
@@ -26,10 +26,10 @@ it('publishes the superseding native selection before acknowledging a settled ed
       requestId: 'pending-edit',
     }
   );
-  await reread.started;
+  await writing.started;
   h.native('third');
   await settleConfig();
-  reread.release();
+  writing.release();
   const outcome = await result;
   expect(h.models()).toEqual(['third']);
   expect(h.row().model).toBe('third');
@@ -38,10 +38,10 @@ it('publishes the superseding native selection before acknowledging a settled ed
 
 it('returns a correlated error when the runtime changes before an edit settles', async () => {
   const h = setupAuthority();
-  const reread = gate();
-  h.hooks.read = async (number) => {
-    if (number === 3) {
-      await reread.wait();
+  const writing = gate();
+  h.hooks.cas = async (number) => {
+    if (number === 1) {
+      await writing.wait();
     }
   };
   const handler = createSetConfigOptionHandler({ sessionConfigService: h.service });
@@ -54,9 +54,9 @@ it('returns a correlated error when the runtime changes before an edit settles',
       requestId: 'pending-edit',
     }
   );
-  await reread.started;
+  await writing.started;
   h.runtime.isStopInProgress.mockReturnValue(true);
-  reread.release();
+  writing.release();
   const outcome = await result;
   expect(outcome.replies).toEqual([
     {

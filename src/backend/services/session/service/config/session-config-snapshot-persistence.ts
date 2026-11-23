@@ -1,10 +1,10 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
-import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { SessionStartupIntent } from '@/backend/services/session/service/data/session-startup-intent';
 import { SessionStartupIntentChangedError } from '@/backend/services/session/service/data/session-startup-intent';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { SessionLaunchSettings } from '@/shared/session-launch';
+import type { Prisma } from '@prisma-gen/client';
 import type { StoredAcpConfigSnapshot } from './acp-config-snapshot';
 import type { SessionProvider } from './session-config-option-helpers';
 const logger = createLogger('session');
@@ -56,6 +56,17 @@ export class SessionConfigSnapshotPersistence {
     snapshot: StoredAcpConfigSnapshot,
     attempt: number
   ): Promise<void> {
+    if (
+      !(params.requirePersistence || params.startupIntent || params.pendingLaunchSettingsPatch) &&
+      params.existingMetadata === undefined
+    ) {
+      await this.repository.reconcileConfigSnapshot(
+        sessionId,
+        snapshotUpdate({}, snapshot, snapshot.observedModelId),
+        params.assertCurrent
+      );
+      return;
+    }
     const source =
       attempt === 0 && params.existingMetadata !== undefined
         ? params.existingMetadata
@@ -109,13 +120,13 @@ function snapshotUpdate(
   metadata: Record<string, unknown>,
   snapshot: StoredAcpConfigSnapshot,
   observedModelId: string | undefined
-): { providerMetadata: AgentSessionRecord['providerMetadata']; model?: string } {
+): { providerMetadata: Prisma.JsonObject; model?: string } {
   return {
     providerMetadata: {
       ...metadata,
       acpConfigSnapshot: snapshot,
       ...(observedModelId ? { observedModelId } : {}),
-    } as AgentSessionRecord['providerMetadata'],
+    } as Prisma.JsonObject,
     ...(observedModelId ? { model: observedModelId } : {}),
   };
 }

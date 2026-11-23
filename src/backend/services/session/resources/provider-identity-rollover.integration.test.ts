@@ -184,3 +184,16 @@ describe('atomic provider identity reconciliation in SQLite', () => {
     });
   });
 });
+
+it('advances the snapshot CAS version even when the clock has not advanced', async () => {
+  const session = await fixture();
+  const current = await db.prisma.agentSession.update({
+    where: { id: session.id },
+    data: { updatedAt: new Date(Date.now() + 1000) },
+  });
+  const update = { providerMetadata: current.providerMetadata };
+  expect(await accessor.updateIfProviderIdentity(session.id, current, update)).toBe(1);
+  const saved = await accessor.findById(session.id);
+  expect(saved?.updatedAt.getTime()).toBeGreaterThan(current.updatedAt.getTime());
+  expect(await accessor.updateIfProviderIdentity(session.id, current, update)).toBe(0);
+});

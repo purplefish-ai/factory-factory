@@ -1,6 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
+import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
@@ -63,6 +64,7 @@ function setup(
     setConfigOption: vi.fn(applyOption),
   };
   const repository = {
+    reconcileConfigSnapshot: vi.fn(),
     getSessionById: vi.fn(() => Promise.resolve(session)),
     updateSession: vi.fn(),
   };
@@ -190,7 +192,7 @@ describe('saved native session access', () => {
         'STRICT'
       );
       expect(h.handle.configOptions[0]?.currentValue).toBe('workspace-write');
-      expect(h.repository.updateSession).toHaveBeenLastCalledWith(
+      expect(h.repository.reconcileConfigSnapshot).toHaveBeenLastCalledWith(
         'session',
         expect.objectContaining({
           providerMetadata: expect.objectContaining({
@@ -257,7 +259,7 @@ describe('saved native session access', () => {
       ).rejects.toThrow();
       expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
       expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
-      expect(h.repository.updateSession).not.toHaveBeenCalled();
+      expect(h.repository.reconcileConfigSnapshot).not.toHaveBeenCalled();
     }
   );
 
@@ -286,6 +288,16 @@ describe('saved native session access', () => {
         },
       })
     );
+    const cas = vi.fn().mockResolvedValue(1);
+    const durable = new SessionRepository(
+      unsafeCoerce({
+        findConfigSnapshotState: h.repository.getSessionById,
+        updateIfProviderIdentity: cas,
+      })
+    );
+    h.repository.reconcileConfigSnapshot.mockImplementation(
+      durable.reconcileConfigSnapshot.bind(durable)
+    );
     await h.service.applyConfiguredPermissionPreset(
       'session',
       unsafeCoerce(h.session),
@@ -293,16 +305,16 @@ describe('saved native session access', () => {
       'YOLO'
     );
     expect(h.handle.configOptions[0]?.currentValue).toBe('read-only');
-    expect(h.repository.updateSession).toHaveBeenCalledWith(
+    expect(cas).toHaveBeenCalledWith(
       'session',
+      expect.objectContaining({ providerSessionId: 'replacement' }),
       expect.objectContaining({
         providerMetadata: expect.objectContaining({
           providerIdentityRollovers: rollovers,
           retainedMetadata: 'preserved',
           acpConfigSnapshot: expect.objectContaining({ providerSessionId: 'replacement' }),
         }),
-      }),
-      expect.any(Function)
+      })
     );
   });
 
@@ -422,7 +434,7 @@ describe('saved native session access', () => {
     ).rejects.toThrow();
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
     expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
-    expect(h.repository.updateSession).not.toHaveBeenCalled();
+    expect(h.repository.reconcileConfigSnapshot).not.toHaveBeenCalled();
   });
 
   it('rejects unavailable saved planning before changing access', async () => {
@@ -477,7 +489,7 @@ describe('saved native session access', () => {
     ).rejects.toThrow();
     expect(h.runtime.setSessionMode).toHaveBeenCalledTimes(1);
     expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
-    expect(h.repository.updateSession).not.toHaveBeenCalled();
+    expect(h.repository.reconcileConfigSnapshot).not.toHaveBeenCalled();
   });
 
   it.each(['read-only', 'workspace-write'])(

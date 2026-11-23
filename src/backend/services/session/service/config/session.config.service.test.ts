@@ -24,6 +24,7 @@ vi.mock('@/backend/services/settings', () => ({
 describe('SessionConfigService', () => {
   const codexModelCatalogService = { getModels: vi.fn() };
   const repository = {
+    reconcileConfigSnapshot: vi.fn(),
     getSessionById: vi.fn(),
     updateSession: vi.fn(),
   };
@@ -832,7 +833,7 @@ describe('SessionConfigService', () => {
       },
     ];
 
-    repository.updateSession
+    repository.reconcileConfigSnapshot
       .mockRejectedValueOnce(new Error('primary metadata write failed'))
       .mockResolvedValueOnce(unsafeCoerce({ id: 'session-1' }));
     repository.getSessionById.mockResolvedValue(
@@ -848,8 +849,8 @@ describe('SessionConfigService', () => {
       configOptions: unsafeCoerce(configOptions),
     });
 
-    const metadataUpdates = repository.updateSession.mock.calls.filter(([, update]: unknown[]) =>
-      Object.hasOwn(update as object, 'providerMetadata')
+    const metadataUpdates = repository.reconcileConfigSnapshot.mock.calls.filter(
+      ([, update]: unknown[]) => Object.hasOwn(update as object, 'providerMetadata')
     );
     expect(metadataUpdates).toHaveLength(2);
   });

@@ -54,6 +54,10 @@ class UserSettingsService {
     return userSettingsAccessor.update(data);
   }
 
+  getTurnLimitMinutes(): Promise<number | null> {
+    return userSettingsAccessor.getTurnLimitMinutes();
+  }
+
   getDefaultSessionProvider(): Promise<SessionProvider> {
     return userSettingsAccessor.getDefaultSessionProvider();
   }

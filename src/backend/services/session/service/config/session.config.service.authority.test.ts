@@ -21,7 +21,7 @@ describe('accepted configuration commit authority', () => {
       return Promise.resolve();
     };
     h.hooks.read = async (number) => {
-      if (number === 3) {
+      if (number === 2) {
         await retry.wait();
       }
     };
@@ -41,7 +41,7 @@ describe('accepted configuration commit authority', () => {
     const h = setupAuthority();
     const read = gate();
     h.hooks.read = async (number) => {
-      if (number === 2) {
+      if (number === 1) {
         await read.wait();
       }
     };
@@ -134,14 +134,14 @@ describe('accepted configuration commit authority', () => {
     }
   );
 
-  it('does not publish an obsolete edit after a delayed final repository reread', async () => {
+  it('does not publish an obsolete edit after a delayed guarded write returns', async () => {
     const h = setupAuthority();
     const reread = gate();
-    h.hooks.read = async (number) => {
-      if (number === 3) {
-        await reread.wait();
-      }
-    };
+    const reconcile = h.repository.reconcileConfigSnapshot.bind(h.repository);
+    vi.spyOn(h.repository, 'reconcileConfigSnapshot').mockImplementationOnce(async (...args) => {
+      await reconcile(...args);
+      await reread.wait();
+    });
     const setting = h.service.setSessionModel('session', 'second');
     await reread.started;
     h.native('third');
@@ -217,7 +217,7 @@ describe('accepted configuration commit authority', () => {
       return Promise.resolve();
     };
     h.hooks.read = async (number) => {
-      if (number === 3) {
+      if (number === 2) {
         await retry.wait();
       }
     };
@@ -239,7 +239,7 @@ describe('accepted configuration commit authority', () => {
     const h = setupAuthority();
     const read = gate();
     h.hooks.read = async (number) => {
-      if (number === 2) {
+      if (number === 1) {
         await read.wait();
       }
     };

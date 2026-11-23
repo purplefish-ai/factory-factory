@@ -282,6 +282,16 @@ export class EventCoalescer {
 // Module-level state
 // ---------------------------------------------------------------------------
 
+interface SessionSummaryRefresh {
+  sources: Set<string>;
+  timer?: NodeJS.Timeout;
+}
+
+interface SessionWorkspaceLookup {
+  sources: Set<string>;
+  removedWorkspaceIds: Set<string>;
+}
+
 class EventCollectorState {
   readonly logger: Logger;
   activeCoalescer: EventCoalescer | null = null;
@@ -289,10 +299,10 @@ class EventCollectorState {
   linearMergeCompletion: LinearMergeCompletion | null = null;
   teardownListeners: Array<() => void> = [];
   ratchetProjection: RatchetProjectionWorker | null = null;
-  readonly sessionRefreshes = new KeyedTrailingRunner();
+  readonly sessionRefreshes = new Map<string, SessionSummaryRefresh>();
+  readonly sessionReads = new KeyedTrailingRunner();
   readonly sessionWorkspaceIds = new Map<string, string>();
-  readonly sessionWorkspaceLookups = new Map<string, Promise<string | null>>();
-  sessionWorkspaceGeneration = 0;
+  readonly sessionWorkspaceLookups = new Map<string, SessionWorkspaceLookup>();
 
   constructor(readonly dependencies: Readonly<EventCollectorDependencies>) {
     this.logger = dependencies.createLogger('event-collector');
@@ -305,104 +315,75 @@ function removeWorkspaceWithState(state: EventCollectorState, workspaceId: strin
   } else {
     state.dependencies.workspaceSnapshotStore.remove(workspaceId);
   }
+  const refresh = state.sessionRefreshes.get(workspaceId);
+  if (refresh) {
+    clearTimeout(refresh.timer);
+    state.sessionRefreshes.delete(workspaceId);
+  }
   state.lastIdlePrRefreshByWorkspace.delete(workspaceId);
   for (const [sessionId, sessionWorkspaceId] of state.sessionWorkspaceIds) {
     if (sessionWorkspaceId === workspaceId) {
       state.sessionWorkspaceIds.delete(sessionId);
     }
   }
-  state.sessionWorkspaceGeneration += 1;
-  state.sessionWorkspaceLookups.clear();
+  for (const lookup of state.sessionWorkspaceLookups.values()) {
+    lookup.removedWorkspaceIds.add(workspaceId);
+  }
   state.linearMergeCompletion?.removeWorkspace(workspaceId);
   state.dependencies.workspaceActivityService.clearWorkspace(workspaceId);
   state.dependencies.prFetchCoordinator.removeWorkspace(workspaceId);
 }
 
 /**
- * Session rows never move between workspaces, so remember each session's
- * workspace instead of reloading the session (and its workspace row) for every
- * runtime or pending-request event.
- */
-async function resolveSessionWorkspaceId(
-  state: EventCollectorState,
-  sessionId: string
-): Promise<string | null> {
-  const cached = state.sessionWorkspaceIds.get(sessionId);
-  if (cached) {
-    return cached;
-  }
-  // Share one lookup between events that arrive before the first one resolves.
-  const existing = state.sessionWorkspaceLookups.get(sessionId);
-  if (existing !== undefined) {
-    return await existing;
-  }
-  const lookup: Promise<string | null> = lookUpSessionWorkspaceId(
-    state,
-    sessionId,
-    state.sessionWorkspaceGeneration
-  ).finally(() => {
-    if (state.sessionWorkspaceLookups.get(sessionId) === lookup) {
-      state.sessionWorkspaceLookups.delete(sessionId);
-    }
-  });
-  state.sessionWorkspaceLookups.set(sessionId, lookup);
-  return await lookup;
-}
-
-async function lookUpSessionWorkspaceId(
-  state: EventCollectorState,
-  sessionId: string,
-  generation: number
-): Promise<string | null> {
-  const session = await state.dependencies.sessionDataService.findAgentSessionById(sessionId);
-  if (!session) {
-    return null;
-  }
-  // A workspace removal or collector stop since this lookup began invalidates it.
-  if (generation !== state.sessionWorkspaceGeneration) {
-    return session.workspaceId;
-  }
-  if (state.sessionWorkspaceIds.size >= SESSION_WORKSPACE_CACHE_MAX_ENTRIES) {
-    state.sessionWorkspaceIds.clear();
-  }
-  state.sessionWorkspaceIds.set(sessionId, session.workspaceId);
-  return session.workspaceId;
-}
-
-/**
- * Bursts of session events for one workspace share one query at a time plus a
- * single trailing rerun, so N subagent transitions do not run N queries.
+ * Batch the read within the board's publication window. Events during the
+ * window share one fresh membership/metadata read, and events during that
+ * read request a trailing observation. The first deadline stays fixed.
  */
 function refreshWorkspaceSessionSummaries(
   state: EventCollectorState,
-  coalescer: EventCoalescer,
   workspaceId: string,
-  source: string,
-  options?: SessionSummaryRefreshOptions
+  source: string
 ): void {
-  state.sessionRefreshes.run(`summaries:${workspaceId}`, () =>
-    loadWorkspaceSessionSummaries(state, coalescer, workspaceId, source, options)
-  );
-}
-
-interface SessionSummaryRefreshOptions {
-  includeWorking?: boolean;
+  const existing = state.sessionRefreshes.get(workspaceId);
+  const refresh: SessionSummaryRefresh = existing ?? { sources: new Set() };
+  refresh.sources.add(source);
+  const read = () => {
+    state.sessionReads.run(workspaceId, () =>
+      loadWorkspaceSessionSummaries(state, workspaceId, refresh)
+    );
+  };
+  if (!existing) {
+    state.sessionRefreshes.set(workspaceId, refresh);
+    refresh.timer = setTimeout(() => {
+      refresh.timer = undefined;
+      read();
+    }, DEFAULT_WINDOW_MS);
+  } else if (!refresh.timer) {
+    read();
+  }
 }
 
 async function loadWorkspaceSessionSummaries(
   state: EventCollectorState,
-  coalescer: EventCoalescer,
   workspaceId: string,
-  source: string,
-  options?: SessionSummaryRefreshOptions
+  refresh: SessionSummaryRefresh
 ): Promise<void> {
+  if (state.sessionRefreshes.get(workspaceId) !== refresh) {
+    return;
+  }
+  const source = [...refresh.sources].join('+');
+  refresh.sources.clear();
   try {
-    if (state.activeCoalescer !== coalescer) {
-      return;
-    }
+    // Use the start of the read for field clocks so that a newer reconciliation
+    // or activity observation wins even if our read completes after it.
+    const observedAt = nextCoalescerTimestamp();
     const sessions =
       await state.dependencies.sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
-    if (state.activeCoalescer !== coalescer) {
+    const store = state.dependencies.workspaceSnapshotStore;
+    if (
+      state.sessionRefreshes.get(workspaceId) !== refresh ||
+      !store.getByWorkspaceId(workspaceId)
+    ) {
       return;
     }
     const pendingRequests = state.dependencies.chatEventForwarderService.getAllPendingRequests();
@@ -415,73 +396,84 @@ async function loadWorkspaceSessionSummaries(
       sessions.map((s) => s.id),
       pendingRequests
     );
-    coalescer.enqueue(
+    store.upsert(
       workspaceId,
       {
         pendingRequestType,
         sessionSummaries,
         ...(sessionSummaries.length > 0 ? { hasHadSessions: true } : {}),
-        ...(options?.includeWorking
-          ? { isWorking: hasWorkingSessionSummary(sessionSummaries) }
-          : {}),
+        isWorking: hasWorkingSessionSummary(sessionSummaries),
       },
-      source
+      source,
+      observedAt
     );
   } catch (error) {
     state.logger.warn('Failed to refresh workspace session summaries', {
       workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    if (refresh.sources.size === 0 && state.sessionRefreshes.get(workspaceId) === refresh) {
+      state.sessionRefreshes.delete(workspaceId);
+    }
   }
 }
 
-async function refreshWorkspacePendingRequestType(
-  state: EventCollectorState,
-  coalescer: EventCoalescer,
-  sessionId: string,
-  source: string
-): Promise<void> {
-  try {
-    if (state.activeCoalescer !== coalescer) {
-      return;
-    }
-    const workspaceId = await resolveSessionWorkspaceId(state, sessionId);
-    if (!workspaceId || state.activeCoalescer !== coalescer) {
-      return;
-    }
-    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
-      includeWorking: true,
-    });
-  } catch (error) {
-    state.logger.warn('Failed to refresh workspace pending request type', {
-      sessionId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
+/**
+ * Session rows never move between workspaces. Resolve a cold session's routing
+ * once and let all of its waiting events share the result.
+ */
 async function refreshWorkspaceSessionSummariesForSession(
   state: EventCollectorState,
   coalescer: EventCoalescer,
   sessionId: string,
   source: string
 ): Promise<void> {
+  if (state.activeCoalescer !== coalescer) {
+    return;
+  }
+  const cached = state.sessionWorkspaceIds.get(sessionId);
+  if (cached) {
+    refreshWorkspaceSessionSummaries(state, cached, source);
+    return;
+  }
+  const existing = state.sessionWorkspaceLookups.get(sessionId);
+  if (existing && existing.removedWorkspaceIds.size === 0) {
+    existing.sources.add(source);
+    return;
+  }
+  const lookup: SessionWorkspaceLookup = {
+    sources: new Set([source]),
+    removedWorkspaceIds: new Set(),
+  };
+  state.sessionWorkspaceLookups.set(sessionId, lookup);
   try {
-    if (state.activeCoalescer !== coalescer) {
+    const workspaceId =
+      await state.dependencies.sessionDataService.findWorkspaceIdForSession(sessionId);
+    // A stop, a newer lookup, or removal of this workspace invalidated this read.
+    if (
+      !workspaceId ||
+      state.sessionWorkspaceLookups.get(sessionId) !== lookup ||
+      lookup.removedWorkspaceIds.has(workspaceId)
+    ) {
       return;
     }
-    const workspaceId = await resolveSessionWorkspaceId(state, sessionId);
-    if (!workspaceId || state.activeCoalescer !== coalescer) {
-      return;
+    if (state.sessionWorkspaceIds.size >= SESSION_WORKSPACE_CACHE_MAX_ENTRIES) {
+      state.sessionWorkspaceIds.clear();
     }
-    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
-      includeWorking: true,
-    });
+    state.sessionWorkspaceIds.set(sessionId, workspaceId);
+    for (const reason of lookup.sources) {
+      refreshWorkspaceSessionSummaries(state, workspaceId, reason);
+    }
   } catch (error) {
-    state.logger.warn('Failed to refresh workspace session summaries from runtime change', {
+    state.logger.warn('Failed to resolve workspace for session summary refresh', {
       sessionId,
       error: error instanceof Error ? error.message : String(error),
     });
+  } finally {
+    if (state.sessionWorkspaceLookups.get(sessionId) === lookup) {
+      state.sessionWorkspaceLookups.delete(sessionId);
+    }
   }
 }
 
@@ -805,13 +797,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     sessionId: string;
     isWorking: boolean;
   }) => {
-    refreshWorkspaceSessionSummaries(
-      state,
-      coalescer,
-      workspaceId,
-      'event:session_activity_changed',
-      { includeWorking: true }
-    );
+    refreshWorkspaceSessionSummaries(state, workspaceId, 'event:session_activity_changed');
   };
   dependencies.workspaceActivityService.on(
     'session_activity_changed',
@@ -827,14 +813,12 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   // 9. Prime session summaries on startup so fresh clients have tab runtime
   // state before the first activity transition or reconciliation tick.
   for (const workspaceId of dependencies.workspaceSnapshotStore.getAllWorkspaceIds()) {
-    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, 'event:collector_startup', {
-      includeWorking: true,
-    });
+    refreshWorkspaceSessionSummaries(state, workspaceId, 'event:collector_startup');
   }
 
   // 10. Pending interactive request transitions (set/clear)
   const pendingRequestChangedHandler = ({ sessionId }: PendingRequestChangedEvent) => {
-    void refreshWorkspacePendingRequestType(
+    void refreshWorkspaceSessionSummariesForSession(
       state,
       coalescer,
       sessionId,
@@ -887,10 +871,13 @@ function stopEventCollectorWithState(state: EventCollectorState): void {
     state.activeCoalescer.flushAll();
     state.activeCoalescer = null;
     state.lastIdlePrRefreshByWorkspace.clear();
+    for (const refresh of state.sessionRefreshes.values()) {
+      clearTimeout(refresh.timer);
+    }
     state.sessionRefreshes.clear();
+    state.sessionReads.clear();
     state.sessionWorkspaceIds.clear();
     state.sessionWorkspaceLookups.clear();
-    state.sessionWorkspaceGeneration += 1;
     state.linearMergeCompletion?.stop();
     state.linearMergeCompletion = null;
     state.logger.info('Event collector stopped');

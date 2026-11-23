@@ -165,6 +165,11 @@ class ChatEventForwarderService {
       });
     };
 
+    if (!voiceNarrationService.hasAnyActiveConnection()) {
+      publish();
+      return;
+    }
+
     // Voice mode already speaks the agent's reply aloud, so the chime is a
     // redundant, jarring second notification on top of it — suppress it
     // here, centrally, rather than relying on each connected browser
@@ -176,10 +181,7 @@ class ChatEventForwarderService {
         VOICE_ACTIVE_CHECK_TIMEOUT_MS
       );
     } catch (error) {
-      // This lookup runs on every turn for every workspace, voice or not —
-      // a DB hiccup (or a stall past the timeout) here must not silently
-      // swallow the notification for non-voice users just because the new
-      // voice-suppression check failed to resolve. Fail open.
+      // A stalled voice check must not swallow the completion notification.
       logger.error(
         'Failed to check voice-active state; publishing notification anyway',
         toError(error),

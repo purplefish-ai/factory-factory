@@ -35,6 +35,9 @@ function fixture(cached = false) {
       : null,
   };
   const repository = {
+    reconcileConfigSnapshot: vi.fn((_id: string, update: object) =>
+      Promise.resolve(Object.assign(session, update))
+    ),
     getSessionById: vi.fn().mockResolvedValue(session),
     updateSession: vi
       .fn()

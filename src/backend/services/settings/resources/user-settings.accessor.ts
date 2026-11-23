@@ -368,6 +368,14 @@ class UserSettingsAccessor {
     }
   }
 
+  async getTurnLimitMinutes(): Promise<number | null> {
+    const settings = await prisma.userSettings.findUnique({
+      where: { userId: 'default' },
+      select: { turnLimitMinutes: true },
+    });
+    return (settings ?? (await this.get())).turnLimitMinutes;
+  }
+
   async getDefaultSessionProvider(): Promise<SessionProvider> {
     const settings = await this.get();
     return settings.defaultSessionProvider;

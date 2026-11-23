@@ -191,3 +191,26 @@ it('creates the default settings on a first voice settings read', async () => {
   });
   expect(await db.prisma.userSettings.count()).toBe(1);
 });
+
+it('reads only the current turn limit, including an unlimited setting', async () => {
+  await seedSettingsWithCache();
+  const read = vi.spyOn(db.prisma.userSettings, 'findUnique');
+  try {
+    await expect(userSettingsService.getTurnLimitMinutes()).resolves.toBeNull();
+    await userSettingsService.update({ turnLimitMinutes: 30 });
+    await expect(userSettingsService.getTurnLimitMinutes()).resolves.toBe(30);
+    expect(read.mock.calls).toEqual([
+      [{ where: { userId: 'default' }, select: { turnLimitMinutes: true } }],
+      [{ where: { userId: 'default' }, select: { turnLimitMinutes: true } }],
+    ]);
+  } finally {
+    read.mockRestore();
+  }
+});
+
+it('creates default settings on the first turn limit read', async () => {
+  await expect(userSettingsService.getTurnLimitMinutes()).resolves.toBeNull();
+  await expect(
+    db.prisma.userSettings.findUnique({ where: { userId: 'default' } })
+  ).resolves.toMatchObject({ turnLimitMinutes: null, defaultSessionProvider: 'CLAUDE' });
+});
