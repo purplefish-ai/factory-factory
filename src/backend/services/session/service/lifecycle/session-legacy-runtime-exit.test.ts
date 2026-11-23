@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
-import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
@@ -104,7 +103,7 @@ import {
 } from '@/backend/services/session/service/composition/session-services';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { workspaceDataService } from '@/backend/services/workspace';
-import { mockCreatedAcpClient } from './session-lifecycle.test-helpers';
+import { mockCreatedAcpClient, mockLifecycleUserSettings } from './session-lifecycle.test-helpers';
 
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',
@@ -115,7 +114,7 @@ const getAcpProcessorState = () => acpEventProcessor;
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(userSettingsService, 'getTurnLimitMinutes').mockResolvedValue(null);
+    mockLifecycleUserSettings();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();

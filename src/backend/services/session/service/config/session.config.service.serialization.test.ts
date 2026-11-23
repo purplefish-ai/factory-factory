@@ -420,6 +420,7 @@ describe('configuration transaction ordering', () => {
     first.reject(new Error('Provider no longer available'));
     expect((await results).map((result) => result.status)).toEqual(['rejected', 'rejected']);
     expect(f.rpc).toHaveBeenCalledOnce();
+    expect(f.repository.updateSession).not.toHaveBeenCalled();
     expect(f.repository.reconcileConfigSnapshot).not.toHaveBeenCalled();
     expect(f.emitted).toEqual([]);
   });

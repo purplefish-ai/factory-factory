@@ -115,40 +115,36 @@ describe('server review startup ownership contracts', () => {
     }
   );
 
-  it.each(['oldest-first', 'newest-first'] as const)(
-    'finishes current startup through three issued snapshot CAS writes (%s)',
-    async (order) => {
-      const h = setupStartupConfig();
-      const issued = [gate(), gate(), gate()];
-      h.hooks.cas = async (number) => {
-        if (number > 16) {
-          throw new Error('configuration CAS write budget exhausted');
-        }
-        await issued[number - 1]?.wait();
-      };
-      const starting = h.service.startSession(h.session.id, { initialPrompt: 'Current prompt' });
-      await issued[0]?.started;
-      h.native('second');
-      await issued[1]?.started;
-      h.native('third');
-      await issued[2]?.started;
-      for (const index of order === 'oldest-first' ? [0, 1, 2] : [2, 1, 0]) {
-        issued[index]?.release();
-        await settleConfig();
+  it('finishes current startup when two native snapshots arrive during an issued CAS', async () => {
+    const h = setupStartupConfig();
+    const issued = gate();
+    h.hooks.cas = async (number) => {
+      if (number > 16) {
+        throw new Error('configuration CAS write budget exhausted');
       }
-      await starting;
-      await settleConfig();
-      expect(h.row().model).toBe('third');
-      expect(h.row().providerMetadata).toMatchObject({
-        acpConfigSnapshot: { observedModelId: 'third' },
-      });
-      expect(h.accessor.updateIfProviderIdentity.mock.calls.length).toBeLessThanOrEqual(16);
-      expect(h.complete).toHaveBeenCalledOnce();
-      expect(h.fail).not.toHaveBeenCalled();
-      expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
-      expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Current prompt');
-    }
-  );
+      if (number === 1) {
+        await issued.wait();
+      }
+    };
+    const starting = h.service.startSession(h.session.id, { initialPrompt: 'Current prompt' });
+    await issued.started;
+    h.native('second');
+    h.native('third');
+    await settleConfig();
+    expect(h.accessor.updateIfProviderIdentity).toHaveBeenCalledOnce();
+    issued.release();
+    await starting;
+    await settleConfig();
+    expect(h.row().model).toBe('third');
+    expect(h.row().providerMetadata).toMatchObject({
+      acpConfigSnapshot: { observedModelId: 'third' },
+    });
+    expect(h.accessor.updateIfProviderIdentity.mock.calls.length).toBeLessThanOrEqual(16);
+    expect(h.complete).toHaveBeenCalledOnce();
+    expect(h.fail).not.toHaveBeenCalled();
+    expect(h.runtimeManager.stopClient).not.toHaveBeenCalled();
+    expect(h.sendSessionMessage).toHaveBeenCalledExactlyOnceWith(h.session.id, 'Current prompt');
+  });
 });
 
 vi.mock('@/backend/services/codex-accounts', () => ({

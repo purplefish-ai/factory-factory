@@ -139,46 +139,63 @@ it('rejects the old snapshot when identity rolls over between the read and guard
   }
 });
 
-it('keeps the newer observation when it matches the durable snapshot while an older CAS is in flight', async () => {
-  const session = await fixture();
-  const started = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let superseded = false;
-  const update = agentSessionAccessor.updateIfProviderIdentity.bind(agentSessionAccessor);
-  const writing = vi
-    .spyOn(agentSessionAccessor, 'updateIfProviderIdentity')
-    .mockImplementationOnce(async (...args) => {
-      started.resolve();
-      await release.promise;
-      return update(...args);
-    });
-  try {
-    const old = persistence
-      .persist(session.id, {
-        ...observation('second'),
-        assertCurrent: () => {
-          if (superseded) {
-            throw new Error('superseded');
+it.each(['read', 'write'] as const)(
+  'preserves a newer unchanged observation over an older pending %s and a same-version status write',
+  async (phase) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const read = agentSessionAccessor.findConfigSnapshotState.bind(agentSessionAccessor);
+    const update = agentSessionAccessor.updateIfProviderIdentity.bind(agentSessionAccessor);
+    try {
+      const session = await fixture();
+      const reads = vi.spyOn(agentSessionAccessor, 'findConfigSnapshotState');
+      if (phase === 'read') {
+        reads.mockImplementationOnce(async (id) => {
+          const captured = await read(id);
+          started.resolve();
+          await release.promise;
+          return captured;
+        });
+      } else {
+        vi.spyOn(agentSessionAccessor, 'updateIfProviderIdentity').mockImplementationOnce(
+          async (...args) => {
+            started.resolve();
+            await release.promise;
+            return update(...args);
           }
-        },
-      })
-      .catch((error: unknown) => error);
-    await started.promise;
-    superseded = true;
-    await persistence.persist(session.id, observation('first'));
-    release.resolve();
-    await old;
-    expect(
-      await db.prisma.agentSession.findUniqueOrThrow({ where: { id: session.id } })
-    ).toMatchObject({
-      model: 'first',
-      providerMetadata: { acpConfigSnapshot: { observedModelId: 'first' } },
-    });
-  } finally {
-    release.resolve();
-    writing.mockRestore();
+        );
+      }
+      const older = persistence.persist(session.id, observation('second'));
+      await started.promise;
+      const newer = persistence.persist(session.id, observation('first'));
+      // The next comparison must use the durable result of the outstanding operation.
+      await Promise.resolve();
+      expect.soft(reads).toHaveBeenCalledTimes(1);
+      // An unrelated status update is allowed to reuse the original timestamp.
+      await db.prisma.agentSession.update({
+        where: { id: session.id },
+        data: { status: 'RUNNING', updatedAt: session.updatedAt },
+      });
+      release.resolve();
+      await Promise.all([older, newer]);
+      expect(reads).toHaveBeenCalledTimes(2);
+      await expect(reads.mock.results[1]?.value).resolves.toMatchObject({ model: 'second' });
+      expect(
+        await db.prisma.agentSession.findUniqueOrThrow({ where: { id: session.id } })
+      ).toMatchObject({
+        model: 'first',
+        status: 'RUNNING',
+        providerMetadata: { acpConfigSnapshot: { observedModelId: 'first' } },
+      });
+    } finally {
+      release.resolve();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
   }
-});
+);
 
 it('compares optional ACP fields by their durable JSON representation', async () => {
   const session = await fixture();

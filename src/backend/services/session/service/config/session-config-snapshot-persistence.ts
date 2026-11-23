@@ -19,26 +19,88 @@ export type PersistAcpConfigSnapshotParams = {
   startupIntent?: SessionStartupIntent;
 };
 
+/** A superseded read can release its place before I/O returns. An issued write must settle. */
+class SnapshotTurn {
+  readonly completion = Promise.withResolvers<void>();
+  private reading = false;
+  private revoked?: { reason: unknown };
+
+  constructor(private readonly assertCurrent?: () => void) {}
+
+  startRead(): void {
+    this.assertAccepted();
+    this.reading = true;
+  }
+
+  readonly beforeWrite = (): void => {
+    this.assertAccepted();
+    this.reading = false;
+  };
+
+  releaseObsoleteRead(): void {
+    if (this.reading && this.assertCurrent) {
+      try {
+        this.assertCurrent();
+      } catch (reason) {
+        this.revoked = { reason };
+        this.completion.resolve();
+      }
+    }
+  }
+
+  assertAccepted(): void {
+    if (this.revoked) {
+      throw this.revoked.reason;
+    }
+    this.assertCurrent?.();
+  }
+}
+
 /** Persist an accepted snapshot with its original guard through metadata reads and CAS retries. */
 export class SessionConfigSnapshotPersistence {
+  private readonly turns = new Map<string, SnapshotTurn>();
+
   constructor(private readonly repository: SessionRepository) {}
 
   async persist(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void> {
     params.assertCurrent?.();
-    await this.write(sessionId, { ...params, configOptions: cloneOptions(params.configOptions) });
-  }
-
-  private async write(sessionId: string, params: PersistAcpConfigSnapshotParams): Promise<void> {
-    const snapshot = buildSnapshot(params);
+    const snapshot = buildSnapshot({
+      ...params,
+      configOptions: cloneOptions(params.configOptions),
+    });
     if (!snapshot) {
       return;
     }
+    const previous = this.turns.get(sessionId);
+    const turn = new SnapshotTurn(params.assertCurrent);
+    this.turns.set(sessionId, turn);
+    try {
+      if (previous) {
+        previous.releaseObsoleteRead();
+        await previous.completion.promise;
+      }
+      await this.write(sessionId, params, snapshot, turn);
+    } finally {
+      turn.completion.resolve();
+      if (this.turns.get(sessionId) === turn) {
+        this.turns.delete(sessionId);
+      }
+    }
+  }
+
+  private async write(
+    sessionId: string,
+    params: PersistAcpConfigSnapshotParams,
+    snapshot: StoredAcpConfigSnapshot,
+    turn: SnapshotTurn
+  ): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
+      turn.startRead();
       try {
-        await this.writeAttempt(sessionId, params, snapshot, attempt);
+        await this.writeAttempt(sessionId, params, snapshot, attempt, turn);
         return;
       } catch (error) {
-        params.assertCurrent?.();
+        turn.assertAccepted();
         if (error instanceof SessionStartupIntentChangedError) {
           throw error;
         }
@@ -54,7 +116,8 @@ export class SessionConfigSnapshotPersistence {
     sessionId: string,
     params: PersistAcpConfigSnapshotParams,
     snapshot: StoredAcpConfigSnapshot,
-    attempt: number
+    attempt: number,
+    turn: SnapshotTurn
   ): Promise<void> {
     if (
       !(params.requirePersistence || params.startupIntent || params.pendingLaunchSettingsPatch) &&
@@ -63,7 +126,7 @@ export class SessionConfigSnapshotPersistence {
       await this.repository.reconcileConfigSnapshot(
         sessionId,
         snapshotUpdate({}, snapshot, snapshot.observedModelId),
-        params.assertCurrent
+        turn.beforeWrite
       );
       return;
     }
@@ -73,24 +136,24 @@ export class SessionConfigSnapshotPersistence {
         : (await this.repository.getSessionById(sessionId))?.providerMetadata;
     const metadata = metadataRecord(source);
     const update = snapshotUpdate(metadata, snapshot, snapshot.observedModelId);
-    params.assertCurrent?.();
+    turn.assertAccepted();
     const intent = params.startupIntent;
     if (intent) {
       await this.repository.acknowledgeStartupConfiguration(
         sessionId,
         update,
         intent,
-        params.assertCurrent
+        turn.beforeWrite
       );
     } else if (params.pendingLaunchSettingsPatch) {
       await this.repository.updatePendingLaunchConfiguration(
         sessionId,
         update,
         params.pendingLaunchSettingsPatch,
-        params.assertCurrent
+        turn.beforeWrite
       );
     } else {
-      await this.repository.updateSession(sessionId, update, params.assertCurrent);
+      await this.repository.updateSession(sessionId, update, turn.beforeWrite);
     }
   }
 }

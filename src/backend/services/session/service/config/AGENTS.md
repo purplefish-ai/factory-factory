@@ -68,8 +68,10 @@ shutdown.
 - A configuration snapshot is persisted and published only while it is the
   latest accepted one, whether it came from a native observation, an RPC result
   or startup. Repeated observations retain the durable capture time when the
-  snapshot and model agree. An overlapping issued write requires a fresh
-  compare-and-set fence, and required startup and launch writes still commit.
+  snapshot and model agree. Snapshot persistence runs in order for each session,
+  including retries. Startup can pass a superseded read. Once a write is issued,
+  the next observation waits for it before reading the durable row. Required
+  startup and launch writes still commit.
   `session-config-snapshot-persistence.integration.test.ts`,
   `session.config.service.authority.test.ts`,
   `session.config.service.authority-startup.test.ts`,

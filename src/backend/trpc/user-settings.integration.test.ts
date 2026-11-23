@@ -208,9 +208,20 @@ it('reads only the current turn limit, including an unlimited setting', async ()
   }
 });
 
-it('creates default settings on the first turn limit read', async () => {
+it('creates default settings immediately after the first turn limit read misses', async () => {
+  using read = vi.spyOn(db.prisma.userSettings, 'findUnique');
   await expect(userSettingsService.getTurnLimitMinutes()).resolves.toBeNull();
+  expect(read).toHaveBeenCalledTimes(1);
   await expect(
     db.prisma.userSettings.findUnique({ where: { userId: 'default' } })
   ).resolves.toMatchObject({ turnLimitMinutes: null, defaultSessionProvider: 'CLAUDE' });
+});
+
+it('reads the winning turn limit if another caller creates settings after the miss', async () => {
+  await userSettingsService.update({ turnLimitMinutes: 45 });
+  using read = vi.spyOn(db.prisma.userSettings, 'findUnique').mockResolvedValueOnce(null);
+  using create = vi.spyOn(db.prisma.userSettings, 'create');
+  await expect(userSettingsService.getTurnLimitMinutes()).resolves.toBe(45);
+  expect(create).toHaveBeenCalledOnce();
+  expect(read).toHaveBeenCalledTimes(2);
 });

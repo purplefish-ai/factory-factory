@@ -68,8 +68,6 @@ type WorkspaceAccessor = {
 };
 
 export class SessionRepository {
-  private readonly snapshotWrites = new Map<string, number>();
-
   constructor(
     private readonly sessions: SessionAccessor = agentSessionAccessor,
     private readonly workspaces: WorkspaceAccessor = workspaceDataService
@@ -84,8 +82,6 @@ export class SessionRepository {
     data: { providerMetadata: Prisma.JsonObject; model?: string },
     assertCurrent?: () => void
   ): Promise<void> {
-    // An older CAS already submitted to SQLite can still land after this read.
-    const writeInFlight = this.snapshotWrites.has(sessionId);
     const current = await this.sessions.findConfigSnapshotState(sessionId);
     assertCurrent?.();
     if (!current) {
@@ -95,7 +91,6 @@ export class SessionRepository {
     const durable = isMetadataRecord(current.providerMetadata) ? current.providerMetadata : {};
     const saved = durable.acpConfigSnapshot;
     if (
-      !writeInFlight &&
       isMetadataRecord(saved) &&
       (data.model === undefined ||
         (current.model === data.model && durable.observedModelId === data.model)) &&
@@ -103,7 +98,7 @@ export class SessionRepository {
     ) {
       return;
     }
-    const count = await this.writeSnapshot(sessionId, current, {
+    const count = await this.sessions.updateIfProviderIdentity(sessionId, current, {
       ...data,
       providerMetadata: { ...durable, ...data.providerMetadata },
     });
@@ -233,7 +228,7 @@ export class SessionRepository {
     const mergedMetadata = mergeSnapshotMetadata(durableMetadata, metadata, launchChange);
     assertCurrent?.();
     if (
-      (await this.writeSnapshot(sessionId, current, {
+      (await this.sessions.updateIfProviderIdentity(sessionId, current, {
         ...guardedData,
         providerMetadata: mergedMetadata,
       })) !== 1
@@ -248,24 +243,6 @@ export class SessionRepository {
       throw new Error(`Session not found: ${sessionId}`);
     }
     return persisted;
-  }
-
-  private async writeSnapshot(
-    sessionId: string,
-    expected: ProviderIdentityExpectation,
-    update: ConditionalSessionUpdateData
-  ): Promise<number> {
-    this.snapshotWrites.set(sessionId, (this.snapshotWrites.get(sessionId) ?? 0) + 1);
-    try {
-      return await this.sessions.updateIfProviderIdentity(sessionId, expected, update);
-    } finally {
-      const remaining = (this.snapshotWrites.get(sessionId) ?? 1) - 1;
-      if (remaining === 0) {
-        this.snapshotWrites.delete(sessionId);
-      } else {
-        this.snapshotWrites.set(sessionId, remaining);
-      }
-    }
   }
 
   deleteSession(sessionId: string): Promise<AgentSessionRecord> {

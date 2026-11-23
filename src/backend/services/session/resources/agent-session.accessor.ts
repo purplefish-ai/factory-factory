@@ -349,11 +349,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         updatedAt: expected.updatedAt,
         providerMetadata: { equals: expected.providerMetadata ?? Prisma.AnyNull },
       },
-      data: {
-        ...toAgentSessionUpdateData({ ...data, providerSessionId: undefined }),
-        // Fence an already issued CAS even when both snapshots and wall-clock milliseconds match.
-        updatedAt: new Date(Math.max(Date.now(), expected.updatedAt.getTime() + 1)),
-      },
+      data: toAgentSessionUpdateData({ ...data, providerSessionId: undefined }),
     });
     return result.count;
   }

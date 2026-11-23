@@ -1,5 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
+import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import { deferred } from '@/test-utils/deferred';
 import {
   createEventCollectorOrchestrator,
@@ -19,12 +22,7 @@ vi.mock('@/backend/orchestration/pull-requests/ratchet.service', () => ({
 vi.mock('@/backend/services/run-script', () => ({
   RUN_SCRIPT_STATUS_CHANGED: 'run_script_status_changed',
 }));
-vi.mock('@/backend/services/workspace', () => ({
-  WORKSPACE_CREATED: 'workspace_created',
-  WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
-}));
-
-function createCollector() {
+function createCollector(store?: WorkspaceSnapshotStore) {
   const sessionDomainService = new EventEmitter();
   const findWorkspaceIdForSession = vi.fn().mockResolvedValue('ws-1');
   const workspaceActivityService = Object.assign(new EventEmitter(), { clearWorkspace: vi.fn() });
@@ -52,7 +50,7 @@ function createCollector() {
     sessionDataService: { findWorkspaceIdForSession, findAgentSessionsByWorkspaceId },
     sessionLifecycleService: { getRuntimeSnapshot },
     workspaceDataService: { subscribeAcceptedBranch: () => vi.fn() },
-    workspaceSnapshotStore: {
+    workspaceSnapshotStore: store ?? {
       getAllWorkspaceIds: () => [],
       getByWorkspaceId: () => ({ projectId: 'project-1' }),
       upsert,
@@ -138,20 +136,57 @@ describe('event collector session refreshes', () => {
     collector.stop();
   });
 
-  it('keeps a delayed read older than reconciliation that began while it was in flight', async () => {
-    const { collector, workspaceActivityService, findAgentSessionsByWorkspaceId, upsert } =
-      createCollector();
+  it('keeps the reconciled session when an older read finishes later', async () => {
+    const store = new WorkspaceSnapshotStore();
+    store.configure({
+      deriveFlowState: (input) =>
+        deriveWorkspaceFlowState({
+          ...input,
+          prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+        }),
+      deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+    });
+    const { collector, workspaceActivityService, findAgentSessionsByWorkspaceId } =
+      createCollector(store);
     const read = deferred<[]>();
     findAgentSessionsByWorkspaceId.mockReturnValueOnce(read.promise);
     collector.start();
+    store.upsert('ws-1', { projectId: 'project-1' }, 'seed');
     workspaceActivityService.emit('session_activity_changed', { workspaceId: 'ws-1' });
     await vi.advanceTimersByTimeAsync(150);
     expect(findAgentSessionsByWorkspaceId).toHaveBeenCalledOnce();
+
     await vi.advanceTimersByTimeAsync(1000);
-    const reconciliationStarted = Date.now();
+    store.upsert(
+      'ws-1',
+      {
+        isWorking: true,
+        sessionSummaries: [
+          {
+            sessionId: 'new-session',
+            name: 'New session',
+            workflow: null,
+            model: null,
+            persistedStatus: 'RUNNING',
+            runtimePhase: 'running',
+            processState: 'alive',
+            activity: 'WORKING',
+            updatedAt: new Date().toISOString(),
+            lastExit: null,
+          },
+        ],
+      },
+      'reconciliation',
+      Date.now()
+    );
+
+    await vi.advanceTimersByTimeAsync(1);
     read.resolve([]);
     await vi.advanceTimersByTimeAsync(0);
-    expect(upsert.mock.lastCall?.[3]).toBeLessThan(reconciliationStarted);
+    expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+      isWorking: true,
+      sessionSummaries: [{ sessionId: 'new-session' }],
+    });
     collector.stop();
   });
 
