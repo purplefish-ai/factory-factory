@@ -67,12 +67,19 @@ it('dismisses completed PRs without reloading their stored observations', async 
     const acceptedAt = new Date('2026-11-04T12:01:00.000Z');
     expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBe(true);
     expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBe(false);
+    expect(prepare).toHaveBeenCalledWith(expect.stringMatching(/^\s*UPDATE\b.*\bWorkspacePR\b/is));
     for (const [sql] of prepare.mock.calls) {
       expect(sql).not.toMatch(/^\s*SELECT\b.*\bWorkspacePR\b/is);
     }
   } finally {
     prepare.mockRestore();
   }
+  await expect(
+    db.prisma.workspacePR.findUniqueOrThrow({
+      where: { id: prId },
+      select: { completionDismissed: true },
+    })
+  ).resolves.toEqual({ completionDismissed: true });
 });
 
 it('counts a merge after a dismissed close when a reopen was missed between polls', async () => {
