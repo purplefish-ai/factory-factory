@@ -67,6 +67,10 @@ review-activity helpers and `classifyGitHubCLIError`.
   `pr-observation.service.test.ts`.
 - Full PR detail reads accept up to 10 MiB of output and fail beyond it rather
   than return truncated metadata. `github-cli-full-details-buffer.test.ts`.
+- Issue lists and issue search ask `gh` for no body and return none; only
+  `getIssue` reads one. The Kanban board polls the list from phones, where 50
+  bodies were about 185 KB a minute. `github-cli-issue-list.test.ts`,
+  `service/github-cli/issue-search.test.ts`.
 - A PR refresh writes nothing itself: it runs the injected observation and then
   returns the association's committed fields. `pr-snapshot.service.test.ts`,
   `pr-snapshot-collection.service.test.ts`.

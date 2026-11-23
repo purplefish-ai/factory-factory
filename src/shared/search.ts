@@ -22,10 +22,10 @@ export const SearchResultSchema = z.discriminatedUnion('kind', [
     projectId: z.string().min(1),
     workspaceId: z.null(),
     sessionId: z.null(),
+    // No body: launching an issue needs only its URL, and bodies can be kilobytes.
     githubIssue: z.object({
       number: z.number().int().positive(),
       title: z.string(),
-      body: z.string(),
       url: z.string(),
       state: z.enum(['OPEN', 'CLOSED']),
       createdAt: z.string(),

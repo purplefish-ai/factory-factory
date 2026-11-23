@@ -39,6 +39,9 @@ pass a decrypted key. It does not own:
 
 - The team list reads every page and fails rather than return a partial list.
   `linear-client.service.test.ts`.
+- `listMyIssues` returns no description or workflow state name, and reads no
+  state, which would cost a Linear request per issue; `getIssue` returns both.
+  The Kanban board polls the list from phones. `linear-client.service.test.ts`.
 - A transition reports success only when Linear accepts the update, and the
   state sync service never throws: a thrown failure is logged, and
   `markIssueCompleted` reports any failure as `false`.

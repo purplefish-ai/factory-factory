@@ -28,6 +28,16 @@ export interface LinearIssue {
   creatorName: string | null;
 }
 
+/**
+ * A Linear issue as the issue lists show it. It leaves out the description,
+ * which can be kilobytes, and the workflow state name, which the lists do not
+ * show and which costs a Linear request per issue; `getIssue` reads both.
+ */
+export type LinearIssueListItem = Pick<
+  LinearIssue,
+  'id' | 'identifier' | 'title' | 'url' | 'createdAt' | 'creatorName'
+>;
+
 /** Normalized Linear workflow state for state transitions. */
 export interface LinearWorkflowState {
   id: string;
@@ -103,10 +113,10 @@ class LinearClientService {
    * List issues assigned to the authenticated user for a given team.
    * Filters to unstarted state type (works regardless of whether the team uses Cycles).
    */
-  async listMyIssues(apiKey: string, teamId: string): Promise<LinearIssue[]> {
+  async listMyIssues(apiKey: string, teamId: string): Promise<LinearIssueListItem[]> {
     const client = this.createClient(apiKey);
     const viewer = await client.viewer;
-    const linearIssues: LinearIssue[] = [];
+    const linearIssues: LinearIssueListItem[] = [];
     let afterCursor: string | undefined;
     let hasNextPage = true;
 
@@ -123,14 +133,12 @@ class LinearClientService {
       linearIssues.push(
         ...(await Promise.all(
           issues.nodes.map(async (issue) => {
-            const [state, creator] = await Promise.all([issue.state, issue.creator]);
+            const creator = await issue.creator;
             return {
               id: issue.id,
               identifier: issue.identifier,
               title: issue.title,
-              description: issue.description ?? '',
               url: issue.url,
-              state: state?.name ?? 'Unknown',
               createdAt: issue.createdAt.toISOString(),
               creatorName: creator?.displayName ?? creator?.name ?? null,
             };

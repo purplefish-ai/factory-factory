@@ -1,9 +1,12 @@
-/** Normalized issue type that works for both GitHub and Linear providers. */
+/**
+ * Normalized issue type that works for both GitHub and Linear providers. It
+ * has no body: the polled issue lists leave bodies out, and starting an issue
+ * hands the agent its URL.
+ */
 export interface NormalizedIssue {
   id: string;
   displayId: string;
   title: string;
-  body: string;
   url: string;
   createdAt: string;
   /** The user who opened the issue, not the assignee. */
@@ -14,25 +17,21 @@ export interface NormalizedIssue {
   linearIssueIdentifier?: string;
 }
 
-/** Raw GitHub issue shape from the tRPC response. */
+/** Raw GitHub issue shape from the tRPC list and search responses. */
 export interface GitHubIssueRaw {
   number: number;
   title: string;
-  body: string;
   url: string;
-  state: 'OPEN' | 'CLOSED';
   createdAt: string;
   author: { login: string };
 }
 
-/** Raw Linear issue shape from the tRPC response. */
+/** Raw Linear issue shape from the tRPC list response. */
 export interface LinearIssueRaw {
   id: string;
   identifier: string;
   title: string;
-  description: string;
   url: string;
-  state: string;
   createdAt: string;
   creatorName: string | null;
 }
@@ -42,7 +41,6 @@ export function normalizeGitHubIssue(issue: GitHubIssueRaw): NormalizedIssue {
     id: String(issue.number),
     displayId: `#${issue.number}`,
     title: issue.title,
-    body: issue.body,
     url: issue.url,
     createdAt: issue.createdAt,
     author: issue.author.login,
@@ -56,7 +54,6 @@ export function normalizeLinearIssue(issue: LinearIssueRaw): NormalizedIssue {
     id: issue.id,
     displayId: issue.identifier,
     title: issue.title,
-    body: issue.description,
     url: issue.url,
     createdAt: issue.createdAt,
     author: issue.creatorName ?? 'Unknown',

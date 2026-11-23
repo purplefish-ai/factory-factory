@@ -136,7 +136,6 @@ function renderCard(provider: NormalizedIssue['provider'] = 'github'): {
           id: 'github-42',
           provider,
           title: 'Fix login redirect',
-          body: 'Issue body',
           url:
             provider === 'github'
               ? 'https://github.com/acme/repo/issues/42'

@@ -53,6 +53,15 @@ export interface GitHubIssue {
   author: { login: string };
 }
 
+/** An issue in a list: see `issueListItemSchema`. */
+export type GitHubIssueListItem = Pick<
+  GitHubIssue,
+  'number' | 'title' | 'url' | 'createdAt' | 'author'
+>;
+
+/** An issue search match: see `issueSearchResultSchema`. */
+export type GitHubIssueSearchResult = GitHubIssueListItem & Pick<GitHubIssue, 'state'>;
+
 export type PRStatusDetails = Pick<
   PRWithFullDetails,
   | 'number'

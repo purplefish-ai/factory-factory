@@ -28,7 +28,10 @@ export const linearRouter = router({
       return ctx.appContext.services.linearClientService.validateKeyAndListTeams(input.apiKey);
     }),
 
-  /** List issues assigned to the current user for a project's configured Linear team. */
+  /**
+   * List issues assigned to the current user for a project's configured Linear
+   * team, without descriptions. The Kanban board and sidebar poll it.
+   */
   listIssuesForProject: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -66,7 +69,7 @@ export const linearRouter = router({
       }
     }),
 
-  /** Get detailed information for a specific Linear issue. */
+  /** Get one Linear issue, including its description; the workspace agent's Linear tool reads it. */
   getIssue: publicProcedure
     .input(z.object({ projectId: z.string(), issueId: z.string() }))
     .query(async ({ ctx, input }) => {

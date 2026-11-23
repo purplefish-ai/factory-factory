@@ -1,15 +1,14 @@
 import { z } from 'zod';
 import { getGitHubCLIErrorMessage } from '@/backend/lib/github-cli-error';
 import { GH_TIMEOUT_MS } from './constants';
-import { issueSchema } from './schemas';
-import type { GitHubIssue } from './types';
+import { ISSUE_SEARCH_FIELDS, issueSearchResultSchema } from './schemas';
+import type { GitHubIssueSearchResult } from './types';
 import { parseGhJson } from './utils';
 
 type Read = (args: string[], options: { timeout: number }) => Promise<{ stdout: string }>;
 const restIssueSchema = z.object({
   number: z.number().int().positive(),
   title: z.string(),
-  body: z.string().nullable(),
   html_url: z.string(),
   state: z.enum(['open', 'closed']),
   created_at: z.string(),
@@ -23,9 +22,9 @@ const ISSUES_DISABLED = /\bHTTP 410\b|\brepository has disabled issues\b/i;
 const ISSUE_NOT_FOUND = /\bHTTP 404\b/i;
 
 async function orNoMatch(
-  search: () => Promise<GitHubIssue[]>,
+  search: () => Promise<GitHubIssueSearchResult[]>,
   ...noMatch: RegExp[]
-): Promise<GitHubIssue[]> {
+): Promise<GitHubIssueSearchResult[]> {
   try {
     return await search();
   } catch (error) {
@@ -42,7 +41,7 @@ async function lookupIssueNumber(
   owner: string,
   repo: string,
   number: string
-): Promise<GitHubIssue[]> {
+): Promise<GitHubIssueSearchResult[]> {
   const { stdout } = await read(['api', `repos/${owner}/${repo}/issues/${number}`], {
     timeout: GH_TIMEOUT_MS.default,
   });
@@ -54,7 +53,6 @@ async function lookupIssueNumber(
         {
           number: issue.number,
           title: issue.title,
-          body: issue.body ?? '',
           url: issue.html_url,
           state: issue.state === 'open' ? 'OPEN' : 'CLOSED',
           createdAt: issue.created_at,
@@ -69,7 +67,7 @@ async function listMatchingIssues(
   repo: string,
   query: string,
   limit: number
-): Promise<GitHubIssue[]> {
+): Promise<GitHubIssueSearchResult[]> {
   const { stdout } = await read(
     [
       'issue',
@@ -83,11 +81,11 @@ async function listMatchingIssues(
       '--limit',
       String(limit),
       '--json',
-      'number,title,body,url,state,createdAt,author',
+      ISSUE_SEARCH_FIELDS,
     ],
     { timeout: GH_TIMEOUT_MS.default }
   );
-  return parseGhJson(issueSchema.array(), stdout, 'searchIssues');
+  return parseGhJson(issueSearchResultSchema.array(), stdout, 'searchIssues');
 }
 
 export function searchIssues(
@@ -96,7 +94,7 @@ export function searchIssues(
   repo: string,
   query: string,
   limit: number
-): Promise<GitHubIssue[]> {
+): Promise<GitHubIssueSearchResult[]> {
   const number = /^#?(\d+)$/.exec(query)?.[1];
   return number
     ? orNoMatch(

@@ -143,6 +143,27 @@ export const issueSchema = z.object({
   author: authorSchema,
 });
 
+/**
+ * An issue as the issue lists show it: no body, which can be kilobytes per
+ * issue, and no state, since every listed issue is open.
+ */
+export const issueListItemSchema = issueSchema.pick({
+  number: true,
+  title: true,
+  url: true,
+  createdAt: true,
+  author: true,
+});
+
+/** A search match keeps its state, since an exact-number lookup can find a closed issue. */
+export const issueSearchResultSchema = issueListItemSchema.extend({
+  state: issueSchema.shape.state,
+});
+
+/** The `gh --json` fields each issue shape reads, so `gh` never prints a body it would drop. */
+export const ISSUE_LIST_FIELDS = 'number,title,url,createdAt,author';
+export const ISSUE_SEARCH_FIELDS = 'number,title,url,state,createdAt,author';
+
 export const reviewRequestedPRGraphQLSchema = z.object({
   data: z.object({
     search: z.object({
