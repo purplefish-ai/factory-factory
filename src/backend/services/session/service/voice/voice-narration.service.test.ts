@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockUserSettingsService = vi.hoisted(() => ({ get: vi.fn() }));
+const mockUserSettingsService = vi.hoisted(() => ({ getVoiceSettings: vi.fn() }));
 const mockCryptoService = vi.hoisted(() => ({
   decrypt: vi.fn((v: string) => v.replace(/^enc:/, '')),
 }));
@@ -175,7 +175,7 @@ describe('voiceNarrationService', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     FakeDeepgramSocket.instances = [];
-    mockUserSettingsService.get.mockResolvedValue({
+    mockUserSettingsService.getVoiceSettings.mockResolvedValue({
       voiceModeEnabled: true,
       deepgramApiKeyEncrypted: 'enc:dg_secret',
       voiceTtsModel: 'flux-haley-en',
@@ -254,7 +254,7 @@ describe('voiceNarrationService', () => {
   });
 
   it('does not synthesize speech when voice mode is disabled', async () => {
-    mockUserSettingsService.get.mockResolvedValue({
+    mockUserSettingsService.getVoiceSettings.mockResolvedValue({
       voiceModeEnabled: false,
       deepgramApiKeyEncrypted: 'enc:dg_secret',
     });
@@ -288,6 +288,7 @@ describe('voiceNarrationService', () => {
       'wss://api.deepgram.com/v2/speak?model=flux-haley-en&encoding=linear16&sample_rate=24000&speed=1'
     );
     expect(mockCryptoService.decrypt).toHaveBeenCalledWith('enc:dg_secret');
+    expect(ttsSocket.options).toMatchObject({ headers: { Authorization: 'Token dg_secret' } });
     // Audio gains nothing from deflate, and a client `PerMessageDeflate` made
     // first would size ws's process-wide zlib limiter for the server too.
     expect(ttsSocket.options).toMatchObject({ perMessageDeflate: false });
@@ -654,7 +655,7 @@ describe('voiceNarrationService', () => {
       // Rows written before the grid was enforced at the write boundary can
       // still hold 0.72, which Deepgram rejects with SPEED_INCREMENT_INVALID
       // on every connection. The stored value alone must not reach the URL.
-      mockUserSettingsService.get.mockResolvedValue({
+      mockUserSettingsService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'enc:dg_secret',
         voiceTtsModel: 'flux-haley-en',
@@ -764,7 +765,7 @@ describe('voiceNarrationService', () => {
     it('does not leave activeTts stuck and still drains the queue when the settings lookup throws', async () => {
       const clientWs = createFakeClientWs();
       register('sess-throws', clientWs as never);
-      mockUserSettingsService.get.mockRejectedValueOnce(new Error('boom'));
+      mockUserSettingsService.getVoiceSettings.mockRejectedValueOnce(new Error('boom'));
 
       emitThinking('sess-throws', 'This will fail to look up settings. ');
       await vi.advanceTimersByTimeAsync(0);
@@ -772,7 +773,7 @@ describe('voiceNarrationService', () => {
 
       // The failure must not leave activeTts stuck — a fresh clause
       // afterwards should still speak normally.
-      mockUserSettingsService.get.mockResolvedValue({
+      mockUserSettingsService.getVoiceSettings.mockResolvedValue({
         voiceModeEnabled: true,
         deepgramApiKeyEncrypted: 'enc:dg_secret',
         voiceTtsModel: 'flux-haley-en',

@@ -60,6 +60,9 @@ Enforced by dependency-cruiser and ownership checks:
   `src/backend/services/session/resources/session-blob-reads.integration.test.ts`
   and `src/backend/trpc/user-settings.integration.test.ts`
   ([why](../../../docs/decisions/2026-11-13-hot-reads-leave-out-blob-columns.md)).
+  Settings reads also omit the secret `deepgramApiKeyEncrypted`; voice code
+  reads it through `getVoiceSettings`, pinned by the same settings test and
+  `src/backend/trpc/voice.integration.test.ts`.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
   `WorkspacePRMonitoring` owns the recipient binding, `WorkspacePREvent` the
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and
