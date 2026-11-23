@@ -41,10 +41,10 @@ it.each(['MERGED', 'CLOSED'] as const)(
       ratchetState: prSummary.ratchetState,
       prHasMergeConflict: false,
     };
-    const dismissCompletedPRs = vi.fn().mockResolvedValue(prs);
+    const dismissCompletedPRs = vi.fn().mockResolvedValue(true);
     const ports = unsafeCoerce<Parameters<typeof createWorkspaceFollowUp>[0]>({
       sessionDataService: {
-        findAgentSessionById: vi.fn().mockResolvedValue({ workspaceId: 'ws' }),
+        findWorkspaceIdForSession: vi.fn().mockResolvedValue('ws'),
       },
       workspacePrSnapshotService: { dismissCompletedPRs },
       workspaceDataService: { findById: vi.fn().mockResolvedValue(workspace) },
@@ -98,12 +98,12 @@ it.each(['MERGED', 'CLOSED'] as const)(
       const publish = vi.spyOn(store, 'upsert');
       await followUp('any-conversation', acceptedAt);
       expect(publish).not.toHaveBeenCalled();
-      dismissCompletedPRs.mockResolvedValue(prs);
+      dismissCompletedPRs.mockResolvedValue(true);
       vi.spyOn(ports.workspaceDataService, 'findById').mockRejectedValueOnce(
         new Error('Read unavailable')
       );
       await expect(followUp('any-conversation', acceptedAt)).resolves.toBeUndefined();
-      dismissCompletedPRs.mockResolvedValue(null);
+      dismissCompletedPRs.mockResolvedValue(false);
       await followUp('any-conversation', acceptedAt);
       expect(publish).not.toHaveBeenCalled();
     } finally {
@@ -123,8 +123,8 @@ it('does not resurrect a removed workspace when its READY follow-up read finishe
   store.upsert('ws', { projectId: 'project', status: 'READY' }, 'seed', 1);
   const followUp = createWorkspaceFollowUp(
     unsafeCoerce<Parameters<typeof createWorkspaceFollowUp>[0]>({
-      sessionDataService: { findAgentSessionById: async () => ({ workspaceId: 'ws' }) },
-      workspacePrSnapshotService: { dismissCompletedPRs: async () => [] },
+      sessionDataService: { findWorkspaceIdForSession: async () => 'ws' },
+      workspacePrSnapshotService: { dismissCompletedPRs: async () => true },
       workspaceDataService: {
         findById: () => {
           const ready = { id: 'ws', projectId: 'project', status: 'READY', prs: [] };

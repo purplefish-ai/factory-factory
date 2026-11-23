@@ -57,7 +57,7 @@ const {
     sendSessionMessage: vi.fn(),
   },
   mockSessionDataService: {
-    findAgentSessionById: vi.fn(),
+    findDispatchWorkspace: vi.fn(),
   },
   mockNotificationDeliveryService: {
     configureRetry: vi.fn(),
@@ -170,12 +170,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
     mockSessionService.hasStopSince.mockReturnValue(false);
-    mockSessionDataService.findAgentSessionById.mockResolvedValue({
-      workspace: {
-        status: 'READY',
-        worktreePath: '/tmp/w1',
-        initErrorMessage: null,
-      },
+    mockSessionDataService.findDispatchWorkspace.mockResolvedValue({
+      status: 'READY',
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
   });
 
@@ -191,23 +189,19 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
 
   it('leaves the message queued when stop begins during dispatch gate evaluation', async () => {
     mockSessionService.getSessionClient.mockReturnValue({});
-    const session = deferred<{
-      workspace: { status: string; worktreePath: string; initErrorMessage: null };
-    }>();
+    const session = deferred<{ status: string; worktreePath: string; initErrorMessage: null }>();
     const lookup = observeInvocation(session.promise);
-    mockSessionDataService.findAgentSessionById.mockImplementationOnce(lookup.call);
+    mockSessionDataService.findDispatchWorkspace.mockImplementationOnce(lookup.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await lookup.started;
-    expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    expect(mockSessionDataService.findDispatchWorkspace).toHaveBeenCalledWith('s1');
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
     session.resolve({
-      workspace: {
-        status: 'READY',
-        worktreePath: '/tmp/w1',
-        initErrorMessage: null,
-      },
+      status: 'READY',
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
     await dispatchPromise;
 
@@ -221,23 +215,19 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
     });
-    const session = deferred<{
-      workspace: { status: string; worktreePath: string; initErrorMessage: null };
-    }>();
+    const session = deferred<{ status: string; worktreePath: string; initErrorMessage: null }>();
     const lookup = observeInvocation(session.promise);
-    mockSessionDataService.findAgentSessionById.mockImplementationOnce(lookup.call);
+    mockSessionDataService.findDispatchWorkspace.mockImplementationOnce(lookup.call);
 
     const dispatchPromise = sessionDispatchService.tryDispatchNextMessage('s1');
     await lookup.started;
-    expect(mockSessionDataService.findAgentSessionById).toHaveBeenCalledWith('s1');
+    expect(mockSessionDataService.findDispatchWorkspace).toHaveBeenCalledWith('s1');
 
     mockSessionService.isSessionStopping.mockReturnValue(true);
     session.resolve({
-      workspace: {
-        status: 'ARCHIVED',
-        worktreePath: '/tmp/w1',
-        initErrorMessage: null,
-      },
+      status: 'ARCHIVED',
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
     await dispatchPromise;
 
@@ -822,7 +812,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
   it('leaves message in queue when dispatch gate evaluation throws', async () => {
     const client = createIdleClient();
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockSessionDataService.findAgentSessionById.mockRejectedValue(new Error('db down'));
+    mockSessionDataService.findDispatchWorkspace.mockRejectedValue(new Error('db down'));
 
     await sessionDispatchService.tryDispatchNextMessage('s1');
 
@@ -837,12 +827,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
     });
-    mockSessionDataService.findAgentSessionById.mockResolvedValue({
-      workspace: {
-        status: 'ARCHIVED',
-        worktreePath: '/tmp/w1',
-        initErrorMessage: null,
-      },
+    mockSessionDataService.findDispatchWorkspace.mockResolvedValue({
+      status: 'ARCHIVED',
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
 
     await sessionDispatchService.tryDispatchNextMessage('s1');
@@ -868,12 +856,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
       },
     });
-    mockSessionDataService.findAgentSessionById.mockResolvedValue({
-      workspace: {
-        status: 'PROVISIONING',
-        worktreePath: null,
-        initErrorMessage: null,
-      },
+    mockSessionDataService.findDispatchWorkspace.mockResolvedValue({
+      status: 'PROVISIONING',
+      worktreePath: null,
+      initErrorMessage: null,
     });
 
     await sessionDispatchService.tryDispatchNextMessage('s1');

@@ -9,7 +9,7 @@ import type {
 const logger = createLogger('workspace-follow-up');
 
 interface Ports {
-  sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionById'>;
+  sessionDataService: Pick<typeof sessionDataService, 'findWorkspaceIdForSession'>;
   workspaceDataService: Pick<typeof workspaceDataService, 'findById'>;
   workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'dismissCompletedPRs'>;
   workspaceSnapshotStore: Pick<WorkspaceSnapshotStore, 'upsert'>;
@@ -18,12 +18,12 @@ interface Ports {
 /** Only explicit human queue admission calls this; background prompts bypass it. */
 export function createWorkspaceFollowUp(ports: Ports) {
   return async (sessionId: string, acceptedAt: Date): Promise<void> => {
-    const session = await ports.sessionDataService.findAgentSessionById(sessionId);
-    if (!session) {
+    const workspaceId = await ports.sessionDataService.findWorkspaceIdForSession(sessionId);
+    if (workspaceId === null) {
       return;
     }
     const changed = await ports.workspacePrSnapshotService.dismissCompletedPRs(
-      session.workspaceId,
+      workspaceId,
       acceptedAt
     );
     if (!changed) {
@@ -32,7 +32,7 @@ export function createWorkspaceFollowUp(ports: Ports) {
     try {
       // Anchor freshness before the async read so an archive during it wins.
       const timestamp = Date.now();
-      const workspace = await ports.workspaceDataService.findById(session.workspaceId);
+      const workspace = await ports.workspaceDataService.findById(workspaceId);
       if (!workspace || workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED') {
         return;
       }
@@ -54,7 +54,7 @@ export function createWorkspaceFollowUp(ports: Ports) {
     } catch (error) {
       // The durable admission has committed. Reconciliation retries publication.
       logger.warn('Workspace reopened; snapshot publication deferred', {
-        workspaceId: session.workspaceId,
+        workspaceId,
         error,
       });
     }

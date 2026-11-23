@@ -85,12 +85,12 @@ function raceHarness() {
   // Hold the dispatch gate's session lookup so another caller can interleave.
   const lookup = deferred<unknown>();
   const lookupStarted = deferred();
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockImplementationOnce(() => {
+  vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockImplementationOnce(() => {
     lookupStarted.resolve();
     return unsafeCoerce(lookup.promise);
   });
   const releaseLookup = () =>
-    lookup.resolve({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } });
+    lookup.resolve({ status: 'READY', worktreePath: '/tmp/workspace', initErrorMessage: null });
   return {
     gate,
     dispatcher,

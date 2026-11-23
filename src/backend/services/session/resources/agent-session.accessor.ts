@@ -8,11 +8,7 @@ import { findEventSessionForCreation } from './event-session-creation';
 
 export type AgentSessionRecord = AgentSession;
 
-/**
- * The workspace columns session reads need. A full workspace row carries the
- * startup log and `creationMetadata` (base64 initial attachments), and
- * `findById` runs on every dispatch and session load.
- */
+/** Session loads only need workspace init fields. Full rows also carry logs and initial attachments. */
 const sessionWorkspaceSelect = {
   status: true,
   worktreePath: true,
@@ -143,6 +139,8 @@ export interface AgentSessionAccessor {
   createWithinWorkspaceLimit(
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation>;
+  findWorkspaceIdForSession(id: string): Promise<string | null>;
+  findDispatchWorkspace(id: string): Promise<AgentSessionRecordWithWorkspace['workspace'] | null>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
   findByIds(ids: string[]): Promise<AgentSessionRecord[]>;
   findExistingBackupSessionIds(
@@ -215,6 +213,25 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return this.runWorkspaceAcquisition(data.workspaceId, () =>
       this.doCreateWithinWorkspaceLimit(data)
     );
+  }
+
+  async findWorkspaceIdForSession(id: string) {
+    const session = await prisma.agentSession.findUnique({
+      where: { id },
+      select: { workspaceId: true },
+    });
+    return session?.workspaceId ?? null;
+  }
+
+  async findDispatchWorkspace(id: string) {
+    // Drive the lookup from the session PK. A nested Prisma select takes two queries,
+    // and the inverse relation filter scans Workspace for a matching session.
+    const rows = await prisma.$queryRaw<AgentSessionRecordWithWorkspace['workspace'][]>`
+      SELECT w.status, w.worktreePath, w.initErrorMessage
+      FROM AgentSession AS s JOIN Workspace AS w ON w.id = s.workspaceId
+      WHERE s.id = ${id}
+    `;
+    return rows[0] ?? null;
   }
 
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {

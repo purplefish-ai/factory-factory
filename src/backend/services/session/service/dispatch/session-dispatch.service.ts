@@ -908,8 +908,8 @@ export class SessionDispatchService {
     if (this.dependencies.eventAuthority) {
       await this.dependencies.eventAuthority.assertOrdinary(dbSessionId);
     }
-    const session = await sessionDataService.findAgentSessionById(dbSessionId);
-    if (!session) {
+    const workspace = await sessionDataService.findDispatchWorkspace(dbSessionId);
+    if (!workspace) {
       return {
         policy: 'blocked',
         permanent: true,
@@ -917,13 +917,13 @@ export class SessionDispatchService {
       };
     }
 
-    const dispatchPolicy = this.initPolicy.getWorkspaceInitPolicy(session.workspace).dispatchPolicy;
+    const dispatchPolicy = this.initPolicy.getWorkspaceInitPolicy(workspace).dispatchPolicy;
     if (dispatchPolicy !== 'manual_resume') {
       this.manualDispatchResumed.delete(dbSessionId);
       if (dispatchPolicy === 'allowed') {
         return { policy: 'allowed' };
       }
-      const reason = getPermanentBlockedDispatchReason(session.workspace);
+      const reason = getPermanentBlockedDispatchReason(workspace);
       return {
         policy: 'blocked',
         permanent: !!reason,
