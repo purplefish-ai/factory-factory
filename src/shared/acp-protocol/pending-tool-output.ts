@@ -18,7 +18,8 @@ function contentSize(content: ToolResultContentValue | undefined): number {
       64 +
       (item.type === 'text'
         ? item.text.length
-        : item.source.data.length + item.source.media_type.length),
+        : (item.source.type === 'base64' ? item.source.data.length : item.source.id.length) +
+          item.source.media_type.length),
     0
   );
 }

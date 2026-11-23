@@ -47,6 +47,7 @@ import {
 import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { ChatImageStore } from './lib/chat-image-store';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
 import {
   ApplicationUpdateService,
@@ -189,6 +190,8 @@ export type ApplicationServices = BridgeServices & {
   sessionCommandFactories: typeof sessionCommandFactories;
   sessionConfigService: typeof sessionConfigService;
   sessionPermissionService: typeof sessionPermissionService;
+  /** Images the chat transport sent as references, for the chat image endpoint. */
+  chatImageStore: ChatImageStore;
   checkGithubAuth: typeof checkGithubAuth;
   cliHealthService: typeof cliHealthService;
   configService: typeof configService;
@@ -394,6 +397,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionConfigService,
     sessionPermissionService,
     sessionDispatchService,
+    chatImageStore: new ChatImageStore(),
     checkGithubAuth,
     cliHealthService,
     configService,

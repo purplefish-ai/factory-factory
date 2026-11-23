@@ -273,3 +273,40 @@ export function isBrowserOriginAllowed(
     (policy.allowOwnLoopbackOrigin === true && isOwnLoopbackOrigin(origin, localPort))
   );
 }
+
+/** What the browser boundary reads from an HTTP request. */
+export interface BrowserRequestInfo {
+  origin?: string;
+  /** `Host` header. */
+  host?: string;
+  /** Local port the connection arrived on. */
+  localPort?: number;
+}
+
+/**
+ * The browser boundary for HTTP requests (tRPC procedures and the chat image
+ * endpoint): a request carrying an `Origin` must come from an allowed origin,
+ * and a loopback-bound server answers only loopback or allowed-origin `Host`
+ * names, which defeats DNS rebinding. Origin-less requests pass the Origin
+ * rule; `disableCorsChecks` turns both checks off.
+ */
+export function isBrowserRequestAllowed(
+  request: BrowserRequestInfo,
+  policy: BrowserOriginPolicy,
+  /** Read only when the `Host` is not otherwise allowed. */
+  getBindHost: () => string | undefined
+): boolean {
+  // The flag already admits every Origin, so a rebound Host adds no exposure.
+  if (policy.disableCorsChecks) {
+    return true;
+  }
+  const { origin, host, localPort } = request;
+  if (origin !== undefined && !isBrowserOriginAllowed(origin, policy, localPort)) {
+    return false;
+  }
+  return (
+    host === undefined ||
+    isHostHeaderAllowed(host, policy.allowedOrigins) ||
+    !isLoopbackBindHost(getBindHost())
+  );
+}

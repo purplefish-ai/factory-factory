@@ -9,7 +9,10 @@ import {
   SESSION_RUNTIME_PROCESS_STATES,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket/chat-message.schema';
+import {
+  ChatSettingsSchema,
+  OutboundAttachmentSchema,
+} from '@/shared/websocket/chat-message.schema';
 import { ArchivedAgentMessageSchema, ArchivedChatMessageSchema } from './archived-message-schema';
 import type { AskUserQuestion } from './interaction';
 import type { CommandInfo } from './models';
@@ -130,7 +133,7 @@ const ConfigOptionSchema = z.object({
 const UserMessageStateSchema = z.object({
   text: z.string(),
   timestamp: z.string(),
-  attachments: z.array(AttachmentSchema).optional(),
+  attachments: z.array(OutboundAttachmentSchema).optional(),
   settings: ChatSettingsSchema.optional(),
   order: z.number().optional(),
   sessionId: z.string().optional(),

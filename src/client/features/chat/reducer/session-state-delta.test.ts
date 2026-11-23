@@ -318,6 +318,19 @@ describe('targeted session-state deltas', () => {
     expect(state.messages[0]?.attachments?.[0]?.name).toBe('new.png');
   });
 
+  it('replaces a queued row when only an image reference changes', () => {
+    const withRef = (id: string): QueuedMessage => ({
+      ...queued('q1'),
+      attachments: [
+        { id: 'a1', name: 'a.png', type: 'image/png', size: 3, data: '', ref: { id, size: 3 } },
+      ],
+    });
+    let state = hydrated({ transcript: [], queue: [], pendingInteractiveRequest: null });
+    state = receive(state, { type: 'queue_updated', queuedMessages: [withRef('1'.repeat(64))] });
+    state = receive(state, { type: 'queue_updated', queuedMessages: [withRef('2'.repeat(64))] });
+    expect(state.messages[0]?.attachments?.[0]?.ref?.id).toBe('2'.repeat(64));
+  });
+
   it('keeps local recovery metadata a snapshot would discard', () => {
     let state = hydrated({ transcript: [], queue: [], pendingInteractiveRequest: null });
     state = chatReducer(state, {

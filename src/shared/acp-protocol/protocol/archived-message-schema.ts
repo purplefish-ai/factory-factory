@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
-import { AttachmentSchema } from '@/shared/websocket/chat-message.schema';
+import { OutboundAttachmentSchema } from '@/shared/websocket/chat-message.schema';
 import {
   ArchivedJsonValueSchema,
   ArchivedMessageContentSchema,
@@ -90,6 +90,6 @@ export const ArchivedChatMessageSchema = z.object({
   text: z.string().optional(),
   message: ArchivedAgentMessageSchema.optional(),
   timestamp: z.string(),
-  attachments: z.array(AttachmentSchema).optional(),
+  attachments: z.array(OutboundAttachmentSchema).optional(),
   order: z.number(),
 }) satisfies z.ZodType<ChatMessage>;

@@ -2,9 +2,12 @@ import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import type { SessionLoadService } from '@/backend/services/session';
 import { SessionEventBus } from '@/backend/services/session';
+import { MessageState } from '@/shared/acp-protocol';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
+import { noisePng } from '@/test-utils/image-fixtures';
 import { createTestEventLog } from '@/test-utils/test-event-log';
 import { ChatConnectionRegistry } from './chat-connection-registry';
 import { executeSessionLoad } from './chat-load-adapter';
@@ -72,6 +75,7 @@ function setup() {
     loadService: service,
     eventBus: bus,
     fileLogger: { log: () => undefined },
+    images: new ChatImageStore(),
   };
   return { calls, deps };
 }
@@ -98,6 +102,55 @@ describe('executeSessionLoad', () => {
       },
       'activation',
     ]);
+  });
+
+  it('replays a 1 MB image as a reference, so loading it twice sends a few hundred bytes of it', async () => {
+    const test = setup();
+    const png = noisePng(590, 590);
+    const data = png.toString('base64');
+    expect(png.length).toBeGreaterThan(1_000_000);
+    test.deps.loadService.captureReplay = () => ({
+      sessionRuntime: runtime,
+      replayEvents: [
+        {
+          type: 'message_state_changed',
+          id: 'u1',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'look',
+            timestamp: '2026-11-23T00:00:00.000Z',
+            order: 0,
+            attachments: [
+              {
+                id: 'a1',
+                name: 'shot.png',
+                type: 'image/png',
+                size: png.length,
+                data,
+                contentType: 'image',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'first' }, test.deps);
+    await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
+
+    const replays = test.calls.flatMap((call) =>
+      typeof call === 'object' && call !== null && 'serialized' in call ? [call] : []
+    );
+    expect(replays).toHaveLength(2);
+    const wire = replays.map(({ serialized }) => String(serialized));
+    // Before references each load sent 1,862,759 bytes in 17 fragmented frames.
+    expect(wire.join('').length).toBeLessThan(2000);
+    const attachment = JSON.parse(wire[0] ?? '').replayEvents[0].userMessage.attachments[0];
+    expect(attachment).toMatchObject({
+      data: '',
+      ref: { size: png.length, width: 590, height: 590 },
+    });
+    expect(test.deps.images.get(attachment.ref.id)?.data).toBe(data);
   });
 
   it('bounds every replay frame even when one tool body exceeds the frame limit', async () => {

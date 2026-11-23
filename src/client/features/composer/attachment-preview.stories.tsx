@@ -96,6 +96,25 @@ export const ImageAttachment: Story = {
   },
 };
 
+/** An image the server sent as a reference it can no longer serve. */
+export const ReferencedImageUnavailable: Story = {
+  args: {
+    attachments: [
+      {
+        ...imageAttachment,
+        id: 'img-ref',
+        data: '',
+        ref: { id: '0'.repeat(64), size: imageAttachment.size, width: 1, height: 1 },
+      },
+    ],
+    readOnly: true,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('img', { name: 'Image unavailable' })).toBeVisible();
+  },
+};
+
 export const TextAttachment: Story = {
   args: {
     attachments: [textAttachmentShort],

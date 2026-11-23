@@ -5,8 +5,7 @@ import type { AppContext } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
   isBrowserOriginAllowed,
-  isHostHeaderAllowed,
-  isLoopbackBindHost,
+  isBrowserRequestAllowed,
   isLoopbackRemoteAddress,
   isTrustedLocalAddress,
 } from '@/backend/lib/request-trust';
@@ -84,21 +83,8 @@ function isAllowedBrowserContext(ctx: Context): boolean {
   }
 
   const { configService } = ctx.appContext.services;
-  const corsConfig = configService.getCorsConfig();
-  // The flag already admits every Origin, so a rebound Host adds no exposure.
-  if (corsConfig.disableCorsChecks) {
-    return true;
-  }
-
-  const { origin, host, localPort } = ctx.requestTrust;
-  if (origin !== undefined && !isBrowserOriginAllowed(origin, corsConfig, localPort)) {
-    return false;
-  }
-
-  return (
-    host === undefined ||
-    isHostHeaderAllowed(host, corsConfig.allowedOrigins) ||
-    !isLoopbackBindHost(configService.getBackendHost())
+  return isBrowserRequestAllowed(ctx.requestTrust, configService.getCorsConfig(), () =>
+    configService.getBackendHost()
   );
 }
 

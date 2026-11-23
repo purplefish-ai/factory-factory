@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { ApplicationServices } from '@/backend/app-context';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import { SessionEventBus } from '@/backend/services/session';
 import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
@@ -52,9 +53,14 @@ function setup(limit = 32 * 1024 * 1024) {
     unsafeCoerce<
       Pick<
         ApplicationServices,
-        'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+        | 'chatImageStore'
+        | 'configService'
+        | 'createLogger'
+        | 'sessionEventBus'
+        | 'sessionFileLogger'
       >
     >({
+      chatImageStore: new ChatImageStore(),
       configService: {
         getDebugConfig: () => ({ chatWebSocket: false }),
         getWebSocketConfig: () => ({ maxFrameBytes: limit }),

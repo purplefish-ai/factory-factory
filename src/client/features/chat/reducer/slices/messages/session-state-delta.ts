@@ -64,6 +64,7 @@ function sameAttachments(
       attachment.type === other.type &&
       attachment.size === other.size &&
       attachment.data === other.data &&
+      attachment.ref?.id === other.ref?.id &&
       attachment.contentType === other.contentType
     );
   });

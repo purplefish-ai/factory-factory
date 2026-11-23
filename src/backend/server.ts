@@ -20,6 +20,7 @@ import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
+import { CHAT_IMAGE_ROUTE } from '@/shared/chat-image-ref';
 import type { Application } from './app-context';
 import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { toError } from './lib/error-utils';
@@ -34,6 +35,7 @@ import {
   securityMiddleware,
   sendPrecompressedHtml,
 } from './middleware';
+import { createChatImageRouter } from './routers/chat-image.router';
 import { createHealthRouter } from './routers/health.router';
 import { createPortShareRouter } from './routers/port-share.router';
 import {
@@ -245,6 +247,7 @@ export function createServer(application: Application, requestedPort?: number): 
   app.use('/health', createHealthRouter(application));
   // Before the SPA fallback, which would otherwise answer every GET.
   app.use('/proxy', createPortShareRouter(application));
+  app.use(CHAT_IMAGE_ROUTE, createChatImageRouter(application));
   app.use(
     '/api/trpc',
     createExpressMiddleware({
