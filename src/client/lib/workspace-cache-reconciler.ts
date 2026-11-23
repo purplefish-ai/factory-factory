@@ -25,6 +25,14 @@ export interface WorkspaceConnection {
   readonly identity: symbol;
 }
 
+const liveSnapshotListeners = new WeakMap<QueryClient, Set<() => void>>();
+
+function notifyLiveSnapshotListeners(queryClient: QueryClient): void {
+  for (const listener of [...(liveSnapshotListeners.get(queryClient) ?? [])]) {
+    listener();
+  }
+}
+
 /** Coordinates the existing query cache; it is not another rendered data store. */
 export class ProjectWorkspaceCacheReconciler {
   private connection: WorkspaceConnection | undefined;
@@ -156,6 +164,7 @@ export class ProjectWorkspaceCacheReconciler {
     this.entries.clear();
     this.hasBaseline = false;
     this.reviewCount = undefined;
+    notifyLiveSnapshotListeners(this.queryClient);
     return this.connection;
   }
 
@@ -168,7 +177,13 @@ export class ProjectWorkspaceCacheReconciler {
     this.entries.clear();
     this.hasBaseline = false;
     this.reviewCount = undefined;
+    notifyLiveSnapshotListeners(this.queryClient);
     return true;
+  }
+
+  /** The stream's entry, only while a connection with a full baseline is current. */
+  liveEntry(workspaceId: string): WorkspaceSnapshotEntry | undefined {
+    return this.connection && this.hasBaseline ? this.entries.get(workspaceId) : undefined;
   }
 
   isCurrent(connection: WorkspaceConnection): boolean {
@@ -372,11 +387,47 @@ export class ProjectWorkspaceCacheReconciler {
         })()
       );
     });
+    notifyLiveSnapshotListeners(this.queryClient);
     return true;
   }
 }
 
 const reconcilers = new WeakMap<QueryClient, Map<string, ProjectWorkspaceCacheReconciler>>();
+
+/**
+ * A workspace's live stream entry from whichever project connection of this
+ * QueryClient carries it. Undefined while no connection with a full baseline
+ * carries the workspace, which is when readers must fall back to HTTP.
+ */
+export function getLiveWorkspaceSnapshot(
+  queryClient: QueryClient,
+  workspaceId: string
+): WorkspaceSnapshotEntry | undefined {
+  for (const owner of reconcilers.get(queryClient)?.values() ?? []) {
+    const entry = owner.liveEntry(workspaceId);
+    if (entry) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+/** Calls `listener` after any connection change or applied message of this QueryClient. */
+export function subscribeLiveWorkspaceSnapshots(
+  queryClient: QueryClient,
+  listener: () => void
+): () => void {
+  let listeners = liveSnapshotListeners.get(queryClient);
+  if (!listeners) {
+    listeners = new Set();
+    liveSnapshotListeners.set(queryClient, listeners);
+  }
+  const owned = listeners;
+  owned.add(listener);
+  return () => {
+    owned.delete(listener);
+  };
+}
 
 export function getProjectWorkspaceCacheReconciler(
   queryClient: QueryClient,

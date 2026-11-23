@@ -1,6 +1,5 @@
 import { usePortSharing } from '@/client/hooks/use-port-sharing';
-import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
-import { trpc } from '@/client/lib/trpc';
+import { useRunScriptStatus } from './use-run-script-status';
 
 interface RunScriptLaunchInfo {
   href: string;
@@ -10,16 +9,7 @@ interface RunScriptLaunchInfo {
 
 export function useRunScriptLaunch(workspaceId: string): RunScriptLaunchInfo | null {
   const portSharing = usePortSharing();
-  const { data: status } = trpc.workspace.getRunScriptStatus.useQuery(
-    { workspaceId },
-    {
-      refetchInterval: (query) => {
-        return query.state.data?.status === 'RUNNING'
-          ? POLL_INTERVAL_MS.runningProcess
-          : POLL_INTERVAL_MS.localStatus;
-      },
-    }
-  );
+  const { data: status } = useRunScriptStatus(workspaceId);
 
   // Until port sharing is known, a fallback link could open the viewing
   // device's own localhost instead of the host's dev server.

@@ -6,10 +6,10 @@ import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
 import { useLatestRef, useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
-import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
+import { useWorkspaceSessions } from '@/client/routes/projects/workspaces/use-workspace-sessions';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 function showArchiveError(error: unknown, onGitLocked: () => void) {
@@ -76,13 +76,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     }
   }, [workspace?.prs.length, workspaceId, syncPRStatus]);
 
-  const { data: sessions } = trpc.session.listSessions.useQuery(
-    { workspaceId },
-    {
-      refetchInterval: POLL_INTERVAL_MS.activity,
-      staleTime: 0, // Always refetch on invalidate - critical for session creation UX
-    }
-  );
+  const { data: sessions } = useWorkspaceSessions(workspaceId);
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 
