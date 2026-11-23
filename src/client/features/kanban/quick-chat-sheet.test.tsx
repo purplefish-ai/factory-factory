@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { QuickChatSheet } from './quick-chat-sheet';
+import { QuickChatSheetBody } from './quick-chat-sheet';
 
 const mocks = vi.hoisted(() => ({
   select: vi.fn(),
@@ -127,9 +127,7 @@ it.each([false, true])(
     document.body.appendChild(container);
     const root = createRoot(container);
     try {
-      await act(() =>
-        root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
-      );
+      await act(() => root.render(createElement(QuickChatSheetBody, { workspaceId: 'workspace' })));
       if (!empty) {
         const secondTab = [...document.body.querySelectorAll<HTMLElement>('[role="tab"]')].find(
           (tab) => tab.textContent?.includes('Chat 2')
@@ -179,9 +177,7 @@ it('blocks new chats until sessions load', async () => {
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    await act(() =>
-      root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
-    );
+    await act(() => root.render(createElement(QuickChatSheetBody, { workspaceId: 'workspace' })));
     expect(
       document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
     ).toBe(true);
@@ -202,9 +198,7 @@ it.each(['CODEX', 'WORKSPACE_DEFAULT'] as const)(
     document.body.append(container);
     const root = createRoot(container);
     try {
-      await act(() =>
-        root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
-      );
+      await act(() => root.render(createElement(QuickChatSheetBody, { workspaceId: 'workspace' })));
       await act(() =>
         document.body
           .querySelector('[aria-label="New session"]')
@@ -217,9 +211,7 @@ it.each(['CODEX', 'WORKSPACE_DEFAULT'] as const)(
       await act(() => work?.click());
       expect(mocks.create).toHaveBeenCalledWith('work');
       mocks.empty = false;
-      await act(() =>
-        root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
-      );
+      await act(() => root.render(createElement(QuickChatSheetBody, { workspaceId: 'workspace' })));
       expect(mocks.content).toHaveBeenLastCalledWith(
         expect.objectContaining({ codexAccountId: 'work' })
       );
@@ -236,7 +228,7 @@ it('keeps a loaded nonempty list pending until its first session is selected', a
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(document.body.textContent).toContain('Loading sessions…');
     expect(document.body.textContent).not.toContain('No chats yet');
   } finally {
@@ -253,7 +245,7 @@ it('offers session-list Retry after failure and disables only Retry while refetc
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('Offline');
     const retry = [...document.body.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
@@ -262,7 +254,7 @@ it('offers session-list Retry after failure and disables only Retry while refetc
     await act(() => retry?.click());
     expect(mocks.refetch).toHaveBeenCalledOnce();
     mocks.fetching = true;
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(
       [...document.body.querySelectorAll('button')].find(
         (button) => button.textContent === 'Retrying…'
@@ -294,7 +286,7 @@ it.each([
     document.body.append(container);
     const root = createRoot(container);
     try {
-      await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+      await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
       expect(mocks.content).toHaveBeenLastCalledWith(
         expect.objectContaining({ newChatUnavailableReason: reason })
       );
@@ -311,7 +303,7 @@ it('reports and retries a failed chat-limit query instead of claiming chats are 
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(mocks.content).toHaveBeenLastCalledWith(
       expect.objectContaining({ newChatUnavailableReason: "Couldn't load the chat limit." })
     );
@@ -332,7 +324,7 @@ it('keeps applying a cached chat limit when only its refetch failed', async () =
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(mocks.content).toHaveBeenLastCalledWith(
       expect.objectContaining({ newChatUnavailableReason: null })
     );
@@ -352,7 +344,7 @@ it('keeps new-chat actions disabled while a chat is closing', async () => {
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(mocks.content).toHaveBeenLastCalledWith(
       expect.objectContaining({ newChatUnavailableReason: 'A chat is closing.' })
     );
@@ -372,7 +364,7 @@ it('explains why the first chat cannot start before workspace setup finishes', a
   document.body.append(container);
   const root = createRoot(container);
   try {
-    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    await act(() => root.render(<QuickChatSheetBody workspaceId="workspace" />));
     expect(document.body.textContent).toContain(
       'New chats can start once the workspace is set up.'
     );

@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { QuickChatSheet } from './quick-chat-sheet';
+import { QuickChatSheetBody } from './quick-chat-sheet';
 
 const sessions = vi.hoisted(() => {
   const base = {
@@ -70,9 +70,7 @@ it('renders scheduled session identity in quick-chat tabs', async () => {
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    await act(() =>
-      root.render(createElement(QuickChatSheet, { workspaceId: 'workspace', onClose: vi.fn() }))
-    );
+    await act(() => root.render(createElement(QuickChatSheetBody, { workspaceId: 'workspace' })));
     const tabs = document.body.querySelectorAll('[role="tab"]');
     expect([...tabs].map((tab) => tab.textContent)).toEqual([
       'Agent',

@@ -108,7 +108,7 @@ vi.mock('./inline-workspace-form', () => ({
 }));
 
 vi.mock('./quick-chat-sheet', () => ({
-  QuickChatSheet: () => null,
+  QuickChatSheetBody: () => null,
 }));
 
 vi.mock('./kanban-context', () => ({

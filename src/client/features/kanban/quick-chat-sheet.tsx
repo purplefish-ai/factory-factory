@@ -7,20 +7,15 @@ import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import { useKanbanState } from './kanban-context';
 import { QuickChatContent } from './quick-chat-content';
 import { useQuickChat } from './use-quick-chat';
+import type { QuickChatScrollMemory } from './use-quick-chat-scroll';
 
-interface QuickChatSheetProps {
+interface QuickChatSheetBodyProps {
   workspaceId: string | null;
-  onClose: () => void;
+  /** Owned by the sheet, which outlives this body, so positions survive closing it. */
+  scrollMemory?: QuickChatScrollMemory;
 }
 
 function QuickChatSessionState({
@@ -117,7 +112,11 @@ function getChatLimitUnavailableReason(query: {
   return query.error ? "Couldn't load the chat limit." : 'Loading chat limit…';
 }
 
-export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
+/**
+ * Quick Chat's tabs and transcript. `lazy-quick-chat-sheet.tsx` loads it inside the
+ * open sheet, so it unmounts whenever the sheet closes.
+ */
+export function QuickChatSheetBody({ workspaceId, scrollMemory }: QuickChatSheetBodyProps) {
   const { workspaces } = useKanbanState();
   const workspace = useMemo(
     () => workspaces?.find((w) => w.id === workspaceId) ?? null,
@@ -153,7 +152,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     sessionsError,
     refetchSessions,
     isFetchingSessions,
-  } = useQuickChat(workspaceId, workspaceProvider);
+  } = useQuickChat(workspaceId, workspaceProvider, scrollMemory);
 
   const sessionTabData: SessionData[] = useMemo(
     () =>
@@ -184,66 +183,54 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     });
 
   return (
-    <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl flex flex-col p-0">
-        {/* Header */}
-        <SheetHeader className="px-4 pt-4 pb-0 shrink-0">
-          <SheetTitle className="text-base leading-tight pr-8 truncate">
-            {workspace?.name ?? 'Quick Chat'}
-          </SheetTitle>
-          <SheetDescription className="sr-only">
-            Chat with the agent for this workspace
-          </SheetDescription>
-        </SheetHeader>
-
-        {/* Session tab bar with actions — always visible */}
-        <div className="flex items-center gap-1 px-4 py-2 border-b shrink-0">
-          <div className="flex-1 min-w-0">
-            <SessionTabBar
-              sessions={sessionTabData}
-              workspaceProvider={workspaceProvider}
-              currentSessionId={selectedSessionId}
-              runningSessionId={runningSessionId}
-              onSelectSession={setSelectedSessionId}
-              onCreateSession={handleNewChat}
-              onCloseSession={handleCloseSession}
-              disabled={tabBarDisabled}
-              createDisabled={Boolean(newChatUnavailableReason)}
-              createPending={isCreatingSession}
-            />
-          </div>
+    <>
+      {/* Session tab bar with actions — always visible */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b shrink-0">
+        <div className="flex-1 min-w-0">
+          <SessionTabBar
+            sessions={sessionTabData}
+            workspaceProvider={workspaceProvider}
+            currentSessionId={selectedSessionId}
+            runningSessionId={runningSessionId}
+            onSelectSession={setSelectedSessionId}
+            onCreateSession={handleNewChat}
+            onCloseSession={handleCloseSession}
+            disabled={tabBarDisabled}
+            createDisabled={Boolean(newChatUnavailableReason)}
+            createPending={isCreatingSession}
+          />
         </div>
+      </div>
 
-        <QuickChatLimitError query={maxSessionsQuery} />
+      <QuickChatLimitError query={maxSessionsQuery} />
 
-        {/* Chat content */}
-        <div className="flex-1 min-h-0">
-          {workspaceId && selectedSessionId ? (
-            <QuickChatContent
-              workspaceId={workspaceId}
-              codexAccountId={selectedCodexAccountId}
-              chatState={chatState}
-              transcriptScroll={transcriptScroll}
-              onRunQuickActionInNewChat={handleQuickAction}
-              newChatUnavailableReason={newChatUnavailableReason}
-            />
-          ) : workspaceId ? (
-            <QuickChatSessionState
-              sessionsLoaded={sessionsLoaded}
-              hasSessions={sessions.length > 0}
-              creating={isCreatingSession}
-              disabled={tabBarDisabled || Boolean(newChatUnavailableReason)}
-              disabledReason={newChatUnavailableReason}
-              onCreate={() => handleNewChat()}
-              error={sessionsError}
-              retrying={isFetchingSessions}
-              onRetry={() => {
-                void refetchSessions();
-              }}
-            />
-          ) : null}
-        </div>
-      </SheetContent>
-    </Sheet>
+      {/* Chat content */}
+      <div className="flex-1 min-h-0">
+        {workspaceId && selectedSessionId ? (
+          <QuickChatContent
+            workspaceId={workspaceId}
+            codexAccountId={selectedCodexAccountId}
+            chatState={chatState}
+            transcriptScroll={transcriptScroll}
+            onRunQuickActionInNewChat={handleQuickAction}
+            newChatUnavailableReason={newChatUnavailableReason}
+          />
+        ) : workspaceId ? (
+          <QuickChatSessionState
+            sessionsLoaded={sessionsLoaded}
+            hasSessions={sessions.length > 0}
+            creating={isCreatingSession}
+            disabled={tabBarDisabled || Boolean(newChatUnavailableReason)}
+            disabledReason={newChatUnavailableReason}
+            onCreate={() => handleNewChat()}
+            error={sessionsError}
+            retrying={isFetchingSessions}
+            onRetry={() => {
+              void refetchSessions();
+            }}
+          />
+        ) : null}
+      </div>
+    </>
   );
 }

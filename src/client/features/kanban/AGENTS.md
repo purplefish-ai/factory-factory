@@ -57,6 +57,14 @@ project switch.
   `kanban-board.test.tsx`, `mobile-board-sections.test.tsx`.
 - An issue stays out of intake until every archive of its workspace has settled,
   including overlapping archives. `kanban-context.test.tsx`.
+- Quick Chat's sheet opens at once and loads its body, and with it the chat
+  feature, inside the open sheet; its scroll memory lives in the sheet, which
+  outlives the body. `lazy-quick-chat-sheet.test.tsx`.
+- No board module other than `quick-chat-sheet.tsx` and its imports may import
+  the chat, subagents or session-controls feature at runtime; type-only imports
+  are erased. Nothing checks the imports themselves: such an import brings the
+  Markdown renderer back, and `pnpm check:client-chunks` rejects that
+  ([client loading](../../../../docs/architecture/client-loading.md)).
 
 ## Map
 
@@ -81,4 +89,7 @@ project switch.
   `workspace-creation-drop-drain.tsx` appends them to the draft.
   `kanban-image-drop-zone.tsx`, `workspace-creation-image-drop-zone.tsx`: the
   board's and the sidebar's drop targets.
-- `quick-chat-sheet.tsx`, `quick-chat-content.tsx`, `use-quick-chat.ts`.
+- `lazy-quick-chat-sheet.tsx` (the sheet, its header, scroll memory and the lazy
+  boundary with its loading and failure states), `quick-chat-sheet.tsx` (the
+  body: tabs and content), `quick-chat-content.tsx`, `use-quick-chat.ts`,
+  `use-quick-chat-scroll.ts`.

@@ -4,7 +4,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TranscriptPosition } from '@/client/features/chat';
-import { useQuickChatScroll } from './use-quick-chat-scroll';
+import {
+  createQuickChatScrollMemory,
+  type QuickChatScrollMemory,
+  useQuickChatScroll,
+} from './use-quick-chat-scroll';
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', { configurable: true, value: true });
 
@@ -31,6 +35,11 @@ let container: HTMLDivElement;
 function Probe({ workspaceId, sessionId, runtimeSessionId, contentVisible = true }: ProbeProps) {
   current = useQuickChatScroll(workspaceId, sessionId, runtimeSessionId);
   return contentVisible ? <output>Transcript content</output> : null;
+}
+
+function Owned({ memory }: { memory?: QuickChatScrollMemory }) {
+  current = useQuickChatScroll('workspace-a', 'session-a', 'session-a', memory);
+  return null;
 }
 
 async function render(
@@ -111,6 +120,16 @@ describe('useQuickChatScroll', () => {
     expect(container.querySelector('output')).toBeNull();
     await render();
     expect(current.transcriptScroll.initialPosition).toEqual(reading);
+  });
+
+  it('keeps positions in caller-owned memory when the hook remounts', async () => {
+    const memory = createQuickChatScrollMemory();
+    await act(() => root.render(<Owned key="first" memory={memory} />));
+    writer()(reading);
+    await act(() => root.render(<Owned key="second" memory={memory} />));
+    expect(current.transcriptScroll.initialPosition).toEqual(reading);
+    await act(() => root.render(<Owned key="third" />));
+    expect(current.transcriptScroll.initialPosition).toBeNull();
   });
 
   it('requires matching runtime snapshot identity before becoming ready', async () => {

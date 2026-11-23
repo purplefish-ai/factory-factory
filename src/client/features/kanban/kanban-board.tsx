@@ -14,8 +14,8 @@ import type { WorkspaceWithKanban } from './kanban-card';
 import { getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
+import { LazyQuickChatSheet } from './lazy-quick-chat-sheet';
 import { MobileBoardSections } from './mobile-board-sections';
-import { QuickChatSheet } from './quick-chat-sheet';
 import { useWaitingSortOrder } from './use-waiting-sort-order';
 
 interface WorkspacesByColumn {
@@ -278,7 +278,7 @@ function KanbanBoardContent() {
         description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
       {archiveGitLockDialog}
-      <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
+      <LazyQuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
     </div>
   );
 }

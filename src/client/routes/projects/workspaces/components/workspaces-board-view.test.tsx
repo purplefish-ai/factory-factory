@@ -95,7 +95,7 @@ vi.mock('@/client/features/kanban/kanban-column', () => ({
   ),
 }));
 vi.mock('@/client/features/kanban/quick-chat-sheet', () => ({
-  QuickChatSheet: ({ workspaceId }: { workspaceId: string | null }) =>
+  QuickChatSheetBody: ({ workspaceId }: { workspaceId: string | null }) =>
     workspaceId ? <div>Quick Chat: {workspaceId}</div> : null,
 }));
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
