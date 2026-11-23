@@ -43,7 +43,9 @@ beforeEach(async () => {
   await db.prisma.userSettings.deleteMany();
 });
 afterAll(async () => {
-  await destroyIntegrationDatabase(db);
+  if (db) {
+    await destroyIntegrationDatabase(db);
+  }
 });
 
 type SettingsOutputs = inferRouterOutputs<typeof userSettingsRouter>;

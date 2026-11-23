@@ -21,7 +21,9 @@ beforeAll(async () => {
   database.prisma = db.prisma;
 }, 30_000);
 afterAll(async () => {
-  await destroyIntegrationDatabase(db);
+  if (db) {
+    await destroyIntegrationDatabase(db);
+  }
 });
 
 // The settings read leaves the cache out, so the cache keeps its own read.

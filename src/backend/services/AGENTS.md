@@ -51,9 +51,10 @@ Enforced by dependency-cruiser and ownership checks:
   the shared process budget.
 - Reads on hot and polled paths leave out `initOutput`, `creationMetadata`,
   session `providerMetadata`, the PR `observation` and the settings
-  `cachedSlashCommands` (which only `getSlashCommandCache` reads, so settings
-  procedures never send it to the browser); narrow any new one with `select` or
-  `omit`, since the Prisma client sets no default. Pinned by
+  `cachedSlashCommands` (settings reads omit it so procedures never send it to
+  the browser; the slash-command cache reads it through `getSlashCommandCache`
+  and the backup snapshot loads the full row); narrow any new one with `select`
+  or `omit`, since the Prisma client sets no default. Pinned by
   `src/backend/services/workspace/resources/workspace-hot-reads.accessor.integration.test.ts`,
   `src/backend/services/workspace/resources/workspace-polled-reads.accessor.integration.test.ts`,
   `src/backend/services/session/resources/session-blob-reads.integration.test.ts`
