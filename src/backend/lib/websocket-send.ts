@@ -158,8 +158,13 @@ export function retireStatefulViewer(ws: WebSocket, logger: SendErrorLogger): vo
 /**
  * Stateful channels must reconnect after any missed write. Never reuse the
  * dropping stream policy for deltas. A single authoritative frame may exceed
- * the ordinary backlog budget only on an empty socket. Its flush callback
- * releases that allowance; follow-up metadata/deltas get a separate budget.
+ * the ordinary backlog budget when no other large frame is queued and that
+ * budget still has room. The socket need not be empty: with
+ * permessage-deflate a frame still waiting for zlib counts in
+ * `bufferedAmount`. Bytes queued before the large frame count against its
+ * follow-ups, so at most one large frame plus one ordinary budget is queued.
+ * Its flush callback releases that allowance; follow-up metadata/deltas get a
+ * separate budget.
  */
 export function sendStateful(
   ws: WebSocket,
@@ -183,7 +188,11 @@ export function sendStateful(
   }
   let large = largeFrames.get(ws);
   const isLargeFrame = bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;
-  const allowLarge = options.allowLargeFrame === true && ws.bufferedAmount === 0;
+  const allowLarge =
+    isLargeFrame &&
+    options.allowLargeFrame === true &&
+    large === undefined &&
+    ws.bufferedAmount < MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES;
   if (exceedsBacklog(ws.bufferedAmount, bytes, large, allowLarge)) {
     retireStatefulViewer(ws, logger);
     return false;

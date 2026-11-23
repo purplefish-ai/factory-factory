@@ -70,10 +70,13 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   remaining JSON (mutations) is usually small. The workspace MCP server fetches
   queries as ordinary JSON, and automation proposals can reach tens of
   kilobytes, but the MCP server runs on the backend's machine, where compression
-  saves nothing. The port-share proxy, health routes and WebSockets are not
-  compressed either. Possible follow-ups are compressing the tRPC jsonl stream
-  with a flush per line, and WebSocket `permessage-deflate` for large session
-  replay frames.
+  saves nothing. The port-share proxy and health routes are not compressed
+  either. A possible follow-up is compressing the tRPC jsonl stream with a flush
+  per line.
+- Some WebSocket channels negotiate `permessage-deflate` for large frames; the
+  `PER_MESSAGE_DEFLATE` and `COMPRESSED_PATHS` comments in
+  `src/backend/routers/websocket/websocket-servers.ts` give which, why, and the
+  memory each compressing connection holds.
 
 Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
 siblings do not match their name patterns. A cold load of the startup closure

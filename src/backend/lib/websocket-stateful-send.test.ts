@@ -104,15 +104,59 @@ describe('stateful viewer delivery', () => {
     viewer.callbacks[1]?.();
   });
 
-  it('does not grant a second large frame exemption to an already queued connection', () => {
+  it('admits a large frame behind ordinary queued bytes, which then count against follow-ups', () => {
     vi.useFakeTimers();
     const viewer = new Viewer();
-    viewer.bufferedAmount = 1;
+    // For example metadata still waiting for permessage-deflate.
+    expect(sendStateful(viewer.socket(), 'm'.repeat(42 * 1024), logger)).toBe(true);
+    const baseline = 'x'.repeat(2 * 1024 * 1024);
+    expect(
+      sendStateful(viewer.socket(), baseline, logger, 'baseline', { allowLargeFrame: true })
+    ).toBe(true);
+    expect(sendStateful(viewer.socket(), 'd'.repeat(1000 * 1024), logger)).toBe(false);
+    expect(viewer.sent).toHaveLength(2);
+    expect(viewer.close).toHaveBeenCalledTimes(1);
+    viewer.emit('close');
+  });
+
+  it('holds an authoritative frame within the ordinary budget to that budget', () => {
+    vi.useFakeTimers();
+    const viewer = new Viewer();
+    viewer.bufferedAmount = 900 * 1024;
+    expect(
+      sendStateful(viewer.socket(), 'x'.repeat(200 * 1024), logger, 'baseline', {
+        allowLargeFrame: true,
+      })
+    ).toBe(false);
+    expect(viewer.sent).toEqual([]);
+    expect(viewer.close).toHaveBeenCalledTimes(1);
+    viewer.emit('close');
+  });
+
+  it('does not grant a large frame exemption to a connection that has used its backlog budget', () => {
+    vi.useFakeTimers();
+    const viewer = new Viewer();
+    viewer.bufferedAmount = 1024 * 1024;
     expect(
       sendStateful(viewer.socket(), 'x'.repeat(2 * 1024 * 1024), logger, 'baseline', {
         allowLargeFrame: true,
       })
     ).toBe(false);
+    expect(viewer.close).toHaveBeenCalledTimes(1);
+    viewer.emit('close');
+  });
+
+  it('does not grant a second large frame exemption while one is queued', () => {
+    vi.useFakeTimers();
+    const viewer = new Viewer();
+    const baseline = 'x'.repeat(2 * 1024 * 1024);
+    expect(
+      sendStateful(viewer.socket(), baseline, logger, 'baseline', { allowLargeFrame: true })
+    ).toBe(true);
+    expect(
+      sendStateful(viewer.socket(), baseline, logger, 'baseline', { allowLargeFrame: true })
+    ).toBe(false);
+    expect(viewer.sent).toEqual([baseline]);
     expect(viewer.close).toHaveBeenCalledTimes(1);
     viewer.emit('close');
   });

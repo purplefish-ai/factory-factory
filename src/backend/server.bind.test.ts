@@ -3,7 +3,12 @@ import { createServer as createNetServer, type Server as NetServer } from 'node:
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deferred } from '@/test-utils/deferred';
 
-vi.mock('@/backend/routers/websocket', () => ({
+vi.mock('@/backend/routers/websocket', async () => ({
+  createWebSocketServers: (
+    await vi.importActual<typeof import('./routers/websocket/websocket-servers')>(
+      './routers/websocket/websocket-servers'
+    )
+  ).createWebSocketServers,
   createChatUpgradeHandler: vi.fn(() => vi.fn()),
   createTerminalUpgradeHandler: vi.fn(() => vi.fn()),
   createSetupTerminalUpgradeHandler: vi.fn(() => vi.fn()),

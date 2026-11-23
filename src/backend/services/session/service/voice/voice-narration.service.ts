@@ -642,6 +642,10 @@ class VoiceNarrationService {
       });
       const ttsSocket = new WebSocket(`${DEEPGRAM_TTS_URL}?${params.toString()}`, {
         headers: { Authorization: `Token ${apiKey}` },
+        // Audio gains nothing from deflate, and `ws` sizes its process-wide
+        // zlib limiter from the first PerMessageDeflate created; the
+        // WebSocket servers' `concurrencyLimit` must be that one.
+        perMessageDeflate: false,
       });
       active.socket = ttsSocket;
 
