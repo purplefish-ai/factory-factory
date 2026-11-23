@@ -56,7 +56,7 @@ const {
     sendSessionMessage: vi.fn(),
   },
   mockSessionDataService: {
-    findAgentSessionById: vi.fn(),
+    findDispatchWorkspace: vi.fn(),
   },
   mockNotificationDeliveryService: {
     configureRetry: vi.fn(),
@@ -153,12 +153,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
     mockSessionService.hasStopSince.mockReturnValue(false);
-    mockSessionDataService.findAgentSessionById.mockResolvedValue({
-      workspace: {
-        status: 'READY',
-        worktreePath: '/tmp/w1',
-        initErrorMessage: null,
-      },
+    mockSessionDataService.findDispatchWorkspace.mockResolvedValue({
+      status: 'READY',
+      worktreePath: '/tmp/w1',
+      initErrorMessage: null,
     });
   });
 

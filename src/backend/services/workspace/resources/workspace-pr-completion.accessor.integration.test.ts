@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   clearIntegrationDatabase,
@@ -58,10 +59,35 @@ async function observe(prId: string, prState: 'MERGED' | 'CLOSED', observedAt: s
   ).toMatchObject({ applied: true });
 }
 
+it('dismisses completed PRs without reloading their stored observations', async () => {
+  const { prId } = await workspacePrAccessor.attach('ws', redObservation.url);
+  await observe(prId, 'MERGED', '2026-11-04T12:00:00.000Z');
+  const prepare = vi.spyOn(Database.prototype, 'prepare');
+  try {
+    const acceptedAt = new Date('2026-11-04T12:01:00.000Z');
+    expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBe(true);
+    expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBe(false);
+    expect(prepare).toHaveBeenCalledWith(expect.stringMatching(/^\s*UPDATE\b.*\bWorkspacePR\b/is));
+    for (const [sql] of prepare.mock.calls) {
+      expect(sql).not.toMatch(/^\s*SELECT\b.*\bWorkspacePR\b/is);
+    }
+  } finally {
+    prepare.mockRestore();
+  }
+  await expect(
+    db.prisma.workspacePR.findUniqueOrThrow({
+      where: { id: prId },
+      select: { completionDismissed: true },
+    })
+  ).resolves.toEqual({ completionDismissed: true });
+});
+
 it('counts a merge after a dismissed close when a reopen was missed between polls', async () => {
   const { prId } = await workspacePrAccessor.attach('ws', redObservation.url);
   await observe(prId, 'CLOSED', '2026-11-04T12:00:00.000Z');
-  await workspacePrAccessor.dismissCompletedPRs('ws', new Date('2026-11-04T12:01:00.000Z'));
+  expect(
+    await workspacePrAccessor.dismissCompletedPRs('ws', new Date('2026-11-04T12:01:00.000Z'))
+  ).toBe(true);
   expect(await db.prisma.workspacePR.findUniqueOrThrow({ where: { id: prId } })).toMatchObject({
     completionDismissed: true,
     revision: 2,
@@ -107,7 +133,7 @@ it('keeps a first terminal observation after human acceptance eligible for compl
   await observe(prId, 'MERGED', '2026-11-04T12:01:00.000Z');
 
   // The human admission began earlier but its persistence resumes after the poll.
-  expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBeNull();
+  expect(await workspacePrAccessor.dismissCompletedPRs('ws', acceptedAt)).toBe(false);
   expect(await db.prisma.workspacePR.findUniqueOrThrow({ where: { id: prId } })).toMatchObject({
     completionDismissed: false,
     terminalObservedAt: new Date('2026-11-04T12:01:00.000Z'),
@@ -169,7 +195,7 @@ it('persists historical completion, preserves polling history, and completes sub
   await db.prisma.workspace.update({ where: { id: 'ws' }, data: { status: 'ARCHIVED' } });
   expect(
     await workspacePrAccessor.dismissCompletedPRs('ws', new Date('2026-11-04T13:00:00.000Z'))
-  ).toBeNull();
+  ).toBe(false);
 
   const row = await db.prisma.workspacePR.findUniqueOrThrow({ where: { id: second } });
   const { workspaceId: _workspaceId, ...backupRow } = row;

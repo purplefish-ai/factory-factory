@@ -95,9 +95,11 @@ function harness(
       isNotificationMessage: () => false,
     },
   });
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue(
-    unsafeCoerce({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } })
-  );
+  vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockResolvedValue({
+    status: 'READY' as const,
+    worktreePath: '/tmp/workspace',
+    initErrorMessage: null,
+  });
   return {
     dispatcher,
     steerSessionMessage,
@@ -877,15 +879,17 @@ it.each([
     } else if (state === 'disarm-error') {
       h.notificationPort.disarmWake.mockRejectedValueOnce(new Error('database unavailable'));
     } else if (state === 'policy-stop') {
-      vi.spyOn(sessionDataService, 'findAgentSessionById').mockImplementationOnce(() => {
+      vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockImplementationOnce(() => {
         h.stop();
         h.dispatcher.resetDispatchState('session');
-        return Promise.resolve(
-          unsafeCoerce({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } })
-        );
+        return Promise.resolve({
+          status: 'READY' as const,
+          worktreePath: '/tmp/workspace',
+          initErrorMessage: null,
+        });
       });
     } else if (state === 'authority-revoked') {
-      vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue(null);
+      vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockResolvedValue(null);
     } else {
       h.notificationPort.claimWake.mockResolvedValueOnce(recovered);
     }

@@ -119,9 +119,11 @@ export function harness(
       isNotificationMessage: () => false,
     },
   });
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue(
-    unsafeCoerce({ workspace: { status: 'READY', worktreePath: '/tmp/workspace' } })
-  );
+  vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockResolvedValue({
+    status: 'READY' as const,
+    worktreePath: '/tmp/workspace',
+    initErrorMessage: null,
+  });
   return {
     dispatcher,
     steerSessionMessage,

@@ -84,6 +84,14 @@ class SessionDataImplementation {
 
   // Agent sessions
 
+  findWorkspaceIdForSession(id: string) {
+    return agentSessionAccessor.findWorkspaceIdForSession(id);
+  }
+
+  findDispatchWorkspace(id: string) {
+    return agentSessionAccessor.findDispatchWorkspace(id);
+  }
+
   async findAgentSessionById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
     const session = await agentSessionAccessor.findById(id);
     return session ? toAgentSessionRecordWithWorkspace(session) : null;

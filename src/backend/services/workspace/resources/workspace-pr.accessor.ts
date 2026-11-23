@@ -220,26 +220,19 @@ function completionDismissalUpdate(row: WorkspacePR, observation: PRObservation)
 
 class WorkspacePRAccessor {
   /** User follow-ups retire only terminal facts already observed at admission. */
-  dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
-    return prisma.$transaction(async (tx) => {
-      const result = await tx.workspacePR.updateMany({
-        where: {
-          workspaceId,
-          detachedAt: null,
-          completionDismissed: false,
-          state: { in: ['MERGED', 'CLOSED'] },
-          OR: [{ terminalObservedAt: null }, { terminalObservedAt: { lte: acceptedAt } }],
-          workspace: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
-        },
-        data: { completionDismissed: true, revision: { increment: 1 } },
-      });
-      return result.count > 0
-        ? tx.workspacePR.findMany({
-            where: { workspaceId, detachedAt: null },
-            orderBy: { id: 'asc' },
-          })
-        : null;
+  async dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
+    const result = await prisma.workspacePR.updateMany({
+      where: {
+        workspaceId,
+        detachedAt: null,
+        completionDismissed: false,
+        state: { in: ['MERGED', 'CLOSED'] },
+        OR: [{ terminalObservedAt: null }, { terminalObservedAt: { lte: acceptedAt } }],
+        workspace: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+      },
+      data: { completionDismissed: true, revision: { increment: 1 } },
     });
+    return result.count > 0;
   }
   /** Detached associations also retain results until the workspace cascade. */
   listForDeletion(tx: Prisma.TransactionClient, workspaceId: string) {

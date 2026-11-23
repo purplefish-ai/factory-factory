@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import Database from 'better-sqlite3';
+import { afterAll, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -78,4 +79,39 @@ it('reads only the provider default of a PR-dedicated session workspace', async 
   await expect(
     prDedicatedSessionAccessor.findWorkspace({ workspaceId: 'w', prId: 'missing' })
   ).resolves.toBeNull();
+});
+
+async function expectSingleNarrowRead<T>(read: () => Promise<T>): Promise<T> {
+  const prepare = vi.spyOn(Database.prototype, 'prepare');
+  try {
+    const result = await read();
+    expect(prepare.mock.calls).toEqual([
+      [expect.not.stringMatching(/providerMetadata|creationMetadata|initOutput|\*/i)],
+    ]);
+    return result;
+  } finally {
+    prepare.mockRestore();
+  }
+}
+
+it('resolves a follow-up workspace ID in one query without reading session metadata', async () => {
+  await expect(
+    expectSingleNarrowRead(() => agentSessionAccessor.findWorkspaceIdForSession('s'))
+  ).resolves.toBe('w');
+  await expect(agentSessionAccessor.findWorkspaceIdForSession('missing')).resolves.toBeNull();
+});
+
+it('reads current dispatch policy in one query without reading session metadata', async () => {
+  const read = () => expectSingleNarrowRead(() => agentSessionAccessor.findDispatchWorkspace('s'));
+  await expect(read()).resolves.toEqual({
+    status: 'READY',
+    worktreePath: '/tmp/w/w',
+    initErrorMessage: null,
+  });
+  onTestFinished(async () => {
+    await db.prisma.workspace.update({ where: { id: 'w' }, data: { status: 'READY' } });
+  });
+  await db.prisma.workspace.update({ where: { id: 'w' }, data: { status: 'ARCHIVING' } });
+  await expect(read()).resolves.toMatchObject({ status: 'ARCHIVING' });
+  await expect(agentSessionAccessor.findDispatchWorkspace('missing')).resolves.toBeNull();
 });

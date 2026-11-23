@@ -94,7 +94,11 @@ function setup(provider: ChatProvider) {
     workflow: 'followup',
     providerSessionId: 'native-session',
     providerMetadata: null,
-    workspace: { status: 'READY', worktreePath: '/tmp/launch-dispatch' },
+    workspace: {
+      status: 'READY' as const,
+      worktreePath: '/tmp/launch-dispatch',
+      initErrorMessage: null,
+    },
   };
   const repository = {
     getSessionById: async () => session,
@@ -150,7 +154,7 @@ function setup(provider: ChatProvider) {
       isNotificationMessage: () => false,
     },
   });
-  vi.spyOn(sessionDataService, 'findAgentSessionById').mockResolvedValue(unsafeCoerce(session));
+  vi.spyOn(sessionDataService, 'findDispatchWorkspace').mockResolvedValue(session.workspace);
   return { dispatcher, prompted, nativeSet };
 }
 
