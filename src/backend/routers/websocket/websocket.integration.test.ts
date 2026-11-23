@@ -253,7 +253,7 @@ function createChatAppContext(worktreeBaseDir: string) {
         captureReplay: vi.fn(),
         completeLoad: vi.fn(),
       },
-      sessionDomainService: { clearSession: vi.fn() },
+      sessionDomainService: { releaseViewerless: vi.fn() },
       sessionLifecycleService: {},
       sessionBackgroundDeliveryService: {},
       sessionDispatchService: {},

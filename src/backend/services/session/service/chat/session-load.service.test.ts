@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { RetainedStoreClaim } from '@/backend/services/session/service/store/session-store-retention';
 import type { ChatMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
@@ -20,6 +24,7 @@ function setup() {
   let runtime = stopped;
   let exists = true;
   let rejectEnqueue = false;
+  let claim: RetainedStoreClaim | undefined;
   const deps: SessionLoadDependencies = {
     findSession: async () =>
       exists
@@ -41,6 +46,11 @@ function setup() {
     },
     getRuntimeSnapshot: () => runtime,
     domain: {
+      claimRetainedStore: () => {
+        const claimed = claim;
+        claim = undefined;
+        return claimed;
+      },
       finishLoad: () => {
         calls.push('runtime');
       },
@@ -114,8 +124,78 @@ function setup() {
     rejectEnqueue: () => {
       rejectEnqueue = true;
     },
+    retain: (historyFile: RetainedStoreClaim['historyFile']) => {
+      claim = {
+        historyFile,
+        discard: () => {
+          calls.push('discard');
+        },
+      };
+    },
   };
 }
+
+const alive: SessionRuntimeState = { ...stopped, processState: 'alive' };
+const directories: string[] = [];
+afterEach(async () => {
+  for (const directory of directories.splice(0)) {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+async function historyFile() {
+  const directory = await mkdtemp(join(tmpdir(), 'ff-load-history-'));
+  directories.push(directory);
+  const filePath = join(directory, 'history.jsonl');
+  await writeFile(filePath, '{}\n');
+  const stats = await stat(filePath);
+  return { filePath, size: stats.size, mtimeMs: stats.mtimeMs, ino: stats.ino };
+}
+
+describe('loading a store retained after its last viewer left', () => {
+  it('keeps it when its history file is unchanged', async () => {
+    const test = setup();
+    test.retain(await historyFile());
+    await test.service.prepareLoad({ sessionId: 's1' });
+    expect(test.calls).toEqual(['history', 'lifecycle']);
+  });
+
+  it.each([
+    ['changed', { size: 999 }],
+    ['vanished', { filePath: '/nonexistent/history.jsonl' }],
+  ])('discards it before hydrating when its history file %s', async (_case, change) => {
+    const test = setup();
+    test.retain({ ...(await historyFile()), ...change });
+    await test.service.prepareLoad({ sessionId: 's1' });
+    expect(test.calls).toEqual(['discard', 'history', 'lifecycle']);
+  });
+
+  it('discards it when hydration could not identify the file it read', async () => {
+    const test = setup();
+    test.retain(undefined);
+    await test.service.prepareLoad({ sessionId: 's1' });
+    expect(test.calls).toEqual(['discard', 'history', 'lifecycle']);
+  });
+
+  it('leaves it alone while its runtime is alive', async () => {
+    const test = setup();
+    test.setRuntime(alive);
+    test.retain({ ...(await historyFile()), size: 999 });
+    await test.service.prepareLoad({ sessionId: 's1' });
+    expect(test.calls).toEqual(['history', 'lifecycle']);
+  });
+
+  it('holds a concurrent load until the check has settled', async () => {
+    const test = setup();
+    test.retain({ ...(await historyFile()), size: 999 });
+    await Promise.all([
+      test.service.prepareLoad({ sessionId: 's1', loadRequestId: 'claims' }),
+      test.service.prepareLoad({ sessionId: 's1', loadRequestId: 'joins' }),
+    ]);
+    expect(test.calls[0]).toBe('discard');
+    expect(test.calls.filter((call) => call === 'history')).toHaveLength(2);
+  });
+});
 
 describe('SessionLoadService', () => {
   it('browses older history without configuration, runtime publication, or initial dispatch', async () => {

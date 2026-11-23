@@ -80,7 +80,7 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
       },
       sessionEventBus: eventBus,
       sessionDomainService: {
-        clearSession: vi.fn(),
+        releaseViewerless: vi.fn(),
         emitDelta: vi.fn((sessionId: string, data: SessionDeltaEvent) =>
           eventBus.publishToSession(sessionId, { type: 'session_delta', data })
         ),
@@ -375,9 +375,10 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
-    expect(sessionDomainService.clearSession).toHaveBeenCalledExactlyOnceWith('session-1', {
-      preserveRejections: true,
-    });
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledExactlyOnceWith(
+      'session-1',
+      expect.any(Function)
+    );
   });
 
   it.each([false, true])(
@@ -683,9 +684,10 @@ describe('createChatUpgradeHandler', () => {
 
     ws.emit('close');
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
-    });
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Function)
+    );
   });
 
   it('does not clear in-memory state when the disconnected session is still running', () => {
@@ -716,7 +718,7 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
     ws.emit('close');
 
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
   });
 
   it('waits for in-flight message handling before clearing disconnected session state', async () => {
@@ -756,27 +758,28 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
     const sessionCleared = deferred();
-    vi.mocked(sessionDomainService.clearSession).mockImplementationOnce(() =>
+    vi.mocked(sessionDomainService.releaseViewerless).mockImplementationOnce(() =>
       sessionCleared.resolve()
     );
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
     await loadStarted.promise;
 
     ws.emit('close');
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
 
     load.resolve();
     await sessionCleared.promise;
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
-    });
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Function)
+    );
   });
 
   it('reports a failure in disconnected-session cleanup at the message boundary', async () => {
     const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager, logger } =
       createTestContext(tempRootDir);
     const cleanupError = new Error('session cleanup failed');
-    vi.mocked(sessionDomainService.clearSession).mockImplementation(() => {
+    vi.mocked(sessionDomainService.releaseViewerless).mockImplementation(() => {
       throw cleanupError;
     });
     const handler = createChatUpgradeHandler(appContext);
@@ -818,7 +821,7 @@ describe('createChatUpgradeHandler', () => {
     await loadStarted.promise;
 
     ws.emit('close');
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
 
     load.resolve();
     await failureLogged.promise;

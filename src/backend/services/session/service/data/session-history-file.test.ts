@@ -35,19 +35,17 @@ describe('loadHistoryFile', () => {
     const filePath = historyFile();
     const read = vi.fn();
     const reuse = vi.fn(() => 'cached');
+    const stats = statSync(filePath);
+    const file = { filePath, size: stats.size, mtimeMs: stats.mtimeMs, ino: stats.ino };
+    // The store records the identity it was hydrated from, cached or read.
     await expect(loadHistoryFile({ filePath, reuse, read })).resolves.toEqual({
       status: 'reused',
       value: 'cached',
       filePath,
+      file,
     });
     expect(read).not.toHaveBeenCalled();
-    const stats = statSync(filePath);
-    expect(reuse).toHaveBeenCalledWith({
-      filePath,
-      size: stats.size,
-      mtimeMs: stats.mtimeMs,
-      ino: stats.ino,
-    });
+    expect(reuse).toHaveBeenCalledWith(file);
   });
 
   it('reports the identity only when the file was unchanged across the read', async () => {

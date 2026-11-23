@@ -19,7 +19,17 @@ export function createLoadSessionTestHandler(deps: {
     hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
     hydrateLifecycleEvents: (sessionId) => sessionLifecycleEventService.hydrate(sessionId),
     getRuntimeSnapshot: (sessionId) => sessionLifecycleService.getRuntimeSnapshot(sessionId),
-    domain: sessionDomainService,
+    // Callers mock the store module; none of them keeps a store after its last viewer.
+    domain: {
+      claimRetainedStore: () => undefined,
+      getTranscriptSnapshot: (id) => sessionDomainService.getTranscriptSnapshot(id),
+      replaceTranscript: (id, transcript) => sessionDomainService.replaceTranscript(id, transcript),
+      consumeInitialMessage: (id) => sessionDomainService.consumeInitialMessage(id),
+      enqueue: (id, message) => sessionDomainService.enqueue(id, message),
+      emitDelta: (id, event) => sessionDomainService.emitDelta(id, event),
+      finishLoad: (id) => sessionDomainService.finishLoad(id),
+      prepareLoad: (id, runtime) => sessionDomainService.prepareLoad(id, runtime),
+    },
     config: sessionConfigService,
     getCachedCommands: (provider) => slashCommandCacheService.getCachedCommands(provider),
     tryDispatchNextMessage: deps.tryDispatchNextMessage,

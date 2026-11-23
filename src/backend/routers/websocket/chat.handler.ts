@@ -180,15 +180,16 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       let inFlightMessageCount = 0;
       let disconnected = false;
 
-      const clearSessionIfDisconnectedAndInactive = (): void => {
+      const releaseSessionIfDisconnectedAndInactive = (): void => {
         if (!disconnected || inFlightMessageCount > 0 || !dbSessionId) {
           return;
         }
-        if (
+        const isIdle = () =>
           !acpRuntimeManager.isSessionRunning(dbSessionId) &&
-          chatConnectionRegistry.countViewers(dbSessionId) === 0
-        ) {
-          sessionDomainService.clearSession(dbSessionId, { preserveRejections: true });
+          chatConnectionRegistry.countViewers(dbSessionId) === 0;
+        if (isIdle()) {
+          // Kept for a grace period, so switching back replays it without reading history.
+          sessionDomainService.releaseViewerless(dbSessionId, isIdle);
         }
       };
 
@@ -241,7 +242,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           sendChatError(ws, dbSessionId, 'Invalid message format');
         } finally {
           inFlightMessageCount = Math.max(0, inFlightMessageCount - 1);
-          clearSessionIfDisconnectedAndInactive();
+          releaseSessionIfDisconnectedAndInactive();
         }
       };
       ws.on('message', (data) => {
@@ -269,7 +270,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             }
           }
           disconnected = true;
-          clearSessionIfDisconnectedAndInactive();
+          releaseSessionIfDisconnectedAndInactive();
         }
       });
 

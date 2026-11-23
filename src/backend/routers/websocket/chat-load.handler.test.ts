@@ -1,7 +1,10 @@
+import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
@@ -30,9 +33,13 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const applications: AppContext[] = [];
+const domains: SessionDomainService[] = [];
 afterEach(() => {
   for (const app of applications.splice(0)) {
     disposeChatTransportForApplication(app);
+  }
+  for (const domain of domains.splice(0)) {
+    domain.clearAllSessions();
   }
   vi.restoreAllMocks();
 });
@@ -59,6 +66,7 @@ function setup(
   const sessionFixture = (sessionId: string) => sessions[sessionId] ?? DEFAULT_SESSION;
   const ports = createChatRouterServices(sessionCommandFactories);
   const domain = new SessionDomainService();
+  domains.push(domain);
   const hydrate = vi.fn(async (): Promise<void> => undefined);
   const capabilities = vi.fn(async () => EMPTY_CHAT_BAR_CAPABILITIES);
   const findSession = vi.fn(async (sessionId: string) => ({
@@ -324,6 +332,100 @@ describe('load-session through the actual chat transport', () => {
     ).toEqual(['first', 'second']);
     expect(test.domain.getQueueLength('s1')).toBe(1);
     expect(test.ports.dispatch.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Rows of a replay batch as the client numbers them. */
+function replayRows(ws: MockWebSocket) {
+  const batch = frames(ws).find((frame) => frame.type === 'session_replay_batch');
+  return (batch?.replayEvents ?? []).flatMap(
+    (event: { type: string; id?: string; userMessage?: { text: string; order?: number } }) =>
+      event.type === 'message_state_changed' && event.userMessage
+        ? [{ id: event.id, order: event.userMessage.order, text: event.userMessage.text }]
+        : []
+  );
+}
+
+describe('switching back to an idle session within the grace period', () => {
+  let directory: string;
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'ff-retained-history-'));
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  /** Hydrates like the provider history hydrator: each read projects fresh row ids. */
+  async function withHistoryFile(lines: string[]) {
+    const test = setup();
+    const file = join(directory, 'history.jsonl');
+    await writeFile(file, `${lines.join('\n')}\n`);
+    let reads = 0;
+    test.hydrate.mockImplementation(async () => {
+      if (test.domain.isHistoryHydrated('s1')) {
+        return;
+      }
+      reads += 1;
+      const identity = await stat(file);
+      const text = await readFile(file, 'utf8');
+      const rows = text
+        .split('\n')
+        .filter(Boolean)
+        .map((line, order) => ({
+          id: `read-${reads}-${order}`,
+          source: 'user' as const,
+          text: line,
+          timestamp: '2026-11-23T00:00:00.000Z',
+          order,
+        }));
+      test.domain.replaceTranscript('s1', rows, {
+        historySource: 'jsonl',
+        historyFile: {
+          filePath: file,
+          size: identity.size,
+          mtimeMs: identity.mtimeMs,
+          ino: identity.ino,
+        },
+      });
+    });
+    const released = vi.spyOn(test.domain, 'releaseViewerless');
+    /** Close the socket and wait until its finished load lets the session go. */
+    const leave = async (ws: MockWebSocket) => {
+      disconnect(ws);
+      await vi.waitFor(() => expect(released).toHaveBeenCalledOnce());
+    };
+    return { test, file, leave, reads: () => reads };
+  }
+
+  it('replays the retained store without reading history, keeping row ids and orders', async () => {
+    const { test, leave, reads } = await withHistoryFile(['first', 'second']);
+    const phone = test.connect('phone');
+    await loadSession(test, phone, 'first');
+    const before = replayRows(phone);
+    expect(before.map((row: { text: string }) => row.text)).toEqual(['first', 'second']);
+
+    await leave(phone);
+    const resumed = test.connect('phone');
+    await loadSession(test, resumed, 'second');
+    expect(reads()).toBe(1);
+    expect(replayRows(resumed)).toEqual(before);
+  });
+
+  it('reads history again when its file changed while the store was retained', async () => {
+    const { test, file, leave, reads } = await withHistoryFile(['first', 'second']);
+    const phone = test.connect('phone');
+    await loadSession(test, phone, 'first');
+
+    await leave(phone);
+    await appendFile(file, 'written elsewhere\n');
+    const resumed = test.connect('phone');
+    await loadSession(test, resumed, 'second');
+    expect(reads()).toBe(2);
+    expect(replayRows(resumed).map((row: { text: string }) => row.text)).toEqual([
+      'first',
+      'second',
+      'written elsewhere',
+    ]);
   });
 });
 
