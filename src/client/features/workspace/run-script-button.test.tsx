@@ -32,8 +32,9 @@ it('rereads the saved configuration when the setup panel opens, since no stream 
                   port: null,
                   proxyUrl: null,
                   startedAt: null,
-                  hasRunScript: false,
-                  runScriptCommand: null,
+                  // Another device saves a run command after the first read.
+                  hasRunScript: paths.length > 1,
+                  runScriptCommand: paths.length > 1 ? 'pnpm start' : null,
                   runScriptPostRunCommand: null,
                   runScriptCleanupCommand: null,
                 },
@@ -69,6 +70,9 @@ it('rereads the saved configuration when the setup panel opens, since no stream 
     await act(async () => {
       await vi.waitFor(() =>
         expect(paths).toEqual(['workspace.getRunScriptStatus', 'workspace.getRunScriptStatus'])
+      );
+      await vi.waitFor(() =>
+        expect(document.querySelector<HTMLInputElement>('#run-command')?.value).toBe('pnpm start')
       );
     });
   } finally {

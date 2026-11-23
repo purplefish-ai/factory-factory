@@ -42,20 +42,27 @@ export function useRunScriptStatus(workspaceId: string) {
 
   const { refetch } = query;
   const queriedRef = useLatestRef(query.data?.status);
+  const hasData = query.data !== undefined;
   const lastStreamed = useRef<RunScriptStatus | undefined>(undefined);
   useEffect(() => {
     if (streamed === undefined) {
+      // Each connection's first value is checked against HTTP again.
+      lastStreamed.current = undefined;
+      return;
+    }
+    if (!hasData) {
+      // Compare once the first response lands: it may predate the stream.
       return;
     }
     const previous = lastStreamed.current;
     lastStreamed.current = streamed;
-    // A first stream value only matters if HTTP disagrees; later ones are transitions.
     const changed =
       previous === undefined ? streamed !== queriedRef.current : previous !== streamed;
     if (changed) {
+      // The button, badge and open-app action share this query; one request serves all.
       runInBackground(refetch({ cancelRefetch: false }));
     }
-  }, [streamed, refetch]);
+  }, [streamed, hasData, refetch]);
 
   return query;
 }

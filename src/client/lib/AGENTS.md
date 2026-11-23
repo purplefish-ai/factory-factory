@@ -45,8 +45,9 @@ readers in `src/client/hooks/` that wrap its options:
 - Live stream reads: `getLiveWorkspaceSnapshot` and
   `subscribeLiveWorkspaceSnapshots`, read through `useLiveWorkspaceSnapshot`
   (`src/client/hooks/use-live-workspace-snapshot.ts`). Polls for state the
-  stream also carries (run-script status, the session list) use them to stop
-  polling while the stream is live and to refetch when it reports a change.
+  stream also carries use them to poll less while the stream is live and to
+  refetch when it reports a change: the run-script status stops polling while
+  the script is idle, and the session list drops to the slow tier.
 
 Other tRPC invalidation, cancellation and cache reads may stay as they are,
 because they reuse the options already installed. Query options carry their key

@@ -60,23 +60,27 @@ export function useWorkspaceSessions(workspaceId: string) {
 
   const { refetch } = query;
   const queriedRef = useLatestRef(query.data);
+  const hasData = query.data !== undefined;
   const lastStreamed = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (streamed === undefined) {
+      // Each connection's first value is checked against HTTP again.
+      lastStreamed.current = undefined;
+      return;
+    }
+    const queried = queriedRef.current;
+    if (!(hasData && queried)) {
+      // Compare once the first response lands: it may predate the stream.
       return;
     }
     const previous = lastStreamed.current;
     lastStreamed.current = streamed;
-    // A first stream value only matters if HTTP disagrees; later ones are changes.
-    const queried = queriedRef.current;
     const changed =
-      previous === undefined
-        ? queried !== undefined && sessionListSignature(queried) !== streamed
-        : previous !== streamed;
+      previous === undefined ? sessionListSignature(queried) !== streamed : previous !== streamed;
     if (changed) {
       runInBackground(refetch());
     }
-  }, [streamed, refetch]);
+  }, [streamed, hasData, refetch]);
 
   return query;
 }

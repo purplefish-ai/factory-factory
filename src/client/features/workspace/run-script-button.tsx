@@ -58,7 +58,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   // before showing them: another device may have changed them.
   const openSetupPanel = () => {
     setSetupPanelOpen(true);
-    runInBackground(refetch());
+    runInBackground(refetch({ throwOnError: true }));
   };
 
   const panelProps = {

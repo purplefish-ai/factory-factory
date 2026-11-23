@@ -17,6 +17,7 @@ type Summary = WorkspaceSnapshotEntry['sessionSummaries'][number];
 
 let serverSessions: Array<{ id: string; name: string }>;
 let requests: number;
+let latencyMs: number;
 let rendered: string[] | undefined;
 let queryClient: QueryClient;
 let root: Root;
@@ -52,19 +53,25 @@ async function mount() {
       () => () =>
         observable((observer) => {
           requests += 1;
-          observer.next({
-            result: {
-              data: serverSessions.map((session) => ({
-                ...session,
-                workspaceId: 'ws-1',
-                workflow: 'default',
-                model: null,
-                status: 'IDLE',
-                isWorking: false,
-              })),
-            },
-          });
-          observer.complete();
+          // The response reflects the server when the request was made.
+          const data = serverSessions.map((session) => ({
+            ...session,
+            workspaceId: 'ws-1',
+            workflow: 'default',
+            model: null,
+            status: 'IDLE',
+            isWorking: false,
+          }));
+          const respond = () => {
+            observer.next({ result: { data } });
+            observer.complete();
+          };
+          if (latencyMs > 0) {
+            const timer = setTimeout(respond, latencyMs);
+            return () => clearTimeout(timer);
+          }
+          respond();
+          return undefined;
         }),
     ],
   });
@@ -116,6 +123,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   serverSessions = [{ id: 's-1', name: 'Chat 1' }];
   requests = 0;
+  latencyMs = 0;
   rendered = undefined;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
@@ -175,6 +183,33 @@ describe('useWorkspaceSessions polling', () => {
     await stream(connection, [summary('s-1', 'Chat 1')]);
     await elapse(0);
     expect(requests).toBe(1);
+  });
+
+  it('refetches once a stream connects with sessions HTTP has not seen, then polls slowly', async () => {
+    await mount();
+    await elapse(25_000);
+    expect(requests).toBe(3);
+
+    serverSessions = [...serverSessions, { id: 's-2', name: 'Chat 2' }];
+    await connect();
+    await elapse(0);
+    expect(requests).toBe(4);
+    expect(rendered).toEqual(['Chat 1', 'Chat 2']);
+
+    await elapse(29_000);
+    expect(requests).toBe(4);
+    await elapse(1000);
+    expect(requests).toBe(5);
+  });
+
+  it('refetches when a response that was in flight as the stream connected is stale', async () => {
+    latencyMs = 1000;
+    await mount();
+    serverSessions = [...serverSessions, { id: 's-2', name: 'Chat 2' }];
+    await connect();
+    await elapse(2500);
+    expect(requests).toBe(2);
+    expect(rendered).toEqual(['Chat 1', 'Chat 2']);
   });
 
   it('falls back to the 10 second poll while the stream is disconnected', async () => {

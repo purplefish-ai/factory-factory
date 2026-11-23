@@ -15,6 +15,7 @@ import { useRunScriptStatus } from './use-run-script-status';
 
 let serverStatus: RunScriptStatus;
 let requests: number;
+let latencyMs: number;
 let queryClient: QueryClient;
 let root: Root;
 
@@ -29,22 +30,28 @@ async function mount() {
       () => () =>
         observable((observer) => {
           requests += 1;
-          observer.next({
-            result: {
-              data: {
-                status: serverStatus,
-                pid: null,
-                port: serverStatus === 'RUNNING' ? 4100 : null,
-                proxyUrl: null,
-                startedAt: null,
-                hasRunScript: true,
-                runScriptCommand: 'pnpm dev',
-                runScriptPostRunCommand: null,
-                runScriptCleanupCommand: null,
-              },
-            },
-          });
-          observer.complete();
+          // The response reflects the server when the request was made.
+          const data = {
+            status: serverStatus,
+            pid: null,
+            port: serverStatus === 'RUNNING' ? 4100 : null,
+            proxyUrl: null,
+            startedAt: null,
+            hasRunScript: true,
+            runScriptCommand: 'pnpm dev',
+            runScriptPostRunCommand: null,
+            runScriptCleanupCommand: null,
+          };
+          const respond = () => {
+            observer.next({ result: { data } });
+            observer.complete();
+          };
+          if (latencyMs > 0) {
+            const timer = setTimeout(respond, latencyMs);
+            return () => clearTimeout(timer);
+          }
+          respond();
+          return undefined;
         }),
     ],
   });
@@ -97,6 +104,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   serverStatus = 'IDLE';
   requests = 0;
+  latencyMs = 0;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 
@@ -168,6 +176,15 @@ describe('useRunScriptStatus polling', () => {
     await connect();
     await elapse(60_000);
     expect(requests).toBe(3);
+  });
+
+  it('refetches when a response that was in flight as the stream connected is stale', async () => {
+    latencyMs = 1000;
+    await mount();
+    serverStatus = 'COMPLETED';
+    await connect('COMPLETED');
+    await elapse(2500);
+    expect(requests).toBe(2);
   });
 
   it('refetches on reconnect when the baseline differs from what HTTP last showed', async () => {
