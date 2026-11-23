@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import { userSettingsService } from '@/backend/services/settings';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -112,13 +113,12 @@ import {
   mockLifecycleUserSettings,
   nextPromptClientLookup,
 } from './session-lifecycle.test-helpers';
-
 const getAcpProcessorState = () => acpEventProcessor;
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLifecycleUserSettings();
+    mockLifecycleUserSettings(userSettingsService);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();

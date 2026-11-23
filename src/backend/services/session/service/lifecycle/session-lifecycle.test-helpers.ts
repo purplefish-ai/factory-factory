@@ -13,7 +13,7 @@ import type { EventSessionAuthority } from '@/backend/services/session/service/e
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import type { SessionPermissionService } from '@/backend/services/session/service/events/session.permission.service';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
-import { userSettingsService } from '@/backend/services/settings';
+import type { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
@@ -35,11 +35,13 @@ import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import { SessionRetryService } from './session.retry.service';
 
-export function mockLifecycleUserSettings(): void {
-  vi.spyOn(userSettingsService, 'get').mockResolvedValue(
+export function mockLifecycleUserSettings(
+  settings: Pick<typeof userSettingsService, 'get' | 'getTurnLimitMinutes'>
+): void {
+  vi.spyOn(settings, 'get').mockResolvedValue(
     unsafeCoerce({ defaultWorkspacePermissions: 'STRICT', automationPermissions: 'RELAXED' })
   );
-  vi.spyOn(userSettingsService, 'getTurnLimitMinutes').mockResolvedValue(null);
+  vi.spyOn(settings, 'getTurnLimitMinutes').mockResolvedValue(null);
 }
 
 export type Deferred<T> = {
