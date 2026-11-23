@@ -306,12 +306,12 @@ export class ChatConnectionRegistry {
     written: () => void
   ): boolean {
     const ownLoad = this.expectedReplays.get(ws) === loadRequestId;
-    const bytes = Buffer.byteLength(message);
-    // A peer discards another viewer's correlated replay. Do not pressure it
-    // with a large authoritative frame that it cannot use.
-    if (loadRequestId && !ownLoad && bytes > MAX_WEBSOCKET_STATEFUL_BACKLOG_BYTES) {
+    // A peer discards another viewer's correlated replay (or a retry's, after
+    // its own was delivered), so only the requester receives it.
+    if (loadRequestId && !ownLoad) {
       return false;
     }
+    const bytes = Buffer.byteLength(message);
     if (loadRequestId && this.pendingReplays.get(ws)?.loadRequestId === loadRequestId) {
       return false;
     }

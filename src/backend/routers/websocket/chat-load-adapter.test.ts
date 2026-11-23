@@ -314,12 +314,8 @@ describe('executeSessionLoad', () => {
         executeSessionLoad({ sessionId: 's1', loadRequestId: 'load-disconnect' }, test.deps)
       ).resolves.toEqual({ replies: [] });
       expect(requesterFrames).toEqual([]);
+      // The correlated replay belongs to the requester; the viewer would drop it.
       expect(viewerFrames.map((frame) => JSON.parse(frame))).toEqual([
-        {
-          type: 'session_replay_batch',
-          loadRequestId: 'load-disconnect',
-          replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: runtime }],
-        },
         {
           type: 'session_delta',
           data: { type: 'session_runtime_updated', sessionRuntime: runtime },
