@@ -25,7 +25,10 @@ export type ChatImageMediaType = z.infer<typeof ChatImageMediaTypeSchema>;
 /** Lowercase hex SHA-256: 64 characters, nothing that could form a path. */
 export const CHAT_IMAGE_ID_PATTERN = /^[0-9a-f]{64}$/;
 
-const dimension = z.number().int().positive().max(1_000_000);
+/** Larger dimensions are left out of a reference rather than sent. */
+export const MAX_CHAT_IMAGE_DIMENSION = 1_000_000;
+
+const dimension = z.number().int().positive().max(MAX_CHAT_IMAGE_DIMENSION);
 
 export const ChatImageRefSchema = z.object({
   id: z.string().regex(CHAT_IMAGE_ID_PATTERN),

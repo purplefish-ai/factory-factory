@@ -48,6 +48,20 @@ function asMessage(payload: object): WebSocketMessage {
   return payload as WebSocketMessage;
 }
 
+function queuedMessage() {
+  return {
+    id: 'q1',
+    text: 'look',
+    timestamp: '2026-11-23T00:00:00.000Z',
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  };
+}
+
 function createTransportDeps(
   sessionLogger: { log: ReturnType<typeof vi.fn> } = { log: vi.fn() },
   chatImageStore = new ChatImageStore()
@@ -530,6 +544,30 @@ describe('attachChatTransport', () => {
     expect(attachment.data).toBe(data);
     ws.send.mock.calls[0]?.[1]?.();
     expect(fileLogger.log).toHaveBeenCalledWith('s1', 'OUT_TO_CLIENT', JSON.parse(sent));
+  });
+
+  it('registers no images for a session nobody views', () => {
+    const store = new ChatImageStore();
+    const put = vi.spyOn(store, 'put');
+    attachChatTransport(createTransportDeps(undefined, store), registry);
+    const png = noisePng(8, 8);
+    const attachment = {
+      id: 'a1',
+      name: 'a.png',
+      type: 'image/png',
+      size: png.length,
+      data: png.toString('base64'),
+    };
+
+    sessionEventBus.publishToSession('unviewed', {
+      type: 'session_delta',
+      data: {
+        type: 'queue_updated',
+        queuedMessages: [{ ...queuedMessage(), attachments: [attachment] }],
+      },
+    });
+
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('delivers all-client broadcasts published on the bus', () => {

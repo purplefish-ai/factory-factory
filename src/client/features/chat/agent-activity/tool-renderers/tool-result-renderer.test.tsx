@@ -88,7 +88,7 @@ describe('ToolResultContentRenderer', () => {
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain('Image unavailable');
 
-    // A restarted server registers the image again on the next load.
+    // Retry loads the same URL again, for an image the server can serve again.
     const retry = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Retry'
     );

@@ -34,11 +34,12 @@ function image(id: string, inline: boolean): MessageAttachment {
 }
 
 function Harness(props: {
+  sessionId: string;
   send: (message: unknown) => boolean;
   chatRef: { current: UseChatStateReturn | null };
 }) {
   props.chatRef.current = useChatState({
-    dbSessionId: 'session-A',
+    dbSessionId: props.sessionId,
     send: props.send,
     connected: true,
   });
@@ -56,9 +57,12 @@ async function renderChatState() {
   const root = createRoot(container);
   const chatRef = { current: null as UseChatStateReturn | null };
   const send = vi.fn((_message: unknown) => true);
-  actFlushSync(() => root.render(createElement(Harness, { send, chatRef })));
+  const render = (sessionId: string) =>
+    actFlushSync(() => root.render(createElement(Harness, { sessionId, send, chatRef })));
+  render('session-A');
   await flushEffects();
   return {
+    selectSession: render,
     chat: () => {
       if (!chatRef.current) {
         throw new Error('Chat state is not rendered');
@@ -86,6 +90,9 @@ describe('useChatState image references', () => {
       actFlushSync(() => harness.chat().setInputAttachments([image('sent-1', true)]));
       actFlushSync(() => harness.chat().sendMessage('look'));
       expect(harness.send).toHaveBeenCalledTimes(1);
+      expect(harness.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'queue_message', attachments: [image('sent-1', true)] })
+      );
       expect(attachmentImageSrc(image('sent-1', false))).toBe(`data:image/png;base64,${base64}`);
     } finally {
       harness.cleanup();
@@ -141,6 +148,54 @@ describe('useChatState image references', () => {
       expect(toast.error).toHaveBeenCalledWith("Couldn't send the message", {
         description: 'shot.png is no longer available. Attach it again.',
       });
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  it('sends a referenced image once, however often it is retried while it downloads', async () => {
+    const pending: ((response: Response) => void)[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)))
+    );
+    const harness = await renderChatState();
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        actFlushSync(() =>
+          harness.chat().sendMessage('again', {
+            preserveInput: true,
+            attachments: [image('history-image-3', false)],
+          })
+        );
+      }
+      for (const respond of pending) {
+        respond(new Response(bytes));
+      }
+      await act(flushEffects);
+      expect(harness.send).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  it('drops a restored send when another session was selected while it downloaded', async () => {
+    let respond: (response: Response) => void = () => undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>((resolve) => (respond = resolve)))
+    );
+    const harness = await renderChatState();
+    try {
+      actFlushSync(() =>
+        harness.chat().sendMessage('again', { attachments: [image('history-image-4', false)] })
+      );
+      harness.selectSession('session-B');
+      actFlushSync(() => harness.chat().setInputDraft('draft for B'));
+      respond(new Response(bytes));
+      await act(flushEffects);
+      expect(harness.send).not.toHaveBeenCalled();
+      expect(harness.chat().inputDraft).toBe('draft for B');
     } finally {
       harness.cleanup();
     }

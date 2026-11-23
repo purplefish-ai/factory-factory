@@ -59,6 +59,9 @@ describe('AttachmentPreview', () => {
     const dialog = document.querySelector('[role="dialog"]');
     const full = dialog?.querySelector('img');
     expect(full?.getAttribute('src')).toBe(`/api/chat-images/${ID}`);
+    // The dimensions sent with the reference reserve the image's space.
+    expect(full?.getAttribute('width')).toBe('640');
+    expect(full?.getAttribute('height')).toBe('480');
     flushSync(() => full?.dispatchEvent(new Event('error')));
     expect(dialog?.textContent).toContain('Image unavailable');
   });

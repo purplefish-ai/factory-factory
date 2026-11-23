@@ -263,7 +263,10 @@ it('accepts image references in attachments and tool results, and rejects malfor
   });
   expect(
     parseChatServerMessage(toolFrame({ type: 'ref', media_type: 'image/png', ...ref }))
-  ).toMatchObject({ success: true });
+  ).toMatchObject({
+    success: true,
+    message: toolFrame({ type: 'ref', media_type: 'image/png', ...ref }),
+  });
 
   // The id becomes a URL path segment: nothing but a lowercase SHA-256.
   expect(parseChatServerMessage(attachmentFrame({ ...ref, id: '../../etc' })).success).toBe(false);

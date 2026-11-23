@@ -529,9 +529,10 @@ export function attachChatTransport(
 
   const sessionOutboundListener = (event: SessionOutboundEvent) => {
     // Image bytes go to browsers as references to the chat image endpoint.
-    // Pre-serialized replay frames were externalized before framing.
+    // Pre-serialized replay frames were externalized before framing, and a
+    // session nobody views registers nothing.
     const payload =
-      event.serialized === undefined
+      event.serialized === undefined && registry.countViewers(event.sessionId) > 0
         ? externalizeChatImages(event.payload, chatImageStore)
         : event.payload;
     registry.broadcastToSession(

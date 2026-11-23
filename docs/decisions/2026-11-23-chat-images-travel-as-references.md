@@ -40,9 +40,11 @@ Rejected:
 
 - A reference outlives its store entry after a restart or eviction; the next
   load registers it again, and the image's failure state offers a retry.
-- The endpoint has the same reach as `publicProcedure`. An `<img>` sends no
-  `Origin`, so it also refuses `Sec-Fetch-Site: cross-site` and answers with
-  `Cross-Origin-Resource-Policy: same-origin`; only PNG, JPEG, GIF and WebP,
+- The endpoint applies the same Origin and DNS-rebinding `Host` checks as
+  `publicProcedure`, which can already read every transcript with its images. It
+  is stricter in one way: an `<img>` sends no `Origin`, so it also refuses
+  `Sec-Fetch-Site: cross-site` and answers with
+  `Cross-Origin-Resource-Policy: same-origin`. Only PNG, JPEG, GIF and WebP,
   typed from their bytes, are served, with `nosniff` and a sandbox policy.
 - Sub-agent transcripts (raw ACP updates) and closed-session archives still
   carry inline images; both are read on demand rather than on every resume.

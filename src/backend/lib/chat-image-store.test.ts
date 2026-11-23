@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ChatImageStore } from './chat-image-store';
 
-const image = (data: string) => ({ mediaType: 'image/png' as const, data, size: data.length });
+const image = (data: string) => ({
+  mediaType: 'image/png' as const,
+  data,
+  size: Buffer.from(data, 'base64').length,
+});
 
 describe('ChatImageStore', () => {
   it('returns what was put under its id', () => {

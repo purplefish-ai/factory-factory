@@ -160,10 +160,52 @@ describe('externalizeChatImages', () => {
 
   it('copies only what it changes and never mutates the stored transcript', () => {
     const store = new ChatImageStore();
-    const original = accepted([attachment()]);
+    const text = attachment({ id: 'text', type: 'text/plain', contentType: 'text', data: 'hi' });
+    const settings = {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    };
+    const original: WebSocketMessage = {
+      type: 'session_delta',
+      data: {
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: MessageState.ACCEPTED,
+        userMessage: {
+          text: 'look',
+          timestamp: '2026-11-23T00:00:00.000Z',
+          attachments: [attachment(), text],
+          settings,
+        },
+      },
+    };
     const snapshot = JSON.stringify(original);
-    externalizeChatImages(original, store);
+
+    const sent = externalizeChatImages(original, store);
+
     expect(JSON.stringify(original)).toBe(snapshot);
+    if (sent.type !== 'session_delta' || sent.data.type !== 'message_state_changed') {
+      throw new Error('Expected a message state delta');
+    }
+    expect(sent).not.toBe(original);
+    expect(sent.data.userMessage?.attachments?.[0]).not.toEqual(attachment());
+    // Branches without images are shared, not cloned.
+    expect(sent.data.userMessage?.attachments?.[1]).toBe(text);
+    expect(sent.data.userMessage?.settings).toBe(settings);
+  });
+
+  it('leaves out dimensions too large for the wire schema', () => {
+    const store = new ChatImageStore();
+    const huge = Buffer.from(png);
+    huge.writeUInt32BE(2_000_000, 16);
+    const sent = externalizeChatImages(
+      accepted([attachment({ data: huge.toString('base64') })]),
+      store
+    );
+    const ref = JSON.parse(JSON.stringify(sent)).data.userMessage.attachments[0].ref;
+    expect(ref).toEqual({ id: expect.stringMatching(CHAT_IMAGE_ID_PATTERN), size: png.length });
   });
 
   it('registers the image again after the store evicted it', () => {

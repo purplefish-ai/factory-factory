@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { ChatImageMediaType, ChatImageRef } from '@/shared/chat-image-ref';
+import {
+  type ChatImageMediaType,
+  type ChatImageRef,
+  MAX_CHAT_IMAGE_DIMENSION,
+} from '@/shared/chat-image-ref';
 import { type InspectedChatImage, inspectChatImage } from './chat-image-inspection';
 import type { ChatImageStore } from './chat-image-store';
 
@@ -49,7 +53,9 @@ function reference(
   const { id, mediaType, size, width, height } = image;
   // Every send registers again: the store may have evicted an earlier one.
   store.put(id, { mediaType, data, size });
-  return { ref: { id, size, ...(width && height ? { width, height } : {}) }, mediaType };
+  const reserved =
+    width && height && width <= MAX_CHAT_IMAGE_DIMENSION && height <= MAX_CHAT_IMAGE_DIMENSION;
+  return { ref: { id, size, ...(reserved ? { width, height } : {}) }, mediaType };
 }
 
 /** `{ type: 'image', source: { type: 'base64', ... } }`, as tool results and prompts carry it. */

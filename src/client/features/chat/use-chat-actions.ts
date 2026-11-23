@@ -10,7 +10,7 @@
  * - Removing queued messages
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { materializeAttachments, sentChatImages } from '@/client/lib/chat-images';
 import type { WebSocketSend, WebSocketSendOptions } from '@/hooks/use-websocket-transport';
@@ -202,6 +202,8 @@ function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | unde
  */
 export function useChatActions(options: UseChatActionsOptions): UseChatActionsReturn {
   const { send, dispatch, stateRef, dbSessionIdRef, inputAttachmentsRef, onClearInput } = options;
+  // A send waiting for referenced images to download; it admits no second one.
+  const restoringImagesRef = useRef(false);
 
   // Keep sequential actions (for example selecting a model then immediately sending)
   // on the same settings even before React commits the reducer render.
@@ -282,11 +284,28 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       // A resent or recovered image may be a server reference; the server
       // accepts only inline bytes, which are usually in the HTTP cache.
       if (attachments.some((attachment) => attachment.ref && !attachment.data)) {
-        materializeAttachments(attachments).then(queue, (error: unknown) => {
-          toast.error("Couldn't send the message", {
-            description: error instanceof Error ? error.message : String(error),
+        if (restoringImagesRef.current) {
+          return;
+        }
+        restoringImagesRef.current = true;
+        const sessionId = dbSessionIdRef.current;
+        materializeAttachments(attachments)
+          .then(
+            (restored) => {
+              // Never deliver into, or clear the composer of, a session selected meanwhile.
+              if (dbSessionIdRef.current === sessionId) {
+                queue(restored);
+              }
+            },
+            (error: unknown) => {
+              toast.error("Couldn't send the message", {
+                description: error instanceof Error ? error.message : String(error),
+              });
+            }
+          )
+          .finally(() => {
+            restoringImagesRef.current = false;
           });
-        });
         return;
       }
       queue(attachments);
