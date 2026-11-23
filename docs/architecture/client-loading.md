@@ -64,19 +64,20 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   once at startup and serves one when the client accepts it, preferring Brotli,
   with the original content type and cache headers, `Content-Encoding`, and
   `Vary: Accept-Encoding`. The SPA fallback serves `index.html` the same way. No
-  compression runs at request time.
-- API responses are not compressed. The browser client sends tRPC queries
-  through `httpBatchStreamLink`, which streams `application/jsonl`; its
-  remaining JSON (mutations) is usually small. The workspace MCP server fetches
-  queries as ordinary JSON, and automation proposals can reach tens of
-  kilobytes, but the MCP server runs on the backend's machine, where compression
-  saves nothing. The port-share proxy and health routes are not compressed
-  either. A possible follow-up is compressing the tRPC jsonl stream with a flush
-  per line.
+  static file is compressed at request time.
+- `createResponseCompression`, mounted on `/api/trpc` only, compresses JSON
+  responses at request time (Brotli quality 4 or gzip level 4) for clients that
+  accept it. A complete body under 1 KiB goes out as is. tRPC's jsonl stream
+  (queries from `httpBatchStreamLink`) commits to compression at its first line
+  and is flushed after every line, so each procedure's result still arrives when
+  it resolves. Node's `fetch` in the workspace MCP server accepts gzip and
+  decodes it; `ff proxy` forwards the client's `Accept-Encoding` and the
+  compressed bytes unchanged.
 - Some WebSocket channels negotiate `permessage-deflate` for large frames; the
   `PER_MESSAGE_DEFLATE` and `COMPRESSED_PATHS` comments in
   `src/backend/routers/websocket/websocket-servers.ts` give which, why, and the
   memory each compressing connection holds.
+- The port-share proxy and health routes are not compressed.
 
 Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
 siblings do not match their name patterns. A cold load of the startup closure

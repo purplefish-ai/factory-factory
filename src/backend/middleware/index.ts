@@ -1,5 +1,6 @@
 export { createCorsMiddleware } from './cors.middleware';
 export { createRequestLoggerMiddleware } from './request-logger.middleware';
+export { createResponseCompression } from './response-compression.middleware';
 export { securityMiddleware } from './security.middleware';
 export {
   createPrecompressedStatic,
