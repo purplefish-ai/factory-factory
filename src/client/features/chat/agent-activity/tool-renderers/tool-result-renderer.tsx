@@ -5,6 +5,7 @@ import { SectionLabel } from '@/client/components/section-label';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { ImageItem, TextItem, ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { chatImageUrl } from '@/shared/chat-image-ref';
 import {
   type CodexFileChangePayload,
   isCodexFileChangeToolName,
@@ -62,6 +63,36 @@ function groupResultContent(content: Array<ImageItem | TextItem>): ResultGroup[]
   return groups;
 }
 
+function imageGroupKey({ source }: ImageItem): string {
+  return source.type === 'ref'
+    ? source.id
+    : `${source.media_type}:${source.data.length}:${source.data.slice(0, 64)}:${source.data.slice(-64)}`;
+}
+
+/** Inline bytes as a data URL; a server reference from its cached, immutable URL. */
+function ToolResultImage({ item: { source } }: { item: ImageItem }) {
+  if (source.type === 'ref') {
+    const url = chatImageUrl(source.id);
+    return (
+      <ChatImage
+        src={url}
+        alt="tool result image"
+        source={url}
+        width={source.width}
+        height={source.height}
+        retryable
+      />
+    );
+  }
+  return (
+    <ChatImage
+      src={imageDataUrl(source.media_type, source.data) ?? undefined}
+      alt="tool result image"
+      source={`data:${source.media_type};base64,${source.data}`}
+    />
+  );
+}
+
 export const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
   content,
   isError,
@@ -74,7 +105,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
           {withOccurrenceKeys(groupResultContent(content), (group) =>
             group.type === 'text'
               ? (group.items[0]?.text.slice(0, 64) ?? '')
-              : `${group.item.source.media_type}:${group.item.source.data.length}:${group.item.source.data.slice(0, 64)}:${group.item.source.data.slice(-64)}`
+              : imageGroupKey(group.item)
           ).map(({ item: group, key }) =>
             group.type === 'text' ? (
               <ToolResultContentRenderer
@@ -84,14 +115,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
                 toolName={toolName}
               />
             ) : (
-              <ChatImage
-                key={key}
-                src={
-                  imageDataUrl(group.item.source.media_type, group.item.source.data) ?? undefined
-                }
-                alt="tool result image"
-                source={`data:${group.item.source.media_type};base64,${group.item.source.data}`}
-              />
+              <ToolResultImage key={key} item={group.item} />
             )
           )}
         </div>

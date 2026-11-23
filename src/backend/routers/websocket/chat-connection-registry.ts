@@ -13,6 +13,7 @@
 
 import type { WebSocket } from 'ws';
 import type { Application, ApplicationServices } from '@/backend/app-context';
+import { externalizeChatImages } from '@/backend/lib/chat-image-externalizer';
 import { TopicBroadcaster } from '@/backend/lib/topic-broadcaster';
 import {
   MAX_WEBSOCKET_STATEFUL_FRAME_BYTES,
@@ -508,7 +509,7 @@ export function getChatConnectionRegistryForApplication(
 
 type ChatTransportDeps = Pick<
   ApplicationServices,
-  'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+  'chatImageStore' | 'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
 >;
 
 interface ChatTransportAttachment {
@@ -549,6 +550,7 @@ export function attachChatTransport(
   const existing = chatTransportAttachments.get(registry);
   if (
     existing?.deps.configService === deps.configService &&
+    existing.deps.chatImageStore === deps.chatImageStore &&
     existing.deps.createLogger === deps.createLogger &&
     existing.deps.sessionEventBus === deps.sessionEventBus &&
     existing.deps.sessionFileLogger === deps.sessionFileLogger
@@ -558,7 +560,7 @@ export function attachChatTransport(
   if (existing) {
     detachChatTransport(registry);
   }
-  const { configService, createLogger, sessionEventBus, sessionFileLogger } = deps;
+  const { chatImageStore, configService, createLogger, sessionEventBus, sessionFileLogger } = deps;
   registry.configure({
     logger: createLogger('chat-connection'),
     debugChatWebSocket: configService.getDebugConfig().chatWebSocket,
@@ -566,11 +568,18 @@ export function attachChatTransport(
   });
 
   const sessionOutboundListener = (event: SessionOutboundEvent) => {
+    // Image bytes go to browsers as references to the chat image endpoint.
+    // Pre-serialized replay frames were externalized before framing, and a
+    // session nobody views registers nothing.
+    const payload =
+      event.serialized === undefined && registry.countViewers(event.sessionId) > 0
+        ? externalizeChatImages(event.payload, chatImageStore)
+        : event.payload;
     registry.broadcastToSession(
       event.sessionId,
-      event.payload,
+      payload,
       () => {
-        sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+        sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', payload);
       },
       event.serialized
     );

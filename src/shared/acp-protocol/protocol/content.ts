@@ -1,3 +1,5 @@
+import type { ChatImageMediaType, ChatImageRef } from '@/shared/chat-image-ref';
+
 /**
  * Text content block in a message.
  */
@@ -32,29 +34,39 @@ export interface TextItem {
   text: string;
 }
 
-/**
- * Image item in a tool result content array (base64 encoded).
- */
-export interface ImageItem {
-  type: 'image';
-  source: {
-    type: 'base64';
-    data: string;
-    media_type: string;
-  };
+/** Inline image bytes, as providers produce them and the server stores them. */
+export interface Base64ImageSource {
+  type: 'base64';
+  data: string;
+  media_type: string;
 }
 
 /**
- * Image content block for user messages (base64 encoded).
+ * Server to client only: an image the server sends as a reference. Its bytes
+ * are at `chatImageUrl(id)` (`@/shared/chat-image-ref`).
+ */
+export interface RefImageSource extends ChatImageRef {
+  type: 'ref';
+  media_type: ChatImageMediaType;
+}
+
+export type ImageSource = Base64ImageSource | RefImageSource;
+
+/**
+ * Image item in a tool result content array.
+ */
+export interface ImageItem {
+  type: 'image';
+  source: ImageSource;
+}
+
+/**
+ * Image content block for user messages.
  * Used when users upload images in chat.
  */
 export interface ImageContent {
   type: 'image';
-  source: {
-    type: 'base64';
-    media_type: string;
-    data: string;
-  };
+  source: ImageSource;
 }
 
 /**

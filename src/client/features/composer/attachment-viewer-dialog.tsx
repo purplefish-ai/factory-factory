@@ -1,4 +1,7 @@
 import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
+import { ImageBrokenIcon } from '@phosphor-icons/react/dist/csr/ImageBroken';
+import { useState } from 'react';
+import { attachmentImageSrc } from '@/client/lib/chat-images';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +17,31 @@ interface AttachmentViewerDialogProps {
   attachment: MessageAttachment | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function FullSizeImage({ attachment }: { attachment: MessageAttachment }) {
+  const src = attachmentImageSrc(attachment);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (!src || failedSrc === src) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <ImageBrokenIcon className="h-5 w-5" aria-hidden="true" />
+        Image unavailable
+      </p>
+    );
+  }
+  const { width, height } = attachment.ref ?? {};
+  return (
+    <img
+      src={src}
+      alt={attachment.name}
+      decoding="async"
+      width={width}
+      height={height}
+      className="h-auto max-w-full max-h-[70vh] object-contain rounded-lg"
+      onError={() => setFailedSrc(src)}
+    />
+  );
 }
 
 /**
@@ -53,11 +81,7 @@ export function AttachmentViewerDialog({
             </pre>
           ) : (
             <div className="flex items-center justify-center">
-              <img
-                src={`data:${attachment.type};base64,${attachment.data}`}
-                alt={attachment.name}
-                className="max-w-full max-h-[70vh] object-contain rounded-lg"
-              />
+              <FullSizeImage attachment={attachment} />
             </div>
           )}
         </div>

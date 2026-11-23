@@ -1,3 +1,5 @@
+import { externalizeChatImages } from '@/backend/lib/chat-image-externalizer';
+import type { ChatImageStore } from '@/backend/lib/chat-image-store';
 import type {
   SessionCommandOutcome,
   SessionEventBus,
@@ -10,6 +12,8 @@ interface SessionLoadAdapterDependencies {
   loadService: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
   eventBus: Pick<SessionEventBus, 'publishToSession'>;
   fileLogger: Pick<SessionFileLogger, 'log'>;
+  /** Receives the images the replay sends as references. */
+  images: ChatImageStore;
 }
 
 export async function executeSessionLoad(
@@ -32,7 +36,8 @@ export async function executeSessionLoad(
   try {
     for (const frame of frameSessionReplay({
       type: 'session_replay_batch',
-      replayEvents: replay.replayEvents,
+      // Before framing: an image would otherwise be resent on every load.
+      replayEvents: externalizeChatImages(replay.replayEvents, deps.images),
       ...(loadRequestId ? { loadRequestId } : {}),
     })) {
       deps.eventBus.publishToSession(sessionId, frame.payload, frame.json);

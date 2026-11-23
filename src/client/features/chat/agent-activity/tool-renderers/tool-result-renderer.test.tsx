@@ -66,6 +66,36 @@ describe('ToolResultContentRenderer', () => {
     );
   });
 
+  it('loads a referenced image lazily from its URL, in reserved space, with a failure state', () => {
+    const id = 'e'.repeat(64);
+    const container = renderToolResult({
+      isError: false,
+      content: [
+        {
+          type: 'image',
+          source: { type: 'ref', media_type: 'image/png', id, size: 2048, width: 640, height: 480 },
+        },
+      ],
+    });
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('src')).toBe(`/api/chat-images/${id}`);
+    expect(img?.getAttribute('loading')).toBe('lazy');
+    expect(img?.getAttribute('width')).toBe('640');
+    expect(img?.getAttribute('height')).toBe('480');
+    expect(img?.style.aspectRatio).toBe('640 / 480');
+
+    flushSync(() => img?.dispatchEvent(new Event('error')));
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.textContent).toContain('Image unavailable');
+
+    // Retry loads the same URL again, for an image the server can serve again.
+    const retry = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retry'
+    );
+    flushSync(() => retry?.click());
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(`/api/chat-images/${id}`);
+  });
+
   const fileChangeJson = JSON.stringify({
     type: 'fileChange',
     changes: [{ path: '/repo/src/app.ts', kind: { type: 'update', move_path: null } }],

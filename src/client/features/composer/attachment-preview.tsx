@@ -1,6 +1,8 @@
 import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
+import { ImageBrokenIcon } from '@phosphor-icons/react/dist/csr/ImageBroken';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
+import { attachmentImageSrc } from '@/client/lib/chat-images';
 import { Button } from '@/components/ui/button';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { formatBytes } from '@/lib/formatters';
@@ -16,6 +18,36 @@ interface AttachmentPreviewProps {
   readOnly?: boolean;
   /** If true, attachments are clickable to view in a dialog */
   clickable?: boolean;
+}
+
+/**
+ * An image thumbnail in its fixed box. A server reference loads lazily from its
+ * immutable URL, which the browser caches; an image this tab sent shows from
+ * its own copy.
+ */
+function AttachmentThumbnail({ attachment }: { attachment: MessageAttachment }) {
+  const src = attachmentImageSrc(attachment);
+  // Keyed by source, so a new source loads again without an effect.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (!src || failedSrc === src) {
+    return (
+      <ImageBrokenIcon
+        role="img"
+        aria-label="Image unavailable"
+        className="h-6 w-6 text-muted-foreground"
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={attachment.name}
+      loading="lazy"
+      decoding="async"
+      className="h-full w-full object-cover"
+      onError={() => setFailedSrc(src)}
+    />
+  );
 }
 
 /**
@@ -75,11 +107,7 @@ export function AttachmentPreview({
                     <FileTextIcon className="h-6 w-6 text-muted-foreground" />
                   </div>
                 ) : (
-                  <img
-                    src={`data:${attachment.type};base64,${attachment.data}`}
-                    alt={attachment.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <AttachmentThumbnail attachment={attachment} />
                 )}
               </div>
 

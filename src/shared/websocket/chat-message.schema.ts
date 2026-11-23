@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { CachedMetadataOfferSchema } from '@/shared/acp-protocol/protocol/cached-metadata';
+import { ChatImageRefSchema } from '@/shared/chat-image-ref';
 
 // ============================================================================
 // Attachment Schema
@@ -17,6 +18,15 @@ export const AttachmentSchema = z.object({
   size: z.number(),
   data: z.string(),
   contentType: z.enum(['image', 'text']).optional(),
+});
+
+/**
+ * An attachment as the server sends it: an image may arrive as a reference
+ * with empty `data`. Clients never send references; `AttachmentSchema` strips
+ * one and the empty data is then rejected.
+ */
+export const OutboundAttachmentSchema = AttachmentSchema.extend({
+  ref: ChatImageRefSchema.optional(),
 });
 
 // ============================================================================

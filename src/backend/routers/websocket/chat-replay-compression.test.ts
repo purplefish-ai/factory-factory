@@ -3,6 +3,7 @@ import type { AddressInfo, Socket } from 'node:net';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { ApplicationServices } from '@/backend/app-context';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import { SessionEventBus } from '@/backend/services/session';
 import { closeWebSocket, connectWebSocket } from '@/backend/testing/websocket-test-utils';
 import type { WebSocketMessage } from '@/shared/acp-protocol';
@@ -52,9 +53,14 @@ async function viewChat(offersDeflate: boolean) {
     unsafeCoerce<
       Pick<
         ApplicationServices,
-        'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+        | 'chatImageStore'
+        | 'configService'
+        | 'createLogger'
+        | 'sessionEventBus'
+        | 'sessionFileLogger'
       >
     >({
+      chatImageStore: new ChatImageStore(),
       configService: {
         getDebugConfig: () => ({ chatWebSocket: false }),
         getWebSocketConfig: () => ({ maxFrameBytes: 32 * 1024 * 1024 }),

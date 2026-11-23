@@ -243,6 +243,70 @@ describe('ChatServerMessageSchema', () => {
   });
 });
 
+it('accepts image references in attachments and tool results, and rejects malformed ones', () => {
+  const id = 'a'.repeat(64);
+  const attachmentFrame = (ref: unknown) => ({
+    type: 'session_delta',
+    data: {
+      type: 'message_state_changed',
+      id: 'u1',
+      newState: MessageState.ACCEPTED,
+      userMessage: {
+        text: 'look',
+        timestamp: '2026-11-23T00:00:00.000Z',
+        attachments: [
+          {
+            id: 'a1',
+            name: 'a.png',
+            type: 'image/png',
+            size: 3,
+            data: '',
+            contentType: 'image',
+            ref,
+          },
+        ],
+      },
+    },
+  });
+  const toolFrame = (source: unknown) => ({
+    type: 'session_delta',
+    data: {
+      type: 'agent_message',
+      order: 1,
+      data: {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'tool_result', tool_use_id: 't1', content: [{ type: 'image', source }] },
+          ],
+        },
+      },
+    },
+  });
+  const ref = { id, size: 3, width: 2, height: 1 };
+
+  expect(parseChatServerMessage(attachmentFrame(ref))).toMatchObject({
+    success: true,
+    message: attachmentFrame(ref),
+  });
+  expect(
+    parseChatServerMessage(toolFrame({ type: 'ref', media_type: 'image/png', ...ref }))
+  ).toMatchObject({
+    success: true,
+    message: toolFrame({ type: 'ref', media_type: 'image/png', ...ref }),
+  });
+
+  // The id becomes a URL path segment: nothing but a lowercase SHA-256.
+  expect(parseChatServerMessage(attachmentFrame({ ...ref, id: '../../etc' })).success).toBe(false);
+  expect(parseChatServerMessage(attachmentFrame({ ...ref, id: id.toUpperCase() })).success).toBe(
+    false
+  );
+  expect(
+    parseChatServerMessage(toolFrame({ type: 'ref', media_type: 'image/svg+xml', ...ref })).success
+  ).toBe(false);
+});
+
 it('rejects empty steering acknowledgment IDs', () => {
   expect(parseChatServerMessage({ type: 'steer_settled', requestId: '' }).success).toBe(false);
   expect(parseChatServerMessage({ type: 'steer_settled', requestId: 'request' })).toMatchObject({

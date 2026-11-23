@@ -1,13 +1,18 @@
 import { z } from 'zod';
+import { ChatImageMediaTypeSchema, ChatImageRefSchema } from '@/shared/chat-image-ref';
 
 const TextSchema = z.object({ type: z.literal('text'), text: z.string() });
 const ImageSchema = z.object({
   type: z.literal('image'),
-  source: z.object({
-    type: z.literal('base64'),
-    data: z.string(),
-    media_type: z.string(),
-  }),
+  source: z.discriminatedUnion('type', [
+    z.object({
+      type: z.literal('base64'),
+      data: z.string(),
+      media_type: z.string(),
+    }),
+    // Live chat frames only; the server stores and archives inline bytes.
+    ChatImageRefSchema.extend({ type: z.literal('ref'), media_type: ChatImageMediaTypeSchema }),
+  ]),
 });
 
 // Validate entries before reconstruction: z.record/z.json drop own __proto__ keys.

@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { externalizeChatImages } from '@/backend/lib/chat-image-externalizer';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import { sessionStopTargetParamsSchema } from '@/shared/acp-protocol/subagents';
 import {
@@ -242,9 +243,14 @@ export const sessionRouter = router({
 
   readTranscriptPage: publicProcedure
     .input(z.object({ sessionId: z.string().min(1), beforeMessageId: z.string().min(1).max(1000) }))
-    .query(({ ctx, input }) =>
-      ctx.appContext.services.sessionLoadService.readTranscriptPage(input)
-    ),
+    .query(async ({ ctx, input }) => {
+      const { chatImageStore, sessionLoadService } = ctx.appContext.services;
+      // Pages render like the live transcript, so images go as references too.
+      return externalizeChatImages(
+        await sessionLoadService.readTranscriptPage(input),
+        chatImageStore
+      );
+    }),
 
   listSubagents: publicProcedure.input(subagentListParamsSchema).query(async ({ ctx, input }) => {
     const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;

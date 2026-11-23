@@ -1,3 +1,4 @@
+import type { ChatImageRef } from '@/shared/chat-image-ref';
 import type { PRDeliveryRequest } from '@/shared/pr-monitoring';
 /**
  * Attachment data for uploaded files in chat.
@@ -7,8 +8,14 @@ export interface MessageAttachment {
   name: string;
   type: string; // MIME type
   size: number;
-  data: string; // base64 for images, raw text for text attachments
+  /**
+   * Base64 for images, raw text for text attachments. Empty when `ref` is set:
+   * the server sends an image it already holds as a reference.
+   */
+  data: string;
   contentType?: 'image' | 'text'; // discriminator for rendering
+  /** Server to client only: the image's bytes are at `chatImageUrl(ref.id)`. */
+  ref?: ChatImageRef;
 }
 
 /**

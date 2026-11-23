@@ -10,7 +10,9 @@
  * - Removing queued messages
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { toast } from 'sonner';
+import { materializeAttachments, sentChatImages } from '@/client/lib/chat-images';
 import type { WebSocketSend, WebSocketSendOptions } from '@/hooks/use-websocket-transport';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
@@ -200,6 +202,8 @@ function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | unde
  */
 export function useChatActions(options: UseChatActionsOptions): UseChatActionsReturn {
   const { send, dispatch, stateRef, dbSessionIdRef, inputAttachmentsRef, onClearInput } = options;
+  // A send waiting for referenced images to download; it admits no second one.
+  const restoringImagesRef = useRef(false);
 
   // Keep sequential actions (for example selecting a model then immediately sending)
   // on the same settings even before React commits the reducer render.
@@ -241,37 +245,70 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         return;
       }
 
-      // Generate single ID for tracking
-      const id = generateMessageId();
+      const queue = (outbound: MessageAttachment[]) => {
+        // Generate single ID for tracking
+        const id = generateMessageId();
+        // The server echoes these as references; show them from this copy.
+        sentChatImages.remember(outbound);
 
-      // Mark message as pending backend confirmation (shows "sending..." indicator)
-      // Store text and attachments for recovery if message is rejected
-      dispatch({
-        type: 'MESSAGE_SENDING',
-        payload: {
+        // Mark message as pending backend confirmation (shows "sending..." indicator)
+        // Store text and attachments for recovery if message is rejected
+        dispatch({
+          type: 'MESSAGE_SENDING',
+          payload: {
+            id,
+            text: trimmedText,
+            attachments: outbound.length > 0 ? outbound : undefined,
+            sessionId: dbSessionIdRef.current,
+          },
+        });
+
+        // Context commands leave the next message draft intact.
+        if (!options?.preserveInput) {
+          onClearInput();
+        }
+
+        // Send to backend for queueing/dispatch
+        // The transcript shows pending content until the backend confirms the message.
+        const msg: QueueMessageRequest = {
+          type: 'queue_message',
           id,
           text: trimmedText,
-          attachments: attachments.length > 0 ? attachments : undefined,
-          sessionId: dbSessionIdRef.current,
-        },
-      });
-
-      // Context commands leave the next message draft intact.
-      if (!options?.preserveInput) {
-        onClearInput();
-      }
-
-      // Send to backend for queueing/dispatch
-      // The transcript shows pending content until the backend confirms the message.
-      const msg: QueueMessageRequest = {
-        type: 'queue_message',
-        id,
-        text: trimmedText,
-        attachments: attachments.length > 0 ? attachments : undefined,
-        voiceMode: options?.voiceMode,
-        settings: getOutboundSettings(stateRef.current),
+          attachments: outbound.length > 0 ? outbound : undefined,
+          voiceMode: options?.voiceMode,
+          settings: getOutboundSettings(stateRef.current),
+        };
+        send(msg);
       };
-      send(msg);
+
+      // A resent or recovered image may be a server reference; the server
+      // accepts only inline bytes, which are usually in the HTTP cache.
+      if (attachments.some((attachment) => attachment.ref && !attachment.data)) {
+        if (restoringImagesRef.current) {
+          return;
+        }
+        restoringImagesRef.current = true;
+        const sessionId = dbSessionIdRef.current;
+        materializeAttachments(attachments)
+          .then(
+            (restored) => {
+              // Never deliver into, or clear the composer of, a session selected meanwhile.
+              if (dbSessionIdRef.current === sessionId) {
+                queue(restored);
+              }
+            },
+            (error: unknown) => {
+              toast.error("Couldn't send the message", {
+                description: error instanceof Error ? error.message : String(error),
+              });
+            }
+          )
+          .finally(() => {
+            restoringImagesRef.current = false;
+          });
+        return;
+      }
+      queue(attachments);
     },
     [send, dispatch, dbSessionIdRef, inputAttachmentsRef, stateRef, onClearInput]
   );

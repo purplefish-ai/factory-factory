@@ -37,6 +37,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   const {
     acpRuntimeManager,
     chatEventForwarderService,
+    chatImageStore,
     configService,
     createLogger,
     sessionFileLogger,
@@ -58,7 +59,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
     // Bridge session domain events onto chat WebSocket connections
     attachChatTransport(
-      { configService, createLogger, sessionEventBus, sessionFileLogger },
+      { chatImageStore, configService, createLogger, sessionEventBus, sessionFileLogger },
       chatConnectionRegistry
     );
   }

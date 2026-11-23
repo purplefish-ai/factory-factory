@@ -43,13 +43,15 @@ export function isImageContent<T extends ContentTypeLike>(
     type?: unknown;
     media_type?: unknown;
     data?: unknown;
+    id?: unknown;
   };
 
-  return (
-    imageSource.type === 'base64' &&
-    typeof imageSource.media_type === 'string' &&
-    typeof imageSource.data === 'string'
-  );
+  if (typeof imageSource.media_type !== 'string') {
+    return false;
+  }
+  return imageSource.type === 'ref'
+    ? typeof imageSource.id === 'string'
+    : imageSource.type === 'base64' && typeof imageSource.data === 'string';
 }
 
 /**

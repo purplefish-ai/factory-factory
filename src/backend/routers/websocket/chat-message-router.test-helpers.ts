@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import type { SessionCommandFactories } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -71,5 +72,6 @@ export function createChatRouterServices(
     },
     eventBus: { publishToSession: vi.fn() },
     fileLogger: { log: vi.fn() },
+    images: new ChatImageStore(),
   };
 }

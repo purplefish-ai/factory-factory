@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,73 @@ export interface ChatImageProps {
   loading?: boolean;
   title?: string;
   interactive?: boolean;
+  /** Intrinsic size when known, so the transcript reserves the space before loading. */
+  width?: number;
+  height?: number;
+  /** Offer to load a failed `src` again, for images the server may serve later. */
+  retryable?: boolean;
+}
+
+function ChatImageFallback({
+  alt,
+  source,
+  loading,
+  interactive,
+  onRetry,
+}: Pick<ChatImageProps, 'alt' | 'source' | 'loading'> & {
+  interactive: boolean;
+  onRetry?: () => void;
+}) {
+  const embedded = source ? /^data:/i.test(source) : false;
+  return (
+    <span
+      className={cn(
+        'inline-flex max-w-full min-w-0 flex-col rounded border p-2 text-xs text-muted-foreground',
+        embedded && 'w-80'
+      )}
+    >
+      <span>
+        {loading ? (
+          <>
+            <Spinner className="mr-1 inline size-3 align-text-bottom" aria-hidden="true" />
+            Loading image…
+          </>
+        ) : (
+          'Image unavailable'
+        )}
+        {alt ? `: ${alt}` : ''}
+      </span>
+      {onRetry && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1 self-start"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRetry();
+          }}
+        >
+          Retry
+        </Button>
+      )}
+      {source &&
+        (embedded && interactive ? (
+          <textarea
+            aria-label="Image source"
+            readOnly
+            rows={2}
+            wrap="off"
+            value={source}
+            className="w-full min-w-0 max-w-full resize-none rounded border bg-muted p-1 font-mono text-xs"
+          />
+        ) : (
+          <code className="max-h-24 overflow-auto select-text whitespace-pre-wrap break-all">
+            {source}
+          </code>
+        ))}
+    </span>
+  );
 }
 
 /** Inline-safe markup: Markdown images may occur inside paragraphs and links. */
@@ -39,45 +107,21 @@ export function ChatImage({
   loading,
   title,
   interactive = true,
+  width,
+  height,
+  retryable = false,
 }: ChatImageProps) {
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
-  const embedded = source ? /^data:/i.test(source) : false;
   if (!src || failed) {
     return (
-      <span
-        className={cn(
-          'inline-flex max-w-full min-w-0 flex-col rounded border p-2 text-xs text-muted-foreground',
-          embedded && 'w-80'
-        )}
-      >
-        <span>
-          {loading ? (
-            <>
-              <Spinner className="mr-1 inline size-3 align-text-bottom" aria-hidden="true" />
-              Loading image…
-            </>
-          ) : (
-            'Image unavailable'
-          )}
-          {alt ? `: ${alt}` : ''}
-        </span>
-        {source &&
-          (embedded && interactive ? (
-            <textarea
-              aria-label="Image source"
-              readOnly
-              rows={2}
-              wrap="off"
-              value={source}
-              className="w-full min-w-0 max-w-full resize-none rounded border bg-muted p-1 font-mono text-xs"
-            />
-          ) : (
-            <code className="max-h-24 overflow-auto select-text whitespace-pre-wrap break-all">
-              {source}
-            </code>
-          ))}
-      </span>
+      <ChatImageFallback
+        alt={alt}
+        source={source}
+        loading={loading}
+        interactive={interactive}
+        onRetry={retryable && src ? () => setFailed(false) : undefined}
+      />
     );
   }
   const preview = (
@@ -86,7 +130,11 @@ export function ChatImage({
       alt={alt}
       title={title}
       loading="lazy"
-      className="my-0 max-h-80 max-w-full rounded object-contain"
+      decoding="async"
+      width={width}
+      height={height}
+      style={width && height ? { aspectRatio: `${width} / ${height}` } : undefined}
+      className="my-0 h-auto max-h-80 max-w-full rounded object-contain"
       onError={() => setFailed(true)}
     />
   );
@@ -112,7 +160,7 @@ export function ChatImage({
           <DialogHeader>
             <DialogTitle>{alt}</DialogTitle>
             <DialogDescription className="break-all">
-              {source && !embedded ? source : 'Full-size image preview'}
+              {source && !/^data:/i.test(source) ? source : 'Full-size image preview'}
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-auto">

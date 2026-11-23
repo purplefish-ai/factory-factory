@@ -1,4 +1,5 @@
 import type { ApplicationServices } from '@/backend/app-context';
+import type { ChatImageStore } from '@/backend/lib/chat-image-store';
 import type {
   SessionCommandConfigService,
   SessionCommandContext,
@@ -30,6 +31,7 @@ export interface ChatMessageRouterServices {
   load: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
   eventBus: Pick<SessionEventBus, 'publishToSession'>;
   fileLogger: Pick<SessionFileLogger, 'log'>;
+  images: ChatImageStore;
 }
 
 type ChatCommandRegistry = {
@@ -95,6 +97,7 @@ export function createChatCommandRegistry(
           loadService: services.load,
           eventBus: services.eventBus,
           fileLogger: services.fileLogger,
+          images: services.images,
         }
       ),
     permission_response: createPermissionResponseHandler({
@@ -185,6 +188,7 @@ export function createChatMessageRouterForApplication(
     | 'sessionEventBus'
     | 'sessionFileLogger'
     | 'acceptWorkspaceFollowUp'
+    | 'chatImageStore'
   >
 ) {
   return createChatMessageRouter({
@@ -213,5 +217,6 @@ export function createChatMessageRouterForApplication(
     load: services.sessionLoadService,
     eventBus: services.sessionEventBus,
     fileLogger: services.sessionFileLogger,
+    images: services.chatImageStore,
   });
 }

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { AcpRuntimeManager } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 import { deferred } from '@/test-utils/deferred';
+import { noisePng } from '@/test-utils/image-fixtures';
 import { SessionProvider } from '@prisma-gen/client';
 
 const mockSessionDataService = vi.hoisted(() => ({
@@ -38,7 +40,10 @@ type SubagentRuntimeManager = Pick<
   'isSessionWorking' | 'getSubagentBrowseCapability' | 'listSubagents' | 'readSubagentTranscript'
 >;
 
-function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) {
+function createCaller(options?: {
+  acpRuntimeManager?: SubagentRuntimeManager;
+  transcriptPage?: unknown;
+}) {
   const acpRuntimeManager = {
     isSessionWorking: vi.fn((id: string) => id === 's-working'),
     getSubagentBrowseCapability: vi.fn(),
@@ -54,6 +59,10 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
   const sessionDomainService = {
     clearSession: vi.fn(),
     storeInitialMessage: mockSessionDomainService.storeInitialMessage,
+  };
+  const chatImageStore = new ChatImageStore();
+  const sessionLoadService = {
+    readTranscriptPage: vi.fn(async () => options?.transcriptPage),
   };
   const cliHealthService = {
     checkHealth: vi.fn(async (): Promise<CLIHealthStatus> => ({
@@ -73,6 +82,8 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
             getMaxSessionsPerWorkspace: () => 2,
           },
           acpRuntimeManager: options?.acpRuntimeManager ?? acpRuntimeManager,
+          chatImageStore,
+          sessionLoadService,
           sessionLifecycleService,
           sessionDomainService,
           sessionDataService: mockSessionDataService,
@@ -91,6 +102,7 @@ function createCaller(options?: { acpRuntimeManager?: SubagentRuntimeManager }) 
       },
     } as never),
     acpRuntimeManager,
+    chatImageStore,
     sessionLifecycleService,
     sessionDomainService,
     cliHealthService,
@@ -127,6 +139,42 @@ describe('sessionRouter', () => {
       outcome: 'created',
       session: { id: 's-new', workspaceId: 'w1' },
     });
+  });
+
+  it('sends earlier transcript pages with image references instead of bytes', async () => {
+    const png = noisePng(4, 4);
+    const data = png.toString('base64');
+    const { caller, chatImageStore } = createCaller({
+      transcriptPage: {
+        messages: [
+          {
+            id: 'u1',
+            source: 'user',
+            text: 'look',
+            timestamp: '2026-11-23T00:00:00.000Z',
+            order: 0,
+            attachments: [
+              {
+                id: 'a1',
+                name: 'a.png',
+                type: 'image/png',
+                size: png.length,
+                data,
+                contentType: 'image',
+              },
+            ],
+          },
+        ],
+        hasMore: false,
+      },
+    });
+
+    const page = await caller.readTranscriptPage({ sessionId: 's1', beforeMessageId: 'u2' });
+
+    expect(JSON.stringify(page)).not.toContain(data);
+    const ref = page.messages[0]?.attachments?.[0]?.ref;
+    expect(ref).toEqual({ id: expect.any(String), size: png.length, width: 4, height: 4 });
+    expect(chatImageStore.get(ref?.id ?? '')?.data).toBe(data);
   });
 
   describe('sub-agent browsing', () => {

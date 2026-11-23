@@ -10,8 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { Application, ApplicationServices } from '@/backend/app-context';
 import { WS_READY_STATE, type WsReadyState } from '@/backend/constants/websocket';
+import { ChatImageStore } from '@/backend/lib/chat-image-store';
 import { SESSION_OUTBOUND_EVENT, sessionEventBus } from '@/backend/services/session';
-import type { WebSocketMessage } from '@/shared/acp-protocol';
+import { MessageState, type WebSocketMessage } from '@/shared/acp-protocol';
+import { noisePng } from '@/test-utils/image-fixtures';
 import {
   attachChatTransport,
   ChatConnectionRegistry,
@@ -46,8 +48,26 @@ function asMessage(payload: object): WebSocketMessage {
   return payload as WebSocketMessage;
 }
 
-function createTransportDeps(sessionLogger: { log: ReturnType<typeof vi.fn> } = { log: vi.fn() }) {
+function queuedMessage() {
   return {
+    id: 'q1',
+    text: 'look',
+    timestamp: '2026-11-23T00:00:00.000Z',
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  };
+}
+
+function createTransportDeps(
+  sessionLogger: { log: ReturnType<typeof vi.fn> } = { log: vi.fn() },
+  chatImageStore = new ChatImageStore()
+) {
+  return {
+    chatImageStore,
     configService: {
       getDebugConfig: () => ({ chatWebSocket: false }),
       getWebSocketConfig: () => ({ maxFrameBytes: 33_554_432 }),
@@ -62,7 +82,7 @@ function createTransportDeps(sessionLogger: { log: ReturnType<typeof vi.fn> } = 
     sessionFileLogger: sessionLogger,
   } as unknown as Pick<
     ApplicationServices,
-    'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
+    'chatImageStore' | 'configService' | 'createLogger' | 'sessionEventBus' | 'sessionFileLogger'
   >;
 }
 
@@ -482,6 +502,72 @@ describe('attachChatTransport', () => {
     sessionEventBus.publishToSession('s1', payload);
 
     expect(ws.send).toHaveBeenCalledWith(JSON.stringify(payload), expect.any(Function));
+  });
+
+  it('sends live image bytes as references and keeps them for the image endpoint', () => {
+    const store = new ChatImageStore();
+    const fileLogger = { log: vi.fn() };
+    attachChatTransport(createTransportDeps(fileLogger, store), registry);
+    const ws = new MockWebSocket();
+    registry.register('conn-1', { ws: asWs(ws), dbSessionId: 's1', workingDir: null });
+    const png = noisePng(8, 8);
+    const data = png.toString('base64');
+    const attachment = {
+      id: 'a1',
+      name: 'shot.png',
+      type: 'image/png',
+      size: png.length,
+      data,
+      contentType: 'image' as const,
+    };
+
+    sessionEventBus.publishToSession('s1', {
+      type: 'session_delta',
+      data: {
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: MessageState.ACCEPTED,
+        userMessage: {
+          text: 'look',
+          timestamp: '2026-11-23T00:00:00.000Z',
+          attachments: [attachment],
+        },
+      },
+    });
+
+    const sent = String(ws.send.mock.calls[0]?.[0]);
+    expect(sent).not.toContain(data);
+    const ref = JSON.parse(sent).data.userMessage.attachments[0].ref;
+    expect(ref).toEqual({ id: expect.any(String), size: png.length, width: 8, height: 8 });
+    expect(store.get(ref.id)?.data).toBe(data);
+    // The stored transcript object keeps its bytes; the log records what was sent.
+    expect(attachment.data).toBe(data);
+    ws.send.mock.calls[0]?.[1]?.();
+    expect(fileLogger.log).toHaveBeenCalledWith('s1', 'OUT_TO_CLIENT', JSON.parse(sent));
+  });
+
+  it('registers no images for a session nobody views', () => {
+    const store = new ChatImageStore();
+    const put = vi.spyOn(store, 'put');
+    attachChatTransport(createTransportDeps(undefined, store), registry);
+    const png = noisePng(8, 8);
+    const attachment = {
+      id: 'a1',
+      name: 'a.png',
+      type: 'image/png',
+      size: png.length,
+      data: png.toString('base64'),
+    };
+
+    sessionEventBus.publishToSession('unviewed', {
+      type: 'session_delta',
+      data: {
+        type: 'queue_updated',
+        queuedMessages: [{ ...queuedMessage(), attachments: [attachment] }],
+      },
+    });
+
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('delivers all-client broadcasts published on the bus', () => {

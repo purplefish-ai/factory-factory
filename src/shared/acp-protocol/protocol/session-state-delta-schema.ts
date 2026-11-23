@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { prDeliveryRequestSchema } from '@/shared/schemas/pr-event.schema';
-import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket/chat-message.schema';
+import {
+  ChatSettingsSchema,
+  OutboundAttachmentSchema,
+} from '@/shared/websocket/chat-message.schema';
 import { ArchivedChatMessageSchema } from './archived-message-schema';
 import type { QueuedMessage } from './queued';
 
@@ -17,7 +20,7 @@ export const QueuedMessageWireSchema = z.object({
   id: z.string(),
   text: z.string(),
   timestamp: z.string(),
-  attachments: z.array(AttachmentSchema).optional(),
+  attachments: z.array(OutboundAttachmentSchema).optional(),
   voiceMode: z.boolean().optional(),
   settings: ChatSettingsSchema,
 }) satisfies z.ZodType<QueuedMessage>;

@@ -154,7 +154,10 @@ export class SessionService {
           blocks.push({ type: 'text', text: item.thinking });
           break;
         case 'image':
-          if (supportsImages) {
+          // References exist only on the wire to browsers; prompts carry bytes.
+          if (item.source.type !== 'base64') {
+            blocks.push({ type: 'text', text: '[Image: unavailable]' });
+          } else if (supportsImages) {
             blocks.push({
               type: 'image',
               data: item.source.data,
