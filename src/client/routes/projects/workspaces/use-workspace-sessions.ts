@@ -60,7 +60,8 @@ export function useWorkspaceSessions(workspaceId: string) {
 
   const { refetch } = query;
   const queriedRef = useLatestRef(query.data);
-  const hasData = query.data !== undefined;
+  // A cached list or a read still in flight may predate the stream.
+  const settled = query.data !== undefined && !query.isFetching;
   const lastStreamed = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (streamed === undefined) {
@@ -69,8 +70,7 @@ export function useWorkspaceSessions(workspaceId: string) {
       return;
     }
     const queried = queriedRef.current;
-    if (!(hasData && queried)) {
-      // Compare once the first response lands: it may predate the stream.
+    if (!(settled && queried)) {
       return;
     }
     const previous = lastStreamed.current;
@@ -80,7 +80,7 @@ export function useWorkspaceSessions(workspaceId: string) {
     if (changed) {
       runInBackground(refetch());
     }
-  }, [streamed, hasData, refetch]);
+  }, [streamed, settled, refetch]);
 
   return query;
 }

@@ -13,8 +13,8 @@ const ACTIVE_STATUSES = new Set<RunScriptStatus | undefined>(['STARTING', 'RUNNI
  * it started, but not the port, tunnel URL or configured commands. So: poll
  * fast while a dev server is starting, running or stopping (the tunnel URL
  * arrives after RUNNING, and the poll detects a dead process); poll as before
- * while the stream does not carry the workspace; otherwise do not poll, and
- * refetch when the stream reports a transition.
+ * while the stream does not carry the workspace or no read has succeeded;
+ * otherwise do not poll, and refetch when the stream reports a transition.
  */
 function runScriptStatusPollInterval(
   queried: RunScriptStatus | undefined,
@@ -23,7 +23,8 @@ function runScriptStatusPollInterval(
   if (ACTIVE_STATUSES.has(queried) || ACTIVE_STATUSES.has(streamed)) {
     return POLL_INTERVAL_MS.runningProcess;
   }
-  return streamed === undefined ? POLL_INTERVAL_MS.localStatus : false;
+  // Without a stream, or before any read has succeeded, the poll is the retry.
+  return streamed === undefined || queried === undefined ? POLL_INTERVAL_MS.localStatus : false;
 }
 
 const selectRunScriptStatus = (entry: { runScriptStatus: RunScriptStatus }) =>
@@ -42,7 +43,8 @@ export function useRunScriptStatus(workspaceId: string) {
 
   const { refetch } = query;
   const queriedRef = useLatestRef(query.data?.status);
-  const hasData = query.data !== undefined;
+  // A cached value or a read still in flight may predate the stream.
+  const settled = query.data !== undefined && !query.isFetching;
   const lastStreamed = useRef<RunScriptStatus | undefined>(undefined);
   useEffect(() => {
     if (streamed === undefined) {
@@ -50,8 +52,7 @@ export function useRunScriptStatus(workspaceId: string) {
       lastStreamed.current = undefined;
       return;
     }
-    if (!hasData) {
-      // Compare once the first response lands: it may predate the stream.
+    if (!settled) {
       return;
     }
     const previous = lastStreamed.current;
@@ -62,7 +63,7 @@ export function useRunScriptStatus(workspaceId: string) {
       // The button, badge and open-app action share this query; one request serves all.
       runInBackground(refetch({ cancelRefetch: false }));
     }
-  }, [streamed, hasData, refetch]);
+  }, [streamed, settled, refetch]);
 
   return query;
 }

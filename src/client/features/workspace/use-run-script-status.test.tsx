@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -16,6 +17,7 @@ import { useRunScriptStatus } from './use-run-script-status';
 let serverStatus: RunScriptStatus;
 let requests: number;
 let latencyMs: number;
+let failures: number;
 let queryClient: QueryClient;
 let root: Root;
 
@@ -30,6 +32,11 @@ async function mount() {
       () => () =>
         observable((observer) => {
           requests += 1;
+          if (failures > 0) {
+            failures -= 1;
+            observer.error(TRPCClientError.from(new Error('Server unavailable')));
+            return undefined;
+          }
           // The response reflects the server when the request was made.
           const data = {
             status: serverStatus,
@@ -105,6 +112,7 @@ beforeEach(() => {
   serverStatus = 'IDLE';
   requests = 0;
   latencyMs = 0;
+  failures = 0;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 });
 
@@ -185,6 +193,32 @@ describe('useRunScriptStatus polling', () => {
     await connect('COMPLETED');
     await elapse(2500);
     expect(requests).toBe(2);
+  });
+
+  it('keeps polling until a first read succeeds, even while the stream shows it idle', async () => {
+    failures = 1;
+    await connect();
+    await mount();
+    await elapse(0);
+    expect(requests).toBe(1);
+    await elapse(5000);
+    expect(requests).toBe(2);
+    await elapse(60_000);
+    expect(requests).toBe(2);
+  });
+
+  it('compares the stream with the remount refetch once it settles, not cached data', async () => {
+    const connection = await connect();
+    await mount();
+    await elapse(0);
+    await act(() => root.unmount());
+
+    latencyMs = 1000;
+    await mount();
+    // The server finishes while the remount read, which saw IDLE, is in flight.
+    await stream(connection, 'COMPLETED');
+    await elapse(2500);
+    expect(requests).toBe(3);
   });
 
   it('refetches on reconnect when the baseline differs from what HTTP last showed', async () => {
