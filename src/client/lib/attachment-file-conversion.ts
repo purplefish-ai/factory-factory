@@ -16,7 +16,7 @@ import {
   nameForType,
   planDownscale,
 } from './image-downscale-plan';
-import { IMAGE_HEADER_BYTES, type ImageHeader, readImageHeader } from './image-header';
+import { IMAGE_HEADER_READS, type ImageHeader, INCOMPLETE, readImageHeader } from './image-header';
 import { resizeImage } from './image-resize';
 
 interface AttachmentConversionError {
@@ -47,12 +47,22 @@ interface UploadImage {
   name: string;
 }
 
+/** Reads a short prefix, and a longer one only when metadata pushes the header past it. */
 async function readHeader(file: File): Promise<ImageHeader | null> {
   try {
-    return readImageHeader(new Uint8Array(await file.slice(0, IMAGE_HEADER_BYTES).arrayBuffer()));
+    for (const length of IMAGE_HEADER_READS) {
+      const header = readImageHeader(new Uint8Array(await file.slice(0, length).arrayBuffer()));
+      if (header !== INCOMPLETE) {
+        return header;
+      }
+      if (length >= file.size) {
+        return null;
+      }
+    }
   } catch {
-    return null;
+    // An unreadable prefix uploads the file unchanged.
   }
+  return null;
 }
 
 /**

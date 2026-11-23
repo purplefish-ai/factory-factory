@@ -231,11 +231,21 @@ describe('image downscale before upload', () => {
     ['an image within the cap', photo('small.jpg', 'image/jpeg', jpegHeader(2576, 1449))],
     ['an image too large to decode', photo('huge.png', 'image/png', pngHeader(10_000, 10_000))],
     ['an unreadable image', image('broken.png')],
+    [
+      'a PNG cut off before its image data',
+      photo('cut.png', 'image/png', pngHeader(5120, 2880).subarray(0, 60)),
+    ],
   ])('does not decode %s', async (_label, file) => {
     const result = await collectAttachments({ mode: 'images-only', files: [file] });
     expect(resizeImage).not.toHaveBeenCalled();
     expect(fileToBase64).toHaveBeenCalledWith(file);
     expect(result.attachments).toHaveLength(1);
+  });
+
+  it('reads further for a header behind large metadata', async () => {
+    const file = photo('icc.png', 'image/png', pngHeader(5120, 2880, { metadataBytes: 100_000 }));
+    await collectAttachments({ mode: 'images-only', files: [file] });
+    expect(resizeImage).toHaveBeenCalledOnce();
   });
 
   it('uploads the resized image with its own size', async () => {

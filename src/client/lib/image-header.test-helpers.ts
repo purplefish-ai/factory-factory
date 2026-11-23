@@ -17,13 +17,13 @@ function pngChunk(type: string, data: number[]): number[] {
 export function pngHeader(
   width: number,
   height: number,
-  { animated = false }: { animated?: boolean } = {}
+  { animated = false, metadataBytes = 64 }: { animated?: boolean; metadataBytes?: number } = {}
 ): Uint8Array<ArrayBuffer> {
   return new Uint8Array([
     0x89,
     ...ascii('PNG\r\n\x1a\n'),
     ...pngChunk('IHDR', [...u32be(width), ...u32be(height), 8, 6, 0, 0, 0]),
-    ...pngChunk('iCCP', new Array(64).fill(1)),
+    ...pngChunk('iCCP', new Array(metadataBytes).fill(1)),
     ...(animated ? pngChunk('acTL', [...u32be(2), ...u32be(0)]) : []),
     ...pngChunk('IDAT', [0, 0, 0, 0]),
   ]);
