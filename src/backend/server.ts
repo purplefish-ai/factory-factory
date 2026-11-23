@@ -28,6 +28,7 @@ import {
   createCorsMiddleware,
   createPrecompressedStatic,
   createRequestLoggerMiddleware,
+  createResponseCompression,
   type PrecompressedDocument,
   readPrecompressedDocument,
   securityMiddleware,
@@ -240,6 +241,7 @@ export function createServer(application: Application, requestedPort?: number): 
   app.use('/proxy', createPortShareRouter(application));
   app.use(
     '/api/trpc',
+    createResponseCompression(),
     createExpressMiddleware({
       router: appRouter,
       createContext: createContext(application),
