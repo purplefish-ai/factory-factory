@@ -216,7 +216,7 @@ export class ChatConnectionRegistry {
       });
     }
     const incoming = this.incomingReplays.get(dbSessionId);
-    const metadata = prepareCacheableMetadata(payload, serialized);
+    const metadata = this.cacheableMetadata(dbSessionId, payload, serialized);
     const wire = metadata?.full ?? serialized ?? payload;
     const sent = this.broadcaster.broadcastWith(dbSessionId, wire, (ws, full) => {
       const message = this.acknowledgementFor(ws, metadata) ?? full;
@@ -265,6 +265,17 @@ export class ChatConnectionRegistry {
     }
 
     return sent;
+  }
+
+  /** Digesting serializes the delta again; skip it when nobody would receive it. */
+  private cacheableMetadata(
+    dbSessionId: string,
+    payload: WebSocketMessage,
+    serialized: string | undefined
+  ): CacheableMetadataFrames | null {
+    return this.broadcaster.hasSubscribers(dbSessionId)
+      ? prepareCacheableMetadata(payload, serialized)
+      : null;
   }
 
   private acknowledgementFor(
