@@ -193,7 +193,15 @@ describe('workspace detail route hydration', () => {
       // The failed reconnect attempt falls back for this project's detail and
       // list (one invalidation each), restarting the pending detail once more.
       channel.onDisconnected?.();
-      expect(invalidate).toHaveBeenCalledTimes(3);
+      const cache = queryClient.getQueryCache();
+      const hashOf = (queryKey: readonly unknown[]) =>
+        cache.find({ queryKey, exact: true })!.queryHash;
+      const listKey = getQueryKey(trpc.workspace.listForProject, { projectId: 'proj-1' }, 'query');
+      expect(
+        invalidate.mock.calls.map(([filters]) =>
+          cache.findAll(filters).map((query) => query.queryHash)
+        )
+      ).toEqual([[hashOf(detailKey)], [hashOf(detailKey)], [hashOf(listKey)]]);
       await requests.waitForCount(3);
       // Other projects' and unassociated detail keep loading through both.
       expect(signals['ws-b']![0]!.aborted).toBe(false);
