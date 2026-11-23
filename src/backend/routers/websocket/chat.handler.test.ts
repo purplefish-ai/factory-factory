@@ -37,6 +37,17 @@ function createLogger() {
   };
 }
 
+/** The idle check the handler handed over with its last release. */
+function releasedIdleCheck(
+  domain: Pick<AppContext['services']['sessionDomainService'], 'releaseViewerless'>
+) {
+  const isIdle = vi.mocked(domain.releaseViewerless).mock.calls.at(-1)?.[1];
+  if (!isIdle) {
+    throw new Error('The session was not released');
+  }
+  return isIdle;
+}
+
 function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = sessionEventBus) {
   const logger = createLogger();
 
@@ -80,7 +91,7 @@ function createTestContext(worktreeBaseDir: string, eventBus: SessionEventBus = 
       },
       sessionEventBus: eventBus,
       sessionDomainService: {
-        clearSession: vi.fn(),
+        releaseViewerless: vi.fn(),
         emitDelta: vi.fn((sessionId: string, data: SessionDeltaEvent) =>
           eventBus.publishToSession(sessionId, { type: 'session_delta', data })
         ),
@@ -375,9 +386,11 @@ describe('createChatUpgradeHandler', () => {
     expect(chatConnectionRegistry.has('conn-1')).toBe(false);
     expect(chatConnectionRegistry.countViewers('session-1')).toBe(0);
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
-    expect(sessionDomainService.clearSession).toHaveBeenCalledExactlyOnceWith('session-1', {
-      preserveRejections: true,
-    });
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledExactlyOnceWith(
+      'session-1',
+      expect.any(Function)
+    );
+    expect(releasedIdleCheck(sessionDomainService)()).toBe(true);
   });
 
   it.each([false, true])(
@@ -653,7 +666,7 @@ describe('createChatUpgradeHandler', () => {
     );
   });
 
-  it('clears in-memory state when the last viewer disconnects from a stopped session', () => {
+  it('releases the store, idle until a viewer or runtime returns, when the last viewer leaves a stopped session', () => {
     const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
@@ -683,12 +696,24 @@ describe('createChatUpgradeHandler', () => {
 
     ws.emit('close');
 
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Function)
+    );
+    const isIdle = releasedIdleCheck(sessionDomainService);
+    expect(isIdle()).toBe(true);
+    chatConnectionRegistry.register('conn-2', {
+      ws: new MockWebSocket() as unknown as WebSocket,
+      dbSessionId: 'session-1',
+      workingDir: null,
     });
+    expect(isIdle()).toBe(false);
+    chatConnectionRegistry.unregister('conn-2');
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
+    expect(isIdle()).toBe(false);
   });
 
-  it('does not clear in-memory state when the disconnected session is still running', () => {
+  it('does not release the store when the disconnected session is still running', () => {
     const { appContext, sessionDomainService, acpRuntimeManager } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
@@ -716,10 +741,10 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
     ws.emit('close');
 
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
   });
 
-  it('waits for in-flight message handling before clearing disconnected session state', async () => {
+  it('waits for in-flight message handling before releasing disconnected session state', async () => {
     const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager } =
       createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
@@ -756,27 +781,28 @@ describe('createChatUpgradeHandler', () => {
     handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
 
     const sessionCleared = deferred();
-    vi.mocked(sessionDomainService.clearSession).mockImplementationOnce(() =>
+    vi.mocked(sessionDomainService.releaseViewerless).mockImplementationOnce(() =>
       sessionCleared.resolve()
     );
     ws.emit('message', JSON.stringify({ type: 'load_session' }));
     await loadStarted.promise;
 
     ws.emit('close');
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
 
     load.resolve();
     await sessionCleared.promise;
-    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1', {
-      preserveRejections: true,
-    });
+    expect(sessionDomainService.releaseViewerless).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Function)
+    );
   });
 
   it('reports a failure in disconnected-session cleanup at the message boundary', async () => {
     const { appContext, sessionLoadService, sessionDomainService, acpRuntimeManager, logger } =
       createTestContext(tempRootDir);
     const cleanupError = new Error('session cleanup failed');
-    vi.mocked(sessionDomainService.clearSession).mockImplementation(() => {
+    vi.mocked(sessionDomainService.releaseViewerless).mockImplementation(() => {
       throw cleanupError;
     });
     const handler = createChatUpgradeHandler(appContext);
@@ -818,7 +844,7 @@ describe('createChatUpgradeHandler', () => {
     await loadStarted.promise;
 
     ws.emit('close');
-    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+    expect(sessionDomainService.releaseViewerless).not.toHaveBeenCalled();
 
     load.resolve();
     await failureLogged.promise;

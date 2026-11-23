@@ -1,13 +1,9 @@
 import { stat } from 'node:fs/promises';
+import type { HistoryFileIdentity } from '@/backend/services/session/service/store/session-store.types';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 
-/** A provider history file as `stat` saw it. Any changed field means the content may differ. */
-export interface HistoryFileIdentity {
-  filePath: string;
-  size: number;
-  mtimeMs: number;
-  ino: number;
-}
+// Defined with the store, which records the file a hydration read.
+export type { HistoryFileIdentity };
 
 /**
  * Optional loader hook. Given the resolved file's identity before it is read,
@@ -29,7 +25,12 @@ export type HistoryLoadResult =
   | { status: 'not_found' }
   | { status: 'skipped'; reason: 'missing_provider_session_id' | 'invalid_provider_session_id' }
   | FailedHistoryFile;
-export type ReusedHistoryFile<T> = { status: 'reused'; value: T; filePath: string };
+export type ReusedHistoryFile<T> = {
+  status: 'reused';
+  value: T;
+  filePath: string;
+  file: HistoryFileIdentity;
+};
 
 export function isSameHistoryFile(left: HistoryFileIdentity, right: HistoryFileIdentity): boolean {
   return (
@@ -40,7 +41,8 @@ export function isSameHistoryFile(left: HistoryFileIdentity, right: HistoryFileI
   );
 }
 
-async function statHistoryFile(filePath: string): Promise<HistoryFileIdentity | null> {
+/** The file's identity now, or null when it is missing or not a regular file. */
+export async function statHistoryFile(filePath: string): Promise<HistoryFileIdentity | null> {
   try {
     const stats = await stat(filePath);
     return stats.isFile()
@@ -65,8 +67,8 @@ export async function loadHistoryFile<T>(params: {
   const { filePath, reuse } = params;
   const before = reuse ? await statHistoryFile(filePath) : null;
   const reused = before && reuse ? reuse(before) : undefined;
-  if (reused !== undefined) {
-    return { status: 'reused', value: reused, filePath };
+  if (before && reused !== undefined) {
+    return { status: 'reused', value: reused, filePath, file: before };
   }
   const { history, hadReadError } = await params.read();
   if (hadReadError) {

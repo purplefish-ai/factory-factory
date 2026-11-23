@@ -223,6 +223,7 @@ function handleLoadedProviderHistory(
       : mergeLifecycleMessage(loadedTranscript, retainedLocalMessages);
   domain.replaceTranscript(sessionId, mergedTranscript, {
     historySource: 'jsonl',
+    ...(loadResult.file ? { historyFile: loadResult.file } : {}),
   });
   logger.debug('Hydrated provider transcript from JSONL history', {
     sessionId,
@@ -315,6 +316,7 @@ function backfillCodexToolTranscript(
 
   domain.replaceTranscript(sessionId, backfilledTranscript, {
     historySource: 'jsonl',
+    ...(loadResult.file ? { historyFile: loadResult.file } : {}),
   });
   logger.debug('Backfilled missing Codex tool calls from JSONL history', {
     sessionId,

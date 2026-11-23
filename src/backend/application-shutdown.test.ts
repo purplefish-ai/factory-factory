@@ -28,8 +28,20 @@ describe('createShutdownPlan', () => {
     expect(names.indexOf('sessions')).toBeLessThan(names.indexOf('codex-accounts'));
     // Stopping all clients can arm queue retries that per-session stops would clear.
     expect(names.indexOf('session-dispatch')).toBe(names.indexOf('sessions') + 1);
+    // Closing chat sockets retains idle stores; nothing may stay retained afterwards.
+    expect(names.indexOf('transports')).toBeLessThan(names.indexOf('session-stores'));
+    expect(names.indexOf('session-stores')).toBeLessThan(names.indexOf('database'));
     expect(names.indexOf('event-collector')).toBeLessThan(names.indexOf('workspace-git-state'));
     expect(names.indexOf('job-runner')).toBe(names.indexOf('database') - 1);
+  });
+
+  it('clears retained session stores in their own step', async () => {
+    const stopStoreRetention = vi.fn();
+    const plan = createShutdownPlan(
+      unsafeCoerce<ShutdownGraph>({ services: { sessionDomainService: { stopStoreRetention } } })
+    );
+    await plan.steps.find((step) => step.name === 'session-stores')?.stop();
+    expect(stopStoreRetention).toHaveBeenCalledOnce();
   });
 
   it('holds account teardown until discovery that reads account context has drained', () => {

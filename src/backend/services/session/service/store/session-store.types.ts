@@ -15,6 +15,14 @@ export interface RecentMessageRejection {
   };
 }
 
+/** A provider history file as `stat` saw it. Any changed field means the content may differ. */
+export interface HistoryFileIdentity {
+  filePath: string;
+  size: number;
+  mtimeMs: number;
+  ino: number;
+}
+
 export interface SessionStore {
   sessionId: string;
   initialized: boolean;
@@ -24,6 +32,8 @@ export interface SessionStore {
   historySuspended?: boolean;
   historyHydratedAt?: string;
   historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
+  /** The history file a `jsonl` hydration projected, when it was unchanged across the read. */
+  historyFile?: HistoryFileIdentity;
   liveSlashCommands?: CommandInfo[];
   taskPlan?: AcpPlanNotification;
   transcript: ChatMessage[];

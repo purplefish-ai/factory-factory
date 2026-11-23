@@ -1,7 +1,12 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { ResolvedSessionConfigProjection } from '@/backend/services/session/service/config/session-config-projection';
+import {
+  isSameHistoryFile,
+  statHistoryFile,
+} from '@/backend/services/session/service/data/session-history-file';
 import type { ProviderHistorySession } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import type { RetainedStoreClaim } from '@/backend/services/session/service/store/session-store-retention';
 import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
 import { selectTranscriptPage } from '@/backend/services/session/service/store/session-transcript-page';
 import {
@@ -40,6 +45,7 @@ export interface SessionLoadDependencies {
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState;
   domain: Pick<
     SessionDomainService,
+    | 'claimRetainedStore'
     | 'getTranscriptSnapshot'
     | 'replaceTranscript'
     | 'consumeInitialMessage'
@@ -58,6 +64,9 @@ export interface SessionLoadDependencies {
 
 /** Application load stages contain no requester or transport callbacks. */
 export class SessionLoadService {
+  /** Checks of retained stores in flight; a concurrent load waits for its session's. */
+  private readonly retainedStoreChecks = new Map<string, Promise<void>>();
+
   constructor(private readonly deps: SessionLoadDependencies) {}
 
   async prepareLoad(input: {
@@ -72,6 +81,7 @@ export class SessionLoadService {
         outcome: { replies: [{ type: 'error', error: { kind: 'session_not_found' } }] },
       };
     }
+    await this.checkRetainedStore(sessionId);
     await this.deps.hydrateProviderHistory(sessionId, session);
     await this.deps.hydrateLifecycleEvents(sessionId);
     return {
@@ -81,6 +91,37 @@ export class SessionLoadService {
       provider: session.provider,
       worktreePath: session.workspace.worktreePath,
     };
+  }
+
+  /**
+   * Claim a store kept after its last viewer left. Without a live runtime, its
+   * history file may have changed since hydration (another client resumed the
+   * session); then discard it so hydration reads the file again.
+   */
+  private checkRetainedStore(sessionId: string): Promise<void> {
+    const claim = this.deps.domain.claimRetainedStore(sessionId);
+    if (!claim) {
+      return this.retainedStoreChecks.get(sessionId) ?? Promise.resolve();
+    }
+    const check = this.discardIfHistoryChanged(sessionId, claim).finally(() => {
+      if (this.retainedStoreChecks.get(sessionId) === check) {
+        this.retainedStoreChecks.delete(sessionId);
+      }
+    });
+    this.retainedStoreChecks.set(sessionId, check);
+    return check;
+  }
+
+  private async discardIfHistoryChanged(sessionId: string, claim: RetainedStoreClaim) {
+    const runtimeAlive = () => this.deps.getRuntimeSnapshot(sessionId).processState === 'alive';
+    if (runtimeAlive()) {
+      return;
+    }
+    const recorded = claim.historyFile;
+    const current = recorded ? await statHistoryFile(recorded.filePath) : null;
+    if (!((recorded && current && isSameHistoryFile(recorded, current)) || runtimeAlive())) {
+      claim.discard();
+    }
   }
 
   /** Browse the loaded transcript without rehydration, which can renumber history.

@@ -315,7 +315,7 @@ vi.mock('@/backend/services/session', async () => {
     providerUsageService: { getUsage: vi.fn() },
     createSessionDataService: vi.fn(() => ({})),
     sessionDataService: {},
-    sessionDomainService: {},
+    sessionDomainService: { stopStoreRetention: vi.fn() },
     sessionEventBus: unsafeCoerce({ publishToSession: vi.fn() }),
     sessionFileLogger: { log: vi.fn(), cleanup: vi.fn() },
     sessionLifecycleEventService: {},

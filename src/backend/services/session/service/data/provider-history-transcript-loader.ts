@@ -24,6 +24,8 @@ export type ProviderHistoryTranscriptResult =
       /** Shared by every caller of one load and the cache; copy entries before storing them. */
       transcript: readonly ChatMessage[];
       filePath: string;
+      /** The file the transcript was projected from, when it was unchanged across the read. */
+      file?: HistoryFileIdentity;
       source: 'cache' | 'file';
     }
   | Exclude<HistoryLoadResult, { status: 'loaded' }>
@@ -159,6 +161,7 @@ async function readProviderHistoryTranscript(
       status: 'loaded',
       transcript: loaded.value,
       filePath: loaded.filePath,
+      file: loaded.file,
       source: 'cache',
     };
   }
@@ -176,5 +179,11 @@ async function readProviderHistoryTranscript(
   if (loaded.file) {
     cache.set(cacheKey(loaded.file), loaded.file, transcript, sessionId);
   }
-  return { status: 'loaded', transcript, filePath: loaded.filePath, source: 'file' };
+  return {
+    status: 'loaded',
+    transcript,
+    filePath: loaded.filePath,
+    ...(loaded.file ? { file: loaded.file } : {}),
+    source: 'file',
+  };
 }

@@ -12,6 +12,7 @@ import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
+import { SessionHistoryFences } from './session-history-fences';
 import { mergeLifecycleMessage } from './session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from './session-local-transcript';
 import { buildMessageFailure, recordPRUpdateOutcome } from './session-pr-update';
@@ -32,7 +33,12 @@ import { buildReplayEvents } from './session-replay-builder';
 import { sessionResumeFences } from './session-resume-fence';
 import { SessionRuntimeMachine } from './session-runtime-machine';
 import { SessionStoreRegistry } from './session-store-registry';
-import type { RecentMessageRejection, SessionStore } from './session-store.types';
+import { type RetainedStoreClaim, SessionStoreRetention } from './session-store-retention';
+import type {
+  HistoryFileIdentity,
+  RecentMessageRejection,
+  SessionStore,
+} from './session-store.types';
 import { existingSubmission, rejectionEvent, retainSubmissionOptions } from './session-submission';
 import {
   appendClaudeEvent,
@@ -126,9 +132,10 @@ export class SessionDomainService extends EventEmitter {
     return this.pendingAdmissions.has(message);
   }
   private readonly registry = new SessionStoreRegistry();
-  // Successful rollover identities fence delayed DB reads even after an inactive
-  // transcript store is evicted. These contain no transcript data.
-  private readonly repairedProviderHistoryIdentities = new Map<string, string>();
+  private readonly retention = new SessionStoreRetention(this.registry, (id) =>
+    this.clearSession(id, { preserveRejections: true })
+  );
+  private readonly historyFences = new SessionHistoryFences(this.registry);
   private readonly publisher = new SessionPublisher();
   private readonly nowIso = () => new Date().toISOString();
   private readonly parityLogger = this.publisher.getParityLogger();
@@ -743,10 +750,25 @@ export class SessionDomainService extends EventEmitter {
     return id;
   }
 
+  /** The last viewer left a session with no running runtime; see `SessionStoreRetention`. */
+  releaseViewerless(sessionId: string, isIdle: () => boolean): void {
+    this.retention.release(sessionId, isIdle);
+  }
+
+  claimRetainedStore(sessionId: string): RetainedStoreClaim | undefined {
+    return this.retention.claim(sessionId);
+  }
+
+  stopStoreRetention(): void {
+    this.retention.stop();
+  }
+
+  /** Clears a session's store; `clearAllSessions` is the only other way to clear one. */
   clearSession(
     sessionId: string,
     options?: { preserveRejections?: boolean; permanentlyDeleted?: boolean }
   ): void {
+    this.retention.cancel(sessionId);
     const initialMessageId = this.publishedInitialMessages.get(sessionId);
     const queuedMessages =
       initialMessageId === undefined ? [] : this.registry.getQueueSnapshot(sessionId);
@@ -773,14 +795,15 @@ export class SessionDomainService extends EventEmitter {
   clearAllSessions(): void {
     this.initialMessages.clear();
     this.publishedInitialMessages.clear();
-    this.repairedProviderHistoryIdentities.clear();
+    this.historyFences.clear();
+    this.retention.cancelAll();
     this.registry.clearAllSessions();
   }
 
   /** Call only after durable deletion; ordinary store eviction must retain this fence. */
   forgetProviderHistoryIdentity(sessionId: string): void {
     this.publishedInitialMessages.delete(sessionId);
-    this.repairedProviderHistoryIdentities.delete(sessionId);
+    this.historyFences.forget(sessionId);
     sessionResumeFences.forget(sessionId);
     this.emit('session_permanently_deleted', sessionId);
   }
@@ -847,59 +870,23 @@ export class SessionDomainService extends EventEmitter {
   }
 
   acceptProviderHistoryIdentity(sessionId: string, providerSessionId: string): boolean {
-    const repairedIdentity = this.repairedProviderHistoryIdentities.get(sessionId);
-    if (repairedIdentity && repairedIdentity !== providerSessionId) {
-      return false;
-    }
-    const store = this.registry.getOrCreate(sessionId);
-    store.historyProviderSessionId ??= providerSessionId;
-    return !store.historySuspended && store.historyProviderSessionId === providerSessionId;
+    return this.historyFences.accept(sessionId, providerSessionId);
   }
 
   createProviderHistoryFence(
     sessionId: string,
     providerSessionId: string | null
   ): (() => boolean) | null {
-    if (providerSessionId === null && this.repairedProviderHistoryIdentities.has(sessionId)) {
-      return null;
-    }
-    if (providerSessionId && !this.acceptProviderHistoryIdentity(sessionId, providerSessionId)) {
-      return null;
-    }
-    const store = this.registry.getOrCreate(sessionId);
-    const generation = store.historyReadGeneration ?? 0;
-    return () =>
-      this.registry.isCurrentStore(sessionId, store) &&
-      !store.historySuspended &&
-      (store.historyProviderSessionId ?? null) === providerSessionId &&
-      (store.historyReadGeneration ?? 0) === generation;
+    return this.historyFences.create(sessionId, providerSessionId);
   }
 
   suspendProviderHistory(sessionId: string): () => void {
-    const store = this.registry.getOrCreate(sessionId);
-    const generation = (store.historyReadGeneration ?? 0) + 1;
-    store.historyReadGeneration = generation;
-    store.historySuspended = true;
-    return () => {
-      if (
-        this.registry.isCurrentStore(sessionId, store) &&
-        store.historyReadGeneration === generation
-      ) {
-        store.historySuspended = false;
-      }
-    };
+    return this.historyFences.suspend(sessionId);
   }
 
   resetProviderHistory(sessionId: string, providerSessionId: string): void {
-    this.repairedProviderHistoryIdentities.set(sessionId, providerSessionId);
-    const store = this.registry.getOrCreateActive(sessionId);
-    store.historyProviderSessionId = providerSessionId;
-    store.historyReadGeneration = (store.historyReadGeneration ?? 0) + 1;
-    store.historySuspended = false;
+    const store = this.historyFences.repair(sessionId, providerSessionId);
     store.taskPlan = undefined;
-    store.historyHydrated = false;
-    store.historyHydrationSource = undefined;
-    store.historyHydratedAt = undefined;
     this.clearHistoryRetryCooldown(sessionId);
     // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
     this.replaceTranscript(
@@ -936,18 +923,22 @@ export class SessionDomainService extends EventEmitter {
   markHistoryHydrated(
     sessionId: string,
     source: 'jsonl' | 'acp_fallback' | 'none',
-    options?: { hydratedAt?: string }
+    options?: { hydratedAt?: string; historyFile?: HistoryFileIdentity }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     store.historyHydrated = true;
     store.historyHydrationSource = source;
+    store.historyFile = options?.historyFile;
     store.historyHydratedAt = options?.hydratedAt ?? this.nowIso();
   }
 
   replaceTranscript(
     sessionId: string,
     transcript: ChatMessage[],
-    options?: { historySource?: 'jsonl' | 'acp_fallback' | 'none' }
+    options?: {
+      historySource?: 'jsonl' | 'acp_fallback' | 'none';
+      historyFile?: HistoryFileIdentity;
+    }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
     retainSubmissionOptions(store, transcript, this.submittedOptions);
@@ -956,7 +947,9 @@ export class SessionDomainService extends EventEmitter {
     setNextOrderFromTranscript(store);
 
     if (options?.historySource) {
-      this.markHistoryHydrated(sessionId, options.historySource);
+      this.markHistoryHydrated(sessionId, options.historySource, {
+        historyFile: options.historyFile,
+      });
     }
   }
 }

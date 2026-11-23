@@ -363,6 +363,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     sessionCommandFactories,
     sessionLoadService: createSessionLoadService({
       domain: {
+        claimRetainedStore: (id) => services.sessionDomainService.claimRetainedStore(id),
         getTranscriptSnapshot: (id) => services.sessionDomainService.getTranscriptSnapshot(id),
         getRuntimeSnapshot: (id) => services.sessionDomainService.getRuntimeSnapshot(id),
         createProviderHistoryFence: (id, providerId) =>
