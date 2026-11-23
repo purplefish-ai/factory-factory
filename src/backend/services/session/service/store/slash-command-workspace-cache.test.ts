@@ -2,6 +2,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   utimesSync,
@@ -20,9 +21,42 @@ let commandsPath: string;
 let scan: ReturnType<typeof vi.fn<typeof scanClaudeWorkspaceCommandsFromDisk>>;
 let cache: WorkspaceCommandScanCache;
 
-function command(path: string, description: string) {
-  writeFileSync(join(commandsPath, path), `---\ndescription: ${description}\n---\n`);
+/**
+ * Wait until the filesystem clock has moved past the last change of every
+ * path, so a change made next gets a later stamp even where timestamps are
+ * coarse (Linux uses its tick clock for them).
+ */
+function afterClockTick(...paths: string[]) {
+  const last = paths.map((path) => statSync(path, { bigint: true }).ctimeNs);
+  const probe = join(worktreePath, 'clock-probe');
+  for (;;) {
+    writeFileSync(probe, '');
+    const now = statSync(probe, { bigint: true }).ctimeNs;
+    if (last.every((ctime) => now > ctime)) {
+      return;
+    }
+  }
 }
+
+/** Write a command after the clock ticked past its file and directory. */
+function command(path: string, description: string) {
+  const file = join(commandsPath, path);
+  const existing = [file, join(file, '..')].filter((candidate) => {
+    try {
+      statSync(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (existing.length > 0) {
+    afterClockTick(...existing);
+  }
+  writeFileSync(file, `---\ndescription: ${description}\n---\n`);
+}
+
+/** Scans run 10 seconds after the fixture's last change, so they are cached. */
+const later = () => Date.now() + 10_000;
 
 function names() {
   return cache
@@ -38,7 +72,7 @@ beforeEach(() => {
   command('deploy.md', 'root');
   command('team/review.md', 'team');
   scan = vi.fn(scanClaudeWorkspaceCommandsFromDisk);
-  cache = new WorkspaceCommandScanCache(scan);
+  cache = new WorkspaceCommandScanCache({ scanFromDisk: scan, now: later });
 });
 
 afterEach(() => {
@@ -63,6 +97,7 @@ describe('cached workspace slash command scan', () => {
 
   it('shows a namespace directory added with its commands', () => {
     names();
+    afterClockTick(commandsPath);
     mkdirSync(join(commandsPath, 'ops'));
     command('ops/restart.md', 'ops');
     expect(names()).toContain('ops:restart=ops');
@@ -81,6 +116,7 @@ describe('cached workspace slash command scan', () => {
 
   it('drops a removed command', () => {
     names();
+    afterClockTick(join(commandsPath, 'team'));
     unlinkSync(join(commandsPath, 'team', 'review.md'));
     expect(names()).toEqual(['deploy=root']);
   });
@@ -89,13 +125,14 @@ describe('cached workspace slash command scan', () => {
     rmSync(join(worktreePath, '.claude'), { recursive: true });
     expect(names()).toEqual([]);
     mkdirSync(commandsPath, { recursive: true });
-    command('late.md', 'late');
+    writeFileSync(join(commandsPath, 'late.md'), '---\ndescription: late\n---\n');
     expect(names()).toEqual(['late=late']);
   });
 
   it('shows a linked command once its target appears elsewhere in the worktree', () => {
     const shared = join(worktreePath, 'shared');
     mkdirSync(shared);
+    afterClockTick(commandsPath);
     symlinkSync(join(shared, 'target.md'), join(commandsPath, 'linked.md'));
     expect(names()).toEqual(['deploy=root', 'team:review=team']);
     writeFileSync(join(shared, 'target.md'), '---\ndescription: later\n---\n');
@@ -117,6 +154,27 @@ describe('cached workspace slash command scan', () => {
       entry.description = 'changed';
     }
     expect(names()).toEqual(['deploy=root', 'team:review=team']);
+  });
+
+  it('rescans the worktree when its path resolves to another root', () => {
+    const link = join(worktreePath, 'current');
+    const other = join(worktreePath, 'other');
+    mkdirSync(join(other, '.claude'), { recursive: true });
+    // The other root shares the first root's commands, which lie outside it.
+    symlinkSync(commandsPath, join(other, '.claude', 'commands'));
+    symlinkSync(worktreePath, link);
+    expect(cache.scan(link).map((entry) => entry.name)).toContain('deploy');
+
+    unlinkSync(link);
+    symlinkSync(other, link);
+    expect(cache.scan(link)).toEqual([]);
+  });
+
+  it('rescans while the newest change is too recent to tell a later one apart', () => {
+    const recent = new WorkspaceCommandScanCache({ scanFromDisk: scan });
+    recent.scan(worktreePath);
+    recent.scan(worktreePath);
+    expect(scan).toHaveBeenCalledTimes(2);
   });
 
   it('returns nothing for a session without a worktree', () => {

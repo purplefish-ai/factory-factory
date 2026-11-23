@@ -136,63 +136,109 @@ export function scanClaudeWorkspaceCommandsFromDisk(
   );
 }
 
-/** A path's state as `stat` sees it through links; null when it cannot be read. */
-function pathStamp(path: string): string | null {
+type PathStamp = { path: string; stamp: string | null; changedNs: bigint };
+
+/** A path's state as `stat` sees it through links; a null stamp when it cannot be read. */
+function stampPath(path: string): PathStamp {
   try {
     const stats = statSync(path, { bigint: true, throwIfNoEntry: false });
-    return stats ? `${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}` : null;
+    return stats
+      ? {
+          path,
+          stamp: `${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}`,
+          changedNs: stats.mtimeNs > stats.ctimeNs ? stats.mtimeNs : stats.ctimeNs,
+        }
+      : { path, stamp: null, changedNs: 0n };
+  } catch {
+    return { path, stamp: null, changedNs: 0n };
+  }
+}
+
+function realpathOrNull(path: string): string | null {
+  try {
+    return realpathSync(path);
   } catch {
     return null;
   }
 }
 
 const MAX_CACHED_WORKSPACES = 64;
+/**
+ * A change this close to a scan may share its timestamps with the next change
+ * (Linux stamps files from a coarse clock, other filesystems to the second), so
+ * such a scan is not reused.
+ */
+const RACY_WINDOW_MS = 2000;
 
 /**
- * Workspace commands per worktree, rescanned only when a stamp of a directory it
- * listed or a command file it read has changed, so an unchanged workspace costs
- * one `stat` per directory and command file instead of a scan.
+ * Workspace commands per worktree, rescanned only when the worktree resolves
+ * elsewhere or a stamp of a directory it listed or a command file it read has
+ * changed, so an unchanged workspace costs one `stat` per directory and command
+ * file instead of a scan.
  */
 export class WorkspaceCommandScanCache {
   private readonly entries = new Map<
     string,
-    { commands: CommandInfo[]; stamps: [path: string, stamp: string | null][] }
+    { root: string | null; commands: CommandInfo[]; stamps: PathStamp[] }
   >();
+  private readonly scanFromDisk: typeof scanClaudeWorkspaceCommandsFromDisk;
+  private readonly maxEntries: number;
+  private readonly now: () => number;
 
   constructor(
-    private readonly scanFromDisk = scanClaudeWorkspaceCommandsFromDisk,
-    private readonly maxEntries = MAX_CACHED_WORKSPACES
-  ) {}
+    options: {
+      scanFromDisk?: typeof scanClaudeWorkspaceCommandsFromDisk;
+      maxEntries?: number;
+      now?: () => number;
+    } = {}
+  ) {
+    this.scanFromDisk = options.scanFromDisk ?? scanClaudeWorkspaceCommandsFromDisk;
+    this.maxEntries = options.maxEntries ?? MAX_CACHED_WORKSPACES;
+    this.now = options.now ?? Date.now;
+  }
 
   /** Same result as `scanClaudeWorkspaceCommandsFromDisk`, in fresh objects. */
   scan(worktreePath: string | null, seen = new Set<string>()): CommandInfo[] {
     if (!worktreePath) {
       return [];
     }
-    let entry = this.entries.get(worktreePath);
+    const root = realpathOrNull(worktreePath);
+    const cached = this.entries.get(worktreePath);
     this.entries.delete(worktreePath);
-    if (!entry?.stamps.every(([path, stamp]) => pathStamp(path) === stamp)) {
-      const stamps: [string, string | null][] = [];
-      const commands = this.scanFromDisk(worktreePath, new Set(), (path) => {
-        stamps.push([path, pathStamp(path)]);
+    let commands = cached?.commands;
+    if (
+      !(
+        cached &&
+        cached.root === root &&
+        cached.stamps.every(({ path, stamp }) => stampPath(path).stamp === stamp)
+      )
+    ) {
+      const scannedAtNs = BigInt(this.now()) * 1_000_000n;
+      const stamps: PathStamp[] = [];
+      commands = this.scanFromDisk(worktreePath, new Set(), (path) => {
+        stamps.push(stampPath(path));
       });
-      entry = { commands, stamps };
+      const settledNs = scannedAtNs - BigInt(RACY_WINDOW_MS) * 1_000_000n;
+      if (stamps.every(({ changedNs }) => changedNs < settledNs)) {
+        this.entries.set(worktreePath, { root, commands, stamps });
+      }
+    } else {
+      this.entries.set(worktreePath, cached);
     }
-    this.entries.set(worktreePath, entry);
     for (const oldest of this.entries.keys()) {
       if (this.entries.size <= this.maxEntries) {
         break;
       }
       this.entries.delete(oldest);
     }
-    const commands: CommandInfo[] = [];
-    for (const command of entry.commands) {
+    const fresh: CommandInfo[] = [];
+    for (const command of commands ?? []) {
       if (!seen.has(command.name)) {
         seen.add(command.name);
-        commands.push({ ...command });
+        fresh.push({ ...command });
       }
     }
-    return commands;
+    return fresh;
   }
 }
 
