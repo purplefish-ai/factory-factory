@@ -49,16 +49,23 @@ export const Answered: Story = {
   },
 };
 
-export const UnavailableAnswer: Story = {
+export const UnavailableOutcome: Story = {
   args: {
     message: {
       type: 'question_response',
       questionResponse: {
         toolUseId: 'ask-resource-view',
-        status: 'answered',
+        status: 'unavailable',
         questions: [{ question: 'What should the resource details show?', answers: [] }],
       },
     },
+  },
+  play: async ({ canvasElement }) => {
+    const region = within(canvasElement).getByRole('region', {
+      name: 'Question outcome unavailable',
+    });
+    await expect(region).toBeVisible();
+    await expect(within(region).getByText('What should the resource details show?')).toBeVisible();
   },
 };
 

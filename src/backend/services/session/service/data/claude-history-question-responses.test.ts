@@ -147,6 +147,63 @@ describe('Claude question response history', () => {
     });
   });
 
+  it('keeps both a companion note and a later structured annotation', async () => {
+    const question = 'Choose how to display the details';
+    const noteTitle = 'Additional detail';
+    const questions = [
+      { id: 'choice', question, options: [{ label: 'Full view', description: '' }] },
+      {
+        id: 'note',
+        question: noteTitle,
+        optional: true,
+        options: [],
+        companionNote: { questionId: 'choice' },
+      },
+    ];
+    writeQuestionHistory({
+      directory: tempDir,
+      providerSessionId: 'combined-notes',
+      entries: [
+        {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'tool_use', name: 'AskUserQuestion', id: 'q', input: { questions } }],
+          },
+        },
+        {
+          type: 'user',
+          toolUseResult: {
+            questions,
+            answers: { [question]: 'Full view', [noteTitle]: 'Include all processes.' },
+            annotations: { [question]: { notes: 'Sort by CPU.' } },
+          },
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'q', content: 'Accepted' }],
+          },
+        },
+      ],
+    });
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: 'combined-notes',
+      workingDir: '/work',
+    });
+    expect(result).toMatchObject({
+      status: 'loaded',
+      history: [
+        {
+          type: 'question_response',
+          questionResponse: {
+            questions: [
+              { question, answers: ['Full view'], note: 'Include all processes.\nSort by CPU.' },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
   it('keeps malformed question tools visible and hides private Claude results', async () => {
     const question = 'Enter private input';
     const questions = [{ question, options: [], writeOnly: true }];

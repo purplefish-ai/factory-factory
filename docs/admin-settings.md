@@ -176,21 +176,23 @@ stay stale after a workspace is viewed.
 
 ## Backup imports
 
-New exports use schema version 8 with the frozen `base-json-slack-connections-1`
+New exports use schema version 8 with the `base-json-question-responses-1`
 partial coverage manifest. This cumulative profile includes base logical
 metadata, periodic configuration and workspace links, retained periodic
-execution history, automation definition bodies and Slack connection metadata.
-Repository/worktree files, provider history bytes, archives, mail, secrets,
-native account homes and live runtime authority remain excluded. Paths and
+execution history, automation definition bodies, Slack connection metadata and
+local question response summaries. The `questionResponses` capability is version
+1 and restores summaries for sessions created by the import. Repository/worktree
+files, provider history bytes, raw tool content, archives, mail, secrets, native
+account homes and live runtime authority are excluded. Paths and
 provider-session IDs may remain metadata. Workspace.creationMetadata,
 WorkspacePR.observation on actual included PR rows,
 AgentSession.providerMetadata and PeriodicTaskExecution.launchSnapshot preserve
-SQL NULL versus top-level JSON null. All five version-1 recovery sections are
-required, including when empty. Frozen older profiles retain their historical
-capabilities, null semantics and warnings. Import requires all 37 canonical
-model classifications and the profile's exact global exclusions; unknown
-capabilities or sections reject before opening the writer. Versions 4–7 retain
-their legacy behavior and report no versioned coverage declaration.
+SQL NULL versus top-level JSON null. All six version-1 recovery sections are
+required, including when empty. The current profile requires all 38 canonical
+model classifications and its exact global exclusions. Frozen older profiles
+retain their historical capabilities, null semantics and warnings. Imports with
+unknown capabilities or sections fail before opening the writer. Versions 4–7
+retain their legacy behavior and report no versioned coverage declaration.
 
 Archived workspaces no longer keep their original attachments or a successful
 setup log, so their exports normally omit them. Rows not yet cleaned up still

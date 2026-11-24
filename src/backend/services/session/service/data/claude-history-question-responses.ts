@@ -82,7 +82,10 @@ function completedQuestion(
       annotations && Object.hasOwn(annotations, field.question)
         ? annotations[field.question]?.notes
         : undefined;
-    return note && !field.redacted ? { ...field, note } : field;
+    if (!note || field.redacted || note === field.note) {
+      return field;
+    }
+    return { ...field, note: field.note ? `${field.note}\n${note}` : note };
   });
   const details = hasSecretQuestion(input)
     ? undefined

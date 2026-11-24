@@ -10,9 +10,9 @@ start with `src/` are from the repository root.
 ## Owns, and does not own
 
 The module owns reading a provider history file, sharing one read and projection
-among concurrent callers, the cache of completed projections, and applying a
-result to a session store through that store's fences (the hydrator). It does
-not own:
+among concurrent callers, the cache of completed projections, and hydrating a
+session store through its history fences. It persists and restores local
+question-response summaries alongside provider history. It does not own:
 
 - The projection itself (`buildTranscriptFromHistoryCooperatively`) and the
   stores: `../store/session-transcript.ts`, `../store/`.
@@ -25,11 +25,11 @@ not own:
 ## Public surface
 
 The capsule barrel exports the session data and provider resolver services, with
-their factories, and `sessionRepository` from here. Stores are hydrated by a
-hydrator from `createProviderHistoryHydrator`
-(`session-provider-history-hydrator.ts`), one per session domain. PR receipt
-lookup (`../delivery/session-pr-receipt.ts`) calls the two loaders directly,
-reading only lines that contain its marker.
+their factories, and `sessionRepository` from here. The session domain uses
+`createSessionTranscriptHydrator` (`session-question-response-history.ts`) to
+restore provider history and merge local question summaries. PR receipt lookup
+(`../delivery/session-pr-receipt.ts`) calls the two loaders directly, reading
+only lines that contain its marker.
 
 ## Invariants
 

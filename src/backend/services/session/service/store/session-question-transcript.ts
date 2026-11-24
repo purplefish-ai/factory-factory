@@ -1,4 +1,9 @@
-import type { AgentMessage, ChatMessage, ToolResultContentValue } from '@/shared/acp-protocol';
+import type {
+  AgentMessage,
+  ChatMessage,
+  ToolResultContentValue,
+  ToolUseContent,
+} from '@/shared/acp-protocol';
 import {
   type QuestionResponse,
   buildQuestionToolDetails,
@@ -56,6 +61,34 @@ function addQuestionResult(
   return { ...message, questionToolDetails: { ...message.questionToolDetails, result } };
 }
 
+const GENERIC_TOOL_NAMES = new Set(['', 'acp tool', 'tool call', 'tool input request']);
+
+function enrichQuestionToolDetails(
+  message: QuestionMessage,
+  tool: ToolUseContent
+): QuestionMessage {
+  // Missing details can mean the original request was private.
+  const current = message.questionToolDetails;
+  if (!current) {
+    return message;
+  }
+  if (
+    hasSecretQuestion(tool.input) ||
+    (current.input && hasSecretQuestion(current.input)) ||
+    message.questionResponse.questions.some((item) => item.redacted)
+  ) {
+    return { ...message, questionToolDetails: undefined };
+  }
+  const name = tool.name.trim().toLowerCase();
+  const toolName = GENERIC_TOOL_NAMES.has(name) ? current.toolName : tool.name;
+  const update = buildQuestionToolDetails(toolName, tool.input);
+  const input =
+    update.input && Object.keys(update.input).length > 0
+      ? { ...current.input, ...update.input }
+      : current.input;
+  return { ...message, questionToolDetails: { ...current, toolName, input } };
+}
+
 export function recordQuestionResponse(
   store: SessionStore,
   order: number,
@@ -98,7 +131,8 @@ export function foldQuestionToolUpdate(
   message: AgentMessage
 ): { messageId: string; order: number; replacement: QuestionMessage } | undefined {
   const result = getStandaloneToolResult(message);
-  const toolId = getToolStart(message)?.id ?? result?.tool_use_id;
+  const tool = getToolStart(message);
+  const toolId = tool?.id ?? result?.tool_use_id;
   if (!toolId) {
     return undefined;
   }
@@ -108,7 +142,11 @@ export function foldQuestionToolUpdate(
   if (entry?.message?.type !== 'question_response') {
     return undefined;
   }
-  const replacement = result ? addQuestionResult(entry.message, result.content) : entry.message;
+  const replacement = tool
+    ? enrichQuestionToolDetails(entry.message, tool)
+    : result
+      ? addQuestionResult(entry.message, result.content)
+      : entry.message;
   upsertTranscriptMessage(store, { ...entry, message: replacement });
   return { messageId: entry.id, order: entry.order, replacement };
 }

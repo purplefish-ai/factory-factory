@@ -24,7 +24,11 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   database.prisma = db.prisma;
 }, 30_000);
-afterAll(async () => destroyIntegrationDatabase(db));
+afterAll(async () => {
+  if (db) {
+    await destroyIntegrationDatabase(db);
+  }
+});
 
 const timestamp = new Date('2026-11-10T10:00:00.000Z');
 const identity = { sessionId: 'session', providerSessionId: 'provider-session', toolUseId: 'tool' };

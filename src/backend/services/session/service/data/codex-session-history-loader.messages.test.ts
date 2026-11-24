@@ -117,6 +117,7 @@ describe('Codex response-item history messages', () => {
         },
       },
       response('assistant', 'I can continue reviewing while I wait.'),
+      event('task_started', undefined, 'later-turn'),
       {
         type: 'response_item',
         payload: { type: 'function_call_output', call_id: 'ask', output: '{"accepted":true}' },
