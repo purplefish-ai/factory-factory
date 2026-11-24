@@ -17,32 +17,27 @@ function normalizeOtherText(value: string | undefined): string {
 export function isAnswerComplete(
   question: AskUserQuestion,
   answer: string | string[] | undefined,
-  otherText: string,
-  allowSkip = true
+  otherText: string
 ): boolean {
   const OTHER_OPTION_VALUE = getOtherOptionValue(question);
   const normalizedOther = normalizeOtherText(otherText);
-  if (
-    allowSkip &&
-    question.optional &&
-    (!answer || (Array.isArray(answer) && answer.length === 0))
-  ) {
-    return true;
-  }
   if (question.multiSelect) {
     if (!Array.isArray(answer) || answer.length === 0) {
-      return false;
+      return question.optional === true;
     }
-    if (answer.includes(OTHER_OPTION_VALUE)) {
-      return normalizedOther.length > 0 && !getArrayAnswerError(question, answer, otherText);
+    const hasUnfilledOther = answer.includes(OTHER_OPTION_VALUE) && normalizedOther.length === 0;
+    if (hasUnfilledOther && !question.optional) {
+      return false;
     }
     return !getArrayAnswerError(question, answer, otherText);
   }
   if (typeof answer !== 'string' || answer.length === 0) {
-    return false;
+    return question.optional === true;
   }
   if (answer === OTHER_OPTION_VALUE) {
-    return normalizedOther.length > 0 && !getAnswerError(question, normalizedOther);
+    return normalizedOther
+      ? !getAnswerError(question, normalizedOther)
+      : question.optional === true;
   }
   return true;
 }
@@ -108,11 +103,11 @@ export function getArrayAnswerError(
   otherText: string
 ): string | null {
   const rules = question.validation;
-  if (rules?.type !== 'array' || (question.optional && answer.length === 0)) {
+  if (rules?.type !== 'array') {
     return null;
   }
   const values = formatAnswer(question, answer, otherText);
-  if (!Array.isArray(values)) {
+  if (!Array.isArray(values) || (question.optional && values.length === 0)) {
     return null;
   }
   if (rules.minItems !== undefined && values.length < rules.minItems) {
