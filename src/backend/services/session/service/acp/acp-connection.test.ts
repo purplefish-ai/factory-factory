@@ -118,7 +118,7 @@ describe('ACP SDK connection', () => {
         },
         { cancellationSignal: abort.signal, stopWaitingOnCancel: true }
       );
-      const rejected = expect(request).rejects.toMatchObject({ code: -32800 });
+      const rejected = expect(request).rejects.toMatchObject({ code: -32_800 });
       const requestId = await shown.promise;
       abort.abort();
       await rejected;
