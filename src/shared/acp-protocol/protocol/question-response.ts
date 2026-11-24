@@ -29,3 +29,22 @@ export const QuestionToolDetailsSchema = z.object({
 });
 
 export type QuestionToolDetails = z.infer<typeof QuestionToolDetailsSchema>;
+
+/** Project optional properties from local tool inputs just as the JSON wire would. */
+export function buildQuestionToolDetails(
+  toolName: string,
+  input: unknown,
+  result?: unknown
+): QuestionToolDetails {
+  let wireInput: unknown;
+  try {
+    wireInput = JSON.parse(JSON.stringify(input));
+  } catch {
+    // Provider details are optional; the plain question summary can still be kept.
+  }
+  return {
+    toolName,
+    input: ArchivedJsonRecordSchema.safeParse(wireInput).data,
+    result: ArchivedToolResultContentSchema.safeParse(result).data,
+  };
+}

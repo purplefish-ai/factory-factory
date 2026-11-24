@@ -6,7 +6,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/st
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { ChatMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
-import { QuestionToolDetailsSchema } from '@/shared/acp-protocol/protocol/question-response';
+import { buildQuestionToolDetails } from '@/shared/acp-protocol/protocol/question-response';
 import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import {
@@ -65,8 +65,11 @@ export class SessionPermissionService {
       (requestId) => {
         const request = this.interactiveRequests.get(sessionId)?.get(requestId);
         this.recordQuestionResponse(sessionId, request, 'cancelled');
-        this.forgetInteractiveRequest(sessionId, requestId);
+        const wasShown = this.forgetInteractiveRequest(sessionId, requestId);
         this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
+        if (wasShown && this.acpPermissionBridges.get(sessionId)?.pendingCount) {
+          this.showNextInteractiveRequest(sessionId);
+        }
       },
       workflow === ADVERSARIAL_REVIEW_WORKFLOW
         ? (params) => {
@@ -230,7 +233,7 @@ export class SessionPermissionService {
     );
     const details = questionResponse.questions.some((item) => item.redacted)
       ? undefined
-      : QuestionToolDetailsSchema.safeParse({ toolName, input: rawInput }).data;
+      : buildQuestionToolDetails(toolName, rawInput);
     const message = this.sessionDomainService.upsertQuestionResponse(sessionId, order, {
       type: 'question_response',
       questionResponse,

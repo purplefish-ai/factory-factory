@@ -363,10 +363,7 @@ export function removeTranscriptMessageById(
 export function setNextOrderFromTranscript(store: SessionStore): void {
   let nextOrder = store.nextOrder;
   for (const message of store.transcript) {
-    if (
-      message.message?.type === 'session_lifecycle' ||
-      (message.message?.type === 'session_notice' && !Number.isInteger(message.order))
-    ) {
+    if (message.message?.type === 'session_lifecycle' || !Number.isInteger(message.order)) {
       continue;
     }
     if (message.order >= nextOrder) {

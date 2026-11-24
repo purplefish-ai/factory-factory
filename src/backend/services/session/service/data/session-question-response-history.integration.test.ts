@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { createSessionLoadService } from '@/backend/services/session/service/composition/session-services';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   hydrateQuestionResponseHistory,
@@ -38,7 +40,14 @@ beforeAll(async () => {
       projectId: 'project',
       name: 'Workspace',
       status: 'READY',
-      agentSessions: { create: { id: 'session', workflow: 'implement', provider: 'CODEX' } },
+      agentSessions: {
+        create: {
+          id: 'session',
+          workflow: 'implement',
+          provider: 'CODEX',
+          providerSessionId: 'provider-1',
+        },
+      },
     },
   });
 });
@@ -103,6 +112,62 @@ it('reopens a completed question from SQLite at its provider tool position', asy
   await hydrateQuestionResponseHistory(withoutProviderHistory, 'session', 'provider-1');
   expect(withoutProviderHistory.getTranscriptSnapshot('session')).toMatchObject([
     {
+      message: {
+        type: 'question_response',
+        questionResponse: { toolUseId: 'tool', status: 'answered' },
+      },
+    },
+  ]);
+  const newlyConnected = new SessionDomainService();
+  await hydrateQuestionResponseHistory(newlyConnected, 'session', 'provider-1');
+  const newEvent = newlyConnected.appendClaudeEvent('session', {
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: 'Continuing the session.' }] },
+  });
+  expect(Number.isInteger(newEvent.order)).toBe(true);
+
+  const passive = new SessionDomainService();
+  passive.appendClaudeEvent('session', {
+    type: 'assistant',
+    timestamp: new Date(Date.parse(recorded.timestamp) + 1000).toISOString(),
+    message: { role: 'assistant', content: [{ type: 'text', text: 'Following the answer.' }] },
+  });
+  const load = createSessionLoadService({
+    domain: passive,
+    config: {
+      getSessionConfigProjection: async () => ({
+        currentProjection: () => ({ capabilities: EMPTY_CHAT_BAR_CAPABILITIES, configOptions: [] }),
+      }),
+    },
+    hydrateLifecycleEvents: async () => undefined,
+    getRuntimeSnapshot: (id) => passive.getRuntimeSnapshot(id),
+    tryDispatchNextMessage: async () => undefined,
+  });
+  const prepared = await load.prepareLoad({ sessionId: 'session' });
+  if (prepared.status !== 'ready') {
+    throw new Error('Expected successful passive session load');
+  }
+  expect(
+    load.captureReplay(prepared).replayEvents.filter((event) => event.type === 'agent_message')
+  ).toMatchObject([
+    { order: -0.5, data: { type: 'question_response', questionResponse: { toolUseId: 'tool' } } },
+    { order: 0, data: { type: 'assistant' } },
+  ]);
+
+  const fallback = withoutProviderHistory.getTranscriptSnapshot('session');
+  const provider = {
+    id: 'provider-row',
+    source: 'agent',
+    order: 7,
+    timestamp: recorded.timestamp,
+    message: tool,
+  } as const;
+  withoutProviderHistory.replaceTranscript('session', [...fallback, provider]);
+  await hydrateQuestionResponseHistory(withoutProviderHistory, 'session', 'provider-1');
+  expect(withoutProviderHistory.getTranscriptSnapshot('session')).toMatchObject([
+    {
+      id: provider.id,
+      order: provider.order,
       message: {
         type: 'question_response',
         questionResponse: { toolUseId: 'tool', status: 'answered' },

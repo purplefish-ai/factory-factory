@@ -19,8 +19,14 @@ import {
 
 export type AcpClientCallbacks = {
   sessionUpdate(params: SessionNotification): Promise<void>;
-  requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse>;
-  createElicitation?(params: CreateElicitationRequest): Promise<CreateElicitationResponse>;
+  requestPermission(
+    params: RequestPermissionRequest,
+    signal?: AbortSignal
+  ): Promise<RequestPermissionResponse>;
+  createElicitation?(
+    params: CreateElicitationRequest,
+    signal?: AbortSignal
+  ): Promise<CreateElicitationResponse>;
   completeElicitation?(params: CompleteElicitationNotification): Promise<void>;
   extNotification?(method: string, params: unknown): Promise<void>;
 };
@@ -29,13 +35,15 @@ export type AcpClientCallbacks = {
 // The unstable v1 entrypoint preserves elicitation and native subagent support.
 export function createAcpConnection(handler: AcpClientCallbacks, stream: Stream) {
   const app = client()
-    .onRequest(methods.client.session.requestPermission, ({ params }) =>
-      handler.requestPermission(params)
+    .onRequest(methods.client.session.requestPermission, ({ params, signal }) =>
+      handler.requestPermission(params, signal)
     )
     .onNotification(methods.client.session.update, ({ params }) => handler.sessionUpdate(params));
   const createElicitation = handler.createElicitation?.bind(handler);
   if (createElicitation) {
-    app.onRequest(methods.client.elicitation.create, ({ params }) => createElicitation(params));
+    app.onRequest(methods.client.elicitation.create, ({ params, signal }) =>
+      createElicitation(params, signal)
+    );
   }
   const completeElicitation = handler.completeElicitation?.bind(handler);
   if (completeElicitation) {

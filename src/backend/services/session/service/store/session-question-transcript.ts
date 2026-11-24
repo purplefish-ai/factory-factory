@@ -1,7 +1,7 @@
 import type { AgentMessage, ChatMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import {
   type QuestionResponse,
-  QuestionToolDetailsSchema,
+  buildQuestionToolDetails,
 } from '@/shared/acp-protocol/protocol/question-response';
 import { mergeLifecycleMessage } from './session-lifecycle-transcript';
 import type { SessionStore } from './session-store.types';
@@ -107,6 +107,22 @@ export function foldQuestionToolUpdate(
   return { messageId: entry.id, order: entry.order, replacement };
 }
 
+function questionHistoryAnchor(
+  row: ChatMessage,
+  answersByTool: ReadonlyMap<string, QuestionResponse>
+): { toolUseId: string; details: QuestionMessage['questionToolDetails'] } | undefined {
+  const message = row.message;
+  if (message?.type === 'question_response') {
+    return { toolUseId: message.questionResponse.toolUseId, details: message.questionToolDetails };
+  }
+  const event = message?.event;
+  const block = event?.type === 'content_block_start' ? event.content_block : undefined;
+  if (block?.type !== 'tool_use' || !answersByTool.has(block.id)) {
+    return undefined;
+  }
+  return { toolUseId: block.id, details: buildQuestionToolDetails(block.name, block.input) };
+}
+
 /** Durable summaries win over provider reconstruction. Correlated rows keep provider order. */
 export function mergeQuestionResponseHistory(
   transcript: ChatMessage[],
@@ -119,24 +135,14 @@ export function mergeQuestionResponseHistory(
   const anchorIds = new Map<string, string>();
   const detailsByTool = new Map<string, QuestionMessage['questionToolDetails']>();
   for (const row of transcript) {
-    const message = row.message;
-    const event = message?.event;
-    const block = event?.type === 'content_block_start' ? event.content_block : undefined;
-    if (message?.type === 'question_response') {
-      const id = message.questionResponse.toolUseId;
-      if (answersByTool.has(id)) {
-        anchorIds.set(id, row.id);
-        detailsByTool.set(id, message.questionToolDetails);
-      }
-    } else if (block?.type === 'tool_use' && answersByTool.has(block.id)) {
-      anchorIds.set(block.id, row.id);
-      detailsByTool.set(
-        block.id,
-        QuestionToolDetailsSchema.safeParse({
-          toolName: block.name,
-          input: block.input,
-        }).data
-      );
+    const anchor = questionHistoryAnchor(row, answersByTool);
+    if (!(anchor && answersByTool.has(anchor.toolUseId))) {
+      continue;
+    }
+    const currentAnchor = anchorIds.get(anchor.toolUseId);
+    if (!currentAnchor || currentAnchor === questionResponseMessageId(anchor.toolUseId)) {
+      anchorIds.set(anchor.toolUseId, row.id);
+      detailsByTool.set(anchor.toolUseId, anchor.details);
     }
   }
 
@@ -162,7 +168,7 @@ export function mergeQuestionResponseHistory(
       }
       return [row];
     })
-    .map((row): ChatMessage => {
+    .flatMap((row): ChatMessage[] => {
       const message = row.message;
       const event = message?.event;
       const tool =
@@ -172,20 +178,25 @@ export function mergeQuestionResponseHistory(
       const id =
         message?.type === 'question_response' ? message.questionResponse.toolUseId : tool?.id;
       const summary = id ? answersByTool.get(id) : undefined;
-      if (!(id && summary) || anchorIds.get(id) !== row.id) {
-        return row;
+      if (!(id && summary)) {
+        return [row];
       }
-      return {
-        ...row,
-        message: {
-          type: 'question_response',
-          timestamp: row.timestamp,
-          questionResponse: summary,
-          questionToolDetails: summary.questions.some((item) => item.redacted)
-            ? undefined
-            : detailsByTool.get(id),
+      if (anchorIds.get(id) !== row.id) {
+        return [];
+      }
+      return [
+        {
+          ...row,
+          message: {
+            type: 'question_response',
+            timestamp: row.timestamp,
+            questionResponse: summary,
+            questionToolDetails: summary.questions.some((item) => item.redacted)
+              ? undefined
+              : detailsByTool.get(id),
+          },
         },
-      };
+      ];
     });
 
   const unmatched = restored

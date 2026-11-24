@@ -99,6 +99,16 @@ export class AcpPermissionBridge {
     return true;
   }
 
+  /** Cancel one request without changing the other pending requests. */
+  cancelPermission(requestId: string): void {
+    const entry = this.pending.get(requestId);
+    if (!entry) {
+      return;
+    }
+    this.pending.delete(requestId);
+    this.finishCancellation(requestId, entry);
+  }
+
   /**
    * Called when session is cancelled/stopped.
    * Resolves all pending Promises with cancelled outcome.
@@ -107,16 +117,16 @@ export class AcpPermissionBridge {
     const entries = [...this.pending.entries()];
     this.pending.clear();
     for (const [requestId, entry] of entries) {
-      entry.resolve({
-        outcome: {
-          outcome: 'cancelled',
-        },
-      });
-      try {
-        this.onCancelled?.(requestId);
-      } catch (error) {
-        logger.warn('Failed to deliver permission cancellation', { requestId, error });
-      }
+      this.finishCancellation(requestId, entry);
+    }
+  }
+
+  private finishCancellation(requestId: string, entry: PendingPermission): void {
+    entry.resolve({ outcome: { outcome: 'cancelled' } });
+    try {
+      this.onCancelled?.(requestId);
+    } catch (error) {
+      logger.warn('Failed to deliver permission cancellation', { requestId, error });
     }
   }
 

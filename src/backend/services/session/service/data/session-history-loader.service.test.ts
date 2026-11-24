@@ -75,6 +75,7 @@ describe('claudeSessionHistoryLoaderService', () => {
             content: [
               { type: 'tool_use', name: 'AskUserQuestion', id: 'q-1', input: { questions } },
               { type: 'text', text: 'An unrelated message' },
+              { type: 'tool_use', name: 'AskUserQuestion', id: 'q-1', input: { questions } },
               { type: 'tool_use', name: 'AskUserQuestion', id: 'q-2', input: { questions } },
               { type: 'tool_use', name: 'AskUserQuestion', id: 'q-3', input: { questions } },
             ],
@@ -82,7 +83,13 @@ describe('claudeSessionHistoryLoaderService', () => {
         },
         {
           type: 'user',
-          toolUseResult: { questions, answers: { [question]: options[0]!.label } },
+          toolUseResult: {
+            questions,
+            answers: { [question]: options[0]!.label },
+            annotations: {
+              [question]: { notes: 'Include information for the current workspace.' },
+            },
+          },
           message: {
             role: 'user',
             content: [{ type: 'tool_result', tool_use_id: 'q-1', content: 'Answer summary' }],
@@ -132,7 +139,14 @@ describe('claudeSessionHistoryLoaderService', () => {
       questionResponse: {
         toolUseId: 'q-1',
         status: 'answered',
-        questions: [{ question, header: 'Why view', answers: [options[0]!.label] }],
+        questions: [
+          {
+            question,
+            header: 'Why view',
+            answers: [options[0]!.label],
+            note: 'Include information for the current workspace.',
+          },
+        ],
       },
       questionToolDetails: { result: 'Answer summary' },
     });

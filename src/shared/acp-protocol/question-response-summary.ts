@@ -8,8 +8,11 @@ const questionPresentationSchema = z.object({
   format: z.string().optional().catch(undefined),
   writeOnly: z.boolean().optional().catch(undefined),
   _meta: z
-    .object({ codex: z.object({ isSecret: z.boolean().optional().catch(undefined) }).nullish() })
-    .nullish(),
+    .object({
+      codex: z.object({ isSecret: z.boolean().optional() }).nullish().catch(undefined),
+    })
+    .nullish()
+    .catch(undefined),
 });
 
 const companionNoteSchema = z.object({

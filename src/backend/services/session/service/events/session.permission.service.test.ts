@@ -177,7 +177,7 @@ describe('SessionPermissionService', () => {
           optional: true,
           companionNote: { questionId: 'processes', revealOnValue: 'None of the above' },
         },
-        { id: 'secret', question: 'Token?', isSecret: true },
+        { id: 'secret', question: 'Token?', isSecret: true, _meta: { codex: 'unexpected' } },
       ],
     };
     const tool = domain.appendClaudeEvent('session-1', {
@@ -279,6 +279,10 @@ describe('SessionPermissionService', () => {
       {
         message: {
           type: 'question_response',
+          questionToolDetails: {
+            toolName: 'AskUserQuestion',
+            input: { questions: [{ validation: { type: 'integer', minimum: 1 } }] },
+          },
           questionResponse: {
             status: 'cancelled',
             questions: [{ question: 'count', answers: [] }],
@@ -321,6 +325,46 @@ describe('SessionPermissionService', () => {
     expect(domain.getTranscriptSnapshot('session').map((row) => row.message)).toMatchObject([
       { questionResponse: { status: 'cancelled', toolUseId: 'First' } },
       { questionResponse: { status: 'cancelled', toolUseId: 'Second' } },
+    ]);
+  });
+
+  it('cancels only the aborted ACP request and rejects its stale answer', async () => {
+    const domain = new SessionDomainService();
+    const service = new SessionPermissionService({ sessionDomainService: domain });
+    const handler = new AcpClientHandler(
+      'session',
+      (sessionId, event) => {
+        if (event.type === 'acp_permission_request') {
+          service.handlePermissionRequest(sessionId, event);
+        }
+      },
+      service.createPermissionBridge('session')
+    );
+    const request = (title: string) => ({
+      mode: 'form' as const,
+      sessionId: 'native',
+      message: title,
+      requestedSchema: { properties: { choice: { type: 'string' as const } } },
+    });
+    const prior = handler.createElicitation(request('Prior question'));
+    const priorId = domain.getPendingInteractiveRequest('session')!.requestId;
+    const aborter = new AbortController();
+    const cancelled = handler.createElicitation(request('Aborted question'), aborter.signal);
+    const cancelledId = domain.getPendingInteractiveRequest('session')!.requestId;
+
+    aborter.abort();
+    expect(
+      service.respondToPermission('session', cancelledId, 'accept', { choice: ['stale'] })
+    ).toBe(false);
+    expect(domain.getPendingInteractiveRequest('session')?.requestId).toBe(priorId);
+    expect(
+      service.respondToPermission('session', priorId, 'accept', { choice: ['accepted'] })
+    ).toBe(true);
+    await expect(cancelled).resolves.toEqual({ action: 'cancel' });
+    await expect(prior).resolves.toEqual({ action: 'accept', content: { choice: 'accepted' } });
+    expect(domain.getTranscriptSnapshot('session').map((row) => row.message)).toMatchObject([
+      { questionResponse: { status: 'answered', requestId: priorId } },
+      { questionResponse: { status: 'cancelled', requestId: cancelledId } },
     ]);
   });
 

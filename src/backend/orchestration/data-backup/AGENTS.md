@@ -39,8 +39,9 @@ the inert import report for restored processes and workflows. It does not own:
   `EXCLUDED` is either exported under a key the current export schema has, or
   excluded with a reason; `Gap:` reasons mark known omissions such as
   `WorkspaceRunScript.postRunCommand`. `data-backup-columns.test.ts`.
-- Building the recovery manifest fails unless its coverage names exactly the
-  Prisma models in `src/backend/services/registry.ts`.
+- Building the recovery manifest checks the frozen coverage and any newer
+  explicitly excluded models against the Prisma registry. The frozen export
+  profile keeps the same manifest when an excluded model is added.
   `data-backup-manifest.test.ts`.
 - When `FF_PROJECT_ROOT` is set, import refuses the whole backup before any
   write if any project's repository or worktree base path, or any workspace's

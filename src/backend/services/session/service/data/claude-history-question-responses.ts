@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import {
   type QuestionResponse,
-  QuestionToolDetailsSchema,
+  buildQuestionToolDetails,
 } from '@/shared/acp-protocol/protocol/question-response';
 import { getAskUserQuestions } from '@/shared/acp-protocol/question-input';
 import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
@@ -14,10 +14,20 @@ export type ClaudeQuestionCallIndex = Map<string, { index: number; call: Call }>
 
 const structuredQuestionResultSchema = z.object({
   questions: z.array(z.unknown()).min(1),
-  answers: z.record(
-    z.string(),
-    z.union([z.string().transform((value) => (value ? [value] : [])), z.array(z.string())])
-  ),
+  answers: z
+    .record(
+      z.string(),
+      z.union([z.string().transform((value) => (value ? [value] : [])), z.array(z.string())])
+    )
+    .optional()
+    .catch(undefined),
+  annotations: z
+    .record(
+      z.string(),
+      z.object({ notes: z.string().trim().min(1).optional().catch(undefined) }).catch({})
+    )
+    .optional()
+    .catch(undefined),
 });
 
 function statusOf(result: ToolResult): QuestionResponse['status'] {
@@ -31,13 +41,13 @@ function statusOf(result: ToolResult): QuestionResponse['status'] {
     : 'unavailable';
 }
 
-function readStructuredAnswers(input: Record<string, unknown>, structuredResult: unknown) {
+function readStructuredSubmission(input: Record<string, unknown>, structuredResult: unknown) {
   const structured = structuredQuestionResultSchema.safeParse(structuredResult).data;
   const reported = getAskUserQuestions(structured);
   const expected = getAskUserQuestions(input);
   return expected.length === reported.length &&
     expected.every((field, index) => field.question === reported[index]?.question)
-    ? structured?.answers
+    ? structured
     : undefined;
 }
 
@@ -49,16 +59,31 @@ function completedQuestion(
 ): Response {
   const status = statusOf(result);
   const input = call.toolInput ?? {};
-  const answers =
-    status === 'answered' ? readStructuredAnswers(input, structuredResult) : undefined;
-  const questionResponse = summarizeQuestionResponse(input, { toolUseId }, status, answers);
+  const submitted =
+    status === 'answered' ? readStructuredSubmission(input, structuredResult) : undefined;
+  const answerPairs = getAskUserQuestions(input).flatMap(({ id, question }) => {
+    const answers = submitted?.answers;
+    return answers && Object.hasOwn(answers, question)
+      ? [[id?.trim() || question, answers[question] ?? []] as const]
+      : [];
+  });
+  const questionResponse = summarizeQuestionResponse(
+    input,
+    { toolUseId },
+    status,
+    Object.fromEntries(answerPairs)
+  );
+  const annotations = submitted?.annotations;
+  questionResponse.questions = questionResponse.questions.map((field) => {
+    const note =
+      annotations && Object.hasOwn(annotations, field.question)
+        ? annotations[field.question]?.notes
+        : undefined;
+    return note && !field.redacted ? { ...field, note } : field;
+  });
   const details = questionResponse.questions.some((question) => question.redacted)
     ? undefined
-    : QuestionToolDetailsSchema.safeParse({
-        toolName: call.toolName,
-        input,
-        result: result.content,
-      }).data;
+    : buildQuestionToolDetails(call.toolName ?? 'AskUserQuestion', input, result.content);
   return {
     type: 'question_response',
     content: call.content,
@@ -71,10 +96,7 @@ function completedQuestion(
 
 function isQuestionCall(message: HistoryMessage): message is Call & { toolId: string } {
   return (
-    message.type === 'tool_use' &&
-    message.toolName === 'AskUserQuestion' &&
-    Boolean(message.toolId) &&
-    getAskUserQuestions(message.toolInput).length > 0
+    message.type === 'tool_use' && message.toolName === 'AskUserQuestion' && Boolean(message.toolId)
   );
 }
 
@@ -112,6 +134,28 @@ function replaceQuestionWithResult(
   return true;
 }
 
+/** Keep the first position if Claude repeats a progressively enriched tool call. */
+function rememberQuestionCall(
+  history: HistoryMessage[],
+  questionCalls: ClaudeQuestionCallIndex,
+  message: Call & { toolId: string }
+): void {
+  const previous = questionCalls.get(message.toolId);
+  if (!previous) {
+    questionCalls.set(message.toolId, { index: history.length, call: message });
+    history.push(message);
+    return;
+  }
+  if (
+    history[previous.index]?.type === 'tool_use' &&
+    getAskUserQuestions(message.toolInput).length > 0
+  ) {
+    const call = { ...previous.call, toolInput: message.toolInput };
+    questionCalls.set(message.toolId, { index: previous.index, call });
+    history[previous.index] = call;
+  }
+}
+
 /** The top-level Claude result belongs to the single tool result in this record. */
 export function appendHistoryWithQuestionResponses(
   history: HistoryMessage[],
@@ -122,7 +166,8 @@ export function appendHistoryWithQuestionResponses(
   const singleResult = messages.filter((message) => message.type === 'tool_result').length === 1;
   for (const message of messages) {
     if (isQuestionCall(message)) {
-      questionCalls.set(message.toolId, { index: history.length, call: message });
+      rememberQuestionCall(history, questionCalls, message);
+      continue;
     }
     if (
       message.type === 'tool_result' &&
