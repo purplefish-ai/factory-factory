@@ -20,6 +20,71 @@ function setup() {
 }
 
 describe('ACP elicitation', () => {
+  it.each([true, false])(
+    'keeps Codex companion notes attached with a provider Other choice=%s',
+    async (providerOther) => {
+      const { handler, bridge, onEvent } = setup();
+      const response = handler.createElicitation(
+        form({
+          properties: {
+            route: {
+              type: 'string',
+              title: 'What should the detail view show?',
+              _meta: { codex: { isOther: true } },
+              oneOf: [
+                {
+                  const: 'Top processes',
+                  title: 'Top processes',
+                  description: 'Show the whole machine.',
+                },
+                ...(providerOther
+                  ? [{ const: 'None of the above', title: 'None of the above' }]
+                  : []),
+              ],
+            },
+            route_note1: {
+              type: 'string',
+              title: 'Additional answer or note',
+              _meta: { codex: { role: 'user_note', questionId: 'route' } },
+            },
+            route_note: { type: 'string', title: 'Independent field' },
+          },
+          required: ['route', 'route_note'],
+        })
+      );
+      const event = onEvent.mock.calls[0]![1];
+      expect(getAskUserQuestions(event.params.toolCall.rawInput)).toMatchObject([
+        {
+          id: 'route',
+          allowOther: false,
+          options: [
+            { label: 'Top processes', description: 'Show the whole machine.' },
+            { label: 'None of the above', description: '' },
+          ],
+        },
+        {
+          id: 'route_note1',
+          optional: true,
+          companionNote: { questionId: 'route', revealOnValue: 'None of the above' },
+        },
+        { id: 'route_note', question: 'Independent field' },
+      ]);
+      bridge.resolvePermission(event.requestId, 'accept', {
+        route: ['None of the above'],
+        route_note1: ['Include memory use.'],
+        route_note: ['Another answer.'],
+      });
+      await expect(response).resolves.toEqual({
+        action: 'accept',
+        content: {
+          route: 'None of the above',
+          route_note1: 'Include memory use.',
+          route_note: 'Another answer.',
+        },
+      });
+    }
+  );
+
   it.each(['', '   ', '__other__'])(
     'preserves blank choice values %j through the question UI',
     async (value) => {

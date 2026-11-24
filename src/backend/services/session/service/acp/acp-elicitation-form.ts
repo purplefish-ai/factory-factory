@@ -11,11 +11,21 @@ const optionSchema = z.object({
   title: z.string(),
   description: z.string().nullish(),
 });
+const CODEX_CUSTOM_ANSWER = 'None of the above';
 const common = {
   title: z.string().nullish(),
   description: z.string().nullish(),
   _meta: z
-    .object({ codex: z.object({ isOther: z.boolean().optional() }).passthrough().nullish() })
+    .object({
+      codex: z
+        .object({
+          isOther: z.boolean().optional(),
+          role: z.string().optional(),
+          questionId: z.string().optional(),
+        })
+        .passthrough()
+        .nullish(),
+    })
     .passthrough()
     .nullish(),
 };
@@ -63,6 +73,12 @@ const answersSchema = z.record(z.string(), z.array(z.string()));
 type Field = z.infer<typeof fieldSchema>;
 type Form = z.infer<typeof formSchema>;
 
+function optionDescription(option: z.infer<typeof optionSchema>): string {
+  return [option.title === option.const ? undefined : option.title, option.description]
+    .filter(Boolean)
+    .join(' — ');
+}
+
 function choices(field: Field): Array<{ label: string; description: string }> {
   if (field.type === 'boolean') {
     return [
@@ -74,7 +90,7 @@ function choices(field: Field): Array<{ label: string; description: string }> {
     if (field.oneOf) {
       return field.oneOf.map((option) => ({
         label: option.const,
-        description: [option.title, option.description].filter(Boolean).join(' — '),
+        description: optionDescription(option),
       }));
     }
     return field.enum?.map((label) => ({ label, description: '' })) ?? [];
@@ -83,7 +99,7 @@ function choices(field: Field): Array<{ label: string; description: string }> {
     return 'anyOf' in field.items
       ? field.items.anyOf.map((option) => ({
           label: option.const,
-          description: [option.title, option.description].filter(Boolean).join(' — '),
+          description: optionDescription(option),
         }))
       : field.items.enum.map((label) => ({ label, description: '' }));
   }
@@ -91,7 +107,7 @@ function choices(field: Field): Array<{ label: string; description: string }> {
 }
 
 /** Give blank provider values a visible label and a nonempty UI selection token. */
-function displayChoices(field: Field) {
+function displayChoices(field: Field): AskUserQuestion['options'] {
   const options = choices(field);
   const usedValues = new Set(options.map((option) => option.label));
   return options.map((option, index) => {
@@ -247,6 +263,47 @@ export interface AcpElicitationForm {
   parseAnswers: (answers: unknown) => Record<string, ElicitationContentValue> | null;
 }
 
+function getCompanionNotes(
+  form: Form,
+  questionIds: Map<string, string>
+): Map<string, NonNullable<AskUserQuestion['companionNote']>> {
+  const notes = new Map<string, NonNullable<AskUserQuestion['companionNote']>>();
+  for (const [id, field] of Object.entries(form.properties)) {
+    const metadata = field._meta?.codex;
+    const parentId = metadata?.questionId;
+    if (
+      metadata?.role !== 'user_note' ||
+      parentId === undefined ||
+      parentId === id ||
+      !Object.hasOwn(form.properties, parentId) ||
+      field.type !== 'string' ||
+      field.enum ||
+      field.oneOf ||
+      form.required?.includes(id)
+    ) {
+      continue;
+    }
+    const parent = form.properties[parentId];
+    const questionId = questionIds.get(parentId);
+    if (parent?.type !== 'string' || parent._meta?.codex?.isOther !== true || !questionId) {
+      continue;
+    }
+    if (choices(parent).length > 0) {
+      notes.set(id, { questionId, revealOnValue: CODEX_CUSTOM_ANSWER });
+    }
+  }
+  return notes;
+}
+
+function questionOptions(field: Field, hasCompanionNote: boolean): AskUserQuestion['options'] {
+  const options = displayChoices(field);
+  // Codex omits this option for AIR clients, where the form owns custom-answer presentation.
+  if (hasCompanionNote && !options.some((option) => option.label === CODEX_CUSTOM_ANSWER)) {
+    options.push({ label: CODEX_CUSTOM_ANSWER, description: '' });
+  }
+  return options;
+}
+
 function validateFieldAnswer(
   field: Field,
   input: string[] | undefined,
@@ -319,13 +376,16 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
         return [id, questionId];
       })
     );
+    const notes = getCompanionNotes(form, questionIds);
+    const parentsWithNotes = new Set(Array.from(notes.values(), (note) => note.questionId));
     const questions = Object.entries(form.properties).map(([id, field]): AskUserQuestion => ({
       id: questionIds.get(id) ?? id,
       question: field.title?.trim() || id.trim() || 'Input',
       ...(field.description ? { header: field.description } : {}),
-      options: displayChoices(field),
+      options: questionOptions(field, parentsWithNotes.has(questionIds.get(id) ?? id)),
       validation: questionValidation(field),
-      allowOther: allowsOtherAnswer(field),
+      allowOther: !parentsWithNotes.has(questionIds.get(id) ?? id) && allowsOtherAnswer(field),
+      ...(notes.has(id) ? { companionNote: notes.get(id) } : {}),
       ...(!form.required?.includes(id) ? { optional: true } : {}),
       ...(field.type === 'array' ? { multiSelect: true } : {}),
     }));

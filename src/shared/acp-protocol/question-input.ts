@@ -5,6 +5,11 @@ import { questionValidationSchema } from './question-validation';
 export type { AskUserQuestion };
 export { compileQuestionPattern, getStringAnswerError } from './question-validation';
 
+export const companionNoteSchema = z.object({
+  questionId: z.string().min(1),
+  revealOnValue: z.string().optional(),
+});
+
 const nonEmptyText = z.string().refine((value) => value.trim().length > 0);
 const questionInputSchema = z
   .array(
@@ -28,6 +33,7 @@ const questionInputSchema = z
       multiSelect: z.boolean().optional(),
       optional: z.boolean().optional(),
       allowOther: z.boolean().optional(),
+      companionNote: companionNoteSchema.optional(),
       validation: questionValidationSchema.optional(),
     })
   )
