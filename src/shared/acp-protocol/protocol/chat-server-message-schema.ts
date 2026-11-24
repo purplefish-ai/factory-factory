@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { companionNoteSchema } from '@/shared/acp-protocol/question-input';
 import { questionValidationSchema } from '@/shared/acp-protocol/question-validation';
 import { sessionStopControlSchema } from '@/shared/acp-protocol/subagents';
 import { acpPlanNotificationSchema } from '@/shared/acp-protocol/task-plan';
@@ -99,6 +100,7 @@ const AskUserQuestionSchema = z.object({
   multiSelect: z.boolean().optional(),
   optional: z.boolean().optional(),
   allowOther: z.boolean().optional(),
+  companionNote: companionNoteSchema.optional(),
   validation: questionValidationSchema.optional(),
 }) satisfies z.ZodType<AskUserQuestion>;
 

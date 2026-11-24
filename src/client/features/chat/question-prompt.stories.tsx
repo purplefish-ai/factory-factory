@@ -13,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Use the option list to answer quickly, or select the inline Other option to type a custom response.',
+          'Pick an option, enter a custom response, or add a note when the question supports it.',
       },
     },
   },
@@ -217,6 +217,46 @@ export const OptionalNote: Story = {
     question: createUserQuestion([
       { question: 'Additional answer or note', options: [], optional: true },
     ]),
+  },
+};
+
+export const ChoiceWithCompanionNote: Story = {
+  args: {
+    question: createUserQuestion([
+      {
+        id: 'detail_view',
+        header: 'CPU and memory',
+        question: 'What should the CPU and memory detail view show?',
+        options: [
+          {
+            label: 'Top processes, whole machine',
+            description: 'Show which processes are using the most resources.',
+          },
+          { label: 'Factory Factory only', description: '' },
+          { label: 'None of the above', description: '' },
+        ],
+        allowOther: false,
+      },
+      {
+        id: 'detail_view_note',
+        question: 'Additional answer or note',
+        optional: true,
+        options: [],
+        companionNote: { questionId: 'detail_view', revealOnValue: 'None of the above' },
+      },
+    ]),
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('radio', { name: 'None of the above' }));
+    const note = canvas.getByRole('textbox', { name: 'Additional answer or note (optional)' });
+    await userEvent.type(note, 'List CPU and memory side by side.');
+    await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
+    await expect(args.onAnswer).toHaveBeenCalledWith(args.question?.requestId, {
+      detail_view: 'None of the above',
+      detail_view_note: 'List CPU and memory side by side.',
+    });
   },
 };
 

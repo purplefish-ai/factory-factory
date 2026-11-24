@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getAskUserQuestions,
   getPendingRequestType,
   hasAskUserQuestionInput,
   hasExitPlanModeInput,
@@ -30,6 +31,28 @@ describe('pending-request-types helpers', () => {
         input: { questions: [{ question: 'Q1' }] },
       })
     ).toBe(true);
+  });
+
+  it('omits malformed companion metadata while retaining all usable questions', () => {
+    const questions = [
+      { id: 'choice', question: 'Choose', options: [{ label: 'A', description: '' }] },
+      { id: 'note', question: 'Leave a note', options: [], optional: true },
+      { id: 'other', question: 'Add a custom answer', options: [], optional: true },
+    ];
+    const validCompanion = { questionId: 'choice' };
+    const input = {
+      questions: [
+        questions[0],
+        { ...questions[1], companionNote: { questionId: 'choice', revealOnValue: 5 } },
+        { ...questions[2], companionNote: validCompanion },
+      ],
+    };
+
+    expect(getAskUserQuestions(input)).toStrictEqual([
+      questions[0],
+      questions[1],
+      { ...questions[2], companionNote: validCompanion },
+    ]);
   });
 
   it.each(

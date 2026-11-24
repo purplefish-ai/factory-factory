@@ -1,622 +1,168 @@
-import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
-import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { QuestionIcon } from '@phosphor-icons/react/dist/csr/Question';
-import { useCallback, useRef, useState } from 'react';
-import { withOccurrenceKeys } from '@/client/lib/list-keys';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { PromptCard } from '@/components/ui/prompt-card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Textarea } from '@/components/ui/textarea';
 import type { AskUserQuestion, UserQuestionRequest } from '@/lib/chat-protocol';
-import { cn } from '@/lib/utils';
 import { usePromptAutoFocus } from './prompt-auto-focus';
-import {
-  getOtherOptionValue,
-  formatAnswer,
-  isAnswerComplete,
-  getAnswerError,
-  getArrayAnswerError,
-} from './question-prompt-answers';
+import { formatAnswer, getOtherOptionValue, isAnswerComplete } from './question-prompt-answers';
+import { CompanionNote, QuestionField } from './question-prompt-fields';
 
 const QUESTION_FIRST_FOCUSABLE_SELECTOR =
   'input, button, textarea, [tabindex]:not([tabindex="-1"])';
-
-// =============================================================================
-// Types
-// =============================================================================
 
 interface QuestionPromptProps {
   question: UserQuestionRequest | null;
   onAnswer: (requestId: string, answers: Record<string, string | string[]>) => void;
 }
 
-interface SingleQuestionProps {
-  question: AskUserQuestion;
+interface IndexedQuestion {
   index: number;
-  value: string | string[];
-  onChange: (value: string | string[]) => void;
-  otherText: string;
-  onOtherTextChange: (value: string) => void;
-  requestId: string;
-}
-
-interface SingleQuestionLayoutProps {
   question: AskUserQuestion;
-  requestId: string;
-  answers: Record<number, string | string[]>;
-  otherTexts: Record<number, string>;
-  onAnswerChange: (index: number, value: string | string[]) => void;
-  onOtherTextChange: (index: number, value: string) => void;
-  onSubmit: () => void;
-  isComplete: boolean;
 }
 
-interface MultiQuestionLayoutProps {
-  question: UserQuestionRequest;
-  requestId: string;
-  currentIndex: number;
-  answers: Record<number, string | string[]>;
-  otherTexts: Record<number, string>;
-  onAnswerChange: (index: number, value: string | string[]) => void;
-  onOtherTextChange: (index: number, value: string) => void;
-  onSubmit: () => void;
-  onIndexChange: (index: number) => void;
-  isComplete: boolean;
-  isCurrentAnswered: boolean;
+interface QuestionStep extends IndexedQuestion {
+  notes: IndexedQuestion[];
 }
 
-// =============================================================================
-// Helper Components
-// =============================================================================
+function getQuestionSteps(questions: AskUserQuestion[]): QuestionStep[] {
+  const steps = questions.map((question, index): QuestionStep => ({ index, question, notes: [] }));
+  const parents = new Map(
+    steps.flatMap((step) =>
+      step.question.id && !step.question.companionNote && step.question.options?.length
+        ? [[step.question.id, step] as const]
+        : []
+    )
+  );
+  return steps.filter(({ index, question }) => {
+    const parent = question.companionNote ? parents.get(question.companionNote.questionId) : null;
+    if (!(parent && question.optional) || question.options?.length || question.multiSelect) {
+      return true;
+    }
+    parent.notes.push({ index, question });
+    return false;
+  });
+}
 
-function SingleQuestionLayout({
+export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
+  if (!question?.questions.length) {
+    return null;
+  }
+  return <QuestionPromptForm key={question.requestId} question={question} onAnswer={onAnswer} />;
+}
+
+function QuestionPromptForm({
   question,
-  requestId,
-  answers,
-  otherTexts,
-  onAnswerChange,
-  onOtherTextChange,
-  onSubmit,
-  isComplete,
-}: SingleQuestionLayoutProps) {
-  return (
-    <PromptCard
-      icon={<QuestionIcon className="h-5 w-5 text-warning" aria-hidden="true" />}
-      role="form"
-      label="Agent question"
-      hideIconOnMobile
-      iconSlot="question-prompt-icon"
-      actions={
-        <div className="flex self-stretch justify-end sm:self-end">
-          <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
-            Submit
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-2 sm:space-y-3">
-        {question.multiSelect ? (
-          <MultiSelectQuestion
-            question={question}
-            index={0}
-            value={answers[0] ?? []}
-            onChange={(value) => onAnswerChange(0, value)}
-            otherText={otherTexts[0] ?? ''}
-            onOtherTextChange={(value) => onOtherTextChange(0, value)}
-            requestId={requestId}
-          />
-        ) : (
-          <SingleSelectQuestion
-            question={question}
-            index={0}
-            value={answers[0] ?? ''}
-            onChange={(value) => onAnswerChange(0, value)}
-            otherText={otherTexts[0] ?? ''}
-            onOtherTextChange={(value) => onOtherTextChange(0, value)}
-            requestId={requestId}
-          />
-        )}
-      </div>
-    </PromptCard>
-  );
-}
-
-function MultiQuestionLayout({
-  question,
-  requestId,
-  currentIndex,
-  answers,
-  otherTexts,
-  onAnswerChange,
-  onOtherTextChange,
-  onSubmit,
-  onIndexChange,
-  isComplete,
-  isCurrentAnswered,
-}: MultiQuestionLayoutProps) {
-  const totalQuestions = question.questions.length;
-  const currentQuestion = question.questions[currentIndex];
-  const isLastQuestion = currentIndex === totalQuestions - 1;
-  const isFirstQuestion = currentIndex === 0;
-
-  return (
-    <PromptCard
-      icon={<QuestionIcon className="h-5 w-5 text-warning" aria-hidden="true" />}
-      role="form"
-      label="Agent questions"
-      hideIconOnMobile
-      iconSlot="question-prompt-icon"
-      actions={
-        <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onIndexChange(currentIndex - 1)}
-            disabled={isFirstQuestion}
-            aria-label="Previous question"
-          >
-            <CaretLeftIcon />
-          </Button>
-
-          {isLastQuestion ? (
-            <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
-              Submit
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => onIndexChange(currentIndex + 1)}
-              disabled={!isCurrentAnswered}
-            >
-              Next
-            </Button>
-          )}
-
-          {!isLastQuestion && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => onIndexChange(currentIndex + 1)}
-              aria-label="Next question"
-            >
-              <CaretRightIcon />
-            </Button>
-          )}
-        </div>
-      }
-    >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          Question {currentIndex + 1} of {totalQuestions}
-        </span>
-        <div className="flex gap-1">
-          {withOccurrenceKeys(question.questions, (item) =>
-            JSON.stringify([requestId, item.question])
-          ).map(({ item, key }, idx) => {
-            const isAnswered = isAnswerComplete(item, answers[idx], otherTexts[idx] ?? '', false);
-            return (
-              <button
-                type="button"
-                key={key}
-                onClick={() => onIndexChange(idx)}
-                className={cn(
-                  'w-2 h-2 rounded-full transition-colors focus-ring',
-                  idx === currentIndex
-                    ? 'bg-primary'
-                    : isAnswered
-                      ? 'bg-primary/50'
-                      : 'bg-muted-foreground/30'
-                )}
-                aria-label={`Go to question ${idx + 1}`}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {currentQuestion ? (
-        currentQuestion.multiSelect ? (
-          <MultiSelectQuestion
-            question={currentQuestion}
-            index={currentIndex}
-            value={answers[currentIndex] ?? []}
-            onChange={(value) => onAnswerChange(currentIndex, value)}
-            otherText={otherTexts[currentIndex] ?? ''}
-            onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-            requestId={requestId}
-          />
-        ) : (
-          <SingleSelectQuestion
-            question={currentQuestion}
-            index={currentIndex}
-            value={answers[currentIndex] ?? ''}
-            onChange={(value) => onAnswerChange(currentIndex, value)}
-            otherText={otherTexts[currentIndex] ?? ''}
-            onOtherTextChange={(value) => onOtherTextChange(currentIndex, value)}
-            requestId={requestId}
-          />
-        )
-      ) : null}
-    </PromptCard>
-  );
-}
-
-/**
- * Renders a single question with radio buttons (single select).
- */
-function SingleSelectQuestion({
-  question,
-  index,
-  value,
-  onChange,
-  otherText,
-  onOtherTextChange,
-  requestId,
-}: SingleQuestionProps) {
-  const selectedValue = typeof value === 'string' ? value : '';
-  const idPrefix = `${requestId}-${index}`;
-  const options = Array.isArray(question.options) ? question.options : [];
-  const OTHER_OPTION_VALUE = getOtherOptionValue(question);
-
-  return (
-    <div className="space-y-1.5">
-      {question.header && (
-        <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
-      )}
-      <p className="text-sm font-medium break-words">
-        {question.question}
-        {question.optional && ' (optional)'}
-      </p>
-
-      <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
-        {options.map((option) => (
-          <label
-            key={`${index}-${option.value ?? option.label}`}
-            htmlFor={`question-${idPrefix}-option-${option.value ?? option.label}`}
-            className={cn(
-              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-              selectedValue === (option.value ?? option.label) && 'border-primary bg-primary/5'
-            )}
-          >
-            <RadioGroupItem
-              value={option.value ?? option.label}
-              id={`question-${idPrefix}-option-${option.value ?? option.label}`}
-              className="mt-0.5 shrink-0"
-            />
-            <div className="flex-1 min-w-0">
-              <span className="text-sm break-words">{option.label}</span>
-              {option.description && (
-                <p className="text-xs text-muted-foreground break-words">{option.description}</p>
-              )}
-            </div>
-          </label>
-        ))}
-        {question.allowOther !== false && (
-          <label
-            htmlFor={`question-${idPrefix}-option-other`}
-            className={cn(
-              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-              selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
-            )}
-          >
-            <RadioGroupItem
-              value={OTHER_OPTION_VALUE}
-              id={`question-${idPrefix}-option-other`}
-              className="shrink-0 mt-1"
-            />
-            <div className="flex-1 min-w-0 space-y-1">
-              <span className="text-sm font-medium">Other</span>
-              <Textarea
-                value={otherText}
-                aria-label="Other response"
-                onFocus={() => {
-                  if (selectedValue !== OTHER_OPTION_VALUE) {
-                    onChange(OTHER_OPTION_VALUE);
-                  }
-                }}
-                onClick={() => {
-                  if (selectedValue !== OTHER_OPTION_VALUE) {
-                    onChange(OTHER_OPTION_VALUE);
-                  }
-                }}
-                onBlur={() => {
-                  if (selectedValue === OTHER_OPTION_VALUE && otherText.trim().length === 0) {
-                    onChange('');
-                  }
-                }}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  onOtherTextChange(nextValue);
-                  if (nextValue.trim().length > 0 && selectedValue !== OTHER_OPTION_VALUE) {
-                    onChange(OTHER_OPTION_VALUE);
-                  }
-                }}
-                placeholder="Type your response…"
-                className="min-h-[42px] text-sm py-1.5"
-                aria-invalid={
-                  selectedValue === OTHER_OPTION_VALUE &&
-                  Boolean(getAnswerError(question, otherText))
-                }
-              />
-              {selectedValue === OTHER_OPTION_VALUE && getAnswerError(question, otherText) && (
-                <p role="alert" className="text-xs text-destructive">
-                  {getAnswerError(question, otherText)}
-                </p>
-              )}
-            </div>
-          </label>
-        )}
-      </RadioGroup>
-    </div>
-  );
-}
-
-/**
- * Renders a single question with checkboxes (multi select).
- */
-function MultiSelectQuestion({
-  question,
-  index,
-  value,
-  onChange,
-  otherText,
-  onOtherTextChange,
-  requestId,
-}: SingleQuestionProps) {
-  const selectedValues = Array.isArray(value) ? value : [];
-  const idPrefix = `${requestId}-${index}`;
-  const options = Array.isArray(question.options) ? question.options : [];
-  const OTHER_OPTION_VALUE = getOtherOptionValue(question);
-
-  const handleCheckboxChange = useCallback(
-    (optionLabel: string, checked: boolean) => {
-      if (checked) {
-        onChange([...selectedValues, optionLabel]);
-      } else {
-        onChange(selectedValues.filter((v) => v !== optionLabel));
-      }
-    },
-    [selectedValues, onChange]
-  );
-
-  return (
-    <div className="space-y-1.5">
-      {question.header && (
-        <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
-      )}
-      <p className="text-sm font-medium break-words">
-        {question.question}
-        {question.optional && ' (optional)'}
-      </p>
-
-      <div className="space-y-1.5">
-        {options.map((option) => {
-          const isSelected = selectedValues.includes(option.value ?? option.label);
-
-          return (
-            <label
-              key={`${index}-${option.value ?? option.label}`}
-              htmlFor={`question-${idPrefix}-option-${option.value ?? option.label}`}
-              className={cn(
-                'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-                isSelected && 'border-primary bg-primary/5'
-              )}
-            >
-              <Checkbox
-                id={`question-${idPrefix}-option-${option.value ?? option.label}`}
-                checked={isSelected}
-                onCheckedChange={(checked) =>
-                  handleCheckboxChange(option.value ?? option.label, checked === true)
-                }
-                className="mt-0.5 shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <span className="text-sm break-words">{option.label}</span>
-                {option.description && (
-                  <p className="text-xs text-muted-foreground break-words">{option.description}</p>
-                )}
-              </div>
-            </label>
-          );
-        })}
-        {question.allowOther !== false && (
-          <label
-            htmlFor={`question-${idPrefix}-option-other`}
-            className={cn(
-              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
-              selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
-            )}
-          >
-            <Checkbox
-              id={`question-${idPrefix}-option-other`}
-              checked={selectedValues.includes(OTHER_OPTION_VALUE)}
-              onCheckedChange={(checked) => {
-                const shouldSelect = checked === true;
-                if (shouldSelect) {
-                  onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                } else {
-                  onOtherTextChange('');
-                  onChange(selectedValues.filter((v) => v !== OTHER_OPTION_VALUE));
-                }
-              }}
-              className="shrink-0 mt-1"
-            />
-            <div className="flex-1 min-w-0 space-y-1">
-              <span className="text-sm font-medium">Other</span>
-              <Textarea
-                value={otherText}
-                aria-label="Other response"
-                onFocus={() => {
-                  if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
-                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                  }
-                }}
-                onClick={() => {
-                  if (!selectedValues.includes(OTHER_OPTION_VALUE)) {
-                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                  }
-                }}
-                onBlur={() => {
-                  if (
-                    otherText.trim().length === 0 &&
-                    selectedValues.includes(OTHER_OPTION_VALUE)
-                  ) {
-                    onChange(selectedValues.filter((value) => value !== OTHER_OPTION_VALUE));
-                  }
-                }}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  onOtherTextChange(nextValue);
-                  if (nextValue.trim().length > 0 && !selectedValues.includes(OTHER_OPTION_VALUE)) {
-                    onChange([...selectedValues, OTHER_OPTION_VALUE]);
-                  }
-                }}
-                placeholder="Type your response…"
-                className="min-h-[42px] text-sm py-1.5"
-              />
-            </div>
-          </label>
-        )}
-      </div>
-      {selectedValues.length > 0 && getArrayAnswerError(question, selectedValues, otherText) && (
-        <p role="alert" className="text-xs text-destructive">
-          {getArrayAnswerError(question, selectedValues, otherText)}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// =============================================================================
-// Main Component
-// =============================================================================
-
-/**
- * Inline prompt for answering AskUserQuestion requests.
- * Appears above the chat input as a compact card.
- * Paginates multiple questions to save vertical space.
- */
-export function QuestionPrompt(props: QuestionPromptProps) {
-  // Answers are keyed by question index, so each request starts from a fresh form.
-  return <QuestionPromptForm key={props.question?.requestId} {...props} />;
-}
-
-function QuestionPromptForm({ question, onAnswer }: QuestionPromptProps) {
-  // State for answers - keyed by question index
+  onAnswer,
+}: QuestionPromptProps & { question: UserQuestionRequest }) {
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
-  // State for current question index (pagination)
-  const [currentIndex, setCurrentIndex] = useState(0);
-  // Inline freeform responses keyed by question index
-  const [otherTexts, setOtherTexts] = useState<Record<number, string>>({});
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [texts, setTexts] = useState<Record<number, string>>({});
+  const [stepIndex, setStepIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const focusNextTitle = useRef(false);
+  usePromptAutoFocus(question.requestId, containerRef, QUESTION_FIRST_FOCUSABLE_SELECTOR);
 
-  // Current request ID for key generation
-  const currentRequestId = question?.requestId;
-
-  usePromptAutoFocus(currentRequestId, containerRef, QUESTION_FIRST_FOCUSABLE_SELECTOR);
-
-  const handleAnswerChange = useCallback((index: number, value: string | string[]) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [index]: value,
-    }));
-  }, []);
-
-  const handleOtherTextChange = useCallback((index: number, value: string) => {
-    setOtherTexts((prev) => ({
-      ...prev,
-      [index]: value,
-    }));
-  }, []);
-
-  const handleSubmit = useCallback(() => {
-    if (!question) {
-      return;
-    }
-
-    // Convert indexed answers to the format expected by the hook.
-    // Prefer stable question IDs when available.
-    const formattedAnswers: Record<string, string | string[]> = {};
-
-    question.questions.forEach((q, index) => {
-      if (q.optional && !answers[index]?.length && !otherTexts[index]?.trim()) {
-        return;
-      }
-      const answerKey = q.id?.trim() || q.question;
-      formattedAnswers[answerKey] = formatAnswer(q, answers[index], otherTexts[index] ?? '');
-    });
-
-    onAnswer(question.requestId, formattedAnswers);
-
-    // Reset answers and pagination after submit
-    setAnswers({});
-    setCurrentIndex(0);
-    setOtherTexts({});
-  }, [question, answers, otherTexts, onAnswer]);
-
-  const isComplete = question?.questions.every((q, index) =>
-    isAnswerComplete(q, answers[index], otherTexts[index] ?? '')
-  );
-
-  const isCurrentAnswered = (() => {
-    if (!question) {
-      return false;
-    }
-    const q = question.questions[currentIndex];
-    if (!q) {
-      return false;
-    }
-    return isAnswerComplete(q, answers[currentIndex], otherTexts[currentIndex] ?? '');
-  })();
-
-  if (!question) {
+  const steps = getQuestionSteps(question.questions);
+  const currentStep = Math.min(stepIndex, steps.length - 1);
+  const step = steps[currentStep];
+  if (!step) {
     return null;
   }
+  const last = currentStep >= steps.length - 1;
 
-  const totalQuestions = question.questions.length;
-  if (totalQuestions === 0) {
-    return null;
+  const isComplete = (field: AskUserQuestion, index: number) =>
+    isAnswerComplete(field, answers[index], texts[index] ?? '');
+  const canContinue = last
+    ? question.questions.every(isComplete)
+    : isComplete(step.question, step.index) &&
+      step.notes.every((note) => isComplete(note.question, note.index));
+
+  function editText(index: number, value: string) {
+    setTexts((previous) => ({ ...previous, [index]: value }));
   }
 
-  const requestId = currentRequestId ?? 'unknown';
+  function editAnswer(index: number, value: string | string[]) {
+    setAnswers((previous) => ({ ...previous, [index]: value }));
+  }
 
-  if (totalQuestions === 1) {
-    const singleQuestion = question.questions[0];
-    if (!singleQuestion) {
-      return null;
-    }
-    return (
-      <div ref={containerRef}>
-        <SingleQuestionLayout
-          question={singleQuestion}
-          requestId={requestId}
-          answers={answers}
-          otherTexts={otherTexts}
-          onAnswerChange={handleAnswerChange}
-          onOtherTextChange={handleOtherTextChange}
-          onSubmit={handleSubmit}
-          isComplete={Boolean(isComplete)}
-        />
-      </div>
+  function navigate(index: number) {
+    focusNextTitle.current = true;
+    setStepIndex(index);
+  }
+
+  function submit() {
+    const formattedAnswers = Object.fromEntries(
+      question.questions.flatMap((field, index) => {
+        const value = formatAnswer(field, answers[index], texts[index] ?? '');
+        return field.optional && value.length === 0
+          ? []
+          : [[field.id?.trim() || field.question, value]];
+      })
     );
+    onAnswer(question.requestId, formattedAnswers);
   }
 
   return (
     <div ref={containerRef}>
-      <MultiQuestionLayout
-        question={question}
-        requestId={requestId}
-        currentIndex={currentIndex}
-        answers={answers}
-        otherTexts={otherTexts}
-        onAnswerChange={handleAnswerChange}
-        onOtherTextChange={handleOtherTextChange}
-        onSubmit={handleSubmit}
-        onIndexChange={setCurrentIndex}
-        isComplete={Boolean(isComplete)}
-        isCurrentAnswered={isCurrentAnswered}
-      />
+      <PromptCard
+        icon={<QuestionIcon className="size-4 text-warning" aria-hidden="true" />}
+        role="form"
+        label={steps.length > 1 ? 'Agent questions' : 'Agent question'}
+        hideIconOnMobile
+        iconSlot="question-prompt-icon"
+        actionsPlacement="below"
+        actions={
+          <>
+            {currentStep > 0 && (
+              <Button size="compact" variant="ghost" onClick={() => navigate(currentStep - 1)}>
+                Back
+              </Button>
+            )}
+            <Button
+              size="compact"
+              disabled={!canContinue}
+              onClick={last ? submit : () => navigate(currentStep + 1)}
+            >
+              {last ? 'Submit' : 'Next'}
+            </Button>
+          </>
+        }
+      >
+        {steps.length > 1 && (
+          <p className="mb-1 text-xs text-muted-foreground" aria-live="polite">
+            {currentStep + 1} of {steps.length}
+          </p>
+        )}
+        <div key={step.index} className="space-y-1.5">
+          <QuestionField
+            question={step.question}
+            value={answers[step.index]}
+            text={texts[step.index] ?? ''}
+            onChange={(value) => editAnswer(step.index, value)}
+            onTextChange={(value) => editText(step.index, value)}
+            titleRef={(title) => {
+              if (title && focusNextTitle.current) {
+                focusNextTitle.current = false;
+                title.focus();
+              }
+            }}
+          />
+          {step.notes.map(({ index, question: note }) => {
+            const revealOnValue = note.companionNote?.revealOnValue;
+            return (
+              <CompanionNote
+                key={note.id}
+                question={note}
+                reveal={revealOnValue !== undefined && answers[step.index] === revealOnValue}
+                text={texts[index] ?? ''}
+                onChange={(value) => {
+                  editText(index, value);
+                  editAnswer(index, value.trim() ? getOtherOptionValue(note) : '');
+                }}
+              />
+            );
+          })}
+        </div>
+      </PromptCard>
     </div>
   );
 }

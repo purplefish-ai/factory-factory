@@ -20,6 +20,158 @@ function setup() {
 }
 
 describe('ACP elicitation', () => {
+  it.each([true, false])(
+    'keeps Codex companion notes attached with a provider Other choice=%s',
+    async (providerOther) => {
+      const { handler, bridge, onEvent } = setup();
+      const response = handler.createElicitation(
+        form({
+          properties: {
+            route: {
+              type: 'string',
+              title: 'What should the detail view show?',
+              _meta: { codex: { isOther: true } },
+              oneOf: [
+                {
+                  const: 'Top processes',
+                  title: 'Top processes',
+                  description: 'Show the whole machine.',
+                },
+                ...(providerOther
+                  ? [{ const: 'None of the above', title: 'None of the above' }]
+                  : []),
+              ],
+            },
+            route_note1: {
+              type: 'string',
+              title: 'Additional answer or note',
+              _meta: { codex: { role: 'user_note', questionId: 'route' } },
+            },
+            route_note: { type: 'string', title: 'Independent field' },
+          },
+          required: ['route', 'route_note'],
+        })
+      );
+      const event = onEvent.mock.calls[0]![1];
+      expect(getAskUserQuestions(event.params.toolCall.rawInput)).toMatchObject([
+        {
+          id: 'route',
+          allowOther: false,
+          options: [
+            { label: 'Top processes', description: 'Show the whole machine.' },
+            { label: 'None of the above', description: '' },
+          ],
+        },
+        {
+          id: 'route_note1',
+          optional: true,
+          companionNote: { questionId: 'route', revealOnValue: 'None of the above' },
+        },
+        { id: 'route_note', question: 'Independent field' },
+      ]);
+      bridge.resolvePermission(event.requestId, 'accept', {
+        route: ['None of the above'],
+        route_note1: ['Include memory use.'],
+        route_note: ['Another answer.'],
+      });
+      await expect(response).resolves.toEqual({
+        action: 'accept',
+        content: {
+          route: 'None of the above',
+          route_note1: 'Include memory use.',
+          route_note: 'Another answer.',
+        },
+      });
+    }
+  );
+
+  it.each([false, true])(
+    'groups Claude custom answers with single and multi-select fields (%s)',
+    async (multiSelect) => {
+      const { handler, bridge, onEvent } = setup();
+      const options = [{ const: 'All processes', title: 'All processes' }];
+      const questionText = 'Which processes should be listed?';
+      const response = handler.createElicitation({
+        ...form({
+          properties: {
+            question_0: multiSelect
+              ? {
+                  type: 'array',
+                  title: 'Processes',
+                  description: questionText,
+                  items: { anyOf: options },
+                }
+              : { type: 'string', title: 'Processes', oneOf: options },
+            question_0_custom: {
+              type: 'string',
+              title: 'Other',
+              _meta: multiSelect
+                ? {
+                    _askUserQuestionCustomAnswer: {
+                      questionId: 'question_0',
+                      isCustomAnswer: true,
+                    },
+                  }
+                : {
+                    jetbrains: {
+                      air: { customAnswer: { questionId: 'question_0', isCustomAnswer: true } },
+                    },
+                  },
+            },
+          },
+        }),
+        message: questionText,
+      });
+      const event = onEvent.mock.calls[0]![1];
+      expect(getAskUserQuestions(event.params.toolCall.rawInput)).toMatchObject([
+        {
+          id: 'question_0',
+          question: questionText,
+          header: 'Processes',
+          optional: true,
+          allowOther: false,
+          options: [{ label: 'All processes', description: '' }],
+        },
+        {
+          id: 'question_0_custom',
+          optional: true,
+          companionNote: { questionId: 'question_0' },
+        },
+      ]);
+
+      bridge.resolvePermission(event.requestId, 'accept', {
+        question_0_custom: ['Only active processes.'],
+      });
+      await expect(response).resolves.toEqual({
+        action: 'accept',
+        content: { question_0_custom: 'Only active processes.' },
+      });
+    }
+  );
+
+  it('accepts the synthesized Codex choice independently of normal choice constraints', () => {
+    const elicitation = createAcpElicitationForm({
+      properties: {
+        choice: {
+          type: 'string',
+          enum: ['A', 'B'],
+          maxLength: 1,
+          _meta: { codex: { isOther: true } },
+        },
+        note: {
+          type: 'string',
+          _meta: { codex: { role: 'user_note', questionId: 'choice' } },
+        },
+      },
+      required: ['choice'],
+    });
+    expect(elicitation?.parseAnswers({ choice: ['None of the above'], note: ['Use C'] })).toEqual({
+      choice: 'None of the above',
+      note: 'Use C',
+    });
+    expect(elicitation?.parseAnswers({ choice: ['Unlisted'] })).toBeNull();
+  });
+
   it.each(['', '   ', '__other__'])(
     'preserves blank choice values %j through the question UI',
     async (value) => {

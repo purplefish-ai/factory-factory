@@ -22,6 +22,8 @@ export interface AskUserQuestion {
   optional?: boolean;
   /** Whether option questions accept an additional free-form answer. Defaults to true. */
   allowOther?: boolean;
+  /** An optional form field displayed with its parent question, with its own answer ID. */
+  companionNote?: { questionId: string; revealOnValue?: string };
   validation?: QuestionValidation;
 }
 

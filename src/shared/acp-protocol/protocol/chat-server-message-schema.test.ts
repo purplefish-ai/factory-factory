@@ -51,6 +51,24 @@ describe('ChatServerMessageSchema', () => {
         acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
       },
       {
+        type: 'user_question',
+        requestId: 'req-2',
+        questions: [
+          {
+            id: 'choice',
+            question: 'What should the detail view show?',
+            options: [{ label: 'None of the above', description: '' }],
+          },
+          {
+            id: 'choice_note',
+            question: 'Additional answer or note',
+            options: [],
+            optional: true,
+            companionNote: { questionId: 'choice', revealOnValue: 'None of the above' },
+          },
+        ],
+      },
+      {
         type: 'message_state_changed',
         id: 'q1',
         newState: MessageState.ACCEPTED,

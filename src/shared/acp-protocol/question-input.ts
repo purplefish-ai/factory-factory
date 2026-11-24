@@ -5,31 +5,41 @@ import { questionValidationSchema } from './question-validation';
 export type { AskUserQuestion };
 export { compileQuestionPattern, getStringAnswerError } from './question-validation';
 
+export const companionNoteSchema = z.object({
+  questionId: z.string().min(1),
+  revealOnValue: z.string().optional(),
+});
+
 const nonEmptyText = z.string().refine((value) => value.trim().length > 0);
 const questionInputSchema = z
   .array(
-    z.object({
-      id: z.string().optional(),
-      question: nonEmptyText,
-      header: z.string().optional(),
-      options: z
-        .array(
-          z.object({
-            label: nonEmptyText,
-            value: nonEmptyText.optional(),
-            description: z
-              .unknown()
-              .optional()
-              .transform((value) => (typeof value === 'string' ? value : '')),
-          })
-        )
-        .nullish()
-        .transform((options) => options ?? []),
-      multiSelect: z.boolean().optional(),
-      optional: z.boolean().optional(),
-      allowOther: z.boolean().optional(),
-      validation: questionValidationSchema.optional(),
-    })
+    z
+      .object({
+        id: z.string().optional(),
+        question: nonEmptyText,
+        header: z.string().optional(),
+        options: z
+          .array(
+            z.object({
+              label: nonEmptyText,
+              value: nonEmptyText.optional(),
+              description: z
+                .unknown()
+                .optional()
+                .transform((value) => (typeof value === 'string' ? value : '')),
+            })
+          )
+          .nullish()
+          .transform((options) => options ?? []),
+        multiSelect: z.boolean().optional(),
+        optional: z.boolean().optional(),
+        allowOther: z.boolean().optional(),
+        companionNote: companionNoteSchema.optional().catch(undefined),
+        validation: questionValidationSchema.optional(),
+      })
+      .transform(({ companionNote, ...question }) =>
+        companionNote ? { ...question, companionNote } : question
+      )
   )
   .min(1);
 
