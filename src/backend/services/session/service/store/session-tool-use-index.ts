@@ -51,6 +51,9 @@ function referencedToolUseIds(entry: ChatMessage | undefined): Set<string> {
   if (!message) {
     return ids;
   }
+  if (message.type === 'question_response') {
+    ids.add(message.questionResponse.toolUseId);
+  }
   const content = message.message?.content;
   if (Array.isArray(content)) {
     for (const item of content) {
@@ -120,6 +123,11 @@ function getToolUseIndex(store: SessionStore): ToolUseIndex {
   const rebuilt = buildToolUseIndex(store.transcript);
   toolUseIndexes.set(store.transcript, rebuilt);
   return rebuilt;
+}
+
+/** All currently indexed entries for a provider tool call. */
+export function getTranscriptToolEntries(store: SessionStore, toolUseId: string): ChatMessage[] {
+  return [...(getToolUseIndex(store).entriesByToolUseId.get(toolUseId)?.keys() ?? [])];
 }
 
 /** Drop the index so the next lookup rebuilds it from the current transcript. */

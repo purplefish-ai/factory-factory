@@ -8,6 +8,7 @@ import type {
   ToolDefinition,
 } from './content';
 import type { ProviderSessionNotice } from './provider-session-notice';
+import type { QuestionResponse, QuestionToolDetails } from './question-response';
 
 export interface SessionLifecycleMessage {
   eventId: string;
@@ -30,6 +31,7 @@ type AgentMessageType =
   | 'error'
   | 'session_lifecycle'
   | 'session_notice'
+  | 'question_response'
   | 'child_workspace_update'
   | 'parent_workspace_update'
   | 'pr_update';
@@ -87,7 +89,13 @@ export type AgentMessage =
       lifecycle?: never;
     })
   | (AgentMessageCommon & {
-      type: Exclude<AgentMessageType, 'session_lifecycle' | 'session_notice'>;
+      type: 'question_response';
+      questionResponse: QuestionResponse;
+      questionToolDetails?: QuestionToolDetails;
+      lifecycle?: never;
+    })
+  | (AgentMessageCommon & {
+      type: Exclude<AgentMessageType, 'session_lifecycle' | 'session_notice' | 'question_response'>;
       lifecycle?: never;
     });
 
@@ -100,6 +108,7 @@ const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   error: true,
   session_lifecycle: true,
   session_notice: true,
+  question_response: true,
   child_workspace_update: true,
   parent_workspace_update: true,
   pr_update: true,

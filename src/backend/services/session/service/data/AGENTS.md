@@ -53,6 +53,11 @@ reading only lines that contain its marker.
 - Codex tool backfill never replaces the transcript while the runtime is
   starting, running or stopping, including a phase entered during the read.
   `session-provider-history-hydrator.test.ts`.
+- Claude's structured question result is correlated by tool-use ID and replaces
+  the tool call at its original position. The session-owned question response
+  history stores only summaries, and provider-marked answer values are omitted.
+  `session-history-loader.service.test.ts`,
+  `session-question-response-history.integration.test.ts`.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.
@@ -64,6 +69,8 @@ reading only lines that contain its marker.
 - `session-history-loader.service.ts`,
   `codex-session-history-loader.service.ts`: find and parse each provider's
   history file, restoring prompt images through `history-image-attachment.ts`.
+- `claude-history-question-responses.ts` restores structured provider answers.
+  `session-question-response-history.ts` persists and restores local summaries.
 - `session-history-jsonl-reader.ts`: the cooperative line reader both use.
 - `session-history-file.ts`: the file identity a read observed.
 - `provider-history-transcript-loader.ts`: the shared read and projection.

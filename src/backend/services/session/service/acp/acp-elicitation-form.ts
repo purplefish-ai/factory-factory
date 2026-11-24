@@ -5,7 +5,7 @@ import {
   compileQuestionPattern,
   getStringAnswerError,
 } from '@/shared/acp-protocol/question-input';
-
+import { isSecretQuestion } from '@/shared/acp-protocol/question-response-summary';
 const optionSchema = z.object({
   const: z.string(),
   title: z.string(),
@@ -243,7 +243,7 @@ function convertAnswer(field: Field, answers: string[]): ElicitationContentValue
 }
 
 export interface AcpElicitationForm {
-  questions: AskUserQuestion[];
+  questions: Array<AskUserQuestion & { isSecret?: true }>;
   parseAnswers: (answers: unknown) => Record<string, ElicitationContentValue> | null;
 }
 
@@ -319,16 +319,21 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
         return [id, questionId];
       })
     );
-    const questions = Object.entries(form.properties).map(([id, field]): AskUserQuestion => ({
-      id: questionIds.get(id) ?? id,
-      question: field.title?.trim() || id.trim() || 'Input',
-      ...(field.description ? { header: field.description } : {}),
-      options: displayChoices(field),
-      validation: questionValidation(field),
-      allowOther: allowsOtherAnswer(field),
-      ...(!form.required?.includes(id) ? { optional: true } : {}),
-      ...(field.type === 'array' ? { multiSelect: true } : {}),
-    }));
+    const rawFields = z.object({ properties: z.record(z.string(), z.unknown()) }).safeParse(schema)
+      .data?.properties;
+    const questions = Object.entries(form.properties).map(
+      ([id, field]): AskUserQuestion & { isSecret?: true } => ({
+        ...(isSecretQuestion(rawFields?.[id]) ? { isSecret: true } : {}),
+        id: questionIds.get(id) ?? id,
+        question: field.title?.trim() || id.trim() || 'Input',
+        ...(field.description ? { header: field.description } : {}),
+        options: displayChoices(field),
+        validation: questionValidation(field),
+        allowOther: allowsOtherAnswer(field),
+        ...(!form.required?.includes(id) ? { optional: true } : {}),
+        ...(field.type === 'array' ? { multiSelect: true } : {}),
+      })
+    );
     return {
       questions,
       parseAnswers: (answers) => parseAnswers(form, validators, questionIds, answers),

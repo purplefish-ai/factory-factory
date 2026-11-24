@@ -538,6 +538,7 @@ model CodexAccount {
 }
 
 model AgentSession {
+  questionResponses   SessionQuestionResponse[]
   dedicatedPRBinding WorkspacePRDedicatedSession?
   prMonitoringBindings WorkspacePRMonitoring[] @relation("PRMonitoringRecipient")
   id                  String        @id @default(cuid())
@@ -566,6 +567,17 @@ model AgentSession {
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, updatedAt])
+}
+
+model SessionQuestionResponse {
+  sessionId         String
+  session           AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  providerSessionId String
+  toolUseId         String
+  timestamp         DateTime
+  summary           Json
+
+  @@id([sessionId, providerSessionId, toolUseId])
 }
 
 model SessionLifecycleEvent {

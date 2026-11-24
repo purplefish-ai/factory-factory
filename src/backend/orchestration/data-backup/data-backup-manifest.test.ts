@@ -5,9 +5,12 @@ import { assertRecoveryModelCoverage, createBaseRecoveryManifest } from './data-
 
 it('classifies every current model with the frozen limitations', () => {
   const manifest = createBaseRecoveryManifest();
-  expect(manifest).toEqual(fixed.meta.recovery);
+  expect({
+    ...manifest,
+    coverage: manifest.coverage.filter((entry) => entry.model !== 'SessionQuestionResponse'),
+  }).toEqual(fixed.meta.recovery);
   expect(manifest.coverage.filter((e) => e.status === 'PARTIAL')).toHaveLength(18);
-  expect(manifest.coverage.filter((e) => e.status === 'EXCLUDED')).toHaveLength(19);
+  expect(manifest.coverage.filter((e) => e.status === 'EXCLUDED')).toHaveLength(20);
   expect(new Set(manifest.coverage.map((e) => e.model))).toEqual(new Set(prismaModelNames));
   expect(createBaseRecoveryManifest()).not.toBe(manifest);
 });

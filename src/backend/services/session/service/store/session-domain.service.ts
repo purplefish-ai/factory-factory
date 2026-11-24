@@ -14,10 +14,15 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import { SessionHistoryFences } from './session-history-fences';
 import { mergeLifecycleMessage } from './session-lifecycle-transcript';
-import { isLocalTranscriptMessage } from './session-local-transcript';
+import { survivesProviderIdentityRollover } from './session-local-transcript';
 import { buildMessageFailure, recordPRUpdateOutcome } from './session-pr-update';
 import { handleProcessExit } from './session-process-exit';
 import { SessionPublisher } from './session-publisher';
+import {
+  foldQuestionToolUpdate,
+  type QuestionMessage,
+  recordQuestionResponse,
+} from './session-question-transcript';
 import {
   clearPendingInteractiveRequest,
   clearPendingInteractiveRequestIfMatches,
@@ -511,14 +516,48 @@ export class SessionDomainService extends EventEmitter {
     return removed;
   }
 
-  appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage) {
+  appendClaudeEvent(
+    sessionId: string,
+    claudeMessage: AgentMessage
+  ): {
+    order: number;
+    messageId?: string;
+    replacement?: AgentMessage;
+  } {
     const store = this.registry.getOrCreateActive(sessionId);
-    return appendClaudeEvent(store, claudeMessage, {
-      nowIso: this.nowIso,
-      onParityTrace: (data) => {
-        this.parityLogger(sessionId, data);
-      },
-    });
+    return (
+      foldQuestionToolUpdate(store, claudeMessage) ??
+      appendClaudeEvent(store, claudeMessage, {
+        nowIso: this.nowIso,
+        onParityTrace: (data) => {
+          this.parityLogger(sessionId, data);
+        },
+      })
+    );
+  }
+
+  upsertQuestionResponse(sessionId: string, order: number, data: QuestionMessage): ChatMessage {
+    const store = this.registry.getOrCreateActive(sessionId);
+    const { row, obsoleteIds } = recordQuestionResponse(
+      store,
+      order,
+      data,
+      data.timestamp ?? this.nowIso()
+    );
+    for (const id of obsoleteIds) {
+      removeTranscriptMessageById(store, id);
+    }
+    if (obsoleteIds.length > 0) {
+      this.publisher.forwardSnapshot(store, { removedMessageIds: obsoleteIds });
+    } else {
+      this.publisher.emitDelta(sessionId, {
+        type: 'agent_message',
+        messageId: row.id,
+        order: row.order,
+        data: row.message ?? data,
+      });
+    }
+    return row;
   }
 
   /**
@@ -889,12 +928,7 @@ export class SessionDomainService extends EventEmitter {
     store.taskPlan = undefined;
     this.clearHistoryRetryCooldown(sessionId);
     // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
-    this.replaceTranscript(
-      sessionId,
-      store.transcript.filter(
-        (message) => isLocalTranscriptMessage(message) && message.message?.type !== 'session_notice'
-      )
-    );
+    this.replaceTranscript(sessionId, store.transcript.filter(survivesProviderIdentityRollover));
     this.publisher.forwardSnapshot(store, { reason: 'manual_emit', resetTranscript: true });
   }
 

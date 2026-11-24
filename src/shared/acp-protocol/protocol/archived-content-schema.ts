@@ -45,6 +45,11 @@ export const ArchivedJsonRecordSchema = JsonEntriesSchema.pipe(
   z.array(z.tuple([z.string(), ArchivedJsonValueSchema]))
 ).transform((entries) => Object.fromEntries(entries));
 
+export const ArchivedToolResultContentSchema = z.union([
+  z.string(),
+  z.array(z.discriminatedUnion('type', [TextSchema, ImageSchema])),
+]);
+
 export const ArchivedContentItemSchema = z.discriminatedUnion('type', [
   TextSchema,
   z.object({ type: z.literal('thinking'), thinking: z.string() }),
@@ -57,10 +62,7 @@ export const ArchivedContentItemSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('tool_result'),
     tool_use_id: z.string(),
-    content: z.union([
-      z.string(),
-      z.array(z.discriminatedUnion('type', [TextSchema, ImageSchema])),
-    ]),
+    content: ArchivedToolResultContentSchema,
     is_error: z.boolean().optional(),
   }),
   ImageSchema,

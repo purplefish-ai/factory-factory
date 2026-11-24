@@ -172,7 +172,23 @@ describe('archived current-message codec (passive)', () => {
                 reconnect: 'retrying',
               },
             }
-          : { ...richCommon, type };
+          : type === 'question_response'
+            ? {
+                ...richCommon,
+                type,
+                questionResponse: {
+                  toolUseId: 'tool',
+                  status: 'answered',
+                  questions: [
+                    {
+                      question: 'Which approach?',
+                      answers: ['Start small'],
+                      note: 'Keep it local',
+                    },
+                  ],
+                },
+              }
+            : { ...richCommon, type };
     const input = { ...row, message };
     expect(ArchivedChatMessageSchema.parse(JSON.parse(JSON.stringify(input)))).toStrictEqual(input);
   });

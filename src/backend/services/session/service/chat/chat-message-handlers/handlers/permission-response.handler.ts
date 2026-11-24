@@ -32,7 +32,6 @@ export function createPermissionResponseHandler(deps: {
           sessionId,
           requestId,
           optionId,
-          answers,
         });
       }
       return { replies: [] };

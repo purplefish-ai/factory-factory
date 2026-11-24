@@ -10,7 +10,14 @@ import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/cla
 import { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { providerHistoryTranscriptCache } from '@/backend/services/session/service/data/provider-history-transcript-cache';
-import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import {
+  getProviderHistorySessionId,
+  hydrateProviderHistoryIfNeeded,
+} from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import {
+  hydrateQuestionResponseHistory,
+  persistQuestionResponse,
+} from '@/backend/services/session/service/data/session-question-response-history';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
@@ -76,8 +83,36 @@ function cancelTimedOutToolPrompt(sessionId: string, toolUseId: string, toolName
   });
 }
 
+const hydrateSessionTranscript: typeof hydrateProviderHistoryIfNeeded = async (
+  sessionId,
+  session,
+  isCurrent
+) => {
+  const providerSessionId = getProviderHistorySessionId(session);
+  const providerIsCurrent = sessionDomainService.createProviderHistoryFence(
+    sessionId,
+    providerSessionId
+  );
+  const loadIsCurrent = () => providerIsCurrent?.() === true && isCurrent?.() !== false;
+  if (loadIsCurrent()) {
+    await hydrateProviderHistoryIfNeeded(sessionId, session, loadIsCurrent);
+  }
+  if (providerSessionId && loadIsCurrent()) {
+    await hydrateQuestionResponseHistory(
+      sessionDomainService,
+      sessionId,
+      providerSessionId,
+      loadIsCurrent
+    );
+  }
+};
+
 export const sessionPermissionService = new SessionPermissionService({
   sessionDomainService,
+  getProviderSessionId: (sessionId) => acpRuntimeManager.getClient(sessionId)?.providerSessionId,
+  persistQuestionResponse: (sessionId, providerSessionId, row) => {
+    void persistQuestionResponse(sessionId, providerSessionId, row);
+  },
 });
 
 export const codexModelCatalogService = new CodexModelCatalogService({
@@ -174,7 +209,7 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
   sessionDomainService,
   closedSessionPersistenceService,
   lifecycleEventService: sessionLifecycleEventService,
-  hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
+  hydrateProviderHistory: hydrateSessionTranscript,
   runtimeManager: acpRuntimeManager,
   countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
 });
@@ -240,7 +275,7 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
 
 const sessionStartupCoordinator = new SessionStartupCoordinator({
   eventAuthority: eventSessionAuthority,
-  hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
+  hydrateProviderHistory: hydrateSessionTranscript,
   repository: sessionRepository,
   contextService: sessionContextService,
   acpEnvironment: sessionAcpEnvironment,

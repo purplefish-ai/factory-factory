@@ -1,4 +1,5 @@
 import type { AgentContentItem, ToolResultContentValue } from './content';
+import type { QuestionResponse, QuestionToolDetails } from './question-response';
 import type { MessageAttachment } from './queued';
 
 /**
@@ -45,6 +46,13 @@ export interface UserToolResultHistoryMessage extends HistoryMessageBase {
   content: AgentContentItem[];
 }
 
+export interface QuestionResponseHistoryMessage extends HistoryMessageBase {
+  type: 'question_response';
+  content: string;
+  questionResponse: QuestionResponse;
+  questionToolDetails?: QuestionToolDetails;
+}
+
 /**
  * Message from session history.
  */
@@ -53,5 +61,6 @@ export type HistoryMessage =
   | AssistantHistoryMessage
   | ThinkingHistoryMessage
   | ToolUseHistoryMessage
+  | QuestionResponseHistoryMessage
   | ToolResultHistoryMessage
   | UserToolResultHistoryMessage;

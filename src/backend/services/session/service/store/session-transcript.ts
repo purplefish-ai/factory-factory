@@ -72,6 +72,13 @@ function historyToClaudeMessage(msg: HistoryMessage): AgentMessage {
         type: 'assistant',
         message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
       };
+    case 'question_response':
+      return {
+        type: 'question_response',
+        timestamp: msg.timestamp,
+        questionResponse: msg.questionResponse,
+        questionToolDetails: msg.questionToolDetails,
+      };
     case 'tool_result': {
       return {
         type: 'user',
@@ -202,7 +209,8 @@ function appendHistoryToTranscript(
     historyMsg.type === 'tool_use' ||
     historyMsg.type === 'tool_result' ||
     historyMsg.type === 'thinking' ||
-    historyMsg.type === 'user_tool_result'
+    historyMsg.type === 'user_tool_result' ||
+    historyMsg.type === 'question_response'
   ) {
     transcript.push(
       projectLegacyProviderNotice(

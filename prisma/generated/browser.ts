@@ -125,6 +125,11 @@ export type CodexAccount = Prisma.CodexAccountModel
  */
 export type AgentSession = Prisma.AgentSessionModel
 /**
+ * Model SessionQuestionResponse
+ * 
+ */
+export type SessionQuestionResponse = Prisma.SessionQuestionResponseModel
+/**
  * Model SessionLifecycleEvent
  * 
  */

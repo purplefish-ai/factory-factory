@@ -11,6 +11,48 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+it('renders an answered question as readable pairs with collapsed tool details', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    flushSync(() =>
+      root.render(
+        <AssistantMessageRenderer
+          message={{
+            type: 'question_response',
+            questionResponse: {
+              toolUseId: 'tool-1',
+              status: 'answered',
+              questions: [
+                {
+                  question: 'Which processes?',
+                  header: 'Why view',
+                  answers: ['CPU', 'Memory'],
+                  note: 'Group by workspace',
+                },
+                { question: 'What does the graph show?', answers: [] },
+              ],
+            },
+            questionToolDetails: { toolName: 'AskUserQuestion', result: 'Raw response' },
+          }}
+        />
+      )
+    );
+    expect(container.querySelector('section')?.getAttribute('aria-label')).toBe('Answered');
+    expect(container.querySelector('dt')?.textContent).toContain('Which processes?');
+    expect([...container.querySelectorAll('dd li')].map((item) => item.textContent)).toEqual([
+      'CPU',
+      'Memory',
+    ]);
+    expect(container.querySelector('dd')?.textContent).toContain('Group by workspace');
+    expect(container.textContent).toContain('Answer unavailable');
+    expect(container.querySelector('details')?.open).toBe(false);
+    expect(container.querySelector('summary')?.textContent).toBe('Raw tool details');
+  } finally {
+    root.unmount();
+  }
+});
+
 describe('LoadingIndicator', () => {
   it('preserves all paragraphs for the inline activity indicator', () => {
     const container = document.createElement('div');

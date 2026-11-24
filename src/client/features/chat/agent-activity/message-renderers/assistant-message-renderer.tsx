@@ -11,6 +11,7 @@ import {
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { ProviderNoticeRenderer } from './provider-notice-renderer';
+import { QuestionResponseRenderer } from './question-response-renderer';
 import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
 import {
   ErrorRenderer,
@@ -34,6 +35,22 @@ interface AssistantMessageRendererProps {
   onWorkspaceFileLink?: (path: string) => void;
 }
 
+function renderTranscriptCard(message: AgentMessage, className?: string) {
+  if (message.type === 'session_lifecycle') {
+    return <SessionLifecycleMessageRenderer message={message} className={className} />;
+  }
+
+  if (message.type === 'session_notice') {
+    return <ProviderNoticeRenderer notice={message.notice} className={className} />;
+  }
+
+  if (message.type === 'question_response') {
+    return <QuestionResponseRenderer message={message} className={className} />;
+  }
+
+  return null;
+}
+
 /**
  * Renders an assistant message, handling different message types.
  */
@@ -44,12 +61,9 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
 }: AssistantMessageRendererProps) {
-  if (message.type === 'session_lifecycle') {
-    return <SessionLifecycleMessageRenderer message={message} className={className} />;
-  }
-
-  if (message.type === 'session_notice') {
-    return <ProviderNoticeRenderer notice={message.notice} className={className} />;
+  const transcriptCard = renderTranscriptCard(message, className);
+  if (transcriptCard) {
+    return transcriptCard;
   }
 
   // Handle tool use/result messages

@@ -70,6 +70,7 @@ export type AcpPermissionRequestEvent = {
   type: 'acp_permission_request';
   /** Set only by the client-side elicitation bridge, never by tool arguments. */
   elicitation?: 'form' | 'url';
+  validateAnswers?: (answers: Record<string, string[]> | undefined) => boolean;
   requestId: string;
   params: RequestPermissionRequest;
 };

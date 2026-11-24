@@ -188,6 +188,7 @@ export const slackConnectionsModelCoverage = {
   ),
   AgentSessionLaunchOrigin: excluded('original session launch provenance absent.'),
   SessionLifecycleEvent: excluded('lifecycle history absent.'),
+  SessionQuestionResponse: excluded('question response history absent.'),
   ClosedSession: excluded('archive payload/metadata recovery absent.'),
   PeriodicTask: partial(
     'complete scalar configuration and timestamps; restored disabled; source enabled state is reported, not restored as scheduling authority.'
@@ -325,6 +326,9 @@ export const recoveryMetadataSchema = z
       }
       expected.delete(entry.model);
     }
+    // The additional exclusion is metadata only. Older exports of the same profile
+    // omit it, and neither form contains a question history section.
+    expected.delete('SessionQuestionResponse');
     if (expected.size) {
       ctx.addIssue({ code: 'custom', message: 'Missing base-1 model classifications' });
     }

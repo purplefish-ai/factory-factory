@@ -185,7 +185,8 @@ export class AcpClientHandler implements AcpClientCallbacks {
 
   private requestPermissionWithPresentation(
     params: RequestPermissionRequest,
-    elicitation?: 'form' | 'url'
+    elicitation?: 'form' | 'url',
+    validateAnswers?: (answers: Record<string, string[]> | undefined) => boolean
   ): Promise<RequestPermissionResponse> {
     // PRESERVE: Log permission request to session file logger
     this.onLog?.(this.sessionId, {
@@ -215,6 +216,7 @@ export class AcpClientHandler implements AcpClientCallbacks {
       requestId,
       params: request,
       ...(elicitation ? { elicitation } : {}),
+      ...(validateAnswers ? { validateAnswers } : {}),
     });
     return response;
   }
@@ -227,8 +229,8 @@ export class AcpClientHandler implements AcpClientCallbacks {
       });
       return Promise.resolve({ action: 'cancel' });
     }
-    return createAcpElicitation(params, this.sessionId, (request, presentation) =>
-      this.requestPermissionWithPresentation(request, presentation)
+    return createAcpElicitation(params, this.sessionId, (request, presentation, validateAnswers) =>
+      this.requestPermissionWithPresentation(request, presentation, validateAnswers)
     );
   }
 

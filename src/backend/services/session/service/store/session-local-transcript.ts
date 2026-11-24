@@ -13,9 +13,20 @@ export function isPRUpdateOutcomeMessage(message: ChatMessage): boolean {
 export function isLocalTranscriptMessage(message: ChatMessage): boolean {
   return (
     (message.source === 'agent' &&
-      (message.message?.type === 'session_lifecycle' ||
+      ((message.message?.type === 'question_response' &&
+        message.id.startsWith('question-response:')) ||
+        message.message?.type === 'session_lifecycle' ||
         (message.message?.type === 'session_notice' &&
           message.id.startsWith('provider-notice:')))) ||
     isPRUpdateOutcomeMessage(message)
+  );
+}
+
+/** Stop evidence and local PR outcomes belong to the app session after a rollover. */
+export function survivesProviderIdentityRollover(message: ChatMessage): boolean {
+  return (
+    isLocalTranscriptMessage(message) &&
+    message.message?.type !== 'session_notice' &&
+    message.message?.type !== 'question_response'
   );
 }
