@@ -12,6 +12,10 @@ const optionSchema = z.object({
   description: z.string().nullish(),
 });
 const CODEX_CUSTOM_ANSWER = 'None of the above';
+const claudeCustomAnswerSchema = z
+  .object({ questionId: z.string(), isCustomAnswer: z.literal(true) })
+  .optional()
+  .catch(undefined);
 const common = {
   title: z.string().nullish(),
   description: z.string().nullish(),
@@ -25,6 +29,12 @@ const common = {
         })
         .passthrough()
         .nullish(),
+      // Claude ACP supplies both the current AIR marker and its legacy spelling.
+      jetbrains: z
+        .object({ air: z.object({ customAnswer: claudeCustomAnswerSchema }).nullish() })
+        .nullish()
+        .catch(undefined),
+      _askUserQuestionCustomAnswer: claudeCustomAnswerSchema,
     })
     .passthrough()
     .nullish(),
@@ -263,19 +273,28 @@ export interface AcpElicitationForm {
   parseAnswers: (answers: unknown) => Record<string, ElicitationContentValue> | null;
 }
 
+type CompanionNote = NonNullable<AskUserQuestion['companionNote']>;
+
+function getProviderNote(field: Field): CompanionNote | undefined {
+  const metadata = field._meta;
+  const codex = metadata?.codex;
+  if (codex?.role === 'user_note' && codex.questionId !== undefined) {
+    return { questionId: codex.questionId, revealOnValue: CODEX_CUSTOM_ANSWER };
+  }
+  const claude = metadata?.jetbrains?.air?.customAnswer ?? metadata?._askUserQuestionCustomAnswer;
+  return claude ? { questionId: claude.questionId } : undefined;
+}
+
 function getCompanionNotes(
   form: Form,
   questionIds: Map<string, string>
-): Map<string, NonNullable<AskUserQuestion['companionNote']>> {
-  const notes = new Map<string, NonNullable<AskUserQuestion['companionNote']>>();
+): Map<string, CompanionNote> {
+  const notes = new Map<string, CompanionNote>();
   for (const [id, field] of Object.entries(form.properties)) {
-    const metadata = field._meta?.codex;
-    const parentId = metadata?.questionId;
+    const note = getProviderNote(field);
     if (
-      metadata?.role !== 'user_note' ||
-      parentId === undefined ||
-      parentId === id ||
-      !Object.hasOwn(form.properties, parentId) ||
+      !note ||
+      note.questionId === id ||
       field.type !== 'string' ||
       field.enum ||
       field.oneOf ||
@@ -283,25 +302,77 @@ function getCompanionNotes(
     ) {
       continue;
     }
-    const parent = form.properties[parentId];
-    const questionId = questionIds.get(parentId);
-    if (parent?.type !== 'string' || parent._meta?.codex?.isOther !== true || !questionId) {
+    const questionId = questionIds.get(note.questionId);
+    if (!questionId) {
       continue;
     }
-    if (choices(parent).length > 0) {
-      notes.set(id, { questionId, revealOnValue: CODEX_CUSTOM_ANSWER });
+    const parent = form.properties[note.questionId];
+    if (parent && supportsCompanionNote(parent, note)) {
+      notes.set(id, { ...note, questionId });
     }
   }
   return notes;
 }
 
-function questionOptions(field: Field, hasCompanionNote: boolean): AskUserQuestion['options'] {
-  const options = displayChoices(field);
-  // Codex omits this option for AIR clients, where the form owns custom-answer presentation.
-  if (hasCompanionNote && !options.some((option) => option.label === CODEX_CUSTOM_ANSWER)) {
-    options.push({ label: CODEX_CUSTOM_ANSWER, description: '' });
+function supportsCompanionNote(parent: Field, note: CompanionNote): boolean {
+  const isChoice = parent.type === 'string' || parent.type === 'array';
+  const supportsCodexOther = parent.type === 'string' && parent._meta?.codex?.isOther === true;
+  return (
+    isChoice &&
+    (note.revealOnValue === undefined || supportsCodexOther) &&
+    choices(parent).length > 0
+  );
+}
+
+function questionCopy(
+  field: Field,
+  id: string,
+  parent: CompanionNote | undefined,
+  formMessage?: string
+): Pick<AskUserQuestion, 'question' | 'header'> {
+  const title = field.title?.trim();
+  const fallback = title || id.trim() || 'Input';
+  // Claude uses its short header as the title and moves the question into the description or form message.
+  if (parent && parent.revealOnValue === undefined) {
+    return {
+      question: field.description?.trim() || formMessage?.trim() || fallback,
+      ...(title ? { header: title } : {}),
+    };
   }
-  return options;
+  return { question: fallback, ...(field.description ? { header: field.description } : {}) };
+}
+
+function projectFormQuestions(form: Form, questionIds: Map<string, string>, formMessage?: string) {
+  const notes = getCompanionNotes(form, questionIds);
+  const parents = new Map(Array.from(notes.values(), (note) => [note.questionId, note]));
+  const validators = new Map<string, z.ZodType<ElicitationContentValue>>();
+  const questions = [];
+  for (const [id, field] of Object.entries(form.properties)) {
+    const questionId = questionIds.get(id) ?? id;
+    const note = notes.get(id);
+    const parent = parents.get(questionId);
+    const options = displayChoices(field);
+    const validate = validator(field);
+    const customChoice = parent?.revealOnValue;
+    // Codex omits this special value for AIR clients. The sentinel is a choice, not user text.
+    if (customChoice && !options.some((option) => option.label === customChoice)) {
+      options.push({ label: customChoice, description: '' });
+      validators.set(id, z.union([z.literal(customChoice), validate]));
+    } else {
+      validators.set(id, validate);
+    }
+    questions.push({
+      id: questionId,
+      ...questionCopy(field, id, parent, formMessage),
+      options,
+      validation: questionValidation(field),
+      allowOther: !parent && allowsOtherAnswer(field),
+      ...(note ? { companionNote: note } : {}),
+      ...(!form.required?.includes(id) ? { optional: true } : {}),
+      ...(field.type === 'array' ? { multiSelect: true } : {}),
+    });
+  }
+  return { questions, validators };
 }
 
 function validateFieldAnswer(
@@ -349,7 +420,10 @@ function parseAnswers(
 }
 
 /** Convert the supported ACP primitive schema into the application's question UI. */
-export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | null {
+export function createAcpElicitationForm(
+  schema: unknown,
+  formMessage?: string
+): AcpElicitationForm | null {
   const parsed = formSchema.safeParse(schema);
   if (!parsed.success) {
     return null;
@@ -359,9 +433,6 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
     return null;
   }
   try {
-    const validators = new Map(
-      Object.entries(form.properties).map(([id, field]) => [id, validator(field)])
-    );
     const usedIds = new Set(Object.keys(form.properties));
     const questionIds = new Map(
       Object.keys(form.properties).map((id, index) => {
@@ -376,19 +447,7 @@ export function createAcpElicitationForm(schema: unknown): AcpElicitationForm | 
         return [id, questionId];
       })
     );
-    const notes = getCompanionNotes(form, questionIds);
-    const parentsWithNotes = new Set(Array.from(notes.values(), (note) => note.questionId));
-    const questions = Object.entries(form.properties).map(([id, field]): AskUserQuestion => ({
-      id: questionIds.get(id) ?? id,
-      question: field.title?.trim() || id.trim() || 'Input',
-      ...(field.description ? { header: field.description } : {}),
-      options: questionOptions(field, parentsWithNotes.has(questionIds.get(id) ?? id)),
-      validation: questionValidation(field),
-      allowOther: !parentsWithNotes.has(questionIds.get(id) ?? id) && allowsOtherAnswer(field),
-      ...(notes.has(id) ? { companionNote: notes.get(id) } : {}),
-      ...(!form.required?.includes(id) ? { optional: true } : {}),
-      ...(field.type === 'array' ? { multiSelect: true } : {}),
-    }));
+    const { questions, validators } = projectFormQuestions(form, questionIds, formMessage);
     return {
       questions,
       parseAnswers: (answers) => parseAnswers(form, validators, questionIds, answers),

@@ -27,7 +27,7 @@ type ElicitationPresentation = {
 
 function createPresentation(params: CreateElicitationRequest): ElicitationPresentation | null {
   if (params.mode === 'form' && 'requestedSchema' in params) {
-    const form = createAcpElicitationForm(params.requestedSchema);
+    const form = createAcpElicitationForm(params.requestedSchema, params.message);
     if (!form) {
       return null;
     }
@@ -47,7 +47,7 @@ function createPresentation(params: CreateElicitationRequest): ElicitationPresen
         type: 'AskUserQuestion',
         message: params.message,
         questions: form.questions.map((question, index) =>
-          index === 0
+          index === 0 && params.message.trim() !== question.question
             ? {
                 ...question,
                 header: [params.message, question.header].filter(Boolean).join(' — '),

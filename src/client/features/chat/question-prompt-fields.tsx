@@ -179,22 +179,20 @@ export function QuestionField({
           labelledBy={titleId}
         />
       ) : (
-        question.allowOther !== false && (
-          <AnswerText
-            labelledBy={titleId}
-            value={text}
-            onChange={(next) => {
-              onTextChange(next);
-              const selected = next.trim() ? other : '';
-              onChange(question.multiSelect ? (selected ? [selected] : []) : selected);
-            }}
-            error={
-              question.multiSelect
-                ? getArrayAnswerError(question, Array.isArray(value) ? value : [], text)
-                : getAnswerError(question, text)
-            }
-          />
-        )
+        <AnswerText
+          labelledBy={titleId}
+          value={text}
+          onChange={(next) => {
+            onTextChange(next);
+            const selected = next.trim() ? other : '';
+            onChange(question.multiSelect ? (selected ? [selected] : []) : selected);
+          }}
+          error={
+            question.multiSelect
+              ? getArrayAnswerError(question, Array.isArray(value) ? value : [], text)
+              : getAnswerError(question, text)
+          }
+        />
       )}
     </div>
   );
@@ -224,7 +222,7 @@ export function CompanionNote({
           setOpen(true);
         }}
       >
-        Add a note
+        {question.companionNote?.revealOnValue === undefined ? 'Add a custom answer' : 'Add a note'}
       </Button>
     );
   }

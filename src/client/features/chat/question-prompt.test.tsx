@@ -9,6 +9,16 @@ import { CommitProbe } from '@/test-utils/commit-probe';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { QuestionPrompt } from './question-prompt';
 
+function typeAnswer(input: HTMLTextAreaElement, value: string) {
+  flushSync(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      input,
+      value
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -57,7 +67,7 @@ describe('QuestionPrompt', () => {
     root.unmount();
   });
 
-  it('allows skipping an optional step and returning to it', () => {
+  it('allows skipping an optional step and preserves its draft when navigating back', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -70,18 +80,21 @@ describe('QuestionPrompt', () => {
       ],
     };
     flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer: vi.fn() })));
-    const next = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Next'
-    )!;
-    expect(next.disabled).toBe(false);
-    flushSync(() => next.click());
+    const getButton = (label: string) =>
+      Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === label
+      )!;
+    expect(getButton('Next').disabled).toBe(false);
+    flushSync(() => getButton('Next').click());
     expect(container.textContent).toContain('2 of 2');
-    const back = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Back'
-    )!;
-    flushSync(() => back.click());
+    flushSync(() => getButton('Back').click());
     expect(container.textContent).toContain('1 of 2');
     expect(container.querySelector('textarea')?.value).toBe('');
+    typeAnswer(container.querySelector('textarea')!, 'Optional draft');
+    flushSync(() => getButton('Next').click());
+    expect(container.textContent).toContain('2 of 2');
+    flushSync(() => getButton('Back').click());
+    expect(container.querySelector('textarea')?.value).toBe('Optional draft');
     root.unmount();
   });
 
@@ -147,6 +160,47 @@ describe('QuestionPrompt', () => {
       root.unmount();
     }
   );
+
+  it('opens a custom answer for a companion without a reveal choice', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'choice-with-custom-answer',
+      timestamp: '',
+      questions: [
+        {
+          id: 'choice',
+          question: 'Choose',
+          options: [{ label: 'A', description: '' }],
+          optional: true,
+          allowOther: false,
+        },
+        {
+          id: 'custom',
+          question: 'Custom answer',
+          options: [],
+          optional: true,
+          companionNote: { questionId: 'choice' },
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    expect(container.querySelector('textarea')).toBeNull();
+    const addAnswer = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Add a custom answer'
+    );
+    expect(addAnswer).toBeDefined();
+    flushSync(() => addAnswer!.click());
+    typeAnswer(container.querySelector('textarea')!, 'B');
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('choice-with-custom-answer', { custom: 'B' });
+    root.unmount();
+  });
 
   it.each([
     ['abc', 'Enter a number.'],
@@ -277,6 +331,55 @@ describe('QuestionPrompt', () => {
     root.unmount();
   });
 
+  it('validates and submits optional multi-select answers without counting blank Other', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'optional-multi-other',
+      timestamp: '',
+      questions: [
+        {
+          id: 'choices',
+          question: 'Pick two',
+          multiSelect: true,
+          optional: true,
+          options: ['A', 'B', 'C'].map((label) => ({ label, description: '' })),
+          validation: { type: 'array', minItems: 2, maxItems: 2 },
+        },
+      ],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    const [first, second, third, other] =
+      container.querySelectorAll<HTMLButtonElement>('[role="checkbox"]');
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    flushSync(() => other!.click());
+    expect(submit.disabled).toBe(false);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenLastCalledWith('optional-multi-other', {});
+
+    flushSync(() => first!.click());
+    expect(submit.disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Select at least 2 options.'
+    );
+    flushSync(() => second!.click());
+    expect(submit.disabled).toBe(false);
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenLastCalledWith('optional-multi-other', { choices: ['A', 'B'] });
+
+    flushSync(() => third!.click());
+    expect(submit.disabled).toBe(true);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Select at most 2 options.'
+    );
+    root.unmount();
+  });
+
   it('discards a multi-select custom answer when Other is unchecked', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -297,6 +400,10 @@ describe('QuestionPrompt', () => {
       container.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')
     )[1]!;
     flushSync(() => other.click());
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(true);
     const input = container.querySelector('textarea')!;
     flushSync(() => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
@@ -628,6 +735,30 @@ describe('QuestionPrompt', () => {
     expect(container.querySelector('textarea')).not.toBeNull();
     expect(container.querySelector('[role="radio"]')).toBeNull();
 
+    root.unmount();
+  });
+
+  it('accepts a text answer with no options and allowOther disabled', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question: UserQuestionRequest = {
+      requestId: 'free-form-without-other',
+      timestamp: '',
+      questions: [{ id: 'text', question: 'Enter a value', options: [], allowOther: false }],
+    };
+    flushSync(() => root.render(createElement(QuestionPrompt, { question, onAnswer })));
+    const submit = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Submit'
+    )!;
+    expect(submit.disabled).toBe(true);
+    const input = container.querySelector('textarea');
+    expect(input).not.toBeNull();
+    typeAnswer(input!, 'A text answer');
+    expect(submit.disabled).toBe(false);
+    flushSync(() => submit.click());
+    expect(onAnswer).toHaveBeenCalledWith('free-form-without-other', { text: 'A text answer' });
     root.unmount();
   });
 
