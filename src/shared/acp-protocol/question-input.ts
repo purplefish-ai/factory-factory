@@ -81,3 +81,28 @@ export function isUserQuestionRequest(request: {
   }
   return hasAskUserQuestionInput(request.input);
 }
+
+const secretQuestionSchema = z.object({
+  isSecret: z.boolean().optional().catch(undefined),
+  secret: z.boolean().optional().catch(undefined),
+  format: z.string().optional().catch(undefined),
+  writeOnly: z.boolean().optional().catch(undefined),
+  _meta: z
+    .object({
+      codex: z.object({ isSecret: z.boolean().optional() }).nullish().catch(undefined),
+    })
+    .nullish()
+    .catch(undefined),
+});
+
+/** Detect explicit provider flags before the display schema strips metadata. */
+export function isSecretQuestion(input: unknown): boolean {
+  const flags = secretQuestionSchema.safeParse(input).data;
+  return Boolean(
+    flags?.isSecret ||
+    flags?.secret ||
+    flags?.writeOnly ||
+    flags?._meta?.codex?.isSecret ||
+    flags?.format === 'password'
+  );
+}

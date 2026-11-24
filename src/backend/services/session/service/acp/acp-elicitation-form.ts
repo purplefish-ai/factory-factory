@@ -4,8 +4,8 @@ import {
   type AskUserQuestion,
   compileQuestionPattern,
   getStringAnswerError,
+  isSecretQuestion,
 } from '@/shared/acp-protocol/question-input';
-import { isSecretQuestion } from '@/shared/acp-protocol/question-response-summary';
 const optionSchema = z.object({
   const: z.string(),
   title: z.string(),

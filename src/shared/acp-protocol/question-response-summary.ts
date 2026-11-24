@@ -1,34 +1,10 @@
 import { z } from 'zod';
 import type { QuestionResponse } from './protocol/question-response';
-import { getAskUserQuestions } from './question-input';
-
-const questionPresentationSchema = z.object({
-  isSecret: z.boolean().optional().catch(undefined),
-  secret: z.boolean().optional().catch(undefined),
-  format: z.string().optional().catch(undefined),
-  writeOnly: z.boolean().optional().catch(undefined),
-  _meta: z
-    .object({
-      codex: z.object({ isSecret: z.boolean().optional() }).nullish().catch(undefined),
-    })
-    .nullish()
-    .catch(undefined),
-});
+import { getAskUserQuestions, isSecretQuestion } from './question-input';
 
 const companionNoteSchema = z.object({
   companionNote: z.object({ questionId: z.string(), revealOnValue: z.string().optional() }),
 });
-
-export function isSecretQuestion(input: unknown): boolean {
-  const flags = questionPresentationSchema.safeParse(input).data;
-  return Boolean(
-    flags?.isSecret ||
-    flags?.secret ||
-    flags?.writeOnly ||
-    flags?._meta?.codex?.isSecret ||
-    flags?.format === 'password'
-  );
-}
 
 type QuestionAnswers = Record<string, string[]>;
 
