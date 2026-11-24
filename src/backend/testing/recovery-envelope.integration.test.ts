@@ -184,13 +184,14 @@ it('roundtrips the complete base graph with explicit null task links from publis
       .sort((a, b) => a.id.localeCompare(b.id));
   expect(associations(exported.data.workspaces)).toEqual(associations(v7.data.workspaces));
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', slack.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery.profile', 'base-json-question-responses-1');
   expect(exported.data).toHaveProperty('recovery', {
     baseJson: { version: 1, jsonStorage: [] },
     periodicConfig: { version: 1, tasks: [] },
     periodicHistory: { version: 1, executions: [], jsonStorage: [] },
     automationDefinitions: { version: 1, definitions: [] },
     slackConnections: { version: 1, connections: [] },
+    questionResponses: { version: 1, responses: [] },
   });
   expect(exportDataSchema.parse(exported)).toEqual(exported);
   const expectedLinks = v7.data.workspaces

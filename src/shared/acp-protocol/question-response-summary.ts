@@ -1,10 +1,5 @@
-import { z } from 'zod';
 import type { QuestionResponse } from './protocol/question-response';
 import { getAskUserQuestions, isSecretQuestion } from './question-input';
-
-const companionNoteSchema = z.object({
-  companionNote: z.object({ questionId: z.string(), revealOnValue: z.string().optional() }),
-});
 
 type QuestionAnswers = Record<string, string[]>;
 
@@ -25,7 +20,7 @@ export function summarizeQuestionResponse(
     return {
       key,
       values,
-      companionNote: companionNoteSchema.safeParse(rawField).data?.companionNote,
+      companionNote: field.companionNote,
       summary: {
         ...(field.id ? { id: key } : {}),
         question: field.question,
@@ -42,17 +37,22 @@ export function summarizeQuestionResponse(
     };
   });
 
-  const notesByParent = new Map<string, { text: string; customChoice?: string }>();
+  const notesByParent = new Map<string, { texts: string[]; customChoices: Set<string> }>();
   const parentKeys = new Set(pairs.map(({ key }) => key));
   const questions = pairs.flatMap(({ key, companionNote, summary, values }) => {
     if (!(companionNote && parentKeys.has(companionNote.questionId)) || summary.redacted) {
       return [{ key, summary, values }];
     }
     if (summary.answers.length) {
-      notesByParent.set(companionNote.questionId, {
-        text: summary.answers.join('\n'),
-        customChoice: companionNote.revealOnValue,
-      });
+      const note = notesByParent.get(companionNote.questionId) ?? {
+        texts: [],
+        customChoices: new Set<string>(),
+      };
+      note.texts.push(summary.answers.join('\n'));
+      if (companionNote.revealOnValue) {
+        note.customChoices.add(companionNote.revealOnValue);
+      }
+      notesByParent.set(companionNote.questionId, note);
     }
     return [];
   });
@@ -65,10 +65,10 @@ export function summarizeQuestionResponse(
       if (!note || summary.redacted) {
         return summary;
       }
-      const visibleAnswers = note.customChoice
-        ? summary.answers.filter((_, index) => values[index] !== note.customChoice)
-        : summary.answers;
-      return { ...summary, answers: visibleAnswers, note: note.text };
+      const visibleAnswers = summary.answers.filter(
+        (_, index) => !note.customChoices.has(values[index] ?? '')
+      );
+      return { ...summary, answers: visibleAnswers, note: note.texts.join('\n') };
     }),
   };
 }

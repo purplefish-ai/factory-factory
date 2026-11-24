@@ -78,3 +78,21 @@ export const Cancelled: Story = {
 export const AnsweredOnPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+export const PrivateAnswer: Story = {
+  args: {
+    message: {
+      type: 'question_response',
+      questionResponse: {
+        toolUseId: 'ask-access-token',
+        status: 'answered',
+        questions: [{ question: 'What is the access token?', answers: [], redacted: true }],
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Private answer hidden')).toBeVisible();
+    await expect(canvas.queryByText('Raw tool details')).not.toBeInTheDocument();
+  },
+};

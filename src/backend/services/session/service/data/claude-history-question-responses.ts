@@ -4,7 +4,7 @@ import {
   type QuestionResponse,
   buildQuestionToolDetails,
 } from '@/shared/acp-protocol/protocol/question-response';
-import { getAskUserQuestions } from '@/shared/acp-protocol/question-input';
+import { getAskUserQuestions, hasSecretQuestion } from '@/shared/acp-protocol/question-input';
 import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
 
 type Call = Extract<HistoryMessage, { type: 'tool_use' }>;
@@ -36,9 +36,11 @@ function statusOf(result: ToolResult): QuestionResponse['status'] {
   }
   const cancellation =
     /^(?:(?:cancelled|canceled|declined)[.!]?$|The user doesn't want to proceed with this tool use\. The tool use was rejected)/i;
-  return typeof result.content === 'string' && cancellation.test(result.content.trim())
-    ? 'cancelled'
-    : 'unavailable';
+  const text =
+    typeof result.content === 'string'
+      ? result.content
+      : result.content.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join(' ');
+  return cancellation.test(text.trim()) ? 'cancelled' : 'unavailable';
 }
 
 function readStructuredSubmission(input: Record<string, unknown>, structuredResult: unknown) {
@@ -57,11 +59,12 @@ function completedQuestion(
   toolUseId: string,
   structuredResult: unknown
 ): Response {
-  const status = statusOf(result);
   const input = call.toolInput ?? {};
+  const fields = getAskUserQuestions(input);
+  const status = fields.length > 0 ? statusOf(result) : 'unavailable';
   const submitted =
     status === 'answered' ? readStructuredSubmission(input, structuredResult) : undefined;
-  const answerPairs = getAskUserQuestions(input).flatMap(({ id, question }) => {
+  const answerPairs = fields.flatMap(({ id, question }) => {
     const answers = submitted?.answers;
     return answers && Object.hasOwn(answers, question)
       ? [[id?.trim() || question, answers[question] ?? []] as const]
@@ -81,7 +84,7 @@ function completedQuestion(
         : undefined;
     return note && !field.redacted ? { ...field, note } : field;
   });
-  const details = questionResponse.questions.some((question) => question.redacted)
+  const details = hasSecretQuestion(input)
     ? undefined
     : buildQuestionToolDetails(call.toolName ?? 'AskUserQuestion', input, result.content);
   return {
@@ -111,6 +114,20 @@ function resultQuality(response: Response): number {
   return status === 'answered' ? 1 : 0;
 }
 
+function resultDetailCount(response: Response): number {
+  return response.questionResponse.questions.reduce(
+    (count, { answers, note }) => count + answers.length + (note ? 1 : 0),
+    0
+  );
+}
+
+function isBetterResult(incoming: Response, previous: Response): boolean {
+  const quality = resultQuality(incoming) - resultQuality(previous);
+  return (
+    quality > 0 || (quality === 0 && resultDetailCount(incoming) > resultDetailCount(previous))
+  );
+}
+
 function replaceQuestionWithResult(
   history: HistoryMessage[],
   questionCalls: ClaudeQuestionCallIndex,
@@ -123,12 +140,15 @@ function replaceQuestionWithResult(
     return false;
   }
   const { index, call } = entry;
+  const input = call.toolInput ?? {};
+  // Incomplete public calls stay available as raw tool history. Private inputs
+  // still get a safe placeholder when the provider payload cannot be displayed.
+  if (getAskUserQuestions(input).length === 0 && !hasSecretQuestion(input)) {
+    return false;
+  }
   const previous = history[index];
   const completed = completedQuestion(call, result, toolId, structuredResult);
-  if (
-    previous?.type !== 'question_response' ||
-    resultQuality(completed) > resultQuality(previous)
-  ) {
+  if (previous?.type !== 'question_response' || isBetterResult(completed, previous)) {
     history[index] = completed;
   }
   return true;

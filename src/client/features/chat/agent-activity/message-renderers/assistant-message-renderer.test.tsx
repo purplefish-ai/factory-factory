@@ -3,7 +3,7 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { AssistantMessageRenderer, LoadingIndicator } from './assistant-message-renderer';
 
@@ -50,6 +50,81 @@ it('renders an answered question as readable pairs with collapsed tool details',
     expect(container.querySelector('summary')?.textContent).toBe('Raw tool details');
   } finally {
     root.unmount();
+  }
+});
+
+it('hides supplied private answers, notes, and raw details when any question is redacted', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    flushSync(() =>
+      root.render(
+        <AssistantMessageRenderer
+          message={{
+            type: 'question_response',
+            questionResponse: {
+              toolUseId: 'tool-1',
+              status: 'answered',
+              questions: [
+                { question: 'Which processes?', answers: ['CPU'] },
+                {
+                  question: 'Which token?',
+                  answers: ['Private answer value'],
+                  note: 'Private note value',
+                  redacted: true,
+                },
+              ],
+            },
+            questionToolDetails: { toolName: 'AskUserQuestion', result: 'Private raw response' },
+          }}
+        />
+      )
+    );
+    expect([...container.querySelectorAll('dd')].map((answer) => answer.textContent)).toEqual([
+      'CPU',
+      'Private answer hidden',
+    ]);
+    expect(container.textContent).not.toContain('Private raw response');
+    expect(container.querySelector('details')).toBeNull();
+  } finally {
+    root.unmount();
+  }
+});
+
+it('renders questions with duplicate IDs and duplicate text without duplicate React keys', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    flushSync(() =>
+      root.render(
+        <AssistantMessageRenderer
+          message={{
+            type: 'question_response',
+            questionResponse: {
+              toolUseId: 'tool-1',
+              status: 'answered',
+              questions: [
+                { id: 'choice', question: 'First choice?', answers: ['One'] },
+                { id: 'choice', question: 'Second choice?', answers: ['Two'] },
+                { question: 'Another choice?', answers: ['Three'] },
+                { question: 'Another choice?', answers: ['Four'] },
+              ],
+            },
+          }}
+        />
+      )
+    );
+    expect([...container.querySelectorAll('dd')].map((answer) => answer.textContent)).toEqual([
+      'One',
+      'Two',
+      'Three',
+      'Four',
+    ]);
+    expect(consoleError).not.toHaveBeenCalled();
+  } finally {
+    root.unmount();
+    consoleError.mockRestore();
   }
 });
 

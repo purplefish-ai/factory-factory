@@ -56,7 +56,7 @@ reading only lines that contain its marker.
 - Claude's structured question result is correlated by tool-use ID and replaces
   the tool call at its original position. The session-owned question response
   history stores only summaries, and provider-marked answer values are omitted.
-  `session-history-loader.service.test.ts`,
+  `claude-history-question-responses.test.ts`,
   `session-question-response-history.integration.test.ts`.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
@@ -70,6 +70,7 @@ reading only lines that contain its marker.
   `codex-session-history-loader.service.ts`: find and parse each provider's
   history file, restoring prompt images through `history-image-attachment.ts`.
 - `claude-history-question-responses.ts` restores structured provider answers.
+  `codex-history-question-responses.ts` projects acknowledgment-only requests.
   `session-question-response-history.ts` persists and restores local summaries.
 - `session-history-jsonl-reader.ts`: the cooperative line reader both use.
 - `session-history-file.ts`: the file identity a read observed.

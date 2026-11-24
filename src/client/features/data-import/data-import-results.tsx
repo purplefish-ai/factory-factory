@@ -105,7 +105,7 @@ export function DataImportResultsProvider({
                     disabled: {definitions.restoredDisabled}
                   </p>
                   <p>
-                    {active.recovery.manifest?.profile === 'base-json-slack-connections-1'
+                    {active.recovery.manifest?.capabilities.slackConnections === 1
                       ? 'Only definition bodies and run preferences are restored. Connection bindings, event configuration and event-triggered run history are excluded. Slack connection metadata is reported separately.'
                       : 'Only definition bodies and run preferences are restored. Connections, event configuration and event-triggered run history are excluded.'}
                   </p>

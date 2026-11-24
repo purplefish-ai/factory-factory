@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { sessionQuestionResponseAccessor } from '@/backend/services/session/resources/session-question-response.accessor';
+import { createPermissionResponseHandler } from '@/backend/services/session/service/chat/chat-message-handlers/handlers/permission-response.handler';
 import { createSessionLoadService } from '@/backend/services/session/service/composition/session-services';
+import { SessionPermissionService } from '@/backend/services/session/service/events/session.permission.service';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   createIntegrationDatabase,
@@ -9,6 +12,7 @@ import {
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
+  createSessionTranscriptHydrator,
   hydrateQuestionResponseHistory,
   persistQuestionResponse,
 } from './session-question-response-history';
@@ -197,4 +201,122 @@ it('keeps a rolled-over conversation separate when it reuses a tool ID', async (
   expect(next.getTranscriptSnapshot('session')).toMatchObject([
     { message: { type: 'stream_event' } },
   ]);
+});
+
+it('marks history hydrated without a provider ID even when the domain is already bound', async () => {
+  const domain = new SessionDomainService();
+  domain.createProviderHistoryFence('session', 'provider-1');
+  await createSessionTranscriptHydrator(domain)('session', {
+    provider: 'CODEX',
+    providerSessionId: null,
+    providerMetadata: null,
+    workspace: { worktreePath: null },
+  });
+  expect(domain.isHistoryHydrated('session')).toBe(true);
+  expect(domain.getHistoryHydrationSource('session')).toBe('none');
+});
+
+function showQuestion(toolUseId: string) {
+  const domain = new SessionDomainService();
+  const permissions = new SessionPermissionService({
+    sessionDomainService: domain,
+    getProviderSessionId: () => 'provider-1',
+    persistQuestionResponse,
+  });
+  const bridge = permissions.createPermissionBridge('session');
+  const params = {
+    sessionId: 'provider-1',
+    toolCall: {
+      toolCallId: toolUseId,
+      title: 'AskUserQuestion',
+      rawInput: { questions: [{ id: 'choice', question: 'Which option?' }] },
+    },
+    options: [{ optionId: 'allow', kind: 'allow_once' as const, name: 'Answer' }],
+  };
+  const requestId = `request-${toolUseId}`;
+  const providerResponse = bridge.waitForUserResponse(requestId, params);
+  permissions.handlePermissionRequest('session', {
+    type: 'acp_permission_request',
+    requestId,
+    params,
+  });
+  const handler = createPermissionResponseHandler({ sessionPermissionService: permissions });
+  const answer = () =>
+    handler(
+      { sessionId: 'session', workingDir: '/tmp/w' },
+      {
+        type: 'permission_response',
+        requestId,
+        optionId: 'allow',
+        answers: { choice: ['Option A'] },
+      }
+    );
+  return { domain, providerResponse, answer };
+}
+
+it('waits for the accepted answer write before settling the command or reloading history', async () => {
+  const release = Promise.withResolvers<void>();
+  const writeStarted = Promise.withResolvers<void>();
+  const upsert = sessionQuestionResponseAccessor.upsert;
+  const write = vi
+    .spyOn(sessionQuestionResponseAccessor, 'upsert')
+    .mockImplementationOnce(async (...args) => {
+      writeStarted.resolve();
+      await release.promise;
+      await upsert(...args);
+    });
+  const read = vi.spyOn(sessionQuestionResponseAccessor, 'findBySessionId');
+  const { providerResponse, answer } = showQuestion('delayed-write');
+  const restored = new SessionDomainService();
+  let commandFinished = false;
+  const command = Promise.resolve(answer()).then((outcome) => {
+    commandFinished = true;
+    return outcome;
+  });
+  const reopen = hydrateQuestionResponseHistory(restored, 'session', 'provider-1');
+  try {
+    await writeStarted.promise;
+    await expect(providerResponse).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
+    expect(commandFinished).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+  } finally {
+    release.resolve();
+    await Promise.all([command, reopen]);
+    write.mockRestore();
+    read.mockRestore();
+  }
+  await expect(command).resolves.toEqual({ replies: [] });
+  expect(restored.getTranscriptSnapshot('session')).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        message: expect.objectContaining({
+          type: 'question_response',
+          questionResponse: expect.objectContaining({
+            toolUseId: 'delayed-write',
+            status: 'answered',
+          }),
+        }),
+      }),
+    ])
+  );
+});
+
+it('keeps the provider-accepted answer when the durable write fails', async () => {
+  const write = vi
+    .spyOn(sessionQuestionResponseAccessor, 'upsert')
+    .mockRejectedValueOnce(new Error('SQLite write failed'));
+  try {
+    const { domain, providerResponse, answer } = showQuestion('failed-write');
+    expect(await answer()).toEqual({ replies: [] });
+    await expect(providerResponse).resolves.toMatchObject({ outcome: { outcome: 'selected' } });
+    expect(domain.getTranscriptSnapshot('session')).toMatchObject([
+      { message: { questionResponse: { toolUseId: 'failed-write', status: 'answered' } } },
+    ]);
+    expect(await answer()).toEqual({
+      replies: [{ type: 'error', error: { kind: 'permission_not_pending' } }],
+    });
+    expect(write).toHaveBeenCalledOnce();
+  } finally {
+    write.mockRestore();
+  }
 });

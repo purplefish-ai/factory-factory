@@ -570,6 +570,7 @@ const SIDE_TABLE_RELATIONS = {
   prDiscovery: 'workspacePRDiscovery',
   runScript: 'workspaceRunScript',
   sessionLifecycleEvents: 'sessionLifecycleEvent',
+  questionResponses: 'sessionQuestionResponse',
 };
 
 /** Paired rows that are initialized as part of every workspace creation. */

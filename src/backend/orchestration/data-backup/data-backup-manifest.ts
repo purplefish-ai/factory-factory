@@ -1,20 +1,16 @@
 import { z } from 'zod';
 import { type PrismaModelName, prismaModelNames } from '@/backend/services/registry';
+import { questionResponsesRecoveryProfile } from '@/shared/schemas/question-responses-recovery.schema';
 import {
   type RecoveryMetadata,
-  slackConnectionsModelCoverage,
+  questionResponsesModelCoverage,
   recoveryMetadataSchema,
 } from '@/shared/schemas/recovery-envelope.schema';
 
-const coverage: Record<PrismaModelName, Omit<RecoveryMetadata['coverage'][number], 'model'>> = {
-  ...slackConnectionsModelCoverage,
-  // Local transcript storage was introduced after the frozen export profile.
-  // It is excluded from that profile's payload and does not change its manifest.
-  SessionQuestionResponse: {
-    status: 'EXCLUDED',
-    limitation: 'question response history absent.',
-  },
-};
+const coverage: Record<
+  PrismaModelName,
+  Omit<RecoveryMetadata['coverage'][number], 'model'>
+> = questionResponsesModelCoverage;
 
 export function assertRecoveryModelCoverage(modelNames: readonly string[]): void {
   const names = new Set(modelNames);
@@ -26,14 +22,14 @@ export function assertRecoveryModelCoverage(modelNames: readonly string[]): void
   }
 }
 export function createBaseRecoveryManifest(): RecoveryMetadata & {
-  profile: 'base-json-slack-connections-1';
+  profile: typeof questionResponsesRecoveryProfile;
 } {
   assertRecoveryModelCoverage(prismaModelNames);
   return recoveryMetadataSchema
-    .safeExtend({ profile: z.literal('base-json-slack-connections-1') })
+    .safeExtend({ profile: z.literal(questionResponsesRecoveryProfile) })
     .parse({
       version: 1,
-      profile: 'base-json-slack-connections-1',
+      profile: questionResponsesRecoveryProfile,
       status: 'PARTIAL',
       capabilities: {
         baseJson: 1,
@@ -41,8 +37,9 @@ export function createBaseRecoveryManifest(): RecoveryMetadata & {
         periodicHistory: 1,
         automationDefinitions: 1,
         slackConnections: 1,
+        questionResponses: 1,
       },
-      coverage: Object.entries(slackConnectionsModelCoverage).map(([model, entry]) => ({
+      coverage: Object.entries(coverage).map(([model, entry]) => ({
         model,
         ...entry,
       })),

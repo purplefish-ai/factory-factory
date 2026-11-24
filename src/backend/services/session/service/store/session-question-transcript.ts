@@ -3,6 +3,7 @@ import {
   type QuestionResponse,
   buildQuestionToolDetails,
 } from '@/shared/acp-protocol/protocol/question-response';
+import { hasSecretQuestion } from '@/shared/acp-protocol/question-input';
 import { mergeLifecycleMessage } from './session-lifecycle-transcript';
 import type { SessionStore } from './session-store.types';
 import { getTranscriptToolEntries } from './session-tool-use-index';
@@ -65,9 +66,10 @@ export function recordQuestionResponse(
   const matching = getTranscriptToolEntries(store, toolUseId);
   const anchors = matching.filter(({ message }) => getQuestionAnchorId(message) === toolUseId);
   const anchor = anchors.find(({ id }) => !isFallbackAnchor(id, toolUseId)) ?? anchors[0];
-  const result = matching
-    .map(({ message }) => getStandaloneToolResult(message))
-    .findLast((block) => block?.tool_use_id === toolUseId)?.content;
+  const result = matching.reduce<ToolResultContentValue | undefined>((latest, { message }) => {
+    const block = getStandaloneToolResult(message);
+    return block?.tool_use_id === toolUseId ? block.content : latest;
+  }, undefined);
   const message = result === undefined ? data : addQuestionResult(data, result);
   const row: ChatMessage = {
     id: anchor?.id ?? questionResponseMessageId(toolUseId),
@@ -123,7 +125,12 @@ function questionHistoryAnchor(
   if (!(block && answersByTool.has(block.id))) {
     return undefined;
   }
-  return { toolUseId: block.id, details: buildQuestionToolDetails(block.name, block.input) };
+  return {
+    toolUseId: block.id,
+    details: hasSecretQuestion(block.input)
+      ? undefined
+      : buildQuestionToolDetails(block.name, block.input),
+  };
 }
 
 /** Durable summaries win over provider reconstruction. Correlated rows keep provider order. */

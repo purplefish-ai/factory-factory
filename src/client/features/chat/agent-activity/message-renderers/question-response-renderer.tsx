@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { QuestionIcon } from '@phosphor-icons/react/dist/csr/Question';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
+import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { cn } from '@/lib/utils';
 import type { AgentMessage } from '@/shared/acp-protocol';
 
@@ -17,8 +18,13 @@ const presentation = {
 
 export function QuestionResponseRenderer({ message, className }: QuestionResponseRendererProps) {
   const { status, questions } = message.questionResponse;
-  const details = message.questionToolDetails;
+  const details = questions.some((question) => question.redacted)
+    ? null
+    : message.questionToolDetails;
   const { label, Icon } = presentation[status];
+  const rows = withOccurrenceKeys(questions, ({ id, question, header }) =>
+    JSON.stringify(id === undefined ? [header, question] : [id])
+  );
   return (
     <section
       aria-label={label}
@@ -30,8 +36,8 @@ export function QuestionResponseRenderer({ message, className }: QuestionRespons
       </div>
       {questions.length > 0 && (
         <dl className="mt-2 space-y-2.5">
-          {questions.map(({ id, question, header, answers, note, redacted }) => (
-            <div key={id ?? JSON.stringify([header, question])} className="min-w-0 break-words">
+          {rows.map(({ key, item: { question, header, answers, note, redacted } }) => (
+            <div key={key} className="min-w-0 break-words">
               <dt className="font-medium">
                 {header && header !== question && (
                   <span className="block text-xs font-normal text-muted-foreground">{header}</span>
@@ -40,21 +46,11 @@ export function QuestionResponseRenderer({ message, className }: QuestionRespons
               </dt>
               {status === 'answered' && (
                 <dd className="mt-0.5 whitespace-pre-wrap">
-                  {answers.length > 1 ? (
-                    <ul className="list-disc ps-5">
-                      {[...new Set(answers)].map((answer) => (
-                        <li key={answer}>{answer}</li>
-                      ))}
-                    </ul>
+                  {redacted ? (
+                    <span className="text-muted-foreground">Private answer hidden</span>
                   ) : (
-                    (answers[0] ??
-                    (!note && (
-                      <span className="text-muted-foreground">
-                        {redacted ? 'Private answer hidden' : 'Answer unavailable'}
-                      </span>
-                    )))
+                    <QuestionAnswer answers={answers} note={note} />
                   )}
-                  {note && <p className="mt-0.5 text-muted-foreground">{note}</p>}
                 </dd>
               )}
             </div>
@@ -74,5 +70,22 @@ export function QuestionResponseRenderer({ message, className }: QuestionRespons
         </details>
       )}
     </section>
+  );
+}
+
+function QuestionAnswer({ answers, note }: { answers: string[]; note?: string }) {
+  return (
+    <>
+      {answers.length > 1 ? (
+        <ul className="list-disc ps-5">
+          {[...new Set(answers)].map((answer) => (
+            <li key={answer}>{answer}</li>
+          ))}
+        </ul>
+      ) : (
+        (answers[0] ?? (!note && <span className="text-muted-foreground">Answer unavailable</span>))
+      )}
+      {note && <p className="mt-0.5 text-muted-foreground">{note}</p>}
+    </>
   );
 }

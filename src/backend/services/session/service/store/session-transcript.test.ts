@@ -77,6 +77,38 @@ function appendToolResult(
 }
 
 describe('session-transcript', () => {
+  it('does not disclose raw tool details from a malformed private question during replay', () => {
+    const domain = new SessionDomainService();
+    domain.appendClaudeEvent('s1', {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: {
+          type: 'tool_use',
+          id: 'ask',
+          name: 'AskUserQuestion',
+          input: { questions: [{ question: false, isSecret: true }], token: 'private value' },
+        },
+      },
+    });
+    domain.appendClaudeEvent('s1', {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'ask', content: 'private value' }],
+      },
+    });
+    const replayed = mergeQuestionResponseHistory(domain.getTranscriptSnapshot('s1'), [
+      {
+        summary: { toolUseId: 'ask', status: 'answered', questions: [] },
+        timestamp: '2026-02-01T00:00:00.000Z',
+      },
+    ]);
+    expect(replayed).toMatchObject([{ message: { type: 'question_response' } }]);
+    expect(JSON.stringify(replayed)).not.toContain('private value');
+  });
+
   it('preserves mixed-content results and folds only standalone results in live and restored questions', () => {
     const session = 's1';
     const domain = new SessionDomainService();

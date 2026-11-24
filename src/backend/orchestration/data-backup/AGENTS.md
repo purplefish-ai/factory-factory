@@ -39,10 +39,14 @@ the inert import report for restored processes and workflows. It does not own:
   `EXCLUDED` is either exported under a key the current export schema has, or
   excluded with a reason; `Gap:` reasons mark known omissions such as
   `WorkspaceRunScript.postRunCommand`. `data-backup-columns.test.ts`.
-- Building the recovery manifest checks the frozen coverage and any newer
-  explicitly excluded models against the Prisma registry. The frozen export
-  profile keeps the same manifest when an excluded model is added.
-  `data-backup-manifest.test.ts`.
+- Building the recovery manifest fails if its coverage differs from the Prisma
+  model registry in `src/backend/services/registry.ts`. Classify every new model
+  explicitly. Published profiles keep their original manifests when the current
+  profile gains a model. `data-backup-manifest.test.ts`.
+- Local question summaries keep their exact session, provider session and
+  tool-use identities. Restore attaches them only to sessions created by the
+  same import. Raw tool content and secret answers are excluded.
+  `question-responses-backup.integration.test.ts`.
 - When `FF_PROJECT_ROOT` is set, import refuses the whole backup before any
   write if any project's repository or worktree base path, or any workspace's
   worktree path, lies outside it, and otherwise stores the real paths it
@@ -59,6 +63,8 @@ the inert import report for restored processes and workflows. It does not own:
   transaction, then writes in one transaction, model by model.
 - `data-backup-manifest.ts`: the recovery manifest and its model coverage.
 - `data-backup-pr-events.ts`: the flattened PR event and delivery format.
+- `data-backup-question-responses.ts`: safe transcript summary projection and
+  restore.
 - `data-backup-legacy-collisions.ts`: identity reservation for older backups.
 - `data-backup-runtime.ts`: restored runs and workflows are not resumed; the
   inert import report counts them.

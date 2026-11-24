@@ -37,7 +37,9 @@ does not own:
 `index.ts` names every public export, in groups: the ACP runtime, chat,
 composition singletons, configuration, session data, delivery, dispatch,
 event-owned sessions and the interceptor bridge, lifecycle, logging, metadata,
-prompts, providers, the store, `sessionEventBus` and voice narration.
+prompts, providers, the store, `sessionEventBus` and voice narration. Backup
+recovery uses `readSessionQuestionResponsesForBackup` and
+`createImportedSessionQuestionResponses` with its private transactions.
 Orchestration passes capabilities in through `service/bridges/`.
 
 ## Invariants

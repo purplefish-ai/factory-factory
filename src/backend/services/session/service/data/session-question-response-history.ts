@@ -12,6 +12,13 @@ import {
 
 const logger = createLogger('session-question-response-history');
 
+// Reloads can start on a new socket while the answer command is still settling.
+const pendingWrites = new Map<string, Promise<void>>();
+
+function historyKey(sessionId: string, providerSessionId: string): string {
+  return JSON.stringify([sessionId, providerSessionId]);
+}
+
 /** Restore provider history and its local question overlays under the same identity fence. */
 export function createSessionTranscriptHydrator(domain: ProviderHistoryHydrationDomain) {
   const hydrateProviderHistory = createProviderHistoryHydrator(domain);
@@ -21,13 +28,17 @@ export function createSessionTranscriptHydrator(domain: ProviderHistoryHydration
     isCurrent
   ) => {
     const providerSessionId = getProviderHistorySessionId(session);
+    if (!providerSessionId) {
+      await hydrateProviderHistory(sessionId, session, isCurrent);
+      return;
+    }
     const providerIsCurrent = domain.createProviderHistoryFence(sessionId, providerSessionId);
     const loadIsCurrent = () => providerIsCurrent?.() === true && isCurrent?.() !== false;
     if (!loadIsCurrent()) {
       return;
     }
     await hydrateProviderHistory(sessionId, session, loadIsCurrent);
-    if (providerSessionId && loadIsCurrent()) {
+    if (loadIsCurrent()) {
       await hydrateQuestionResponseHistory(domain, sessionId, providerSessionId, loadIsCurrent);
     }
   };
@@ -43,11 +54,29 @@ export function persistQuestionResponse(
   if (message?.type !== 'question_response') {
     return Promise.resolve();
   }
-  return sessionQuestionResponseAccessor
-    .upsert(sessionId, providerSessionId, new Date(row.timestamp), message.questionResponse)
+  const key = historyKey(sessionId, providerSessionId);
+  const previousWrite = pendingWrites.get(key) ?? Promise.resolve();
+  const write = previousWrite
+    .then(() =>
+      sessionQuestionResponseAccessor.upsert(
+        sessionId,
+        providerSessionId,
+        new Date(row.timestamp),
+        message.questionResponse
+      )
+    )
     .catch(() => {
-      logger.warn('Unable to persist question response', { sessionId });
+      logger.warn('Unable to persist question response for future history loads', {
+        sessionId,
+      });
+    })
+    .finally(() => {
+      if (pendingWrites.get(key) === write) {
+        pendingWrites.delete(key);
+      }
     });
+  pendingWrites.set(key, write);
+  return write;
 }
 
 export async function hydrateQuestionResponseHistory(
@@ -57,6 +86,10 @@ export async function hydrateQuestionResponseHistory(
   isCurrent = () => true
 ): Promise<void> {
   try {
+    await pendingWrites.get(historyKey(sessionId, providerSessionId));
+    if (!isCurrent()) {
+      return;
+    }
     const rows = await sessionQuestionResponseAccessor.findBySessionId(
       sessionId,
       providerSessionId

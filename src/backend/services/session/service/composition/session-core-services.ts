@@ -84,9 +84,7 @@ const hydrateSessionTranscript = createSessionTranscriptHydrator(sessionDomainSe
 export const sessionPermissionService = new SessionPermissionService({
   sessionDomainService,
   getProviderSessionId: (sessionId) => acpRuntimeManager.getClient(sessionId)?.providerSessionId,
-  persistQuestionResponse: (sessionId, providerSessionId, row) => {
-    void persistQuestionResponse(sessionId, providerSessionId, row);
-  },
+  persistQuestionResponse,
 });
 
 export const codexModelCatalogService = new CodexModelCatalogService({

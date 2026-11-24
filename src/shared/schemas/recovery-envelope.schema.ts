@@ -4,6 +4,10 @@ import {
   periodicConfigRecoverySchema,
   periodicHistoryRecoverySchema,
 } from './periodic-recovery.schema';
+import {
+  questionResponsesRecoveryProfile,
+  questionResponsesRecoverySchema,
+} from './question-responses-recovery.schema';
 import { baseJsonSectionSchema } from './recovery-json-storage.schema';
 import { slackConnectionsRecoverySchema } from './slack-connections-recovery.schema';
 
@@ -213,6 +217,13 @@ export const slackConnectionsModelCoverage = {
   AgentEvaluation: excluded('frozen automation decisions absent.'),
   AgentInitialDelivery: excluded('initial automation effect evidence absent.'),
 } as const;
+export const questionResponsesModelCoverage = {
+  ...slackConnectionsModelCoverage,
+  SessionQuestionResponse: partial(
+    'local answer summaries retain session, provider session and tool identities; restored for newly imported sessions; raw tool content and secret answer values excluded.'
+  ),
+};
+
 const exclusions = [
   'SECRETS_AND_ENCRYPTION_KEYS',
   'NATIVE_ACCOUNT_HOMES',
@@ -227,6 +238,7 @@ export const recoverySectionsSchema = z.strictObject({
   periodicHistory: periodicHistoryRecoverySchema.optional(),
   automationDefinitions: automationDefinitionsRecoverySchema.optional(),
   slackConnections: slackConnectionsRecoverySchema.optional(),
+  questionResponses: questionResponsesRecoverySchema.optional(),
 });
 export const recoveryMetadataSchema = z
   .strictObject({
@@ -240,6 +252,7 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-history-1',
       'base-json-automation-definitions-1',
       'base-json-slack-connections-1',
+      questionResponsesRecoveryProfile,
     ]),
     status: z.literal('PARTIAL'),
     capabilities: z.strictObject({
@@ -248,17 +261,30 @@ export const recoveryMetadataSchema = z
       periodicHistory: z.literal(1).optional(),
       automationDefinitions: z.literal(1).optional(),
       slackConnections: z.literal(1).optional(),
+      questionResponses: z.literal(1).optional(),
     }),
     coverage: z.array(coverageEntrySchema),
     exclusions: z.array(z.enum(exclusions)),
   })
   .superRefine((metadata, ctx) => {
-    const slack = metadata.profile === 'base-json-slack-connections-1';
+    const slack =
+      metadata.profile === 'base-json-slack-connections-1' ||
+      metadata.profile === questionResponsesRecoveryProfile;
     if (
       slack !== Object.hasOwn(metadata.capabilities, 'slackConnections') ||
       (slack && metadata.capabilities.slackConnections !== 1)
     ) {
       ctx.addIssue({ code: 'custom', message: 'Slack profile capabilities do not match' });
+    }
+    const questionResponses = metadata.profile === questionResponsesRecoveryProfile;
+    if (
+      questionResponses !== Object.hasOwn(metadata.capabilities, 'questionResponses') ||
+      (questionResponses && metadata.capabilities.questionResponses !== 1)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Question response profile capabilities do not match',
+      });
     }
   })
   .superRefine((metadata, ctx) => {
@@ -269,8 +295,11 @@ export const recoveryMetadataSchema = z
       'base-json-periodic-history-1',
       'base-json-automation-definitions-1',
       'base-json-slack-connections-1',
+      questionResponsesRecoveryProfile,
     ].includes(metadata.profile);
-    const slack = metadata.profile === 'base-json-slack-connections-1';
+    const slack =
+      metadata.profile === 'base-json-slack-connections-1' ||
+      metadata.profile === questionResponsesRecoveryProfile;
     const automation = slack || metadata.profile === 'base-json-automation-definitions-1';
     const history = automation || metadata.profile === 'base-json-periodic-history-1';
     if (
@@ -311,6 +340,7 @@ export const recoveryMetadataSchema = z
           'base-json-periodic-history-1': periodicHistoryModelCoverage,
           'base-json-automation-definitions-1': automationDefinitionsModelCoverage,
           'base-json-slack-connections-1': slackConnectionsModelCoverage,
+          [questionResponsesRecoveryProfile]: questionResponsesModelCoverage,
         }[metadata.profile]
       )
     );

@@ -74,6 +74,10 @@ export { SessionConfigService } from './service/config/session.config.service';
 
 // Session data
 export {
+  createImportedSessionQuestionResponses,
+  readSessionQuestionResponsesForBackup,
+} from './resources/session-question-response.accessor';
+export {
   createSessionDataService,
   type SessionDataDependencies,
   type SessionDataService,

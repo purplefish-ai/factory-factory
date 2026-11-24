@@ -125,9 +125,22 @@ function getToolUseIndex(store: SessionStore): ToolUseIndex {
   return rebuilt;
 }
 
-/** All currently indexed entries for a provider tool call. */
+/** Current tool entries in transcript order; indexed references can outlive a row. */
 export function getTranscriptToolEntries(store: SessionStore, toolUseId: string): ChatMessage[] {
-  return [...(getToolUseIndex(store).entriesByToolUseId.get(toolUseId)?.keys() ?? [])];
+  const candidates = getToolUseIndex(store).entriesByToolUseId.get(toolUseId);
+  if (!candidates) {
+    return [];
+  }
+  const located: Array<{ entry: ChatMessage; position: number }> = [];
+  for (const entry of candidates.keys()) {
+    const position = locateEntry(store, entry);
+    if (position < 0) {
+      candidates.delete(entry);
+    } else if (referencedToolUseIds(entry).has(toolUseId)) {
+      located.push({ entry, position });
+    }
+  }
+  return located.sort((left, right) => left.position - right.position).map(({ entry }) => entry);
 }
 
 /** Drop the index so the next lookup rebuilds it from the current transcript. */

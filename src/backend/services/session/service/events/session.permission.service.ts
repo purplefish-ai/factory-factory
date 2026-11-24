@@ -7,6 +7,7 @@ import { sessionDomainService } from '@/backend/services/session/service/store/s
 import type { ChatMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { buildQuestionToolDetails } from '@/shared/acp-protocol/protocol/question-response';
+import { hasSecretQuestion } from '@/shared/acp-protocol/question-input';
 import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import {
@@ -31,11 +32,12 @@ type InteractiveRequest = {
 export type SessionPermissionServiceDependencies = {
   sessionDomainService?: SessionDomainService;
   getProviderSessionId?: (sessionId: string) => string | undefined;
+  /** Completes the storage attempt and reports any failure without rejecting the live response. */
   persistQuestionResponse?: (
     sessionId: string,
     providerSessionId: string,
     message: ChatMessage
-  ) => void;
+  ) => Promise<void>;
 };
 
 export class SessionPermissionService {
@@ -64,7 +66,7 @@ export class SessionPermissionService {
     const bridge = new AcpPermissionBridge(
       (requestId) => {
         const request = this.interactiveRequests.get(sessionId)?.get(requestId);
-        this.recordQuestionResponse(sessionId, request, 'cancelled');
+        void this.recordQuestionResponse(sessionId, request, 'cancelled');
         const wasShown = this.forgetInteractiveRequest(sessionId, requestId);
         this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
         if (wasShown && this.acpPermissionBridges.get(sessionId)?.pendingCount) {
@@ -102,7 +104,7 @@ export class SessionPermissionService {
     requestId: string,
     optionId: string,
     answers?: Record<string, string[]>
-  ): boolean {
+  ): boolean | Promise<boolean> {
     const bridge = this.acpPermissionBridges.get(sessionId);
     if (!bridge) {
       return false;
@@ -118,11 +120,16 @@ export class SessionPermissionService {
     const allowed = selected?.kind === 'allow_once' || selected?.kind === 'allow_always';
     const elicitation = request?.question?.resolveElicitationResponse?.(optionId, answers);
     const accepted = elicitation ? elicitation.action === 'accept' : allowed;
-    this.recordQuestionResponse(sessionId, request, accepted ? 'answered' : 'cancelled', answers);
+    const persisted = this.recordQuestionResponse(
+      sessionId,
+      request,
+      accepted ? 'answered' : 'cancelled',
+      answers
+    );
     if (this.forgetInteractiveRequest(sessionId, requestId)) {
       this.showNextInteractiveRequest(sessionId);
     }
-    return true;
+    return persisted?.then(() => true) ?? true;
   }
 
   handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {
@@ -217,7 +224,7 @@ export class SessionPermissionService {
     request: InteractiveRequest | undefined,
     status: 'answered' | 'cancelled',
     answers?: Record<string, string[]>
-  ): void {
+  ): Promise<void> | undefined {
     if (!(request?.question && request.pending.toolUseId)) {
       return;
     }
@@ -232,18 +239,19 @@ export class SessionPermissionService {
       status,
       answers
     );
-    const details = questionResponse.questions.some((item) => item.redacted)
-      ? undefined
-      : buildQuestionToolDetails(toolName, rawInput);
+    const details =
+      hasSecretQuestion(rawInput) || questionResponse.questions.some((item) => item.redacted)
+        ? undefined
+        : buildQuestionToolDetails(toolName, rawInput);
     const message = this.sessionDomainService.upsertQuestionResponse(sessionId, order, {
       type: 'question_response',
       questionResponse,
       questionToolDetails: details,
       timestamp,
     });
-    if (providerSessionId) {
-      this.persistQuestionResponse?.(sessionId, providerSessionId, message);
-    }
+    return providerSessionId
+      ? this.persistQuestionResponse?.(sessionId, providerSessionId, message)
+      : undefined;
   }
 
   private showInteractiveRequest(sessionId: string, request: InteractiveRequest): void {

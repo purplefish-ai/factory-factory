@@ -146,6 +146,17 @@ const exportColumns: Record<string, ModelColumns> = {
     createdAt: exported(),
     updatedAt: exported(),
   }),
+  SessionQuestionResponse: model(
+    Prisma.SessionQuestionResponseScalarFieldEnum,
+    ['data', 'recovery', 'questionResponses', 'responses'],
+    {
+      sessionId: exported(),
+      providerSessionId: exported(),
+      toolUseId: exported(),
+      timestamp: exported(),
+      summary: exported(),
+    }
+  ),
   TerminalSession: model(Prisma.TerminalSessionScalarFieldEnum, ['data', 'terminalSessions'], {
     id: exported(),
     workspaceId: exported(),

@@ -43,6 +43,7 @@ const mockTx = vi.hoisted(() => ({
   periodicTaskExecution: { findMany: vi.fn().mockResolvedValue([]) },
   $queryRaw: vi.fn().mockResolvedValue([]),
   periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
+  sessionQuestionResponse: { findMany: vi.fn().mockResolvedValue([]) },
   workspacePREvent: {
     updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     findMany: vi.fn().mockResolvedValue([]),
@@ -84,6 +85,7 @@ vi.mock('@/backend/db', () => ({
     agentConnection: { findMany: vi.fn().mockResolvedValue([]) },
     agentDefinition: { findMany: vi.fn().mockResolvedValue([]) },
     periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
+    sessionQuestionResponse: { findMany: vi.fn().mockResolvedValue([]) },
     $queryRaw: vi.fn().mockResolvedValue([]),
     project: {
       findMany: vi.fn(),

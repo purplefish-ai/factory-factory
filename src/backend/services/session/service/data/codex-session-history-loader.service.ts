@@ -9,6 +9,7 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
+import { createCodexQuestionHistoryAppender } from './codex-history-question-responses';
 import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import {
@@ -512,6 +513,7 @@ function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryM
 }
 
 function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): void {
+  const append = createCodexQuestionHistoryAppender(history);
   const eventTypes = new Set(
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
@@ -523,7 +525,7 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
     if (source === 'event' || !eventTypes.has(message.type)) {
       const needsAttachments =
         source === 'event' && message.type === 'user' && !message.attachments;
-      history.push(
+      append(
         needsAttachments && responseUserAttachments
           ? { ...message, attachments: responseUserAttachments }
           : message

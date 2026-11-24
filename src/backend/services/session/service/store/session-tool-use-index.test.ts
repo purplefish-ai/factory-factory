@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
-import { findPersistedToolUseStart } from './session-tool-use-index';
+import { findPersistedToolUseStart, getTranscriptToolEntries } from './session-tool-use-index';
 import {
   appendClaudeEvent,
   messageSort,
@@ -120,6 +120,15 @@ function createRandom(seed: number): () => number {
     return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
+
+it('ignores stale question index entries replaced without changing transcript length', () => {
+  const store = createStore();
+  appendClaudeEvent(store, toolUse('question'), appendOptions);
+  const old = store.transcript[0]!;
+  expect(getTranscriptToolEntries(store, 'question')).toEqual([old]);
+  store.transcript[0] = { ...old, message: assistantText('Replacement message') };
+  expect(getTranscriptToolEntries(store, 'question')).toEqual([]);
+});
 
 const TOOL_IDS = ['t0', 't1', 't2', 't3', 't4'];
 

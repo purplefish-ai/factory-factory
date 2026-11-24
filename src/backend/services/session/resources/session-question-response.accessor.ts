@@ -1,5 +1,21 @@
 import { prisma } from '@/backend/db';
 import type { QuestionResponse } from '@/shared/acp-protocol/protocol/question-response';
+import type { Prisma } from '@prisma-gen/client';
+
+type QuestionResponseClient = Pick<Prisma.TransactionClient, 'sessionQuestionResponse'>;
+
+export function readSessionQuestionResponsesForBackup(tx: QuestionResponseClient) {
+  return tx.sessionQuestionResponse.findMany({
+    orderBy: [{ sessionId: 'asc' }, { providerSessionId: 'asc' }, { toolUseId: 'asc' }],
+  });
+}
+
+export async function createImportedSessionQuestionResponses(
+  tx: QuestionResponseClient,
+  rows: Prisma.SessionQuestionResponseCreateManyInput[]
+): Promise<void> {
+  await tx.sessionQuestionResponse.createMany({ data: rows });
+}
 
 export const sessionQuestionResponseAccessor = {
   async upsert(
