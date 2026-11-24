@@ -527,6 +527,8 @@ const OWNED_SIDE_TABLES = {
     'src/backend/services/session/resources/pr-dedicated-session.accessor.ts',
   sessionLifecycleEvent:
     'src/backend/services/session/resources/session-lifecycle-event.accessor.ts',
+  sessionQuestionResponse:
+    'src/backend/services/session/resources/session-question-response.accessor.ts',
   workspacePRMonitoring:
     'src/backend/services/workspace/resources/workspace-pr-monitoring.accessor.ts',
   workspacePREvent: 'src/backend/services/workspace/resources/workspace-pr-event.accessor.ts',
