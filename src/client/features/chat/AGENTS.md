@@ -90,8 +90,6 @@ The barrel is `index.ts`. Callers in routes and other features must:
   recent renderer window and keeps its lookups.
 - `use-grouped-chat-messages.ts`, `incremental-chat-grouping.ts`: cached tool
   grouping.
-- `agent-activity/message-renderers/question-response-renderer.tsx` renders
-  completed question summaries and their optional raw tool details.
 - `chat-transcript.tsx`: the surface; `transcript-layout.tsx` builds rows and
   `transcript-rows.tsx` renders them.
 - `use-transcript-scroll.ts`: the virtualizer, suspended while hidden, zero-size
