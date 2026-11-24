@@ -24,7 +24,7 @@ type InteractiveRequest = {
     providerSessionId?: string;
     isCurrent?: () => boolean;
     rawInput: Record<string, unknown>;
-    validateAnswers?: AcpPermissionRequestEvent['validateAnswers'];
+    resolveElicitationResponse?: AcpPermissionRequestEvent['resolveElicitationResponse'];
   };
 };
 
@@ -116,7 +116,8 @@ export class SessionPermissionService {
     const request = this.interactiveRequests.get(sessionId)?.get(requestId);
     const selected = request?.pending.acpOptions?.find((option) => option.optionId === optionId);
     const allowed = selected?.kind === 'allow_once' || selected?.kind === 'allow_always';
-    const accepted = allowed && (request?.question?.validateAnswers?.(answers) ?? true);
+    const elicitation = request?.question?.resolveElicitationResponse?.(optionId, answers);
+    const accepted = elicitation ? elicitation.action === 'accept' : allowed;
     this.recordQuestionResponse(sessionId, request, accepted ? 'answered' : 'cancelled', answers);
     if (this.forgetInteractiveRequest(sessionId, requestId)) {
       this.showNextInteractiveRequest(sessionId);
@@ -163,7 +164,7 @@ export class SessionPermissionService {
     const request: InteractiveRequest = {
       delta,
       ...(isUserQuestion
-        ? { question: this.captureQuestion(sessionId, toolInput, event.validateAnswers) }
+        ? { question: this.captureQuestion(sessionId, toolInput, event.resolveElicitationResponse) }
         : {}),
       pending: {
         requestId,
@@ -196,7 +197,7 @@ export class SessionPermissionService {
   private captureQuestion(
     sessionId: string,
     rawInput: Record<string, unknown>,
-    validateAnswers: AcpPermissionRequestEvent['validateAnswers']
+    resolveElicitationResponse: AcpPermissionRequestEvent['resolveElicitationResponse']
   ): NonNullable<InteractiveRequest['question']> {
     const providerSessionId = this.getProviderSessionId?.(sessionId);
     const fence = providerSessionId
@@ -207,7 +208,7 @@ export class SessionPermissionService {
       providerSessionId,
       isCurrent: fence === null ? () => false : fence,
       rawInput,
-      validateAnswers,
+      resolveElicitationResponse,
     };
   }
 

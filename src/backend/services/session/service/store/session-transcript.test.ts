@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AcpEventTranslator } from '@/shared/acp-protocol';
+import { AcpEventTranslator, type AgentMessage } from '@/shared/acp-protocol';
+import type { QuestionResponse } from '@/shared/acp-protocol/protocol/question-response';
+import { SessionDomainService } from './session-domain.service';
+import { mergeQuestionResponseHistory } from './session-question-transcript';
 import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore } from './session-store.types';
 import {
@@ -74,6 +77,61 @@ function appendToolResult(
 }
 
 describe('session-transcript', () => {
+  it('preserves mixed-content results and folds only standalone results in live and restored questions', () => {
+    const session = 's1';
+    const domain = new SessionDomainService();
+    const tool = domain.appendClaudeEvent(session, {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'ask', name: 'AskUserQuestion', input: {} },
+      },
+    });
+    const mixed: AgentMessage = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'ask', content: 'Shared answer block' },
+          { type: 'tool_result', tool_use_id: 'other-tool', content: 'Keep the other result' },
+        ],
+      },
+    };
+    const unrelated = domain.appendClaudeEvent(session, mixed);
+    domain.appendClaudeEvent(session, {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'ask', content: 'Standalone answer' }],
+      },
+    });
+    const beforeResponse = domain.getTranscriptSnapshot(session);
+    const summary: QuestionResponse = { toolUseId: 'ask', status: 'answered', questions: [] };
+    const answered = domain.upsertQuestionResponse(session, 3, {
+      type: 'question_response',
+      questionResponse: summary,
+      questionToolDetails: { toolName: 'AskUserQuestion' },
+    });
+
+    const restored = mergeQuestionResponseHistory(beforeResponse, [
+      { summary, timestamp: answered.timestamp },
+    ]);
+    for (const transcript of [domain.getTranscriptSnapshot(session), restored]) {
+      expect(transcript).toMatchObject([
+        {
+          id: tool.messageId,
+          order: tool.order,
+          message: {
+            type: 'question_response',
+            questionToolDetails: { result: 'Standalone answer' },
+          },
+        },
+        { id: unrelated.messageId, message: mixed },
+      ]);
+    }
+  });
+
   it('retains refined ACP tool input at its original order for live delivery and reconnect', () => {
     const store = createStore();
     const options = createAppendOptions();

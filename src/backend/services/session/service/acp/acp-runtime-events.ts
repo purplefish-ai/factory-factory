@@ -3,6 +3,7 @@ import type {
   SessionNotification,
 } from '@agentclientprotocol/sdk/unstable';
 import type { SubagentsChangedParams } from '@/shared/acp-protocol/subagents';
+import type { ResolveAcpElicitationResponse } from './acp-elicitation';
 import type { SubagentToolUpdate } from './acp-native-session-tracker';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpSessionCreationOutcome } from './acp-session-creation-outcome';
@@ -70,7 +71,7 @@ export type AcpPermissionRequestEvent = {
   type: 'acp_permission_request';
   /** Set only by the client-side elicitation bridge, never by tool arguments. */
   elicitation?: 'form' | 'url';
-  validateAnswers?: (answers: Record<string, string[]> | undefined) => boolean;
+  resolveElicitationResponse?: ResolveAcpElicitationResponse;
   requestId: string;
   params: RequestPermissionRequest;
 };

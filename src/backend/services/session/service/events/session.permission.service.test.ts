@@ -249,48 +249,52 @@ describe('SessionPermissionService', () => {
     expect(JSON.stringify(rows)).not.toContain('private-token');
   });
 
-  it('records an invalid ACP form response as cancelled without the submitted value', async () => {
-    const domain = new SessionDomainService();
-    const service = new SessionPermissionService({ sessionDomainService: domain });
-    const handler = new AcpClientHandler(
-      'session-1',
-      (sessionId, event) => {
-        if (event.type === 'acp_permission_request') {
-          service.handlePermissionRequest(sessionId, event);
-        }
-      },
-      service.createPermissionBridge('session-1')
-    );
-    const response = handler.createElicitation({
-      mode: 'form',
-      sessionId: 'native',
-      message: 'Pick a count',
-      requestedSchema: {
-        properties: { count: { type: 'integer', minimum: 1 } },
-        required: ['count'],
-      },
-    });
-    const requestId = domain.getPendingInteractiveRequest('session-1')!.requestId;
-    expect(service.respondToPermission('session-1', requestId, 'accept', { count: ['0'] })).toBe(
-      true
-    );
-    await expect(response).resolves.toEqual({ action: 'cancel' });
-    expect(domain.getTranscriptSnapshot('session-1')).toMatchObject([
-      {
-        message: {
-          type: 'question_response',
-          questionToolDetails: {
-            toolName: 'AskUserQuestion',
-            input: { questions: [{ validation: { type: 'integer', minimum: 1 } }] },
-          },
-          questionResponse: {
-            status: 'cancelled',
-            questions: [{ question: 'count', answers: [] }],
+  it.each([
+    { optionId: 'accept', answers: { count: ['0'] }, action: 'cancel' },
+    { optionId: 'decline', answers: { count: ['1'] }, action: 'decline' },
+  ])(
+    'records the $action ACP form action as a cancelled transcript response',
+    async ({ optionId, answers, action }) => {
+      const domain = new SessionDomainService();
+      const service = new SessionPermissionService({ sessionDomainService: domain });
+      const handler = new AcpClientHandler(
+        'session-1',
+        (sessionId, event) => {
+          if (event.type === 'acp_permission_request') {
+            service.handlePermissionRequest(sessionId, event);
+          }
+        },
+        service.createPermissionBridge('session-1')
+      );
+      const response = handler.createElicitation({
+        mode: 'form',
+        sessionId: 'native',
+        message: 'Pick a count',
+        requestedSchema: {
+          properties: { count: { type: 'integer', minimum: 1 } },
+          required: ['count'],
+        },
+      });
+      const requestId = domain.getPendingInteractiveRequest('session-1')!.requestId;
+      expect(service.respondToPermission('session-1', requestId, optionId, answers)).toBe(true);
+      await expect(response).resolves.toEqual({ action });
+      expect(domain.getTranscriptSnapshot('session-1')).toMatchObject([
+        {
+          message: {
+            type: 'question_response',
+            questionToolDetails: {
+              toolName: 'AskUserQuestion',
+              input: { questions: [{ validation: { type: 'integer', minimum: 1 } }] },
+            },
+            questionResponse: {
+              status: 'cancelled',
+              questions: [{ question: 'count', answers: [] }],
+            },
           },
         },
-      },
-    ]);
-  });
+      ]);
+    }
+  );
 
   it('records cancellation for each overlapping question without republishing one', async () => {
     const domain = new SessionDomainService();

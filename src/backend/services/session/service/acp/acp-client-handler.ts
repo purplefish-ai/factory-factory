@@ -13,7 +13,7 @@ import {
   subagentsChangedParamsSchema,
 } from '@/shared/acp-protocol/subagents';
 import type { AcpClientCallbacks } from './acp-connection';
-import { createAcpElicitation } from './acp-elicitation';
+import { createAcpElicitation, type ResolveAcpElicitationResponse } from './acp-elicitation';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
 import {
@@ -190,7 +190,7 @@ export class AcpClientHandler implements AcpClientCallbacks {
     params: RequestPermissionRequest,
     signal?: AbortSignal,
     elicitation?: 'form' | 'url',
-    validateAnswers?: (answers: Record<string, string[]> | undefined) => boolean
+    resolveElicitationResponse?: ResolveAcpElicitationResponse
   ): Promise<RequestPermissionResponse> {
     if (signal?.aborted) {
       return Promise.resolve({ outcome: { outcome: 'cancelled' } });
@@ -228,7 +228,7 @@ export class AcpClientHandler implements AcpClientCallbacks {
       requestId,
       params: request,
       ...(elicitation ? { elicitation } : {}),
-      ...(validateAnswers ? { validateAnswers } : {}),
+      ...(resolveElicitationResponse ? { resolveElicitationResponse } : {}),
     });
     return response.finally(() => signal?.removeEventListener('abort', onAbort));
   }
@@ -244,8 +244,16 @@ export class AcpClientHandler implements AcpClientCallbacks {
       });
       return Promise.resolve({ action: 'cancel' });
     }
-    return createAcpElicitation(params, this.sessionId, (request, presentation, validateAnswers) =>
-      this.requestPermissionWithPresentation(request, signal, presentation, validateAnswers)
+    return createAcpElicitation(
+      params,
+      this.sessionId,
+      (request, presentation, resolveElicitationResponse) =>
+        this.requestPermissionWithPresentation(
+          request,
+          signal,
+          presentation,
+          resolveElicitationResponse
+        )
     );
   }
 

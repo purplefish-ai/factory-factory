@@ -97,26 +97,26 @@ function createPermissionRequest(
   };
 }
 
-function convertResponse(
-  response: RequestPermissionResponse,
+export type ResolveAcpElicitationResponse = (
+  optionId: string | undefined,
+  answers: Record<string, string[]> | undefined
+) => CreateElicitationResponse;
+
+function resolveResponse(
+  optionId: string | undefined,
+  answers: Record<string, string[]> | undefined,
   form: AcpElicitationForm | null
 ): CreateElicitationResponse {
-  if (response.outcome.outcome !== 'selected') {
-    return { action: 'cancel' };
-  }
-  if (response.outcome.optionId === 'decline') {
+  if (optionId === 'decline') {
     return { action: 'decline' };
   }
-  if (response.outcome.optionId !== 'accept') {
+  if (optionId !== 'accept') {
     return { action: 'cancel' };
   }
   if (!form) {
     return { action: 'accept' };
   }
-  const answers = responseAnswersSchema.safeParse(response._meta);
-  const content = form.parseAnswers(
-    answers.success ? answers.data.factoryFactory.toolUserInputAnswers : undefined
-  );
+  const content = form.parseAnswers(answers);
   return content ? { action: 'accept', content } : { action: 'cancel' };
 }
 
@@ -127,18 +127,22 @@ export async function createAcpElicitation(
   requestPermission: (
     request: RequestPermissionRequest,
     presentation: 'form' | 'url',
-    validateAnswers?: (answers: Record<string, string[]> | undefined) => boolean
+    resolveElicitationResponse: ResolveAcpElicitationResponse
   ) => Promise<RequestPermissionResponse>
 ): Promise<CreateElicitationResponse> {
   const presentation = createPresentation(params);
   if (!presentation) {
     return { action: 'cancel' };
   }
-  const { form } = presentation;
+  const resolveElicitationResponse: ResolveAcpElicitationResponse = (optionId, answers) =>
+    resolveResponse(optionId, answers, presentation.form);
   const response = await requestPermission(
     createPermissionRequest(params, fallbackSessionId, presentation),
     params.mode === 'url' ? 'url' : 'form',
-    form ? (answers) => form.parseAnswers(answers) !== null : undefined
+    resolveElicitationResponse
   );
-  return convertResponse(response, form);
+  const optionId = response.outcome.outcome === 'selected' ? response.outcome.optionId : undefined;
+  const answers = responseAnswersSchema.safeParse(response._meta).data?.factoryFactory
+    .toolUserInputAnswers;
+  return resolveElicitationResponse(optionId, answers);
 }
