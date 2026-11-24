@@ -2,6 +2,7 @@ import { agent, methods, PROTOCOL_VERSION, type Stream } from '@agentclientproto
 import { describe, expect, it, vi } from 'vitest';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection } from './acp-connection';
+import { AcpPermissionBridge } from './acp-permission-bridge';
 import { TASK_STATUS_CHANGED_METHOD } from './acp-task-status-protocol';
 
 function createStreams(): [Stream, Stream] {
@@ -81,6 +82,48 @@ describe('ACP SDK connection', () => {
         eventType: 'acp_elicitation_complete',
         elicitationId: 'form-1',
       });
+    } finally {
+      connection.close();
+      server.close();
+    }
+  });
+
+  it('cancels a pending local elicitation when the ACP requester aborts', async () => {
+    const [clientStream, agentStream] = createStreams();
+    const server = agent().connect(agentStream);
+    const shown = Promise.withResolvers<string>();
+    const cancelled = Promise.withResolvers<string>();
+    const bridge = new AcpPermissionBridge(cancelled.resolve);
+    const connection = createAcpConnection(
+      new AcpClientHandler(
+        'local-session',
+        (_id, event) => {
+          if (event.type === 'acp_permission_request') {
+            shown.resolve(event.requestId);
+          }
+        },
+        bridge
+      ),
+      clientStream
+    );
+    const abort = new AbortController();
+    try {
+      const request = server.client.request(
+        methods.client.elicitation.create,
+        {
+          mode: 'form',
+          sessionId: 'provider-session',
+          message: 'Choose',
+          requestedSchema: { type: 'object', properties: { note: { type: 'string' } } },
+        },
+        { cancellationSignal: abort.signal, stopWaitingOnCancel: true }
+      );
+      const rejected = expect(request).rejects.toMatchObject({ code: -32_800 });
+      const requestId = await shown.promise;
+      abort.abort();
+      await rejected;
+      await expect(cancelled.promise).resolves.toBe(requestId);
+      expect(bridge.resolvePermission(requestId, 'accept', { note: ['stale'] })).toBe(false);
     } finally {
       connection.close();
       server.close();

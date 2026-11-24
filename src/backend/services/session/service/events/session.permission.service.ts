@@ -4,8 +4,11 @@ import {
 } from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { ChatMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
+import { buildQuestionToolDetails } from '@/shared/acp-protocol/protocol/question-response';
+import { hasSecretQuestion } from '@/shared/acp-protocol/question-input';
+import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import {
   getAskUserQuestions,
@@ -17,14 +20,30 @@ import {
 type InteractiveRequest = {
   delta: SessionDeltaEvent;
   pending: PendingInteractiveRequest;
+  question?: {
+    order: number;
+    providerSessionId?: string;
+    isCurrent?: () => boolean;
+    rawInput: Record<string, unknown>;
+    resolveElicitationResponse?: AcpPermissionRequestEvent['resolveElicitationResponse'];
+  };
 };
 
 export type SessionPermissionServiceDependencies = {
   sessionDomainService?: SessionDomainService;
+  getProviderSessionId?: (sessionId: string) => string | undefined;
+  /** Completes the storage attempt and reports any failure without rejecting the live response. */
+  persistQuestionResponse?: (
+    sessionId: string,
+    providerSessionId: string,
+    message: ChatMessage
+  ) => Promise<void>;
 };
 
 export class SessionPermissionService {
   private readonly sessionDomainService: SessionDomainService;
+  private readonly getProviderSessionId?: SessionPermissionServiceDependencies['getProviderSessionId'];
+  private readonly persistQuestionResponse?: SessionPermissionServiceDependencies['persistQuestionResponse'];
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /**
    * Outstanding user-facing requests per session, oldest first. Only the newest is the
@@ -34,6 +53,8 @@ export class SessionPermissionService {
 
   constructor(options?: SessionPermissionServiceDependencies) {
     this.sessionDomainService = options?.sessionDomainService ?? sessionDomainService;
+    this.getProviderSessionId = options?.getProviderSessionId;
+    this.persistQuestionResponse = options?.persistQuestionResponse;
   }
 
   createPermissionBridge(sessionId: string, workflow?: string): AcpPermissionBridge {
@@ -44,9 +65,11 @@ export class SessionPermissionService {
 
     const bridge = new AcpPermissionBridge(
       (requestId) => {
+        const request = this.interactiveRequests.get(sessionId)?.get(requestId);
+        void this.recordQuestionResponse(sessionId, request, 'cancelled');
         const wasShown = this.forgetInteractiveRequest(sessionId, requestId);
         this.sessionDomainService.emitDelta(sessionId, { type: 'permission_cancelled', requestId });
-        if (wasShown) {
+        if (wasShown && this.acpPermissionBridges.get(sessionId)?.pendingCount) {
           this.showNextInteractiveRequest(sessionId);
         }
       },
@@ -71,9 +94,9 @@ export class SessionPermissionService {
       return;
     }
 
-    this.interactiveRequests.delete(sessionId);
-    bridge.cancelAll();
     this.acpPermissionBridges.delete(sessionId);
+    bridge.cancelAll();
+    this.interactiveRequests.delete(sessionId);
   }
 
   respondToPermission(
@@ -81,17 +104,32 @@ export class SessionPermissionService {
     requestId: string,
     optionId: string,
     answers?: Record<string, string[]>
-  ): boolean {
+  ): boolean | Promise<boolean> {
     const bridge = this.acpPermissionBridges.get(sessionId);
     if (!bridge) {
       return false;
     }
 
     const resolved = bridge.resolvePermission(requestId, optionId, answers);
-    if (resolved && this.forgetInteractiveRequest(sessionId, requestId)) {
+    if (!resolved) {
+      return false;
+    }
+
+    const request = this.interactiveRequests.get(sessionId)?.get(requestId);
+    const selected = request?.pending.acpOptions?.find((option) => option.optionId === optionId);
+    const allowed = selected?.kind === 'allow_once' || selected?.kind === 'allow_always';
+    const elicitation = request?.question?.resolveElicitationResponse?.(optionId, answers);
+    const accepted = elicitation ? elicitation.action === 'accept' : allowed;
+    const persisted = this.recordQuestionResponse(
+      sessionId,
+      request,
+      accepted ? 'answered' : 'cancelled',
+      answers
+    );
+    if (this.forgetInteractiveRequest(sessionId, requestId)) {
       this.showNextInteractiveRequest(sessionId);
     }
-    return resolved;
+    return persisted?.then(() => true) ?? true;
   }
 
   handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {
@@ -132,6 +170,9 @@ export class SessionPermissionService {
         };
     const request: InteractiveRequest = {
       delta,
+      ...(isUserQuestion
+        ? { question: this.captureQuestion(sessionId, toolInput, event.resolveElicitationResponse) }
+        : {}),
       pending: {
         requestId,
         toolName,
@@ -145,6 +186,11 @@ export class SessionPermissionService {
       },
     };
 
+    this.registerInteractiveRequest(sessionId, request);
+  }
+
+  private registerInteractiveRequest(sessionId: string, request: InteractiveRequest): void {
+    const { requestId } = request.pending;
     let requests = this.interactiveRequests.get(sessionId);
     if (!requests) {
       requests = new Map();
@@ -153,6 +199,59 @@ export class SessionPermissionService {
     requests.delete(requestId);
     requests.set(requestId, request);
     this.showInteractiveRequest(sessionId, request);
+  }
+
+  private captureQuestion(
+    sessionId: string,
+    rawInput: Record<string, unknown>,
+    resolveElicitationResponse: AcpPermissionRequestEvent['resolveElicitationResponse']
+  ): NonNullable<InteractiveRequest['question']> {
+    const providerSessionId = this.getProviderSessionId?.(sessionId);
+    const fence = providerSessionId
+      ? this.sessionDomainService.createProviderHistoryFence(sessionId, providerSessionId)
+      : undefined;
+    return {
+      order: this.sessionDomainService.allocateOrder(sessionId),
+      providerSessionId,
+      isCurrent: fence === null ? () => false : fence,
+      rawInput,
+      resolveElicitationResponse,
+    };
+  }
+
+  private recordQuestionResponse(
+    sessionId: string,
+    request: InteractiveRequest | undefined,
+    status: 'answered' | 'cancelled',
+    answers?: Record<string, string[]>
+  ): Promise<void> | undefined {
+    if (!(request?.question && request.pending.toolUseId)) {
+      return;
+    }
+    const { rawInput, order, providerSessionId, isCurrent } = request.question;
+    if (isCurrent?.() === false) {
+      return;
+    }
+    const { requestId, toolUseId, timestamp, toolName } = request.pending;
+    const questionResponse = summarizeQuestionResponse(
+      rawInput,
+      { requestId, toolUseId },
+      status,
+      answers
+    );
+    const details =
+      hasSecretQuestion(rawInput) || questionResponse.questions.some((item) => item.redacted)
+        ? undefined
+        : buildQuestionToolDetails(toolName, rawInput);
+    const message = this.sessionDomainService.upsertQuestionResponse(sessionId, order, {
+      type: 'question_response',
+      questionResponse,
+      questionToolDetails: details,
+      timestamp,
+    });
+    return providerSessionId
+      ? this.persistQuestionResponse?.(sessionId, providerSessionId, message)
+      : undefined;
   }
 
   private showInteractiveRequest(sessionId: string, request: InteractiveRequest): void {
@@ -165,7 +264,10 @@ export class SessionPermissionService {
    * the user, in which case the caller shows the next one.
    */
   private forgetInteractiveRequest(sessionId: string, requestId: string): boolean {
-    this.interactiveRequests.get(sessionId)?.delete(requestId);
+    const requests = this.interactiveRequests.get(sessionId);
+    if (requests?.delete(requestId) && requests.size === 0) {
+      this.interactiveRequests.delete(sessionId);
+    }
     return this.sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
   }
 

@@ -64,7 +64,7 @@ export interface SessionPermissionCommandService {
     requestId: string,
     optionId: string,
     answers?: Record<string, string[]>
-  ): boolean;
+  ): boolean | Promise<boolean>;
 }
 
 export interface SessionModelCommandService {

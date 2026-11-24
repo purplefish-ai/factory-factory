@@ -38,6 +38,10 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - When permission requests overlap, the newest is shown, and answering it shows
   the newest one still waiting; an answer to an older or unknown request never
   clears the one shown. `session.permission.service.test.ts`.
+- A captured question with a tool-use ID and a current provider identity
+  publishes its outcome at the original tool use or permission request. Invalid
+  or cancelled requests produce cancelled rows.
+  `session.permission.service.test.ts`.
 - An adversarial-review session's permission requests are never shown or
   answerable: each is rejected with its reject option, or cancelled if it has
   none. `session.permission.service.test.ts`.

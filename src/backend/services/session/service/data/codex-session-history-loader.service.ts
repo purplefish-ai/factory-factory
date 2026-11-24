@@ -9,6 +9,7 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
+import { createCodexQuestionHistoryAppender } from './codex-history-question-responses';
 import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import {
@@ -81,6 +82,7 @@ const CodexTurnIdentitySchema = z.object({
 type CodexHistoryEntry = z.infer<typeof CodexHistoryEntrySchema>;
 type CodexHistorySource = 'event' | 'response';
 type CodexHistoryTurn = {
+  append: (message: HistoryMessage) => void;
   id?: string;
   messages: { source: CodexHistorySource; message: HistoryMessage }[];
 };
@@ -511,7 +513,7 @@ function parseResponseTextMessage(payload: unknown, timestamp: string): HistoryM
   ];
 }
 
-function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): void {
+function appendHistoryTurn(turn: CodexHistoryTurn): void {
   const eventTypes = new Set(
     turn.messages.filter((item) => item.source === 'event').map((item) => item.message.type)
   );
@@ -523,7 +525,7 @@ function appendHistoryTurn(history: HistoryMessage[], turn: CodexHistoryTurn): v
     if (source === 'event' || !eventTypes.has(message.type)) {
       const needsAttachments =
         source === 'event' && message.type === 'user' && !message.attachments;
-      history.push(
+      turn.append(
         needsAttachments && responseUserAttachments
           ? { ...message, attachments: responseUserAttachments }
           : message
@@ -896,7 +898,10 @@ class CodexSessionHistoryLoaderService {
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     let hadReadError = false;
     const history: HistoryMessage[] = [];
-    const turn: CodexHistoryTurn = { messages: [] };
+    const turn: CodexHistoryTurn = {
+      messages: [],
+      append: createCodexQuestionHistoryAppender(history),
+    };
     const fallbackBaseTimestampMs = Date.now();
 
     await readNonEmptyJsonlLines({
@@ -921,7 +926,7 @@ class CodexSessionHistoryLoaderService {
       },
     });
 
-    appendHistoryTurn(history, turn);
+    appendHistoryTurn(turn);
 
     return { history, hadReadError };
   }
@@ -948,7 +953,7 @@ class CodexSessionHistoryLoaderService {
       isRecord(entry.payload) &&
       entry.payload.type === 'task_started';
     if ((turnId && turn.id && turnId !== turn.id) || (taskStarted && turn.messages.length > 0)) {
-      appendHistoryTurn(history, turn);
+      appendHistoryTurn(turn);
     }
     const legacyStart =
       entry.type === 'response_item' &&
@@ -961,7 +966,7 @@ class CodexSessionHistoryLoaderService {
     );
     const source = entry.type === 'event_msg' ? 'event' : 'response';
     if (!turn.id && startsImplicitTurn(turn, parsedMessages, source, turnId)) {
-      appendHistoryTurn(history, turn);
+      appendHistoryTurn(turn);
     }
     if (turnId) {
       turn.id = turnId;

@@ -40,7 +40,7 @@ function makeDeps(): AcpEventProcessorDependencies {
       getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'idle' }),
       setRuntimeSnapshot: vi.fn(),
       emitDelta: vi.fn(),
-      appendClaudeEvent: vi.fn(),
+      appendClaudeEvent: vi.fn().mockReturnValue({ order: 0 }),
       upsertClaudeEvent: vi.fn(),
       allocateOrder: vi.fn(),
     } as unknown as AcpEventProcessorDependencies['sessionDomainService'],

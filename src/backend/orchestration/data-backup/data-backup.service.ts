@@ -58,6 +58,10 @@ import { planLegacyImport } from './data-backup-legacy-collisions';
 import { createBaseRecoveryManifest } from './data-backup-manifest';
 import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
 import {
+  exportQuestionResponses,
+  restoreQuestionResponses,
+} from './data-backup-question-responses';
+import {
   createInertImportReport,
   inertWorkspaceRuntime,
   recordStoppedProcess,
@@ -405,8 +409,9 @@ async function importAgentSessions(
   importedWorkspaceIds: ReadonlySet<string>,
   accountIds: ReadonlyMap<string, string>,
   jsonNullIds: JsonNullIds
-): Promise<ImportCounter> {
+) {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
+  const createdSessionIds = new Set<string>();
 
   for (const s of sessions) {
     if (!importedWorkspaceIds.has(s.workspaceId)) {
@@ -454,11 +459,12 @@ async function importAgentSessions(
         updatedAt: new Date(s.updatedAt),
       },
     });
+    createdSessionIds.add(s.id);
     recordStoppedProcess(report, 'agentSessions', s.status, s.providerProcessPid);
     counter.imported++;
   }
 
-  return counter;
+  return { counter, createdSessionIds };
 }
 
 async function importTerminalSessions(
@@ -645,6 +651,7 @@ class DataBackupService {
       periodicHistory,
       automationDefinitions,
       slackConnections,
+      questionResponses,
     } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
       ...(await dataBackupAccessor.getSnapshotForExport(tx)),
       codexAccounts: await exportCodexAccountMetadata(tx),
@@ -653,6 +660,7 @@ class DataBackupService {
       periodicHistory: await exportPeriodicHistoryRecovery(tx),
       automationDefinitions: await exportAutomationDefinitionsRecovery(tx),
       slackConnections: await exportSlackConnectionsRecovery(tx),
+      questionResponses: await exportQuestionResponses(tx),
     }));
 
     const exportData: ExportData = {
@@ -669,6 +677,7 @@ class DataBackupService {
           periodicHistory,
           automationDefinitions,
           slackConnections,
+          questionResponses,
         },
         projects: projects.map((p) => ({
           id: p.id,
@@ -847,12 +856,7 @@ class DataBackupService {
       for (const model of ['Workspace', 'WorkspacePR', 'AgentSession'] as const) {
         if (
           model === 'Workspace' ||
-          input.meta.recovery.profile === 'base-json-1' ||
-          input.meta.recovery.profile === 'base-json-periodic-config-1' ||
-          input.meta.recovery.profile === 'base-json-periodic-links-1' ||
-          input.meta.recovery.profile === 'base-json-periodic-history-1' ||
-          input.meta.recovery.profile === 'base-json-automation-definitions-1' ||
-          input.meta.recovery.profile === 'base-json-slack-connections-1'
+          !input.meta.recovery.exclusions.includes('PHYSICAL_NULLABLE_JSON_FIDELITY')
         ) {
           jsonNullIds.set(
             model,
@@ -866,18 +870,14 @@ class DataBackupService {
       }
     }
 
-    const slackSection =
-      'recovery' in input.data ? input.data.recovery.slackConnections : undefined;
-    const automationSection =
-      'recovery' in input.data ? input.data.recovery.automationDefinitions : undefined;
-    const historySection =
-      'recovery' in input.data ? input.data.recovery.periodicHistory : undefined;
+    const recoverySections = 'recovery' in input.data ? input.data.recovery : undefined;
+    const slackSection = recoverySections?.slackConnections;
+    const automationSection = recoverySections?.automationDefinitions;
+    const historySection = recoverySections?.periodicHistory;
     const recoveryMetadata = input.meta.schemaVersion === 8 ? input.meta.recovery : undefined;
     const restoresPeriodicLinks =
       recoveryMetadata?.profile === 'base-json-periodic-links-1' ||
-      recoveryMetadata?.profile === 'base-json-periodic-history-1' ||
-      recoveryMetadata?.profile === 'base-json-automation-definitions-1' ||
-      recoveryMetadata?.profile === 'base-json-slack-connections-1';
+      recoveryMetadata?.capabilities.periodicHistory === 1;
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const admission = await planLegacyImport(tx, placed);
@@ -939,7 +939,7 @@ class DataBackupService {
           )
         : undefined;
       const accountIds = await restoreCodexAccountMetadata(tx, input.data.codexAccounts);
-      const agentSessions = await importAgentSessions(
+      const { counter: agentSessions, createdSessionIds } = await importAgentSessions(
         input.data.agentSessions,
         tx,
         inertTransforms,
@@ -947,6 +947,7 @@ class DataBackupService {
         accountIds,
         jsonNullIds
       );
+      await restoreQuestionResponses(tx, recoverySections?.questionResponses, createdSessionIds);
       await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx, inertTransforms);
       const terminalSessions = await importTerminalSessions(
         input.data.terminalSessions,

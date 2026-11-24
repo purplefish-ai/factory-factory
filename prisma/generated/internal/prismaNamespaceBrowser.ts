@@ -64,6 +64,7 @@ export const ModelName = {
   WorkspaceRunScript: 'WorkspaceRunScript',
   CodexAccount: 'CodexAccount',
   AgentSession: 'AgentSession',
+  SessionQuestionResponse: 'SessionQuestionResponse',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -335,6 +336,17 @@ export const AgentSessionScalarFieldEnum = {
 } as const
 
 export type AgentSessionScalarFieldEnum = (typeof AgentSessionScalarFieldEnum)[keyof typeof AgentSessionScalarFieldEnum]
+
+
+export const SessionQuestionResponseScalarFieldEnum = {
+  sessionId: 'sessionId',
+  providerSessionId: 'providerSessionId',
+  toolUseId: 'toolUseId',
+  timestamp: 'timestamp',
+  summary: 'summary'
+} as const
+
+export type SessionQuestionResponseScalarFieldEnum = (typeof SessionQuestionResponseScalarFieldEnum)[keyof typeof SessionQuestionResponseScalarFieldEnum]
 
 
 export const SessionLifecycleEventScalarFieldEnum = {

@@ -142,6 +142,23 @@ describe('check-single-writer', () => {
         'workspacePRDedicatedSession is written only by src/backend/services/session/resources/pr-dedicated-session.accessor.ts'
       );
     });
+    it.each([
+      `tx.agentSession.create({ data: { questionResponses: { create: { toolUseId: 'tool' } } } });`,
+      `tx.agentSession.update({ where: { id: 's' }, data: { questionResponses: { deleteMany: {} } } });`,
+    ])('keeps nested question response writes in the session resource: %s', (mutation) => {
+      const tempRoot = createTempBackend([
+        {
+          relPath: 'src/backend/services/session/resources/other.accessor.ts',
+          content: `function change(tx) { ${mutation} }`,
+        },
+      ]);
+      const result = runChecker(tempRoot);
+      expect(result.status).toBe(1);
+      expect(result.output).toContain(
+        'sessionQuestionResponse is written only by src/backend/services/session/resources/session-question-response.accessor.ts'
+      );
+    });
+
     it('allows the dedicated session resource to write its own mapping', () => {
       const tempRoot = createTempBackend([
         {

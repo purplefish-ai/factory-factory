@@ -13,7 +13,7 @@ import {
   subagentsChangedParamsSchema,
 } from '@/shared/acp-protocol/subagents';
 import type { AcpClientCallbacks } from './acp-connection';
-import { createAcpElicitation } from './acp-elicitation';
+import { createAcpElicitation, type ResolveAcpElicitationResponse } from './acp-elicitation';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
 import {
@@ -179,14 +179,22 @@ export class AcpClientHandler implements AcpClientCallbacks {
     return Promise.resolve();
   }
 
-  requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-    return this.requestPermissionWithPresentation(params);
+  requestPermission(
+    params: RequestPermissionRequest,
+    signal?: AbortSignal
+  ): Promise<RequestPermissionResponse> {
+    return this.requestPermissionWithPresentation(params, signal);
   }
 
   private requestPermissionWithPresentation(
     params: RequestPermissionRequest,
-    elicitation?: 'form' | 'url'
+    signal?: AbortSignal,
+    elicitation?: 'form' | 'url',
+    resolveElicitationResponse?: ResolveAcpElicitationResponse
   ): Promise<RequestPermissionResponse> {
+    if (signal?.aborted) {
+      return Promise.resolve({ outcome: { outcome: 'cancelled' } });
+    }
     // PRESERVE: Log permission request to session file logger
     this.onLog?.(this.sessionId, {
       eventType: 'acp_permission_request',
@@ -200,7 +208,8 @@ export class AcpClientHandler implements AcpClientCallbacks {
       return Promise.resolve(automatic);
     }
 
-    if (!this.permissionBridge) {
+    const bridge = this.permissionBridge;
+    if (!bridge) {
       logger.warn('Permission bridge missing; failing closed on ACP permission request', {
         sessionId: this.sessionId,
         toolCallId: request.toolCall.toolCallId,
@@ -209,17 +218,25 @@ export class AcpClientHandler implements AcpClientCallbacks {
     }
 
     const requestId = crypto.randomUUID();
-    const response = this.permissionBridge.waitForUserResponse(requestId, request);
+    const response = bridge.waitForUserResponse(requestId, request);
+    const onAbort = () => {
+      bridge.cancelPermission(requestId);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
     this.onEvent(this.sessionId, {
       type: 'acp_permission_request',
       requestId,
       params: request,
       ...(elicitation ? { elicitation } : {}),
+      ...(resolveElicitationResponse ? { resolveElicitationResponse } : {}),
     });
-    return response;
+    return response.finally(() => signal?.removeEventListener('abort', onAbort));
   }
 
-  createElicitation(params: CreateElicitationRequest): Promise<CreateElicitationResponse> {
+  createElicitation(
+    params: CreateElicitationRequest,
+    signal?: AbortSignal
+  ): Promise<CreateElicitationResponse> {
     if (!this.permissionBridge) {
       logger.warn('Permission bridge missing; cancelling ACP elicitation', {
         sessionId: this.sessionId,
@@ -227,8 +244,16 @@ export class AcpClientHandler implements AcpClientCallbacks {
       });
       return Promise.resolve({ action: 'cancel' });
     }
-    return createAcpElicitation(params, this.sessionId, (request, presentation) =>
-      this.requestPermissionWithPresentation(request, presentation)
+    return createAcpElicitation(
+      params,
+      this.sessionId,
+      (request, presentation, resolveElicitationResponse) =>
+        this.requestPermissionWithPresentation(
+          request,
+          signal,
+          presentation,
+          resolveElicitationResponse
+        )
     );
   }
 

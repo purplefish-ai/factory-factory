@@ -97,6 +97,60 @@ describe('Codex response-item history messages', () => {
     expect(history[3]).toMatchObject({ content: 'second' });
   });
 
+  it('shows a historical Codex question acknowledgment without inventing an answer', async () => {
+    const first = 'May I run one additional review?';
+    const second = 'Does the page overlay look ready to merge?';
+    const history = await load([
+      {
+        type: 'response_item',
+        timestamp: '2026-10-18T12:00:00Z',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'ask',
+          arguments: JSON.stringify({
+            questions: [
+              { title: first, options: ['Allow one more review', 'Stop at the cap'] },
+              { title: second, options: ['UI looks ready', 'I want UI changes'] },
+            ],
+          }),
+        },
+      },
+      response('assistant', 'I can continue reviewing while I wait.'),
+      event('task_started', undefined, 'later-turn'),
+      {
+        type: 'response_item',
+        payload: { type: 'function_call_output', call_id: 'ask', output: '{"accepted":true}' },
+      },
+      {
+        type: 'response_item',
+        payload: { type: 'function_call', name: 'another_tool', call_id: 'other', arguments: '{}' },
+      },
+      {
+        type: 'response_item',
+        payload: { type: 'function_call_output', call_id: 'other', output: '{"accepted":true}' },
+      },
+    ]);
+    expect(history.map(({ type }) => type)).toEqual([
+      'question_response',
+      'assistant',
+      'tool_use',
+      'tool_result',
+    ]);
+    expect(history[0]).toMatchObject({
+      timestamp: '2026-10-18T12:00:00Z',
+      questionResponse: {
+        toolUseId: 'ask',
+        status: 'unavailable',
+        questions: [
+          { question: first, answers: [] },
+          { question: second, answers: [] },
+        ],
+      },
+      questionToolDetails: { result: '{"accepted":true}' },
+    });
+  });
+
   it('restores generated tool images as structured results after reload', async () => {
     const png =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';

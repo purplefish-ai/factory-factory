@@ -11,6 +11,7 @@ import {
 } from './archived-content-schema';
 import type { AgentMessage, ChatMessage } from './messages';
 import { ProviderSessionNoticeSchema } from './provider-session-notice';
+import { QuestionResponseSchema, QuestionToolDetailsSchema } from './question-response';
 
 const commonFields = {
   prDeliveryState: z.enum(['queued', 'delivered', 'failed', 'cancelled']).optional(),
@@ -63,6 +64,13 @@ export const ArchivedAgentMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('session_notice'),
     lifecycle: z.never().optional(),
     notice: ProviderSessionNoticeSchema,
+  }),
+  z.object({
+    ...commonFields,
+    type: z.literal('question_response'),
+    lifecycle: z.never().optional(),
+    questionResponse: QuestionResponseSchema,
+    questionToolDetails: QuestionToolDetailsSchema.optional(),
   }),
   z.object({
     ...commonFields,

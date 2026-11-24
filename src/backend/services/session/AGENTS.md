@@ -11,9 +11,10 @@ layout, boundaries and the module-map rule. `index.ts`, `modules.ts` and
 ## Owns, and does not own
 
 The capsule owns the Prisma models `AgentSession`, `AgentSessionLaunchOrigin`,
-`ClosedSession`, `SessionLifecycleEvent` and `WorkspacePRDedicatedSession`,
-written through the accessors in `resources/` (and `AgentSession` by backup
-import), and the session logic in `service/`. It does not own:
+`ClosedSession`, `SessionLifecycleEvent`, `SessionQuestionResponse` and
+`WorkspacePRDedicatedSession`, written through the accessors in `resources/`
+(and `AgentSession` by backup import), and the session logic in `service/`. It
+does not own:
 
 - Socket subscriptions, replay framing and delivery to viewers:
   `src/backend/routers/websocket/`, which the capsule publishes to through
@@ -36,8 +37,11 @@ import), and the session logic in `service/`. It does not own:
 `index.ts` names every public export, in groups: the ACP runtime, chat,
 composition singletons, configuration, session data, delivery, dispatch,
 event-owned sessions and the interceptor bridge, lifecycle, logging, metadata,
-prompts, providers, the store, `sessionEventBus` and voice narration.
-Orchestration passes capabilities in through `service/bridges/`.
+prompts, providers, the store, `sessionEventBus` and voice narration. Backup
+orchestration supplies its private SQLite transaction when it calls
+`readSessionQuestionResponsesForBackup` or
+`createImportedSessionQuestionResponses`. Orchestration passes capabilities in
+through `service/bridges/`.
 
 ## Invariants
 

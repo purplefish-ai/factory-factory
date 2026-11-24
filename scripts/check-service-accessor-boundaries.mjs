@@ -211,6 +211,10 @@ const ACCESSOR_POLICIES = {
     owner: 'session',
     module: 'src/backend/services/session/resources/session-lifecycle-event.accessor',
   },
+  sessionQuestionResponseAccessor: {
+    owner: 'session',
+    module: 'src/backend/services/session/resources/session-question-response.accessor',
+  },
   userSettingsAccessor: {
     owner: 'settings',
     module: 'src/backend/services/settings/resources/user-settings.accessor',

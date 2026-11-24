@@ -13,12 +13,12 @@ export function createPermissionResponseHandler(deps: {
 }): SessionCommandHandler<PermissionResponseMessage> {
   const { sessionPermissionService } = deps;
 
-  return ({ sessionId }, message) => {
+  return async ({ sessionId }, message) => {
     const { requestId, optionId, answers } = message;
 
     try {
       // ACP permission response -- route through bridge
-      const resolved = sessionPermissionService.respondToPermission(
+      const resolved = await sessionPermissionService.respondToPermission(
         sessionId,
         requestId,
         optionId,
@@ -32,7 +32,6 @@ export function createPermissionResponseHandler(deps: {
           sessionId,
           requestId,
           optionId,
-          answers,
         });
       }
       return { replies: [] };

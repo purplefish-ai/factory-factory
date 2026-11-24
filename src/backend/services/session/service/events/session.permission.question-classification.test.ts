@@ -9,6 +9,8 @@ const usableQuestions = [{ question: 'Pick a path', options: [{ label: 'A' }] }]
 function createHarness(workflow?: string) {
   const domain = {
     emitDelta: vi.fn(),
+    allocateOrder: vi.fn(),
+    upsertQuestionResponse: vi.fn(),
     setPendingInteractiveRequest: vi.fn(),
     clearPendingInteractiveRequestIfMatches: vi.fn(),
   };

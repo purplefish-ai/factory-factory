@@ -5,7 +5,6 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { sessionLifecycleService } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
-import history from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -170,7 +169,7 @@ it('commits the existing base graph and account mapping through the private tran
   expect(result).toEqual({
     recovery: {
       status: 'PARTIAL',
-      manifest: history.meta.recovery,
+      manifest: 'recovery' in backup.meta ? backup.meta.recovery : null,
       slackConnections: {
         model: 'AgentConnection',
         imported: 0,

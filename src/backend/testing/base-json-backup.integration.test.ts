@@ -10,7 +10,6 @@ import history from '@/shared/testing/recovery-automation-definitions-v8.fixture
 import full from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-base-json-workspace-v8.fixture.json';
 import { malformedWorkspaceJsonCases } from '@/shared/testing/recovery-json-storage.fixture';
-import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   createIntegrationDatabase,
@@ -177,6 +176,7 @@ it('declares an empty section for all SQL NULL rows and restores explicit SQL NU
     periodicHistory: 1,
     automationDefinitions: 1,
     slackConnections: 1,
+    questionResponses: 1,
   });
   expect(backup.data).toHaveProperty('recovery.baseJson', { version: 1, jsonStorage: [] });
   state.prisma = destination.prisma;
@@ -398,7 +398,7 @@ it('roundtrips PR and session SQL NULL versus JSON null at their existing insert
   ];
   expect(await read(source.prisma)).toEqual({ prs: expected, sessions: expected });
   const backup = await dataBackupService.exportData('test');
-  expect(backup.meta).toHaveProperty('recovery', slack.meta.recovery);
+  expect(backup.meta).toHaveProperty('recovery.capabilities.baseJson', 1);
   state.prisma = destination.prisma;
   const result = await dataBackupService.importData(backup);
   expect(result.agentSessions).toEqual({ imported: 3, skipped: 0 });

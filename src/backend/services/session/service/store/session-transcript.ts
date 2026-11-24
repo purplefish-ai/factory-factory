@@ -72,6 +72,13 @@ function historyToClaudeMessage(msg: HistoryMessage): AgentMessage {
         type: 'assistant',
         message: { role: 'assistant', content: [{ type: 'text', text: msg.content }] },
       };
+    case 'question_response':
+      return {
+        type: 'question_response',
+        timestamp: msg.timestamp,
+        questionResponse: msg.questionResponse,
+        questionToolDetails: msg.questionToolDetails,
+      };
     case 'tool_result': {
       return {
         type: 'user',
@@ -202,7 +209,8 @@ function appendHistoryToTranscript(
     historyMsg.type === 'tool_use' ||
     historyMsg.type === 'tool_result' ||
     historyMsg.type === 'thinking' ||
-    historyMsg.type === 'user_tool_result'
+    historyMsg.type === 'user_tool_result' ||
+    historyMsg.type === 'question_response'
   ) {
     transcript.push(
       projectLegacyProviderNotice(
@@ -355,10 +363,7 @@ export function removeTranscriptMessageById(
 export function setNextOrderFromTranscript(store: SessionStore): void {
   let nextOrder = store.nextOrder;
   for (const message of store.transcript) {
-    if (
-      message.message?.type === 'session_lifecycle' ||
-      (message.message?.type === 'session_notice' && !Number.isInteger(message.order))
-    ) {
+    if (message.message?.type === 'session_lifecycle' || !Number.isInteger(message.order)) {
       continue;
     }
     if (message.order >= nextOrder) {

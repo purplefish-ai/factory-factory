@@ -57,11 +57,7 @@ export interface RecoveryImportReport {
   unreportedTotals: 'EMBEDDED_ROWS_AND_ACCOUNT_MAPPINGS';
 }
 function includesPeriodicHistory(metadata: RecoveryMetadata | undefined): boolean {
-  return (
-    metadata?.profile === 'base-json-periodic-history-1' ||
-    metadata?.profile === 'base-json-automation-definitions-1' ||
-    metadata?.profile === 'base-json-slack-connections-1'
-  );
+  return metadata?.capabilities.periodicHistory === 1;
 }
 function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string {
   return includesPeriodicHistory(metadata)
@@ -76,9 +72,7 @@ function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string
 }
 
 function definitionConnectionScope(metadata: RecoveryMetadata | undefined): string {
-  return metadata?.profile === 'base-json-slack-connections-1'
-    ? 'Connection bindings'
-    : 'Connections';
+  return metadata?.capabilities.slackConnections === 1 ? 'Connection bindings' : 'Connections';
 }
 
 function slackConnectionWarnings(

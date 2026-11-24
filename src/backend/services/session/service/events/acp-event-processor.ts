@@ -435,7 +435,12 @@ export class AcpEventProcessor {
 
     // Persist to transcript + allocate order in one step
     const identity = this.sessionDomainService.appendClaudeEvent(sid, safeData);
-    this.sessionDomainService.emitDelta(sid, { ...delta, data: safeData, ...identity });
+    const { replacement, ...messageIdentity } = identity;
+    this.sessionDomainService.emitDelta(sid, {
+      ...delta,
+      data: replacement ?? safeData,
+      ...messageIdentity,
+    });
   }
 
   finalizeOrphanedToolCalls(sid: string, reason: string): void {

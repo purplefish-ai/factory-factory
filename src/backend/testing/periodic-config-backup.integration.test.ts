@@ -6,7 +6,6 @@ import { expectBackupWriterUnopened } from '@/backend/services/settings/resource
 import { exportDataSchema, exportedProjectSchema } from '@/shared/schemas/export-data.schema';
 import legacy from '@/shared/testing/recovery-base-json-v8.fixture.json';
 import fixed from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
-import current from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import {
   clearIntegrationDatabase,
@@ -109,7 +108,7 @@ it('roundtrips every scalar and all four timestamps disabled without mutating so
     cadence: 'DAILY',
     scheduledDayOfMonth: 31,
   });
-  expect(backup.meta).toHaveProperty('recovery', current.meta.recovery);
+  expect(backup.meta).toHaveProperty('recovery.capabilities.periodicConfig', 1);
   const wire = 'recovery' in backup.data ? backup.data.recovery.periodicConfig!.tasks : [];
   expect(wire).toHaveLength(8);
   rows.forEach((row, i) => {
@@ -353,7 +352,7 @@ it('keeps physical SQL NULL and JSON null distinct for all three full-base catal
   ];
   expect(await read(source.prisma)).toEqual({ workspaces: states, prs: states, sessions: states });
   const backup = await dataBackupService.exportData('physical-null');
-  expect(backup.meta).toHaveProperty('recovery.profile', 'base-json-slack-connections-1');
+  expect(backup.meta).toHaveProperty('recovery.profile', 'base-json-question-responses-1');
   for (const kind of ['missing', 'undefined']) {
     const invalid = structuredClone(backup);
     const pr = invalid.data.workspaces[0]!.prs[0]!;

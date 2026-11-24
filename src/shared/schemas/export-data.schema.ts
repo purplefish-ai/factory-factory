@@ -53,6 +53,7 @@ import {
   prEventBackupSchema,
   prMonitoringBackupSchema,
 } from './pr-monitoring-backup.schema';
+import { questionResponsesRecoveryProfile } from './question-responses-recovery.schema';
 import { recoveryMetadataSchema, recoverySectionsSchema } from './recovery-envelope.schema';
 import { validateBaseJsonTargets } from './recovery-json-storage.schema';
 
@@ -479,7 +480,7 @@ const version8Schema = z
     }),
   })
   .superRefine((backup, ctx) => {
-    const slack = backup.meta.recovery.profile === 'base-json-slack-connections-1';
+    const slack = backup.meta.recovery.capabilities.slackConnections === 1;
     if (
       slack !== Object.hasOwn(backup.data.recovery, 'slackConnections') ||
       (slack && !backup.data.recovery.slackConnections)
@@ -488,17 +489,38 @@ const version8Schema = z
     }
   })
   .superRefine((backup, ctx) => {
+    const covered = backup.meta.recovery.profile === questionResponsesRecoveryProfile;
+    const section = backup.data.recovery.questionResponses;
+    if (
+      covered !== Object.hasOwn(backup.data.recovery, 'questionResponses') ||
+      (covered && !section)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Question response profile sections do not match' });
+    }
+    if (!section?.responses.length) {
+      return;
+    }
+    const sessionCounts = new Map<string, number>();
+    for (const session of backup.data.agentSessions) {
+      sessionCounts.set(session.id, (sessionCounts.get(session.id) ?? 0) + 1);
+    }
+    section.responses.forEach((row, index) => {
+      if (sessionCounts.get(row.sessionId) !== 1) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['data', 'recovery', 'questionResponses', 'responses', index, 'sessionId'],
+          message: 'Question response parent is absent or ambiguous',
+        });
+      }
+    });
+  })
+  .superRefine((backup, ctx) => {
     const covered = backup.meta.recovery.profile !== 'base-1';
     const section = backup.data.recovery.baseJson;
     if (covered !== Object.hasOwn(backup.data.recovery, 'baseJson') || (covered && !section)) {
       ctx.addIssue({ code: 'custom', message: 'Profile sections do not match' });
     }
-    const periodic =
-      backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
-      backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
-      backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
-      backup.meta.recovery.profile === 'base-json-slack-connections-1';
+    const periodic = backup.meta.recovery.capabilities.periodicConfig === 1;
     const config = backup.data.recovery.periodicConfig;
     if (
       periodic !== Object.hasOwn(backup.data.recovery, 'periodicConfig') ||
@@ -509,9 +531,7 @@ const version8Schema = z
   })
   .superRefine((backup, ctx) => {
     const automation = backup.data.recovery.automationDefinitions;
-    const hasAutomation =
-      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
-      backup.meta.recovery.profile === 'base-json-slack-connections-1';
+    const hasAutomation = backup.meta.recovery.capabilities.automationDefinitions === 1;
     if (
       hasAutomation !== Object.hasOwn(backup.data.recovery, 'automationDefinitions') ||
       (hasAutomation && !automation)
@@ -532,10 +552,7 @@ const version8Schema = z
     const covered = backup.meta.recovery.profile !== 'base-1';
     const section = backup.data.recovery.baseJson;
     const history = backup.data.recovery.periodicHistory;
-    const hasHistory =
-      backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-      backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
-      backup.meta.recovery.profile === 'base-json-slack-connections-1';
+    const hasHistory = backup.meta.recovery.capabilities.periodicHistory === 1;
     if (
       hasHistory !== Object.hasOwn(backup.data.recovery, 'periodicHistory') ||
       (hasHistory && !history)
@@ -577,12 +594,7 @@ const version8Schema = z
       validateBaseJsonTargets(
         backup.data,
         section,
-        backup.meta.recovery.profile === 'base-json-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-config-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-links-1' ||
-          backup.meta.recovery.profile === 'base-json-periodic-history-1' ||
-          backup.meta.recovery.profile === 'base-json-automation-definitions-1' ||
-          backup.meta.recovery.profile === 'base-json-slack-connections-1',
+        !backup.meta.recovery.exclusions.includes('PHYSICAL_NULLABLE_JSON_FIDELITY'),
         ctx
       );
     }
@@ -617,6 +629,7 @@ const periodicLinksVersion8Schema = version8Schema
           'base-json-periodic-history-1',
           'base-json-automation-definitions-1',
           'base-json-slack-connections-1',
+          questionResponsesRecoveryProfile,
         ]),
       }),
     }),

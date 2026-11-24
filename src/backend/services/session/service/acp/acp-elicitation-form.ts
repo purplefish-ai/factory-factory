@@ -4,8 +4,8 @@ import {
   type AskUserQuestion,
   compileQuestionPattern,
   getStringAnswerError,
+  isSecretQuestion,
 } from '@/shared/acp-protocol/question-input';
-
 const optionSchema = z.object({
   const: z.string(),
   title: z.string(),
@@ -269,7 +269,7 @@ function convertAnswer(field: Field, answers: string[]): ElicitationContentValue
 }
 
 export interface AcpElicitationForm {
-  questions: AskUserQuestion[];
+  questions: Array<AskUserQuestion & { isSecret?: true }>;
   parseAnswers: (answers: unknown) => Record<string, ElicitationContentValue> | null;
 }
 
@@ -342,11 +342,16 @@ function questionCopy(
   return { question: fallback, ...(field.description ? { header: field.description } : {}) };
 }
 
-function projectFormQuestions(form: Form, questionIds: Map<string, string>, formMessage?: string) {
+function projectFormQuestions(
+  form: Form,
+  questionIds: Map<string, string>,
+  rawFields?: Record<string, unknown>,
+  formMessage?: string
+) {
   const notes = getCompanionNotes(form, questionIds);
   const parents = new Map(Array.from(notes.values(), (note) => [note.questionId, note]));
   const validators = new Map<string, z.ZodType<ElicitationContentValue>>();
-  const questions = [];
+  const questions: Array<AskUserQuestion & { isSecret?: true }> = [];
   for (const [id, field] of Object.entries(form.properties)) {
     const questionId = questionIds.get(id) ?? id;
     const note = notes.get(id);
@@ -362,6 +367,7 @@ function projectFormQuestions(form: Form, questionIds: Map<string, string>, form
       validators.set(id, validate);
     }
     questions.push({
+      ...(isSecretQuestion(rawFields?.[id]) ? { isSecret: true } : {}),
       id: questionId,
       ...questionCopy(field, id, parent, formMessage),
       options,
@@ -447,7 +453,14 @@ export function createAcpElicitationForm(
         return [id, questionId];
       })
     );
-    const { questions, validators } = projectFormQuestions(form, questionIds, formMessage);
+    const rawFields = z.object({ properties: z.record(z.string(), z.unknown()) }).safeParse(schema)
+      .data?.properties;
+    const { questions, validators } = projectFormQuestions(
+      form,
+      questionIds,
+      rawFields,
+      formMessage
+    );
     return {
       questions,
       parseAnswers: (answers) => parseAnswers(form, validators, questionIds, answers),

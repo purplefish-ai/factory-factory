@@ -10,9 +10,9 @@ start with `src/` are from the repository root.
 ## Owns, and does not own
 
 The module owns reading a provider history file, sharing one read and projection
-among concurrent callers, the cache of completed projections, and applying a
-result to a session store through that store's fences (the hydrator). It does
-not own:
+among concurrent callers, the cache of completed projections, and hydrating a
+session store through its history fences. It persists and restores local
+question-response summaries alongside provider history. It does not own:
 
 - The projection itself (`buildTranscriptFromHistoryCooperatively`) and the
   stores: `../store/session-transcript.ts`, `../store/`.
@@ -25,11 +25,11 @@ not own:
 ## Public surface
 
 The capsule barrel exports the session data and provider resolver services, with
-their factories, and `sessionRepository` from here. Stores are hydrated by a
-hydrator from `createProviderHistoryHydrator`
-(`session-provider-history-hydrator.ts`), one per session domain. PR receipt
-lookup (`../delivery/session-pr-receipt.ts`) calls the two loaders directly,
-reading only lines that contain its marker.
+their factories, and `sessionRepository` from here. The session domain uses
+`createSessionTranscriptHydrator` (`session-question-response-history.ts`) to
+restore provider history and merge local question summaries. PR receipt lookup
+(`../delivery/session-pr-receipt.ts`) calls the two loaders directly, reading
+only lines that contain its marker.
 
 ## Invariants
 
@@ -53,6 +53,11 @@ reading only lines that contain its marker.
 - Codex tool backfill never replaces the transcript while the runtime is
   starting, running or stopping, including a phase entered during the read.
   `session-provider-history-hydrator.test.ts`.
+- Claude's structured question result is correlated by tool-use ID and replaces
+  the tool call at its original position. The session-owned question response
+  history stores only summaries, and provider-marked answer values are omitted.
+  `claude-history-question-responses.test.ts`,
+  `session-question-response-history.integration.test.ts`.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.
@@ -64,6 +69,9 @@ reading only lines that contain its marker.
 - `session-history-loader.service.ts`,
   `codex-session-history-loader.service.ts`: find and parse each provider's
   history file, restoring prompt images through `history-image-attachment.ts`.
+- `claude-history-question-responses.ts` restores structured provider answers.
+  `codex-history-question-responses.ts` projects acknowledgment-only requests.
+  `session-question-response-history.ts` persists and restores local summaries.
 - `session-history-jsonl-reader.ts`: the cooperative line reader both use.
 - `session-history-file.ts`: the file identity a read observed.
 - `provider-history-transcript-loader.ts`: the shared read and projection.

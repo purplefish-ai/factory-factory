@@ -8,6 +8,8 @@ import { SessionPermissionService } from './session.permission.service';
 describe('SessionPermissionService', () => {
   const sessionDomain = {
     emitDelta: vi.fn(),
+    allocateOrder: vi.fn(),
+    upsertQuestionResponse: vi.fn(),
     setPendingInteractiveRequest: vi.fn(),
     clearPendingInteractiveRequestIfMatches: vi.fn(),
   };
@@ -146,6 +148,228 @@ describe('SessionPermissionService', () => {
         optionId: 'allow_once',
       },
     });
+  });
+
+  it('replaces the original tool row with the accepted answers and hides secret fields', async () => {
+    const domain = new SessionDomainService();
+    const service = new SessionPermissionService({ sessionDomainService: domain });
+    const handler = new AcpClientHandler(
+      'session-1',
+      (sessionId, event) => {
+        if (event.type === 'acp_permission_request') {
+          service.handlePermissionRequest(sessionId, event);
+        }
+      },
+      service.createPermissionBridge('session-1')
+    );
+    const rawInput = {
+      questions: [
+        {
+          id: 'processes',
+          header: 'Why view',
+          question: 'Which processes?',
+          options: [{ value: 'whole', label: 'Whole machine', description: '' }],
+          multiSelect: true,
+        },
+        {
+          id: 'note',
+          question: 'Any notes?',
+          optional: true,
+          companionNote: { questionId: 'processes', revealOnValue: 'None of the above' },
+        },
+        { id: 'secret', question: 'Token?', isSecret: true, _meta: { codex: 'unexpected' } },
+      ],
+    };
+    const tool = domain.appendClaudeEvent('session-1', {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'tool-1', name: 'AskUserQuestion', input: rawInput },
+      },
+    });
+    domain.appendClaudeEvent('session-1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Interleaving message' }] },
+    });
+    const response = handler.requestPermission({
+      sessionId: 'native',
+      toolCall: { toolCallId: 'tool-1', title: 'AskUserQuestion', rawInput },
+      options: [{ optionId: 'accept', name: 'Answer', kind: 'allow_once' }],
+    });
+    const requestId = domain.getPendingInteractiveRequest('session-1')!.requestId;
+    const answers = {
+      processes: ['whole', 'Only active'],
+      note: ['Include inactive workspaces too'],
+      secret: ['private-token'],
+    };
+    expect(service.respondToPermission('session-1', requestId, 'missing', answers)).toBe(false);
+    expect(service.respondToPermission('session-1', requestId, 'accept', answers)).toBe(true);
+    expect(service.respondToPermission('session-1', requestId, 'accept', answers)).toBe(false);
+    await expect(response).resolves.toMatchObject({
+      outcome: { outcome: 'selected', optionId: 'accept' },
+    });
+
+    const late = domain.appendClaudeEvent('session-1', {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-1',
+            content: 'Echoes the private-token value',
+          },
+        ],
+      },
+    });
+    expect(late.messageId).toBe(tool.messageId);
+    expect(late.replacement?.type).toBe('question_response');
+    const rows = domain.getTranscriptSnapshot('session-1');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      id: tool.messageId,
+      order: tool.order,
+      message: {
+        type: 'question_response',
+        questionResponse: {
+          toolUseId: 'tool-1',
+          status: 'answered',
+          questions: [
+            {
+              question: 'Which processes?',
+              answers: ['Whole machine', 'Only active'],
+              note: 'Include inactive workspaces too',
+            },
+            { question: 'Token?', answers: [], redacted: true },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(rows)).not.toContain('private-token');
+  });
+
+  it.each([
+    { optionId: 'accept', answers: { count: ['0'] }, action: 'cancel' },
+    { optionId: 'decline', answers: { count: ['1'] }, action: 'decline' },
+  ])(
+    'records the $action ACP form action as a cancelled transcript response',
+    async ({ optionId, answers, action }) => {
+      const domain = new SessionDomainService();
+      const service = new SessionPermissionService({ sessionDomainService: domain });
+      const handler = new AcpClientHandler(
+        'session-1',
+        (sessionId, event) => {
+          if (event.type === 'acp_permission_request') {
+            service.handlePermissionRequest(sessionId, event);
+          }
+        },
+        service.createPermissionBridge('session-1')
+      );
+      const response = handler.createElicitation({
+        mode: 'form',
+        sessionId: 'native',
+        message: 'Pick a count',
+        requestedSchema: {
+          properties: { count: { type: 'integer', minimum: 1 } },
+          required: ['count'],
+        },
+      });
+      const requestId = domain.getPendingInteractiveRequest('session-1')!.requestId;
+      expect(service.respondToPermission('session-1', requestId, optionId, answers)).toBe(true);
+      await expect(response).resolves.toEqual({ action });
+      expect(domain.getTranscriptSnapshot('session-1')).toMatchObject([
+        {
+          message: {
+            type: 'question_response',
+            questionToolDetails: {
+              toolName: 'AskUserQuestion',
+              input: { questions: [{ validation: { type: 'integer', minimum: 1 } }] },
+            },
+            questionResponse: {
+              status: 'cancelled',
+              questions: [{ question: 'count', answers: [] }],
+            },
+          },
+        },
+      ]);
+    }
+  );
+
+  it('records cancellation for each overlapping question without republishing one', async () => {
+    const domain = new SessionDomainService();
+    const service = new SessionPermissionService({ sessionDomainService: domain });
+    const shown = vi.spyOn(domain, 'emitDelta');
+    const handler = new AcpClientHandler(
+      'session',
+      (sessionId, event) => {
+        if (event.type === 'acp_permission_request') {
+          service.handlePermissionRequest(sessionId, event);
+        }
+      },
+      service.createPermissionBridge('session')
+    );
+    const ask = (id: string) =>
+      handler.requestPermission({
+        sessionId: 'native',
+        toolCall: {
+          toolCallId: id,
+          title: 'AskUserQuestion',
+          rawInput: { questions: [{ question: id }] },
+        },
+        options: [{ optionId: 'allow', name: 'Answer', kind: 'allow_once' }],
+      });
+    const pending = [ask('First'), ask('Second')];
+    service.cancelPendingRequests('session');
+    expect(await Promise.all(pending)).toEqual([
+      { outcome: { outcome: 'cancelled' } },
+      { outcome: { outcome: 'cancelled' } },
+    ]);
+    expect(shown.mock.calls.filter(([, delta]) => delta.type === 'user_question')).toHaveLength(2);
+    expect(domain.getTranscriptSnapshot('session').map((row) => row.message)).toMatchObject([
+      { questionResponse: { status: 'cancelled', toolUseId: 'First' } },
+      { questionResponse: { status: 'cancelled', toolUseId: 'Second' } },
+    ]);
+  });
+
+  it('cancels only the aborted ACP request and rejects its stale answer', async () => {
+    const domain = new SessionDomainService();
+    const service = new SessionPermissionService({ sessionDomainService: domain });
+    const handler = new AcpClientHandler(
+      'session',
+      (sessionId, event) => {
+        if (event.type === 'acp_permission_request') {
+          service.handlePermissionRequest(sessionId, event);
+        }
+      },
+      service.createPermissionBridge('session')
+    );
+    const request = (title: string) => ({
+      mode: 'form' as const,
+      sessionId: 'native',
+      message: title,
+      requestedSchema: { properties: { choice: { type: 'string' as const } } },
+    });
+    const prior = handler.createElicitation(request('Prior question'));
+    const priorId = domain.getPendingInteractiveRequest('session')!.requestId;
+    const aborter = new AbortController();
+    const cancelled = handler.createElicitation(request('Aborted question'), aborter.signal);
+    const cancelledId = domain.getPendingInteractiveRequest('session')!.requestId;
+
+    aborter.abort();
+    expect(
+      service.respondToPermission('session', cancelledId, 'accept', { choice: ['stale'] })
+    ).toBe(false);
+    expect(domain.getPendingInteractiveRequest('session')?.requestId).toBe(priorId);
+    expect(
+      service.respondToPermission('session', priorId, 'accept', { choice: ['accepted'] })
+    ).toBe(true);
+    await expect(cancelled).resolves.toEqual({ action: 'cancel' });
+    await expect(prior).resolves.toEqual({ action: 'accept', content: { choice: 'accepted' } });
+    expect(domain.getTranscriptSnapshot('session').map((row) => row.message)).toMatchObject([
+      { questionResponse: { status: 'answered', requestId: priorId } },
+      { questionResponse: { status: 'cancelled', requestId: cancelledId } },
+    ]);
   });
 
   it('reuses the existing ACP permission bridge for repeated session setup', () => {

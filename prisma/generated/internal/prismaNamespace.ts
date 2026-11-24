@@ -410,6 +410,7 @@ export const ModelName = {
   WorkspaceRunScript: 'WorkspaceRunScript',
   CodexAccount: 'CodexAccount',
   AgentSession: 'AgentSession',
+  SessionQuestionResponse: 'SessionQuestionResponse',
   SessionLifecycleEvent: 'SessionLifecycleEvent',
   TerminalSession: 'TerminalSession',
   ClosedSession: 'ClosedSession',
@@ -449,7 +450,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePRDelivery" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceMailState" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
+    modelProps: "project" | "decisionLog" | "workspace" | "workspaceMetadata" | "workspacePR" | "workspacePRMonitoring" | "workspacePRDedicatedSession" | "workspacePRDelivery" | "workspacePREvent" | "workspacePRDiscovery" | "workspaceRunScript" | "codexAccount" | "agentSession" | "sessionQuestionResponse" | "sessionLifecycleEvent" | "terminalSession" | "closedSession" | "userSettings" | "agentDefinition" | "agentProposal" | "agentConnection" | "agentTrigger" | "agentRun" | "agentSourceState" | "agentSourcePage" | "agentSourceCheckpoint" | "agentSourceHead" | "agentSourceBaseline" | "agentEvent" | "agentEvaluation" | "agentInitialDelivery" | "periodicTask" | "periodicTaskExecution" | "workspaceNotification" | "workspaceMailState" | "workspaceLaunchOrigin" | "agentSessionLaunchOrigin" | "workspaceChildOrigin"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1412,6 +1413,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         count: {
           args: Prisma.AgentSessionCountArgs<ExtArgs>
           result: runtime.Types.Utils.Optional<Prisma.AgentSessionCountAggregateOutputType> | number
+        }
+      }
+    }
+    SessionQuestionResponse: {
+      payload: Prisma.$SessionQuestionResponsePayload<ExtArgs>
+      fields: Prisma.SessionQuestionResponseFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SessionQuestionResponseFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SessionQuestionResponseFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        findFirst: {
+          args: Prisma.SessionQuestionResponseFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SessionQuestionResponseFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        findMany: {
+          args: Prisma.SessionQuestionResponseFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>[]
+        }
+        create: {
+          args: Prisma.SessionQuestionResponseCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        createMany: {
+          args: Prisma.SessionQuestionResponseCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SessionQuestionResponseCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>[]
+        }
+        delete: {
+          args: Prisma.SessionQuestionResponseDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        update: {
+          args: Prisma.SessionQuestionResponseUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        deleteMany: {
+          args: Prisma.SessionQuestionResponseDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SessionQuestionResponseUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SessionQuestionResponseUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>[]
+        }
+        upsert: {
+          args: Prisma.SessionQuestionResponseUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SessionQuestionResponsePayload>
+        }
+        aggregate: {
+          args: Prisma.SessionQuestionResponseAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSessionQuestionResponse>
+        }
+        groupBy: {
+          args: Prisma.SessionQuestionResponseGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SessionQuestionResponseGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SessionQuestionResponseCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SessionQuestionResponseCountAggregateOutputType> | number
         }
       }
     }
@@ -3461,6 +3536,17 @@ export const AgentSessionScalarFieldEnum = {
 export type AgentSessionScalarFieldEnum = (typeof AgentSessionScalarFieldEnum)[keyof typeof AgentSessionScalarFieldEnum]
 
 
+export const SessionQuestionResponseScalarFieldEnum = {
+  sessionId: 'sessionId',
+  providerSessionId: 'providerSessionId',
+  toolUseId: 'toolUseId',
+  timestamp: 'timestamp',
+  summary: 'summary'
+} as const
+
+export type SessionQuestionResponseScalarFieldEnum = (typeof SessionQuestionResponseScalarFieldEnum)[keyof typeof SessionQuestionResponseScalarFieldEnum]
+
+
 export const SessionLifecycleEventScalarFieldEnum = {
   id: 'id',
   workspaceId: 'workspaceId',
@@ -4335,6 +4421,7 @@ export type GlobalOmitConfig = {
   workspaceRunScript?: Prisma.WorkspaceRunScriptOmit
   codexAccount?: Prisma.CodexAccountOmit
   agentSession?: Prisma.AgentSessionOmit
+  sessionQuestionResponse?: Prisma.SessionQuestionResponseOmit
   sessionLifecycleEvent?: Prisma.SessionLifecycleEventOmit
   terminalSession?: Prisma.TerminalSessionOmit
   closedSession?: Prisma.ClosedSessionOmit

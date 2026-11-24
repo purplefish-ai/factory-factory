@@ -81,3 +81,38 @@ export function isUserQuestionRequest(request: {
   }
   return hasAskUserQuestionInput(request.input);
 }
+
+const secretQuestionSchema = z.object({
+  isSecret: z.unknown().optional(),
+  secret: z.unknown().optional(),
+  format: z.unknown().optional(),
+  writeOnly: z.unknown().optional(),
+  _meta: z
+    .object({
+      codex: z.object({ isSecret: z.unknown().optional() }).nullish().catch(undefined),
+    })
+    .nullish()
+    .catch(undefined),
+});
+
+/** Detect provider privacy flags without depending on display or unrelated metadata. */
+export function isSecretQuestion(input: unknown): boolean {
+  const flags = secretQuestionSchema.safeParse(input).data;
+  if (!flags) {
+    return false;
+  }
+  const codex = flags._meta?.codex;
+  // A present boolean flag must explicitly opt out, even if its value is malformed.
+  return (
+    (['isSecret', 'secret', 'writeOnly'] as const).some(
+      (key) => Object.hasOwn(flags, key) && flags[key] !== false
+    ) ||
+    (!!codex && Object.hasOwn(codex, 'isSecret') && codex.isSecret !== false) ||
+    (Object.hasOwn(flags, 'format') &&
+      (typeof flags.format !== 'string' || flags.format === 'password'))
+  );
+}
+
+export function hasSecretQuestion(input: Record<string, unknown>): boolean {
+  return Array.isArray(input.questions) && input.questions.some(isSecretQuestion);
+}

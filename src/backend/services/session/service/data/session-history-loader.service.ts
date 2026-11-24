@@ -5,6 +5,10 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
+import {
+  appendHistoryWithQuestionResponses,
+  type ClaudeQuestionCallIndex,
+} from './claude-history-question-responses';
 import { buildHistoryImageAttachments, HistoryImageSourceSchema } from './history-image-attachment';
 import {
   type HistoryFileReuse,
@@ -535,6 +539,7 @@ class ClaudeSessionHistoryLoaderService {
     isCurrent?: () => boolean
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     const history: HistoryMessage[] = [];
+    const questionCalls: ClaudeQuestionCallIndex = new Map();
     const fallbackBaseTimestampMs = Date.now();
     let hadReadError = false;
 
@@ -560,7 +565,12 @@ class ClaudeSessionHistoryLoaderService {
 
         const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
         const uuid = resolveSessionUuid(entry);
-        history.push(...parseContentAsHistory(role, content, timestamp, uuid));
+        appendHistoryWithQuestionResponses(
+          history,
+          questionCalls,
+          parseContentAsHistory(role, content, timestamp, uuid),
+          entry.toolUseResult
+        );
       },
       onError: (error) => {
         hadReadError = true;

@@ -4,10 +4,8 @@ import {
   SessionLoadService,
   type SessionLoadDependencies,
 } from '@/backend/services/session/service/chat/session-load.service';
-import {
-  createProviderHistoryHydrator,
-  type ProviderHistoryHydrationDomain,
-} from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import type { ProviderHistoryHydrationDomain } from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import { createSessionTranscriptHydrator } from '@/backend/services/session/service/data/session-question-response-history';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
 import type { SessionDispatchStartOptions } from '@/backend/services/session/service/dispatch/session-dispatch.types';
@@ -82,7 +80,7 @@ export function createSessionLoadService(
   return new SessionLoadService({
     ...ports,
     findSession: (sessionId) => agentSessionAccessor.findById(sessionId),
-    hydrateProviderHistory: createProviderHistoryHydrator(ports.domain),
+    hydrateProviderHistory: createSessionTranscriptHydrator(ports.domain),
     getCachedCommands: (provider) => slashCommandCacheService.getCachedCommands(provider),
   });
 }

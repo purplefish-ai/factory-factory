@@ -41,7 +41,8 @@ export function hasTranscriptOrder(message: ChatMessage): boolean {
   return (
     message.order >= 0 ||
     message.message?.type === 'session_lifecycle' ||
-    message.message?.type === 'session_notice'
+    message.message?.type === 'session_notice' ||
+    message.message?.type === 'question_response'
   );
 }
 
