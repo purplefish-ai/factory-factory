@@ -181,10 +181,12 @@ partial coverage manifest. This cumulative profile includes base logical
 metadata, periodic configuration and workspace links, retained periodic
 execution history, automation definition bodies, Slack connection metadata and
 local question response summaries. The `questionResponses` capability is version
-1 and restores summaries for sessions created by the import. Repository/worktree
-files, provider history bytes, raw tool content, archives, mail, secrets, native
-account homes and live runtime authority are excluded. Paths and
-provider-session IDs may remain metadata. Workspace.creationMetadata,
+1 and restores summaries for sessions created by the import. Summaries include
+the questions, selected answers, custom answers, and notes. Provider-marked
+private responses carry a redaction marker in place of answer and note text.
+Repository/worktree files, provider history bytes, raw tool content, archives,
+mail, secrets, native account homes and live runtime authority are excluded.
+Paths and provider-session IDs may remain metadata. Workspace.creationMetadata,
 WorkspacePR.observation on actual included PR rows,
 AgentSession.providerMetadata and PeriodicTaskExecution.launchSnapshot preserve
 SQL NULL versus top-level JSON null. All six version-1 recovery sections are
