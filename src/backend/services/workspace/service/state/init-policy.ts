@@ -1,4 +1,4 @@
-import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
+import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/service/state/archive-incomplete';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
 

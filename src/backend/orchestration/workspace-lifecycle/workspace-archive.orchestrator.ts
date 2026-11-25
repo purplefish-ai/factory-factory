@@ -398,10 +398,20 @@ async function performArchive(
 
   return await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
     let statusBeforeArchive: ArchiveSourceStatus;
+    let target = workspace;
     try {
-      statusBeforeArchive =
-        resumeSource ??
-        (await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id)).previousStatus;
+      if (resumeSource) {
+        statusBeforeArchive = resumeSource;
+      } else {
+        const started = await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+        statusBeforeArchive = started.previousStatus;
+        // The caller's row may predate another attempt that marked this one incomplete.
+        target = {
+          ...workspace,
+          status: started.previousStatus,
+          initErrorMessage: started.workspace.initErrorMessage,
+        };
+      }
     } catch (error) {
       return await resolveArchiveTransitionConflict(
         workspace.id,
@@ -416,7 +426,7 @@ async function performArchive(
       removalStarted: interruptedArchives.get(workspace.id)?.removalStarted === true,
     };
     try {
-      const archived = await completeArchive(workspace, options, services, progress);
+      const archived = await completeArchive(target, options, services, progress);
       interruptedArchives.delete(workspace.id);
       return archived;
     } catch (error) {

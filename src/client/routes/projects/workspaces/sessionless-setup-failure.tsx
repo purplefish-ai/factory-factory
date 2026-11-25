@@ -21,7 +21,8 @@ export function SessionlessSetupFailure({
       banner={{
         kind: 'error',
         message: banner?.message ?? errorMessage ?? 'Workspace setup failed',
-        showRetry: true,
+        // Policy hides retry only where setup must not run again (an incomplete archive).
+        showRetry: banner?.showRetry ?? true,
         showPlay: false,
         showDismiss: false,
       }}

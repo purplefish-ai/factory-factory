@@ -2,8 +2,8 @@ import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
 import { createLogger } from '@/backend/services/logger.service';
-import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/service/state/archive-incomplete';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { archiveSnapshotRef, gitOpsService } from './git-ops.service';
 

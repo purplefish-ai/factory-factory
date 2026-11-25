@@ -491,7 +491,14 @@ describe('archiveWorkspace', () => {
       });
       vi.mocked(worktreeLifecycleService.archiveRemovalMayHaveStarted).mockResolvedValue(true);
       vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
-        unsafeCoerce({ workspace: { id: 'ws-1', status: 'ARCHIVING' }, previousStatus: 'FAILED' })
+        unsafeCoerce({
+          workspace: {
+            id: 'ws-1',
+            status: 'ARCHIVING',
+            initErrorMessage: incomplete.initErrorMessage,
+          },
+          previousStatus: 'FAILED',
+        })
       );
 
       await expect(archiveWorkspace(incomplete, defaultOptions)).resolves.toMatchObject({

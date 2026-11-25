@@ -32,7 +32,10 @@ const workspaceId = 'cleanup-notification';
 beforeEach(() => {
   vi.spyOn(workspaceStateMachine, 'isValidTransition').mockReturnValue(true);
   vi.spyOn(workspaceStateMachine, 'startArchivingWithSourceStatus').mockResolvedValue(
-    unsafeCoerce({ previousStatus: 'READY' })
+    unsafeCoerce({
+      workspace: { status: 'ARCHIVING', initErrorMessage: null },
+      previousStatus: 'READY',
+    })
   );
   vi.spyOn(workspaceStateMachine, 'markArchived').mockResolvedValue(
     unsafeCoerce({ status: 'ARCHIVED' })
@@ -103,7 +106,9 @@ it.each([
         throw new Error('worktree cleanup failed');
       }
     });
-    vi.spyOn(worktreeLifecycleService, 'removeWorkspaceWorktree').mockResolvedValue(undefined);
+    vi.spyOn(worktreeLifecycleService, 'removeWorkspaceWorktree').mockImplementation(
+      finishLatePrompt
+    );
     vi.mocked(workspaceStateMachine.transition).mockImplementation(async () => {
       await finishLatePrompt();
       return unsafeCoerce({ status: 'READY' });
@@ -142,7 +147,7 @@ it.each([
         expect(notify).toHaveBeenCalledOnce();
       } else {
         await archive;
-        expect(counts).toEqual([0, 0]);
+        expect(counts).toEqual([0, 0, 0]);
         expect(notify).not.toHaveBeenCalled();
       }
     } finally {

@@ -249,6 +249,21 @@ describe('concurrent workspace archives', () => {
     expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledTimes(2);
   });
 
+  it('reads the marker after the transition, so a stale READY request never snapshots', async () => {
+    const staleReadyRow = row;
+    vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValueOnce(
+      new Error('git worktree remove timed out')
+    );
+    await expect(archiveWorkspace(row, {}, services)).rejects.toThrow('timed out');
+    expect(row.status).toBe('FAILED');
+
+    await expect(archiveWorkspace(staleReadyRow, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVED',
+    });
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledTimes(1);
+    expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['current', 'stale'] as const)(
     'resumes past the snapshot from a %s request when FAILED could not be written',
     async (snapshot) => {

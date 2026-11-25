@@ -21,18 +21,13 @@ import { EventEmitter } from 'node:events';
  */
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/service/state/archive-incomplete';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 
 const logger = createLogger('workspace-state-machine');
-
-export {
-  formatArchiveIncompleteMessage,
-  hasArchiveIncompleteMarker,
-} from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 
 /**
  * Valid state transitions for workspace status.

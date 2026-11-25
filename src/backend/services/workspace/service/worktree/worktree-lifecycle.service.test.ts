@@ -89,12 +89,17 @@ describe('worktreeLifecycleService archive snapshot rule', () => {
     'always snapshots a %s workspace without the marker, whatever refs exist',
     async (status) => {
       const readRef = vi.spyOn(gitOpsService, 'readPrivateRef').mockResolvedValue('a'.repeat(40));
+      const snapshot = vi
+        .spyOn(worktreeLifecycleService, 'snapshotWorkspaceWorktree')
+        .mockResolvedValue();
+      const remove = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+      const row = workspace({ status, initErrorMessage: 'Setup failed' });
 
-      await expect(
-        worktreeLifecycleService.archiveRemovalMayHaveStarted(
-          workspace({ status, initErrorMessage: 'Setup failed' })
-        )
-      ).resolves.toBe(false);
+      await expect(worktreeLifecycleService.archiveRemovalMayHaveStarted(row)).resolves.toBe(false);
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(row, {});
+
+      expect(snapshot).toHaveBeenCalledExactlyOnceWith(row, {});
+      expect(remove).toHaveBeenCalledOnce();
       expect(readRef).not.toHaveBeenCalled();
     }
   );

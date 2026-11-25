@@ -18,8 +18,6 @@ export {
 } from './service/lifecycle/event-workspace-init.service';
 export type { EventWorkspaceSource } from './service/lifecycle/event-workspace-source';
 export {
-  formatArchiveIncompleteMessage,
-  hasArchiveIncompleteMarker,
   WORKSPACE_CREATED,
   type WorkspaceCreatedEvent,
   WORKSPACE_STATE_CHANGED,
@@ -59,6 +57,10 @@ export {
 } from './service/snapshot/workspace-snapshot-store.service';
 
 // --- State derivation (pure functions) ---
+export {
+  formatArchiveIncompleteMessage,
+  hasArchiveIncompleteMarker,
+} from './service/state/archive-incomplete';
 export {
   deriveWorkspaceFlowState,
   deriveWorkspaceFlowStateFromWorkspace,

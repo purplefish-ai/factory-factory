@@ -107,16 +107,17 @@ export async function summarizeSnapshotPaths(
     ['diff-tree', '-r', '--root', '--no-commit-id', '--name-status', '--no-renames', sha],
     cwd
   );
-  if (result.code !== 0) {
+  // Output past the buffer limit stops Git; what was read is still a bounded summary.
+  const truncated = result.stdoutOverflowed === true;
+  if (result.code !== 0 && !truncated) {
     return null;
   }
-  const summary: ArchivedPathSummary = {
-    total: 0,
-    byStatus: {},
-    paths: [],
-    truncated: result.stdoutOverflowed === true,
-  };
-  for (const line of result.stdout.split('\n')) {
+  const lines = result.stdout.split('\n');
+  if (truncated) {
+    lines.pop(); // The last line may be cut off mid-path.
+  }
+  const summary: ArchivedPathSummary = { total: 0, byStatus: {}, paths: [], truncated };
+  for (const line of lines) {
     const tab = line.indexOf('\t');
     if (tab <= 0) {
       continue;

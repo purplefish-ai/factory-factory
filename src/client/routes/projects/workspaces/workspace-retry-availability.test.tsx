@@ -79,3 +79,32 @@ it.each(['warning', 'sessionless', 'chat'] as const)(
     }
   }
 );
+it('offers no sessionless retry when the init policy hides it after an incomplete archive', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const message = 'Archive incomplete: remove failed. Archive again to finish.';
+  try {
+    flushSync(() =>
+      root.render(
+        createElement(SessionlessSetupFailure, {
+          workspaceId: 'workspace',
+          banner: { kind: 'error', message, showRetry: false, showPlay: false, showDismiss: false },
+          errorMessage: message,
+          retryAvailability: {
+            status: 'BLOCKED',
+            reason: 'ARCHIVE_INCOMPLETE',
+            explanation: 'The archive did not finish.',
+          },
+        })
+      )
+    );
+    expect(container.textContent).toContain(message);
+    expect(
+      Array.from(container.querySelectorAll('button')).some((node) =>
+        /Retry/.test(node.textContent ?? '')
+      )
+    ).toBe(false);
+  } finally {
+    root.unmount();
+  }
+});

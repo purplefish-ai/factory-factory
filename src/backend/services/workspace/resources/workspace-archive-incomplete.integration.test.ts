@@ -5,7 +5,6 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import { formatArchiveIncompleteMessage } from './workspace-archive-incomplete';
 
 let db: IntegrationDatabase;
 let workspaceAccessor: typeof import('./workspace.accessor').workspaceAccessor;
@@ -39,7 +38,9 @@ it.each([
   ['retry setup', 'startProvisioningRetryIfAllowed'],
   ['recreate the worktree', 'resetToNewIfAllowed'],
 ] as const)('a racing %s cannot restart an incomplete archive', async (_name, method) => {
-  const incomplete = await createFailedWorkspace(formatArchiveIncompleteMessage('remove failed'));
+  const incomplete = await createFailedWorkspace(
+    'Archive incomplete: remove failed. Archive again to finish.'
+  );
   const withoutMessage = await createFailedWorkspace(null);
   const setupFailure = await createFailedWorkspace('Setup script failed');
 

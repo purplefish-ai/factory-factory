@@ -15,13 +15,15 @@ branch had that branch advanced.
 
 ## Decision
 
-- One snapshot per attempt, before anything destructive. When HEAD is on the
-  workspace's own branch (`branchName`), uncommitted work is committed onto it
-  as before. Otherwise it is committed aside through a copy of the index
-  (`GIT_INDEX_FILE`, `add -A`, `write-tree`, `commit-tree -p HEAD`), moving no
-  branch, HEAD or index. In every case `refs/factory-factory/archive/<id>`
-  points at the snapshot; a clean tree's snapshot is HEAD. The committed paths
-  are logged, bounded to 50 with counts per status.
+- One snapshot per attempt, after runtimes stop and before worktree removal
+  begins. When HEAD is on the workspace's own branch (`branchName`), uncommitted
+  work is committed onto it as before. Otherwise it is committed aside through a
+  copy of the index (`GIT_INDEX_FILE`, `add -A`, `write-tree`,
+  `commit-tree -p HEAD`), moving no branch, HEAD or index. Whenever the worktree
+  has a commit to point at, `refs/factory-factory/archive/<id>` points at the
+  snapshot; a clean tree's snapshot is HEAD, and a clean worktree with no
+  commits gets no ref. The committed paths are logged, bounded to 50 with counts
+  per status.
 - Before removal starts, a failure rolls back to the previous status. Once it
   has started, a failure moves the workspace to FAILED with an
   `Archive incomplete: <reason>. Archive again to finish.` message, never READY.
@@ -29,7 +31,8 @@ branch had that branch advanced.
 - Removal may have started when the row carries that marker, or when an
   interrupted ARCHIVING row (startup recovery, or an in-process resume) already
   has its ref, which is written just before removal. Such an attempt skips the
-  snapshot, and any failure keeps the marker.
+  snapshot, and any failure keeps the marker. The marker is read from the row
+  the ARCHIVING transition returns, not from the caller's possibly stale copy.
 - Setup retry refuses a FAILED row with the marker (availability, router, state
   machine and the conditional write). Every setup retry clears
   `initErrorMessage`, so the marker cannot outlive a workspace becoming active,
@@ -41,7 +44,10 @@ later snapshot of an active workspace.
 
 Rejected: a schema column recording that removal started. The marker and the ref
 answer the same question without a migration, and the marker is already what the
-user sees.
+user sees. The cost is that the marker shares `initErrorMessage`: a setup
+failure whose own message began with `Archive incomplete:` would be read as one.
+Every writer of that column is application code, and no setup failure path
+builds a message with that prefix.
 
 Rejected: committing deletions only below a threshold. Agents delete files
 legitimately; the snapshot must instead never run on a worktree that removal may
