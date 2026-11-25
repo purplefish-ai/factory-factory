@@ -7,10 +7,14 @@ import {
 } from '@/backend/services/workspace/resources/workspace-branch-cleanup.accessor';
 import {
   findCommitsOnRemotes,
+  isSameOrAncestor,
+  type BranchDeletionOutcome,
+  type LocalBranch,
   listBusyBranches,
   listLocalBranches,
   pinAndDeleteBranch,
   resolveRepositoryIdentity,
+  restoreDeletedBranch,
 } from './archived-branch-git';
 
 const logger = createLogger('archived-branch-cleanup');
@@ -143,16 +147,34 @@ async function detectRepositoryCandidates(
 
   const candidates = new Map<string, ArchivedBranchCandidate>();
   for (const branch of eligible) {
-    const merged = archivedOwners
-      .get(branch.name)
-      ?.some((owner) => owner.mergedPrHeadBranches.includes(branch.name));
     if (onRemotes.has(branch.sha)) {
       candidates.set(branch.name, { ...branch, safeBecause: 'ON_REMOTE' });
-    } else if (merged) {
+    } else if (await mergedPrContainsTip(repository.repoPath, branch, archivedOwners)) {
       candidates.set(branch.name, { ...branch, safeBecause: 'MERGED_PR' });
     }
   }
   return candidates;
+}
+
+/**
+ * A merged pull request vouches for a branch only when it was opened from a
+ * branch of the same name and its last reported head contains the local tip,
+ * so a commit added after the merge keeps the branch.
+ */
+async function mergedPrContainsTip(
+  repoPath: string,
+  branch: LocalBranch,
+  archivedOwners: Map<string, BranchCleanupWorkspace[]>
+): Promise<boolean> {
+  const heads = (archivedOwners.get(branch.name) ?? []).flatMap((owner) =>
+    owner.mergedPrHeads.filter((head) => head.branch === branch.name)
+  );
+  for (const head of heads) {
+    if (await isSameOrAncestor(repoPath, branch.sha, head.sha)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class ArchivedBranchCleanupService {
@@ -290,21 +312,43 @@ class ArchivedBranchCleanupService {
     return result;
   }
 
-  private async deleteIfStillUnclaimed(repository: Repository, candidate: ArchivedBranchCandidate) {
-    const projectIds = repository.projects.map((project) => project.id);
-    if (
-      await workspaceBranchCleanupAccessor.hasNonArchivedWorkspaceWithBranch(
-        projectIds,
-        candidate.name
-      )
-    ) {
-      return { status: 'skipped', reason: 'A workspace now uses this branch' } as const;
+  private async deleteIfStillUnclaimed(
+    repository: Repository,
+    candidate: ArchivedBranchCandidate
+  ): Promise<BranchDeletionOutcome> {
+    const claim = await claimOn(repository, candidate.name);
+    if (claim) {
+      return { status: 'skipped', reason: claim };
     }
-    if ((await listBusyBranches(repository.repoPath)).has(candidate.name)) {
-      return { status: 'skipped', reason: 'Branch is now checked out or in use' } as const;
+    const outcome = await pinAndDeleteBranch(repository.repoPath, candidate.name, candidate.sha);
+    if (outcome.status !== 'removed') {
+      return outcome;
     }
-    return pinAndDeleteBranch(repository.repoPath, candidate.name, candidate.sha);
+    // Git has no lock shared with checkouts or the app's workspace creation,
+    // so check once more and put the branch back if it came into use meanwhile.
+    if (!(await claimOn(repository, candidate.name))) {
+      return outcome;
+    }
+    if (await restoreDeletedBranch(repository.repoPath, candidate.name, candidate.sha)) {
+      return { status: 'skipped', reason: 'Branch came into use during deletion; restored it' };
+    }
+    return {
+      status: 'failed',
+      error: `Branch came into use during deletion and could not be restored; its commit is kept at ${outcome.pinRef}`,
+    };
   }
+}
+
+/** Why a branch must not be deleted right now, or null when nothing claims it. */
+async function claimOn(repository: Repository, name: string): Promise<string | null> {
+  const projectIds = repository.projects.map((project) => project.id);
+  if (await workspaceBranchCleanupAccessor.hasNonArchivedWorkspaceWithBranch(projectIds, name)) {
+    return 'A workspace now uses this branch';
+  }
+  if ((await listBusyBranches(repository.repoPath)).has(name)) {
+    return 'Branch is now checked out or in use';
+  }
+  return null;
 }
 
 export const archivedBranchCleanupService = new ArchivedBranchCleanupService();

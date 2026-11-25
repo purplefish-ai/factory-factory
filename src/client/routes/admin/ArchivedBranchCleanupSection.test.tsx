@@ -194,7 +194,7 @@ describe('ArchivedBranchCleanupSection', () => {
     );
 
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      'Deleted 2 branches. Skipped 1 that changed or are in use again.'
+      'Deleted 2 branches. Skipped 1 that changed or no longer qualify.'
     );
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
     expect(findButton('Delete')).toBeUndefined();

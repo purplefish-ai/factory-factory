@@ -21,7 +21,7 @@ export function ArchivedBranchCleanupSection() {
   const removeBranches = trpc.admin.removeArchivedBranches.useMutation({
     onSuccess: ({ removed, skipped, failed }) => {
       const skippedNote =
-        skipped.length > 0 ? ` Skipped ${skipped.length} that changed or are in use again.` : '';
+        skipped.length > 0 ? ` Skipped ${skipped.length} that changed or no longer qualify.` : '';
       if (failed.length > 0) {
         toast.error(
           `Couldn't delete all branches. Deleted ${removed.length}; failed to delete ${failed.length}.${skippedNote} ${failed[0]?.error}`

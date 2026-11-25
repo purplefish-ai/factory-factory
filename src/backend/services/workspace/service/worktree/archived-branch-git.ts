@@ -183,16 +183,65 @@ export type BranchDeletionOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string };
 
-async function readBranchSha(repoPath: string, name: string): Promise<string | null> {
+async function readRefSha(repoPath: string, ref: string): Promise<string | null> {
   const result = await execCommand('git', [
     '-C',
     repoPath,
     'rev-parse',
     '--verify',
     '--quiet',
-    `${HEADS_PREFIX}${name}`,
+    ref,
   ]);
   return result.code === 0 ? result.stdout.trim() : null;
+}
+
+/**
+ * True when `ancestor` is `descendant` or reachable from it. False when Git
+ * says no or cannot answer, for example because `descendant` was never fetched.
+ */
+export async function isSameOrAncestor(
+  repoPath: string,
+  ancestor: string,
+  descendant: string
+): Promise<boolean> {
+  if (!(COMMIT_SHA.test(ancestor) && COMMIT_SHA.test(descendant))) {
+    return false;
+  }
+  if (ancestor === descendant) {
+    return true;
+  }
+  const result = await execCommand('git', [
+    '-C',
+    repoPath,
+    'merge-base',
+    '--is-ancestor',
+    ancestor,
+    descendant,
+  ]);
+  return result.code === 0;
+}
+
+/**
+ * Recreate a branch that was just deleted, at its old tip, only if nothing has
+ * created it again since.
+ */
+export async function restoreDeletedBranch(
+  repoPath: string,
+  name: string,
+  sha: string
+): Promise<boolean> {
+  const result = await execCommand('git', [
+    '-C',
+    repoPath,
+    'update-ref',
+    '--no-deref',
+    '-m',
+    'factory-factory: restore branch that came into use during deletion',
+    `${HEADS_PREFIX}${name}`,
+    sha,
+    '0'.repeat(sha.length),
+  ]);
+  return result.code === 0;
 }
 
 /**
@@ -207,6 +256,9 @@ export async function pinAndDeleteBranch(
 ): Promise<BranchDeletionOutcome> {
   const pinRef = deletedBranchPinRef(name, expectedSha);
   const branchRef = `${HEADS_PREFIX}${name}`;
+  // An earlier deletion at the same commit may already own this pin; only a
+  // pin this call created is removed again when the deletion is skipped.
+  const pinExisted = (await readRefSha(repoPath, pinRef)) !== null;
   const pin = await execCommand('git', [
     '-C',
     repoPath,
@@ -231,12 +283,15 @@ export async function pinAndDeleteBranch(
   if (deletion.code === 0) {
     return { status: 'removed', pinRef };
   }
-  const current = await readBranchSha(repoPath, name);
-  if (current === null) {
-    return { status: 'skipped', reason: 'Branch no longer exists' };
+  const current = await readRefSha(repoPath, branchRef);
+  if (current === expectedSha) {
+    return { status: 'failed', error: deletion.stderr.trim() || `exit ${deletion.code}` };
   }
-  if (current !== expectedSha) {
-    return { status: 'skipped', reason: 'Branch moved since it was listed' };
+  if (!pinExisted) {
+    // Best effort: a leftover pin only keeps a commit reachable.
+    await execCommand('git', ['-C', repoPath, 'update-ref', '-d', pinRef, expectedSha]);
   }
-  return { status: 'failed', error: deletion.stderr.trim() || `exit ${deletion.code}` };
+  return current === null
+    ? { status: 'skipped', reason: 'Branch no longer exists' }
+    : { status: 'skipped', reason: 'Branch moved since it was listed' };
 }

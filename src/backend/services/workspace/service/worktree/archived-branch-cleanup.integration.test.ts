@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { workspaceBranchCleanupAccessor } from '@/backend/services/workspace/resources/workspace-branch-cleanup.accessor';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -65,9 +66,12 @@ async function createBranch(name: string, options: { push?: boolean } = {}): Pro
 let workspaceCounter = 0;
 async function createWorkspace(
   branchName: string,
-  data: Partial<Prisma.WorkspaceUncheckedCreateInput> & { mergedPr?: boolean } = {}
+  data: Partial<Prisma.WorkspaceUncheckedCreateInput> & {
+    /** Attach a merged PR whose last observed head is this commit; null observes no head. */
+    mergedPrHead?: string | null;
+  } = {}
 ): Promise<string> {
-  const { mergedPr, ...rest } = data;
+  const { mergedPrHead, ...rest } = data;
   const id = `ws-${++workspaceCounter}`;
   await db.prisma.workspace.create({
     data: {
@@ -80,13 +84,14 @@ async function createWorkspace(
       ...rest,
     },
   });
-  if (mergedPr) {
+  if (mergedPrHead !== undefined) {
     await db.prisma.workspacePR.create({
       data: {
         workspaceId: id,
         url: `https://github.com/acme/repo/pull/${workspaceCounter}`,
         state: 'MERGED',
         headRefName: branchName,
+        ...(mergedPrHead && { observation: { headSha: mergedPrHead } }),
       },
     });
   }
@@ -143,6 +148,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(testRoot, { recursive: true, force: true, maxRetries: 3 });
 });
 
@@ -150,8 +156,8 @@ describe('archived branch candidates', () => {
   it('lists branches whose commits are on a remote or in a merged pull request', async () => {
     await createBranch('user/pushed', { push: true });
     await createWorkspace('user/pushed');
-    await createBranch('user/squashed');
-    await createWorkspace('user/squashed', { mergedPr: true });
+    const squashed = await createBranch('user/squashed');
+    await createWorkspace('user/squashed', { mergedPrHead: squashed });
 
     await expect(candidateNames()).resolves.toEqual({
       'user/pushed': 'ON_REMOTE',
@@ -165,7 +171,7 @@ describe('archived branch candidates', () => {
     await createBranch('user/unpushed');
     await createWorkspace('user/unpushed');
     // A merged pull request for another head branch does not vouch for this one.
-    await createBranch('user/other-head');
+    const otherHead = await createBranch('user/other-head');
     const id = await createWorkspace('user/other-head');
     await db.prisma.workspacePR.create({
       data: {
@@ -173,15 +179,25 @@ describe('archived branch candidates', () => {
         url: 'https://github.com/a/b/pull/9',
         state: 'MERGED',
         headRefName: 'x',
+        observation: { headSha: otherHead },
       },
     });
     // Neither does a merged pull request that was detached from the workspace.
-    await createBranch('user/detached');
-    const detached = await createWorkspace('user/detached', { mergedPr: true });
+    const detachedTip = await createBranch('user/detached');
+    const detached = await createWorkspace('user/detached', { mergedPrHead: detachedTip });
     await db.prisma.workspacePR.updateMany({
       where: { workspaceId: detached },
       data: { detachedAt: new Date() },
     });
+    // Nor one whose head commit was never observed.
+    await createBranch('user/unobserved');
+    await createWorkspace('user/unobserved', { mergedPrHead: null });
+    // Nor one merged before the local tip gained another commit.
+    const merged = await createBranch('user/after-merge');
+    await createWorkspace('user/after-merge', { mergedPrHead: merged });
+    const tree = await git(repoPath, 'rev-parse', 'main^{tree}');
+    const later = await git(repoPath, 'commit-tree', tree, '-p', merged, '-m', 'After merge');
+    await git(repoPath, 'update-ref', 'refs/heads/user/after-merge', later);
 
     await createControlBranch();
     await expect(candidateNames()).resolves.toEqual(CONTROL);
@@ -255,6 +271,45 @@ describe('archived branch candidates', () => {
     await createControlBranch();
     await expect(candidateNames()).resolves.toEqual(CONTROL);
   });
+
+  it('skips repositories only archived projects use', async () => {
+    await createBranch('user/old', { push: true });
+    const archivedRepo = path.join(testRoot, 'archived-repo');
+    await git(testRoot, 'clone', '--quiet', path.join(testRoot, 'origin.git'), archivedRepo);
+    await git(archivedRepo, 'branch', 'user/old', 'origin/user/old');
+    await db.prisma.project.create({
+      data: {
+        id: 'archived-project',
+        name: 'Archived',
+        slug: 'archived',
+        repoPath: archivedRepo,
+        worktreeBasePath: path.join(testRoot, 'worktrees-archived'),
+        isArchived: true,
+      },
+    });
+    await createWorkspace('user/old', { projectId: 'archived-project' });
+
+    await createControlBranch();
+    await expect(candidateNames()).resolves.toEqual(CONTROL);
+  });
+
+  it('protects names used by active workspaces in a project whose repository cannot be read', async () => {
+    await db.prisma.project.create({
+      data: {
+        id: 'unreadable',
+        name: 'Unreadable',
+        slug: 'unreadable',
+        repoPath: path.join(testRoot, 'missing-repo'),
+        worktreeBasePath: path.join(testRoot, 'worktrees-missing'),
+      },
+    });
+    await createWorkspace('user/global', { projectId: 'unreadable', status: 'READY' });
+    await createBranch('user/global', { push: true });
+    await createWorkspace('user/global');
+
+    await createControlBranch();
+    await expect(candidateNames()).resolves.toEqual(CONTROL);
+  });
 });
 
 describe('archived branch removal', () => {
@@ -262,7 +317,10 @@ describe('archived branch removal', () => {
     const pushed = await createBranch('user/pushed', { push: true });
     await createWorkspace('user/pushed');
     const dotted = await createBranch('user.name/feature.v2_final');
-    await createWorkspace('user.name/feature.v2_final', { mergedPr: true });
+    // The merged head may contain more commits than the local tip.
+    const tree = await git(repoPath, 'rev-parse', 'main^{tree}');
+    const head = await git(repoPath, 'commit-tree', tree, '-p', dotted, '-m', 'Review fix');
+    await createWorkspace('user.name/feature.v2_final', { mergedPrHead: head });
 
     const result = await archivedBranchCleanupService.removeBranches([
       { projectId: 'project', name: 'user/pushed', sha: pushed },
@@ -346,6 +404,63 @@ describe('archived branch removal', () => {
       status: 'skipped',
       reason: 'Branch no longer exists',
     });
+    // A skipped deletion removes the pin it created...
+    expect(await git(repoPath, 'for-each-ref', 'refs/factory-factory/')).toBe('');
+
+    // ...but keeps one an earlier deletion at the same commit left.
+    const earlierPin = deletedBranchPinRef('user/raced', stale);
+    await git(repoPath, 'update-ref', earlierPin, stale);
+    await expect(pinAndDeleteBranch(repoPath, 'user/raced', stale)).resolves.toMatchObject({
+      status: 'skipped',
+    });
+    expect(await git(repoPath, 'rev-parse', earlierPin)).toBe(stale);
+  });
+
+  it('re-checks each branch immediately before deleting it', async () => {
+    const tip = await createBranch('user/pushed', { push: true });
+    await createWorkspace('user/pushed');
+    // A worktree appears after the run's detection, before this branch's turn.
+    vi.spyOn(
+      workspaceBranchCleanupAccessor,
+      'hasNonArchivedWorkspaceWithBranch'
+    ).mockImplementationOnce(async () => {
+      await git(repoPath, 'worktree', 'add', '--quiet', path.join(testRoot, 'late'), 'user/pushed');
+      return false;
+    });
+
+    const result = await archivedBranchCleanupService.removeBranches([
+      { projectId: 'project', name: 'user/pushed', sha: tip },
+    ]);
+
+    expect(result.skipped).toEqual([
+      { projectId: 'project', name: 'user/pushed', reason: 'Branch is now checked out or in use' },
+    ]);
+    expect(await branchSha('user/pushed')).toBe(tip);
+  });
+
+  it('puts a branch back when a workspace claims it during its deletion', async () => {
+    const tip = await createBranch('user/pushed', { push: true });
+    await createWorkspace('user/pushed');
+    vi.spyOn(workspaceBranchCleanupAccessor, 'hasNonArchivedWorkspaceWithBranch')
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const result = await archivedBranchCleanupService.removeBranches([
+      { projectId: 'project', name: 'user/pushed', sha: tip },
+    ]);
+
+    expect(result).toEqual({
+      removed: [],
+      skipped: [
+        {
+          projectId: 'project',
+          name: 'user/pushed',
+          reason: 'Branch came into use during deletion; restored it',
+        },
+      ],
+      failed: [],
+    });
+    expect(await branchSha('user/pushed')).toBe(tip);
   });
 
   it('rejects a second cleanup while one is running', async () => {
