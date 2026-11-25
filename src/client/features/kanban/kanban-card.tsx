@@ -22,7 +22,10 @@ import {
 } from '@/client/features/workspace';
 import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-rename';
 import { trpc } from '@/client/lib/trpc';
-import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import {
+  isWorkspaceArchiveIncomplete,
+  isWorkspaceDoneOrMerged,
+} from '@/client/lib/workspace-archive';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -189,6 +192,8 @@ function CardArchiveButton({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const requiresConfirmation = !isWorkspaceDoneOrMerged(workspace);
+  // Archiving again is the only way forward, so the button stays visible.
+  const archiveIncomplete = isWorkspaceArchiveIncomplete(workspace);
   const isParent = workspace.creationSource !== 'CHILD_WORKSPACE';
   const { data: children } = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: workspace.id },
@@ -209,11 +214,13 @@ function CardArchiveButton({
   return (
     <>
       <IconButton
-        label="Archive workspace"
+        label={archiveIncomplete ? 'Archive again' : 'Archive workspace'}
         size="icon-xs"
         className={cn(
           'hover:bg-destructive/10 hover:text-destructive shrink-0',
-          requiresConfirmation && 'hover-reveal transition-opacity'
+          archiveIncomplete
+            ? 'text-destructive'
+            : requiresConfirmation && 'hover-reveal transition-opacity'
         )}
         onClick={handleClick}
       >
@@ -224,6 +231,7 @@ function CardArchiveButton({
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           onConfirm={() => onArchive(workspace.id)}
+          archiveIncomplete={archiveIncomplete}
           activeChildCount={activeChildCount}
         />
       )}
@@ -335,7 +343,10 @@ function CardTitleIcons({
           <TooltipContent>{sessionRuntimeError}</TooltipContent>
         </Tooltip>
       )}
-      <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
+      {/* The body's chip and hint say it; a "Setup failed" badge here would be wrong. */}
+      {!isWorkspaceArchiveIncomplete(workspace) && (
+        <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
+      )}
       {showActions && !isArchived && onArchive && (
         <CardArchiveButton workspace={workspace} onArchive={onArchive} />
       )}
@@ -646,6 +657,11 @@ export const KanbanCard = memo(function KanbanCard({
             </p>
           )}
           {workspace.statusReason && <KanbanStatusChip statusReason={workspace.statusReason} />}
+          {isWorkspaceArchiveIncomplete(workspace) && (
+            <p className="text-2xs text-muted-foreground">
+              The last archive stopped partway. Archive again to finish.
+            </p>
+          )}
           <IssueAndPullRequestRow workspace={workspace} issue={issue} showPR={showPR} />
           {showBranch && (
             <div className="flex items-center">

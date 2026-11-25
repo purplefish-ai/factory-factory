@@ -3,6 +3,7 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import { WorkspaceSnapshotStore } from '@/backend/services/workspace/service/snapshot/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
+import { formatArchiveIncompleteMessage } from '@/shared/workspace-archive-incomplete';
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import {
   deriveLastActivityAt,
@@ -173,6 +174,63 @@ describe('toWorkspaceDerivedStateInput', () => {
       isWorking: false,
       ratchetButtonAnimated: true,
       statusReason: { code: 'PR_DELIVERY_ERROR' },
+    });
+  });
+
+  it('derives an incomplete archive from the FAILED row marker, not any FAILED message', () => {
+    const derive = (initErrorMessage: string | null | undefined) =>
+      assembleWorkspaceDerivedState(
+        toWorkspaceDerivedStateInput(
+          { ...raw, status: 'FAILED', initErrorMessage },
+          { sessionSummaries: [], sessionIsWorking: false, pendingRequestType: null, flowState }
+        ),
+        { deriveSidebarStatus: deriveWorkspaceSidebarStatus }
+      );
+
+    expect(derive(formatArchiveIncompleteMessage('worktree is locked'))).toMatchObject({
+      kanbanColumn: 'WAITING',
+      statusReason: { code: 'ARCHIVE_INCOMPLETE', label: 'Archive incomplete' },
+    });
+    expect(derive('Setup script exited with code 1').statusReason.code).toBe('SETUP_FAILED');
+    expect(derive(null).statusReason.code).toBe('SETUP_FAILED');
+    expect(derive(undefined).statusReason.code).toBe('SETUP_FAILED');
+  });
+
+  it('re-derives an incomplete archive in the store when the FAILED marker arrives', () => {
+    const store = new WorkspaceSnapshotStore();
+    stores.push(store);
+    store.configure({
+      deriveFlowState: (input) =>
+        deriveWorkspaceFlowState({
+          ...input,
+          prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+        }),
+      deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+    });
+    store.upsert(
+      'ws',
+      {
+        ...raw,
+        projectId: 'project',
+        isWorking: false,
+        sessionSummaries: [],
+        pendingRequestType: null,
+        initErrorMessage: null,
+      },
+      'seed',
+      100
+    );
+    expect(store.getByWorkspaceId('ws')?.statusReason.code).toBe('READY_FOR_NEXT_PROMPT');
+
+    store.upsert(
+      'ws',
+      { status: 'FAILED', initErrorMessage: formatArchiveIncompleteMessage('worktree is locked') },
+      'archive failed',
+      200
+    );
+    expect(store.getByWorkspaceId('ws')).toMatchObject({
+      kanbanColumn: 'WAITING',
+      statusReason: { code: 'ARCHIVE_INCOMPLETE' },
     });
   });
 

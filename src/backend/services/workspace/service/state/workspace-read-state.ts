@@ -4,6 +4,7 @@ import {
   hasStartingSessionSummary,
   type SessionSummary,
 } from '@/shared/session-runtime';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 
 /** Normalized persisted fields shared by HTTP reads and accepted snapshot state. */
 export interface WorkspaceDerivedStateSource extends Pick<
@@ -19,6 +20,8 @@ export interface WorkspaceDerivedStateSource extends Pick<
   | 'prMonitoring'
 > {
   status: WorkspaceDerivedStateInput['lifecycle'];
+  /** Optional because a snapshot entry may not have hydrated its metadata yet. */
+  initErrorMessage?: string | null;
 }
 
 export interface WorkspaceDerivedRuntimeInput {
@@ -36,6 +39,7 @@ export function toWorkspaceDerivedStateInput(
 ): WorkspaceDerivedStateInput {
   return {
     lifecycle: source.status,
+    archiveIncomplete: hasArchiveIncompleteMarker(source.initErrorMessage),
     prSummary: source.prSummary,
     prUrl: source.prUrl,
     prState: source.prState,

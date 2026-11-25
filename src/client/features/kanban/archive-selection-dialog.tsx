@@ -1,10 +1,17 @@
 import { StatusCallout } from '@/client/components/status-callout';
+import { isWorkspaceArchiveIncomplete } from '@/client/lib/workspace-archive';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { WorkspaceWithKanban } from './kanban-card';
 
 type ArchiveRiskWorkspace = Pick<
   WorkspaceWithKanban,
-  'name' | 'isWorking' | 'gitStats' | 'prSummary' | 'runScriptStatus' | 'childWorkspaceCount'
+  | 'name'
+  | 'isWorking'
+  | 'gitStats'
+  | 'prSummary'
+  | 'runScriptStatus'
+  | 'childWorkspaceCount'
+  | 'statusReason'
 >;
 
 export interface ArchiveRisk {
@@ -23,7 +30,11 @@ const RISKS: { label: string; applies: (workspace: ArchiveRiskWorkspace) => bool
   { label: 'Agent running', applies: (workspace) => workspace.isWorking },
   {
     label: 'Uncommitted changes',
-    applies: (workspace) => workspace.gitStats?.hasUncommitted === true,
+    // An incomplete archive already committed its changes and is not
+    // committed again; its worktree may be partly deleted, so its cached
+    // stats say nothing about work that could be lost.
+    applies: (workspace) =>
+      workspace.gitStats?.hasUncommitted === true && !isWorkspaceArchiveIncomplete(workspace),
   },
   { label: 'Open pull request', applies: (workspace) => workspace.prSummary.openCount > 0 },
   {
@@ -49,6 +60,23 @@ export function summarizeArchiveRisks(workspaces: readonly ArchiveRiskWorkspace[
 }
 
 const MAX_NAMES = 3;
+
+/**
+ * What happens to uncommitted changes. A workspace whose last archive stopped
+ * partway had its changes committed when that archive started, and archiving
+ * it again deliberately does not commit again.
+ */
+function describeCommit(count: number, incompleteCount: number) {
+  if (incompleteCount === 0) {
+    return `Uncommitted changes will be committed before ${count === 1 ? 'the worktree is' : 'the worktrees are'} removed.`;
+  }
+  if (incompleteCount === count) {
+    return count === 1
+      ? 'Its last archive stopped partway, so archiving again finishes removing the worktree. Its changes were committed when that archive started, so nothing is committed again.'
+      : 'Their last archives stopped partway, so archiving again finishes removing the worktrees. Their changes were committed when those archives started, so nothing is committed again.';
+  }
+  return `Uncommitted changes will be committed before the worktrees are removed, except for ${incompleteCount === 1 ? 'the workspace whose last archive' : `the ${incompleteCount} workspaces whose last archives`} stopped partway: nothing is committed again for ${incompleteCount === 1 ? 'it' : 'them'}.`;
+}
 
 function formatNames(names: readonly string[]) {
   const shown = names.slice(0, MAX_NAMES).join(', ');
@@ -80,12 +108,15 @@ export function ArchiveSelectionDialog({
   const count = workspaces.length;
   const noun = count === 1 ? 'workspace' : 'workspaces';
   const risks = summarizeArchiveRisks(workspaces);
+  const incompleteNames = workspaces
+    .filter(isWorkspaceArchiveIncomplete)
+    .map((workspace) => workspace.name);
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
       title={`Archive ${count} ${noun}?`}
-      description={`${scope ? `${scope} ` : ''}Running agents and processes will stop. Uncommitted changes will be committed before ${count === 1 ? 'the worktree is' : 'the worktrees are'} removed. Chat history and ${count === 1 ? 'the branch are' : 'branches are'} kept. Worktree removal cannot be undone in the app.`}
+      description={`${scope ? `${scope} ` : ''}Running agents and processes will stop. ${describeCommit(count, incompleteNames.length)} Chat history and ${count === 1 ? 'the branch are' : 'branches are'} kept. Worktree removal cannot be undone in the app.`}
       confirmText={`Archive ${count}`}
       variant="destructive"
       onConfirm={() => {
@@ -93,6 +124,11 @@ export function ArchiveSelectionDialog({
         onOpenChange(false);
       }}
     >
+      {incompleteNames.length > 0 && incompleteNames.length < count && (
+        <StatusCallout tone="info" title="Finishing an earlier archive">
+          Archive incomplete ({incompleteNames.length}): {formatNames(incompleteNames)}
+        </StatusCallout>
+      )}
       {risks.length > 0 && (
         <StatusCallout tone="warning" title="Check before archiving">
           <ul className="list-disc space-y-0.5 pl-4">

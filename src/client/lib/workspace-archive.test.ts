@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { isArchiveGitIndexLockedError, isWorkspaceDoneOrMerged } from './workspace-archive';
+import {
+  isArchiveGitIndexLockedError,
+  isWorkspaceArchiveIncomplete,
+  isWorkspaceDoneOrMerged,
+} from './workspace-archive';
+
+describe('isWorkspaceArchiveIncomplete', () => {
+  it('reads the server-derived status reason', () => {
+    expect(isWorkspaceArchiveIncomplete({ statusReason: { code: 'ARCHIVE_INCOMPLETE' } })).toBe(
+      true
+    );
+    expect(isWorkspaceArchiveIncomplete({ statusReason: { code: 'SETUP_FAILED' } })).toBe(false);
+    expect(isWorkspaceArchiveIncomplete({ statusReason: null })).toBe(false);
+    expect(isWorkspaceArchiveIncomplete(undefined)).toBe(false);
+  });
+});
 
 describe('isWorkspaceDoneOrMerged', () => {
   it('returns true when PR state is merged', () => {

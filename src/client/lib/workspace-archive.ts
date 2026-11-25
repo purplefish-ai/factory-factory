@@ -1,4 +1,5 @@
 import type { KanbanColumn, PRState, RatchetState, WorkspaceSidebarCiState } from '@/shared/core';
+import type { WorkspaceStatusReasonCode } from '@/shared/workspace-status-reason';
 
 interface ArchiveWorkspaceStateLike {
   prSummary?: { totalCount: number; hasNonterminal: boolean };
@@ -21,6 +22,18 @@ export function isArchiveGitIndexLockedError(error: unknown): boolean {
     return false;
   }
   return (error as ArchiveErrorLike).data?.applicationErrorKind === 'GIT_INDEX_LOCKED';
+}
+
+/**
+ * Whether the workspace's last archive stopped after worktree removal began.
+ * The server derives this status reason from the FAILED row's marker (see
+ * `src/shared/workspace-archive-incomplete.ts`), so snapshots carry it even
+ * when the cached row's `initErrorMessage` is stale.
+ */
+export function isWorkspaceArchiveIncomplete(
+  workspace: { statusReason?: { code: WorkspaceStatusReasonCode } | null } | null | undefined
+): boolean {
+  return workspace?.statusReason?.code === 'ARCHIVE_INCOMPLETE';
 }
 
 /**

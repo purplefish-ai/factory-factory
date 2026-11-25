@@ -26,6 +26,7 @@ export const WORKSPACE_STATUS_REASON_CODES = [
   'SESSION_ERROR',
   'SETTING_UP',
   'SETUP_FAILED',
+  'ARCHIVE_INCOMPLETE',
   'ARCHIVING',
   'ARCHIVED',
   'AGENT_WORKING',
@@ -61,6 +62,11 @@ export interface WorkspaceStatusReason {
 
 export interface WorkspaceStatusReasonInput {
   lifecycle: WorkspaceStatus;
+  /**
+   * The FAILED row carries the archive-incomplete marker: an archive reached
+   * worktree removal and did not finish. See `workspace-archive-incomplete.ts`.
+   */
+  archiveIncomplete?: boolean;
   hasHadSessions: boolean;
   isWorking: boolean;
   isSessionStarting: boolean;
@@ -122,13 +128,20 @@ function deriveBlockingReason(input: WorkspaceStatusReasonInput): OptionalWorksp
 }
 
 /**
- * The two lifecycle states that take a workspace off the board entirely.
+ * The archive states: the two lifecycle states that take a workspace off the
+ * board entirely, and a FAILED archive that left it on the board.
  *
  * Split out of `deriveLifecycleReason` so it can run first in the chain: a
  * workspace being archived (or already archived) must not be reported as a
- * merged/closed PR, a pending request, or any other reason below it.
+ * merged/closed PR, a pending request, or any other reason below it. An
+ * incomplete archive is not a setup failure either: setup retry is blocked for
+ * it and archiving again is the only way forward, so it wins over a merged PR
+ * that would otherwise move the card to Done as though nothing were left to do.
  */
 function deriveArchiveReason(input: WorkspaceStatusReasonInput): OptionalWorkspaceStatusReason {
+  if (input.lifecycle === 'FAILED' && input.archiveIncomplete) {
+    return reason('ARCHIVE_INCOMPLETE', 'Archive incomplete', 'danger', true);
+  }
   if (input.lifecycle === 'ARCHIVING') {
     return reason('ARCHIVING', 'Archiving', 'working');
   }

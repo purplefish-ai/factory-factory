@@ -152,6 +152,25 @@ describe('workspace snapshot cache projections', () => {
     }
   });
 
+  it('keeps an incomplete archive when re-deriving a legacy PR observation', () => {
+    const entry = makeEntry({
+      status: 'FAILED',
+      prs: [],
+      prState: 'MERGED',
+      statusReason: {
+        code: 'ARCHIVE_INCOMPLETE',
+        label: 'Archive incomplete',
+        tone: 'danger',
+        needsUser: true,
+      },
+    });
+    const listed = projectSnapshotToWorkspace(entry);
+    expect(listed).toMatchObject({
+      kanbanColumn: 'WAITING',
+      statusReason: { code: 'ARCHIVE_INCOMPLETE' },
+    });
+  });
+
   it('synthesizes a legacy PR association for both cache projections', () => {
     const entry = makeEntry({
       prs: [],

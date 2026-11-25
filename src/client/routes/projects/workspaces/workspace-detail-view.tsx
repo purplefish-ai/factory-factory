@@ -70,6 +70,7 @@ interface ArchiveDialogProps {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   activeChildCount: number;
+  archiveIncomplete: boolean;
   onConfirm: () => void;
 }
 
@@ -321,6 +322,7 @@ export function WorkspaceDetailView({
         open={archiveDialog.open}
         onOpenChange={archiveDialog.setOpen}
         activeChildCount={archiveDialog.activeChildCount}
+        archiveIncomplete={archiveDialog.archiveIncomplete}
         onConfirm={archiveDialog.onConfirm}
       />
     </div>

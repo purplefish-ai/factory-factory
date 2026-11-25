@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, fireEvent, fn, userEvent, within } from 'storybook/test';
+import { expect, fireEvent, fn, userEvent, waitFor, within } from 'storybook/test';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { baseWorkspace } from './kanban-card.story-fixtures';
@@ -457,21 +457,51 @@ const archiveIncompleteWorkspace: WorkspaceWithKanban = {
   status: 'FAILED',
   initErrorMessage:
     'Archive incomplete: Failed to delete worktree: git worktree remove timed out. Archive again to finish.',
-  statusReason: { code: 'SETUP_FAILED', label: 'Setup failed', tone: 'danger', needsUser: true },
+  kanbanColumn: 'WAITING',
+  statusReason: {
+    code: 'ARCHIVE_INCOMPLETE',
+    label: 'Archive incomplete',
+    tone: 'danger',
+    needsUser: true,
+  },
 };
 
-/** A FAILED workspace whose archive did not finish can be archived again from its card. */
+/**
+ * A FAILED workspace whose archive did not finish reads as an incomplete
+ * archive, not a setup failure, and keeps its Archive again button in view.
+ */
 export const ArchiveIncompleteCanArchiveAgain: Story = {
   args: {
     workspace: archiveIncompleteWorkspace,
     projectSlug: 'my-project',
     onArchive: fn(),
   },
-  play: async ({ canvasElement }) => {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByTestId('kanban-status-chip')).toHaveTextContent('Archive incomplete');
+    await expect(canvas.queryByText('Setup failed')).not.toBeInTheDocument();
     await expect(
-      within(canvasElement).getByRole('button', { name: 'Archive workspace' })
-    ).toBeInTheDocument();
+      canvas.getByText('The last archive stopped partway. Archive again to finish.')
+    ).toBeVisible();
+    const archive = canvas.getByRole('button', { name: 'Archive again' });
+    await expect(archive).toBeVisible();
+    await expect(archive).not.toHaveClass('hover-reveal');
+
+    await userEvent.click(archive);
+    const dialog = await within(canvasElement.ownerDocument.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('Finish archiving workspace?');
+    await expect(dialog).toHaveTextContent('so nothing is committed again.');
+    await expect(dialog).not.toHaveTextContent('will be committed');
+    const confirm = within(dialog).getByRole('button', { name: 'Archive again' });
+    await waitFor(() => expect(getComputedStyle(confirm).pointerEvents).not.toBe('none'));
+    await userEvent.click(confirm);
+    await expect(args.onArchive).toHaveBeenCalledWith(archiveIncompleteWorkspace.id);
   },
+};
+
+export const ArchiveIncompleteDark: Story = {
+  args: { workspace: archiveIncompleteWorkspace, projectSlug: 'my-project', onArchive: fn() },
+  globals: { theme: 'dark' },
 };
 
 /** The same workspace can be chosen for the board's multi-select archive. */

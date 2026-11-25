@@ -24,6 +24,8 @@ export interface WorkspaceDerivedFlowState {
 
 export interface WorkspaceDerivedStateInput {
   lifecycle: WorkspaceStatus;
+  /** From the row's `initErrorMessage` marker; see `workspace-archive-incomplete.ts`. */
+  archiveIncomplete: boolean;
   prSummary?: WorkspacePRSummary;
   prUrl: string | null;
   prState: PRState;
@@ -72,6 +74,7 @@ export function assembleWorkspaceDerivedState(
   // path that reaches a column without going through a reason.
   const statusReason = deriveWorkspaceStatusReason({
     lifecycle: input.lifecycle,
+    archiveIncomplete: input.archiveIncomplete,
     hasHadSessions: input.hasHadSessions,
     isWorking,
     isSessionStarting: input.isSessionStarting,
