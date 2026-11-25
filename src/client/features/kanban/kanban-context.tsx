@@ -18,6 +18,48 @@ import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import type { IssueProvider } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
 
+function archiveErrorMessage(error: unknown): string | null {
+  return typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+    ? error.message
+    : null;
+}
+
+/**
+ * One toast for the failures of a multi-workspace archive, naming each
+ * workspace. A request that failed as a whole shares one error, shown once.
+ */
+function reportArchiveFailures(failures: { id: string; name: string; error: unknown }[]) {
+  const [first] = failures;
+  if (!first) {
+    return;
+  }
+  if (failures.length === 1) {
+    const message = archiveErrorMessage(first.error);
+    toast.error(`Couldn't archive ${first.name}.${message ? ` ${message}` : ''}`);
+    return;
+  }
+  const title = `Couldn't archive ${failures.length} workspaces.`;
+  if (failures.every((failure) => failure.error === first.error)) {
+    const message = archiveErrorMessage(first.error);
+    toast.error(message ? `${title} ${message}` : title);
+    return;
+  }
+  toast.error(title, {
+    description: (
+      <ul className="list-disc pl-4">
+        {failures.map((failure) => (
+          <li key={failure.id}>
+            {failure.name}: {archiveErrorMessage(failure.error) ?? 'Archive failed'}
+          </li>
+        ))}
+      </ul>
+    ),
+  });
+}
+
 /** Board data; a new value only when one of these fields changes. */
 interface KanbanState {
   projectId: string;
@@ -39,6 +81,8 @@ interface KanbanState {
   archiveGitLockWorkspaceIds: string[];
   isBulkArchiving: boolean;
   isArchiving: boolean;
+  /** Selection mode: cards show checkboxes and a click selects instead of opening. */
+  isSelecting: boolean;
   showInlineForm: boolean;
   /** Increments on every explicit "New Workspace" request, even if the form is already open. */
   inlineFormRequest: number;
@@ -54,7 +98,13 @@ interface KanbanActions {
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => void;
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   archiveWorkspace: (workspaceId: string, removeGitIndexLock?: boolean) => Promise<void>;
-  bulkArchiveColumn: (kanbanColumn: string) => Promise<void>;
+  /**
+   * Archives exactly these workspaces and reports each failure (index-lock
+   * failures through the lock dialog). Resolves with the IDs that failed.
+   */
+  archiveWorkspaces: (ids: readonly string[]) => Promise<{ failedIds: string[] }>;
+  startSelecting: () => void;
+  stopSelecting: () => void;
   dismissArchiveGitLock: () => void;
   retryGitLockedArchives: (removeGitIndexLock: boolean) => Promise<void>;
   setShowInlineForm: (show: boolean) => void;
@@ -161,20 +211,17 @@ export function KanbanProvider({
   const [showInlineForm, setShowInlineForm] = useState(false);
   const [inlineFormRequest, setInlineFormRequest] = useState(0);
   const [quickChatWorkspaceId, setQuickChatWorkspaceId] = useState<string | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  const offerGitLockRecovery = (workspaceIds: readonly string[]) =>
+    setArchiveGitLockWorkspaceIds((current) => [...new Set([...current, ...workspaceIds])]);
 
   const handleArchiveError = (error: unknown, workspaceIds: string[]) => {
     if (isArchiveGitIndexLockedError(error)) {
-      setArchiveGitLockWorkspaceIds((current) => [...new Set([...current, ...workspaceIds])]);
+      offerGitLockRecovery(workspaceIds);
       return;
     }
-    const message =
-      typeof error === 'object' &&
-      error !== null &&
-      'message' in error &&
-      typeof error.message === 'string'
-        ? error.message
-        : "Couldn't archive workspace";
-    toast.error(message);
+    toast.error(archiveErrorMessage(error) ?? "Couldn't archive workspace");
   };
 
   const handleArchiveOutcomes = (outcomes: WorkspaceArchiveOutcome[]) => {
@@ -251,31 +298,42 @@ export function KanbanProvider({
     }
   );
 
-  const bulkArchiveColumn = useStableCallback(async (kanbanColumn: string) => {
-    const workspacesToArchive = (workspaces ?? []).filter(
-      (workspace) => workspace.kanbanColumn === kanbanColumn
-    );
-    const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
-
+  const archiveWorkspaces = useStableCallback(async (ids: readonly string[]) => {
+    const requestedIds = [...new Set(ids)];
+    const listed = new Map((workspaces ?? []).map((workspace) => [workspace.id, workspace]));
+    const names = new Map(requestedIds.map((id) => [id, listed.get(id)?.name ?? id]));
     const releaseIssueSuppression = suppressArchiveIssues(
       new Map(
-        workspacesToArchive.map((workspace) => [
-          workspace.id,
+        requestedIds.map((id) => [
+          id,
           {
-            githubIssueNumber: workspace.githubIssueNumber ?? null,
-            linearIssueId: workspace.linearIssueId ?? null,
+            githubIssueNumber:
+              listed.get(id)?.githubIssueNumber ??
+              archivingWorkspaceIssueLinks.get(id)?.githubIssueNumber ??
+              null,
+            linearIssueId:
+              listed.get(id)?.linearIssueId ??
+              archivingWorkspaceIssueLinks.get(id)?.linearIssueId ??
+              null,
           },
         ])
       )
     );
 
     try {
-      const outcomes = await archiveCommand.archiveColumn({
-        projectId,
-        ids: workspaceIdsToArchive,
-        kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-      });
-      handleArchiveOutcomes(outcomes);
+      const outcomes = await archiveCommand.archiveWorkspaces({ projectId, ids: requestedIds });
+      const failures = outcomes.filter((outcome) => !outcome.success);
+      offerGitLockRecovery(
+        failures
+          .filter((failure) => isArchiveGitIndexLockedError(failure.error))
+          .map((failure) => failure.id)
+      );
+      reportArchiveFailures(
+        failures
+          .filter((failure) => !isArchiveGitIndexLockedError(failure.error))
+          .map((failure) => ({ ...failure, name: names.get(failure.id) ?? failure.id }))
+      );
+      return { failedIds: failures.map((failure) => failure.id) };
     } finally {
       releaseIssueSuppression();
     }
@@ -297,7 +355,9 @@ export function KanbanProvider({
       toggleWorkspaceRatcheting,
       renameWorkspace,
       archiveWorkspace,
-      bulkArchiveColumn,
+      archiveWorkspaces,
+      startSelecting: () => setIsSelecting(true),
+      stopSelecting: () => setIsSelecting(false),
       dismissArchiveGitLock: () => setArchiveGitLockWorkspaceIds([]),
       retryGitLockedArchives,
       setShowInlineForm,
@@ -338,6 +398,7 @@ export function KanbanProvider({
       archiveGitLockWorkspaceIds,
       isBulkArchiving: archiveCommand.isBulkArchiving,
       isArchiving,
+      isSelecting,
       showInlineForm,
       inlineFormRequest,
       quickChatWorkspaceId,
@@ -360,6 +421,7 @@ export function KanbanProvider({
       archiveGitLockWorkspaceIds,
       archiveCommand.isBulkArchiving,
       isArchiving,
+      isSelecting,
       showInlineForm,
       inlineFormRequest,
       quickChatWorkspaceId,

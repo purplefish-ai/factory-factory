@@ -26,7 +26,7 @@ vi.mock('@/client/lib/trpc', () => ({
     },
     workspace: {
       archive: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-      bulkArchive: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      archiveMany: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       openInIde: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       getAvailableIdes: { useQuery: () => ({}) },
     },

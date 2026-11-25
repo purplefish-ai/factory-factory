@@ -1,4 +1,3 @@
-import { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
@@ -17,7 +16,6 @@ const mockWorkspaceDataService = vi.hoisted(() => ({
 
 const mockWorkspaceQueryService = vi.hoisted(() => ({
   listForProject: vi.fn(),
-  findWorkspaceIdsInKanbanColumn: vi.fn(),
   refreshFactoryConfigs: vi.fn(),
   getFactoryConfig: vi.fn(),
   syncPRStatus: vi.fn(),
@@ -435,47 +433,6 @@ describe('workspaceCoreRouter', () => {
       { removeGitIndexLock: true },
       expect.anything()
     );
-  });
-
-  it('includes error codes and application kinds for individual bulk archive failures', async () => {
-    mockWorkspaceQueryService.findWorkspaceIdsInKanbanColumn.mockResolvedValue([
-      'w-success',
-      'w-blocked',
-      'w-missing',
-    ]);
-    mockArchiveWorkspace
-      .mockResolvedValueOnce({ archived: true })
-      .mockRejectedValueOnce(
-        new ApplicationError('CONFLICT', 'Git is locked', { kind: 'GIT_INDEX_LOCKED' })
-      )
-      .mockRejectedValueOnce(new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' }));
-    const { caller } = createCaller();
-
-    await expect(
-      caller.bulkArchive({
-        projectId: 'p1',
-        kanbanColumn: 'WAITING',
-      })
-    ).resolves.toEqual({
-      results: [
-        { id: 'w-success', success: true },
-        {
-          id: 'w-blocked',
-          success: false,
-          error: 'Git is locked',
-          code: 'CONFLICT',
-          applicationErrorKind: 'GIT_INDEX_LOCKED',
-        },
-        {
-          id: 'w-missing',
-          success: false,
-          error: 'Workspace not found',
-          code: 'NOT_FOUND',
-          applicationErrorKind: null,
-        },
-      ],
-      total: 3,
-    });
   });
 
   it('rejects privileged workspace mutations from untrusted requests', async () => {

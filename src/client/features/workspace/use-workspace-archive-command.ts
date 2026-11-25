@@ -1,11 +1,40 @@
 import { useQueryClient } from '@tanstack/react-query';
+import type { inferRouterOutputs } from '@trpc/server';
 import { useState } from 'react';
-import { trpc } from '@/client/lib/trpc';
+import { type AppRouter, trpc } from '@/client/lib/trpc';
 import { beginWorkspaceArchiveOperation } from '@/client/lib/workspace-archive-operation';
+import { ARCHIVE_MANY_MAX_IDS } from '@/shared/workspace-archive';
 
 export type WorkspaceArchiveOutcome =
   | { id: string; success: true }
   | { id: string; success: false; error: unknown };
+
+type ArchiveManyResult =
+  inferRouterOutputs<AppRouter>['workspace']['archiveMany']['results'][number];
+
+function toArchiveOutcome(
+  id: string,
+  result: ArchiveManyResult | undefined
+): WorkspaceArchiveOutcome {
+  if (!result) {
+    return {
+      id,
+      success: false,
+      error: new Error('The server returned no result for this workspace'),
+    };
+  }
+  if (result.success) {
+    return { id, success: true };
+  }
+  return {
+    id,
+    success: false,
+    error: {
+      data: { code: result.code, applicationErrorKind: result.applicationErrorKind },
+      message: result.error,
+    },
+  };
+}
 
 interface ArchiveTarget {
   projectId: string | undefined;
@@ -17,7 +46,7 @@ export function useWorkspaceArchiveCommand() {
   const queryClient = useQueryClient();
   const utils = trpc.useUtils();
   const single = trpc.workspace.archive.useMutation({ meta: { errorToast: false } });
-  const bulk = trpc.workspace.bulkArchive.useMutation({ meta: { errorToast: false } });
+  const many = trpc.workspace.archiveMany.useMutation({ meta: { errorToast: false } });
 
   // Not the mutations' isPending: an observer tracks only its latest call, while
   // several archives can run at once, and an archive stays in progress from the
@@ -90,39 +119,28 @@ export function useWorkspaceArchiveCommand() {
       return [{ id, success: true }];
     });
 
-  const archiveColumn = ({
-    projectId,
-    ids,
-    kanbanColumn,
-  }: {
-    projectId: string;
-    ids: readonly string[];
-    kanbanColumn: 'WORKING' | 'WAITING' | 'DONE';
-  }) =>
+  /** Archives exactly these workspaces; each gets its own outcome. */
+  const archiveWorkspaces = ({ projectId, ids }: { projectId: string; ids: readonly string[] }) =>
     execute('bulk', { projectId, ids }, async (capturedIds) => {
-      const result = await bulk.mutateAsync({ projectId, kanbanColumn });
-      const failures = new Map(
-        result.results.filter((item) => !item.success).map((item) => [item.id, item])
-      );
-      // Omitted results retain the existing bulk endpoint's success semantics.
-      return [...new Set([...capturedIds, ...result.results.map((item) => item.id)])].map((id) => {
-        const failure = failures.get(id);
-        return failure
-          ? {
-              id,
-              success: false,
-              error: {
-                data: { code: failure.code, applicationErrorKind: failure.applicationErrorKind },
-                message: failure.error,
-              },
-            }
-          : { id, success: true };
-      });
+      const outcomes: WorkspaceArchiveOutcome[] = [];
+      for (let start = 0; start < capturedIds.length; start += ARCHIVE_MANY_MAX_IDS) {
+        const chunk = capturedIds.slice(start, start + ARCHIVE_MANY_MAX_IDS);
+        try {
+          const result = await many.mutateAsync({ projectId, ids: [...chunk] });
+          const byId = new Map(result.results.map((item) => [item.id, item]));
+          for (const id of chunk) {
+            outcomes.push(toArchiveOutcome(id, byId.get(id)));
+          }
+        } catch (error) {
+          outcomes.push(...chunk.map((id) => ({ id, success: false as const, error })));
+        }
+      }
+      return outcomes;
     });
 
   return {
     archiveWorkspace,
-    archiveColumn,
+    archiveWorkspaces,
     isArchiving: active.single > 0,
     isBulkArchiving: active.bulk > 0,
   };

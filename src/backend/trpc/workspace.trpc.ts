@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import pLimit from 'p-limit';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
@@ -11,10 +12,11 @@ import {
   toWorkspaceDerivedStateInput,
   deriveWorkspaceFlowStateFromWorkspace,
 } from '@/backend/services/workspace';
-import { deriveWorkspaceSidebarStatus, KanbanColumn } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { prDeliveryModeSchema } from '@/shared/pr-monitoring';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 import { AttachmentSchema } from '@/shared/websocket';
+import { ARCHIVE_MANY_MAX_IDS } from '@/shared/workspace-archive';
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { toTRPCError } from './application-error-mapper';
 import { type Context, mergeRouters, publicProcedure, router, trustedLocalProcedure } from './trpc';
@@ -30,12 +32,25 @@ import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
-function normalizeBulkArchiveError(error: unknown): TRPCError | undefined {
+function normalizeArchiveError(error: unknown): TRPCError | undefined {
   if (error instanceof ApplicationError) {
     return toTRPCError(error);
   }
   return error instanceof TRPCError ? error : undefined;
 }
+
+type ArchiveManyResult =
+  | { id: string; success: true }
+  | {
+      id: string;
+      success: false;
+      error: string;
+      code: TRPCError['code'];
+      applicationErrorKind: ReturnType<typeof getApplicationErrorKind>;
+    };
+
+/** Archives at once per archiveMany request; each one stops sessions and removes a worktree. */
+const ARCHIVE_MANY_CONCURRENCY = 3;
 
 function getApplicationErrorKind(error: unknown) {
   if (error instanceof ApplicationError) {
@@ -307,56 +322,59 @@ export const workspaceCoreRouter = router({
       );
     }),
 
-  // Bulk archive workspaces in a specific kanban column
-  bulkArchive: publicProcedure
+  // Archive the workspaces the user chose. Each ID is checked against the
+  // project and archived through archiveWorkspace, a few at a time; one
+  // failure does not stop the rest, and each ID gets its own result.
+  archiveMany: publicProcedure
     .input(
       z.object({
-        projectId: z.string(),
-        kanbanColumn: z.nativeEnum(KanbanColumn),
+        projectId: z.string().min(1),
+        ids: z.array(z.string().min(1)).min(1).max(ARCHIVE_MANY_MAX_IDS),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
-      const { archiveWorkspace, workspaceDataService, workspaceQueryService } =
-        ctx.appContext.services;
-      const { projectId, kanbanColumn } = input;
+      const { archiveWorkspace, workspaceDataService } = ctx.appContext.services;
+      const { projectId } = input;
+      const ids = [...new Set(input.ids)];
+      logger.info('Archiving selected workspaces', { projectId, count: ids.length });
 
-      // Get all workspaces in the specified kanban column
-      const workspaceIds = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
-        projectId,
-        kanbanColumn
+      const limit = pLimit(ARCHIVE_MANY_CONCURRENCY);
+      const results = await Promise.all(
+        ids.map((workspaceId) =>
+          limit(async (): Promise<ArchiveManyResult> => {
+            try {
+              const workspace = await getWorkspaceWithProjectOrThrow(
+                workspaceDataService,
+                workspaceId
+              );
+              if (workspace.projectId !== projectId) {
+                throw new TRPCError({
+                  code: 'NOT_FOUND',
+                  message: `Workspace not found in this project: ${workspaceId}`,
+                });
+              }
+              await archiveWorkspace(workspace, {}, ctx.appContext.services);
+              return { id: workspaceId, success: true };
+            } catch (error) {
+              const mappedError = normalizeArchiveError(error);
+              logger.error('Failed to archive a selected workspace', {
+                workspaceId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+              return {
+                id: workspaceId,
+                success: false,
+                error: error instanceof Error ? error.message : String(error),
+                code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
+                applicationErrorKind: getApplicationErrorKind(error),
+              };
+            }
+          })
+        )
       );
 
-      logger.info('Bulk archiving workspaces', {
-        projectId,
-        kanbanColumn,
-        count: workspaceIds.length,
-      });
-
-      // Archive each workspace sequentially
-      const results = [];
-      for (const workspaceId of workspaceIds) {
-        try {
-          const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, workspaceId);
-          await archiveWorkspace(workspace, {}, ctx.appContext.services);
-          results.push({ id: workspace.id, success: true });
-        } catch (error) {
-          const mappedError = normalizeBulkArchiveError(error);
-          logger.error('Failed to archive workspace during bulk operation', {
-            workspaceId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          results.push({
-            id: workspaceId,
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            code: mappedError?.code ?? 'INTERNAL_SERVER_ERROR',
-            applicationErrorKind: getApplicationErrorKind(error),
-          });
-        }
-      }
-
-      return { results, total: workspaceIds.length };
+      return { results, total: ids.length };
     }),
 
   // Delete a workspace

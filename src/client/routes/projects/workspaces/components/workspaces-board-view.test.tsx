@@ -10,7 +10,13 @@ import { trpc } from '@/client/lib/trpc';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspacesBoardView } from './workspaces-board-view';
 
-type Workspace = { id: string; kanbanColumn: 'WAITING' | 'WORKING'; createdAt: string };
+type Workspace = {
+  id: string;
+  name: string;
+  kanbanColumn: 'WAITING' | 'WORKING';
+  createdAt: string;
+  prSummary: { openCount: number };
+};
 type WorkspaceList = { workspaces: Workspace[]; reviewCount: number };
 
 const mocks = vi.hoisted(() => ({
@@ -18,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   context: null as ReturnType<typeof useKanban> | null,
   rename: vi.fn(),
   archive: vi.fn(),
-  bulkArchive: vi.fn(),
+  archiveMany: vi.fn(),
   cancel: vi.fn(),
   refetch: vi.fn(),
   listInvalidate: vi.fn(),
@@ -152,7 +158,7 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       archive: { useMutation: () => ({ mutateAsync: mocks.archive }) },
-      bulkArchive: { useMutation: () => ({ mutateAsync: mocks.bulkArchive, isPending: false }) },
+      archiveMany: { useMutation: () => ({ mutateAsync: mocks.archiveMany, isPending: false }) },
     },
   },
 }));
@@ -166,8 +172,10 @@ function list(projectId: string): WorkspaceList {
   return {
     workspaces: [1, 2].map((id) => ({
       id: `${projectId}-${id}`,
+      name: `Workspace ${projectId}-${id}`,
       kanbanColumn: 'WAITING',
       createdAt: '2026-01-01',
+      prSummary: { openCount: 0 },
     })),
     reviewCount: 0,
   };
@@ -239,7 +247,9 @@ beforeEach(() => {
     setList(projectId, list(projectId));
   }
   mocks.archive.mockResolvedValue(undefined);
-  mocks.bulkArchive.mockResolvedValue({ results: [] });
+  mocks.archiveMany.mockImplementation(async ({ ids }: { ids: string[] }) => ({
+    results: ids.map((id) => ({ id, success: true })),
+  }));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -340,15 +350,15 @@ describe('WorkspacesBoardView project lifetime', () => {
   it('drops a pending column confirmation on project switch', async () => {
     await render('a');
     await click('Archive column');
-    expect(document.body.textContent).toContain('Archive workspace');
+    expect(document.body.textContent).toContain('Archive 2 workspaces?');
     await render('b');
-    expect(document.body.textContent).not.toContain('Archive workspace');
-    expect(mocks.bulkArchive).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('Archive 2 workspaces?');
+    expect(mocks.archiveMany).not.toHaveBeenCalled();
     await click('Archive column');
-    await click('Archive');
-    expect(mocks.bulkArchive).toHaveBeenCalledExactlyOnceWith({
+    await click('Archive 2');
+    expect(mocks.archiveMany).toHaveBeenCalledExactlyOnceWith({
       projectId: 'b',
-      kanbanColumn: 'WAITING',
+      ids: ['b-1', 'b-2'],
     });
   });
 
@@ -462,19 +472,23 @@ describe('WorkspacesBoardView project lifetime', () => {
   it('isolates delayed bulk recovery and keeps current-project archive identity', async () => {
     await render('a');
     const pending = deferred<{
-      results: Array<{ id: string; success: boolean; code: string; applicationErrorKind: string }>;
+      results: Array<
+        | { id: string; success: true }
+        | { id: string; success: false; code: string; applicationErrorKind: string }
+      >;
     }>();
-    mocks.bulkArchive.mockReturnValueOnce(pending.promise);
-    let archive!: Promise<void>;
+    mocks.archiveMany.mockReturnValueOnce(pending.promise);
+    let archive!: Promise<{ failedIds: string[] }>;
     await act(() => {
-      archive = mocks.context!.bulkArchiveColumn('WAITING');
+      archive = mocks.context!.archiveWorkspaces(['a-1', 'a-2']);
     });
-    expect(mocks.bulkArchive).toHaveBeenCalledWith({ projectId: 'a', kanbanColumn: 'WAITING' });
+    expect(mocks.archiveMany).toHaveBeenCalledWith({ projectId: 'a', ids: ['a-1', 'a-2'] });
     await render('b');
     await act(async () => {
       pending.resolve({
         results: [
           { id: 'a-1', success: false, code: 'CONFLICT', applicationErrorKind: 'GIT_INDEX_LOCKED' },
+          { id: 'a-2', success: true },
         ],
       });
       await archive;

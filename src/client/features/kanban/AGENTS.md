@@ -10,9 +10,10 @@ repository root.
 ## Owns, and does not own
 
 This directory owns how the board shows one project's workspace list: grouping
-by `kanbanColumn`, filtering and ordering, phone sections, Archive All, issue
-intake suppression while archives are pending, the creation form, its
-per-project drafts and dropped images, and Quick Chat. It does not own:
+by `kanbanColumn`, filtering and ordering, phone sections, Archive All and
+selection mode, issue intake suppression while archives are pending, the
+creation form, its per-project drafts and dropped images, and Quick Chat. It
+does not own:
 
 - Which column a workspace is in: `kanbanColumn` comes from
   `src/shared/kanban-column-projection.ts`, a total map over status reason
@@ -50,8 +51,14 @@ project switch.
   sort choice, which is one browser preference shared across projects and tabs.
   `board-view.test.ts`, `use-waiting-sort-order.test.tsx`.
 - Archive All archives every workspace in its column from the unfiltered list,
-  including cards the filter hides. `kanban-board.test.tsx`,
-  `kanban-context.test.tsx`.
+  including cards the filter hides, and sends the IDs its dialog counted to
+  `workspace.archiveMany`; the server never re-derives the column.
+  `kanban-board.test.tsx`, `kanban-context.test.tsx`.
+- Cards show no checkboxes until selection mode is entered from Board actions.
+  Ranges and "Select all" stay within one column's shown cards, and only shown
+  cards are counted and archived. A fully successful archive ends the mode; a
+  failed card comes back still selected. `kanban-board.selection.test.tsx`,
+  `board-selection.test.ts`.
 - Only a successful creation request clears the filter and, on phones, reveals
   Working; mounting, remounting or cancelling does neither.
   `kanban-board.test.tsx`, `mobile-board-sections.test.tsx`.
@@ -76,7 +83,11 @@ project switch.
 - `kanban-column.tsx` (`getKanbanColumns`: Todo is the provider's issue column),
   `kanban-card.tsx`, `kanban-card-status-chip.tsx`, `kanban-pr-states.tsx`,
   `kanban-family-highlight.tsx` (family hover outside React state).
-- `kanban-controls.tsx`, `board-view-controls.tsx`: header controls and filter.
+- `kanban-controls.tsx`, `board-view-controls.tsx`: header controls (Board
+  actions, which enters selection mode) and filter.
+- `board-selection.ts` (selection state), `board-selection-bar.tsx` (the action
+  bar), `archive-selection-dialog.tsx` (the multi-archive confirmation and its
+  risk summary from list data).
 - `issues-column.tsx`, `issue-card.tsx`, `issue-launch-sheet.tsx`: Todo and its
   in-app issue launch.
 - `inline-workspace-form.tsx`, `workspace-creation-options.tsx`,

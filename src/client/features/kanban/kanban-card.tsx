@@ -25,6 +25,7 @@ import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,14 @@ export interface KanbanCardProps {
   onArchive?: (workspaceId: string) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
+  /**
+   * Selection mode: the card shows a checkbox, hides its own actions, and a
+   * click toggles selection instead of opening the workspace.
+   */
+  selectionMode?: boolean;
+  selected?: boolean;
+  /** `range` is true for a shift-click, which selects from the last toggled card. */
+  onToggleSelected?: (workspaceId: string, range: boolean) => void;
 }
 
 function CardStatusIndicator({
@@ -228,6 +237,7 @@ function CardTitleIcons({
   isTogglePending,
   isArchived,
   sessionRuntimeError,
+  selectionMode,
   onToggleRatcheting,
   onArchive,
   onOpenQuickChat,
@@ -238,19 +248,22 @@ function CardTitleIcons({
   isTogglePending: boolean;
   isArchived: boolean;
   sessionRuntimeError: string | null;
+  selectionMode: boolean;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   onArchive?: (workspaceId: string) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
   onStartEdit?: () => void;
 }) {
+  const showActions = !selectionMode;
   const showQuickChat =
+    showActions &&
     !isArchived &&
     workspace.status !== 'NEW' &&
     workspace.status !== 'PROVISIONING' &&
     onOpenQuickChat;
   return (
     <div className="relative z-10 flex items-center gap-1.5 [@media(any-pointer:coarse)]:gap-0 shrink-0">
-      {onStartEdit && !isArchived && (
+      {showActions && onStartEdit && !isArchived && (
         <IconButton
           label="Rename workspace"
           size="icon-xs"
@@ -284,19 +297,21 @@ function CardTitleIcons({
           )}
         </IconButton>
       )}
-      <RatchetToggleButton
-        enabled={ratchetEnabled}
-        state={workspace.ratchetState}
-        animated={workspace.ratchetButtonAnimated ?? false}
-        size="icon-xs"
-        className="shrink-0"
-        pending={isTogglePending}
-        disabled={isArchived || !onToggleRatcheting}
-        stopPropagation
-        onToggle={(enabled) => {
-          onToggleRatcheting?.(workspace.id, enabled);
-        }}
-      />
+      {showActions && (
+        <RatchetToggleButton
+          enabled={ratchetEnabled}
+          state={workspace.ratchetState}
+          animated={workspace.ratchetButtonAnimated ?? false}
+          size="icon-xs"
+          className="shrink-0"
+          pending={isTogglePending}
+          disabled={isArchived || !onToggleRatcheting}
+          stopPropagation
+          onToggle={(enabled) => {
+            onToggleRatcheting?.(workspace.id, enabled);
+          }}
+        />
+      )}
       {workspace.runScriptStatus === 'RUNNING' && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -321,7 +336,7 @@ function CardTitleIcons({
         </Tooltip>
       )}
       <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
-      {!isArchived && onArchive && (
+      {showActions && !isArchived && onArchive && (
         <CardArchiveButton workspace={workspace} onArchive={onArchive} />
       )}
     </div>
@@ -387,6 +402,82 @@ function CardFamilyMetadata({
   );
 }
 
+function selectableCardClassName(selectionMode: boolean, selected: boolean) {
+  if (!selectionMode) {
+    return undefined;
+  }
+  // Shift-click selects a range, so it must not also select the card's text.
+  return cn('select-none', selected && 'border-primary ring-2 ring-primary ring-inset');
+}
+
+/** In selection mode a click anywhere on the card toggles it; shift-click selects a range. */
+function selectableCardProps(
+  workspaceId: string,
+  selectionMode: boolean,
+  selected: boolean,
+  onToggleSelected: KanbanCardProps['onToggleSelected']
+) {
+  if (!selectionMode) {
+    return {};
+  }
+  return {
+    'data-selected': selected,
+    onClick: (event: React.MouseEvent) => onToggleSelected?.(workspaceId, event.shiftKey),
+  };
+}
+
+/**
+ * The card title: a link that covers the card, or in selection mode a
+ * labelled checkbox beside the plain name.
+ */
+function CardName({
+  workspace,
+  projectSlug,
+  unreadCount,
+  selectionMode,
+  selected,
+  onToggleSelected,
+}: Pick<
+  KanbanCardProps,
+  'workspace' | 'projectSlug' | 'unreadCount' | 'selected' | 'onToggleSelected'
+> & { selectionMode: boolean }) {
+  return (
+    <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
+      {workspace.creationSource === 'PERIODIC_TASK' && (
+        <RobotIcon
+          role="img"
+          aria-label="Automation workspace"
+          className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
+        />
+      )}
+      {selectionMode ? (
+        <>
+          <Checkbox
+            data-board-selection-checkbox=""
+            checked={selected}
+            aria-label={`Select ${workspace.name}`}
+            className="mt-px"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleSelected?.(workspace.id, event.shiftKey);
+            }}
+          />
+          <span className="min-w-0 line-clamp-2 [overflow-wrap:anywhere]">{workspace.name}</span>
+        </>
+      ) : (
+        <Link
+          to={`/projects/${projectSlug}/workspaces/${workspace.id}`}
+          className="min-w-0 line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-xl outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+        >
+          {workspace.name}
+        </Link>
+      )}
+      <UnreadMailBadge count={unreadCount} />
+    </CardTitle>
+  );
+}
+
 /** The card title while renaming; a spinner beside it shows the save is in flight. */
 function InlineNameEditor({
   inputRef,
@@ -445,6 +536,9 @@ export const KanbanCard = memo(function KanbanCard({
   onArchive,
   onOpenQuickChat,
   onRename,
+  selectionMode = false,
+  selected = false,
+  onToggleSelected,
 }: KanbanCardProps) {
   const { highlighted, ...familyEvents } = useKanbanFamilyHighlight(workspace);
   const {
@@ -478,13 +572,15 @@ export const KanbanCard = memo(function KanbanCard({
       {...familyEvents}
       data-workspace-id={workspace.id}
       data-family-highlighted={highlighted || undefined}
+      {...selectableCardProps(workspace.id, selectionMode, selected, onToggleSelected)}
       className={cn(
         'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
         sessionRuntimeError && 'border-destructive/40 bg-destructive/5 hover:border-destructive/60',
         workspace.isWorking && 'border-running-accent/80 dark:border-running/50 dark:bg-running/5',
         workspace.pendingRequestType && 'border-warning/40 bg-warning/5 hover:border-warning/60',
         isArchived && 'opacity-60 border-dashed',
-        highlighted && 'ring-2 ring-info/70 ring-inset'
+        highlighted && 'ring-2 ring-info/70 ring-inset',
+        selectableCardClassName(selectionMode, selected)
       )}
     >
       <CardHeader className="pb-2">
@@ -499,22 +595,14 @@ export const KanbanCard = memo(function KanbanCard({
               onCancel={handleCancelRename}
             />
           ) : (
-            <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">
-              {workspace.creationSource === 'PERIODIC_TASK' && (
-                <RobotIcon
-                  role="img"
-                  aria-label="Automation workspace"
-                  className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
-                />
-              )}
-              <Link
-                to={`/projects/${projectSlug}/workspaces/${workspace.id}`}
-                className="min-w-0 line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-xl outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
-              >
-                {workspace.name}
-              </Link>
-              <UnreadMailBadge count={unreadCount} />
-            </CardTitle>
+            <CardName
+              workspace={workspace}
+              projectSlug={projectSlug}
+              unreadCount={unreadCount}
+              selectionMode={selectionMode}
+              selected={selected}
+              onToggleSelected={onToggleSelected}
+            />
           )}
           <CardTitleIcons
             workspace={workspace}
@@ -522,6 +610,7 @@ export const KanbanCard = memo(function KanbanCard({
             isTogglePending={isTogglePending}
             isArchived={isArchived}
             sessionRuntimeError={sessionRuntimeError}
+            selectionMode={selectionMode}
             onToggleRatcheting={onToggleRatcheting}
             onArchive={onArchive}
             onOpenQuickChat={onOpenQuickChat}

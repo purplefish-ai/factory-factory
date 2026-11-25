@@ -20,6 +20,7 @@ import {
 } from '@/client/lib/workspace-cache-reconciler';
 import { useSessionManagement } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useArchivedWorkspaceRedirect } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
+import { ARCHIVE_MANY_MAX_IDS } from '@/shared/workspace-archive';
 import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -269,7 +270,7 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
       const execute = (id: string) =>
         kind === 'single'
           ? f.command().archiveWorkspace({ projectId: 'proj-1', id })
-          : f.command().archiveColumn({ projectId: 'proj-1', ids: [id], kanbanColumn: 'WAITING' });
+          : f.command().archiveWorkspaces({ projectId: 'proj-1', ids: [id] });
       const pending = () =>
         kind === 'single' ? f.command().isArchiving : f.command().isBulkArchiving;
       const { older, newer } = await commitReactUpdate(async () => {
@@ -280,13 +281,17 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
       });
       expect(pending()).toBe(true);
       await commitReactUpdate(async () => {
-        f.requests[1]!.resolve(kind === 'single' ? { id: 'ws-2' } : { results: [] });
+        f.requests[1]!.resolve(
+          kind === 'single' ? { id: 'ws-2' } : { results: [{ id: 'ws-2', success: true }] }
+        );
         await newer;
       });
       expect(f.queryClient.isMutating()).toBe(1);
       expect(pending()).toBe(true);
       await commitReactUpdate(async () => {
-        f.requests[0]!.resolve(kind === 'single' ? { id: 'ws-1' } : { results: [] });
+        f.requests[0]!.resolve(
+          kind === 'single' ? { id: 'ws-1' } : { results: [{ id: 'ws-1', success: true }] }
+        );
         await older;
       });
       expect(pending()).toBe(false);
@@ -317,14 +322,12 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     expect(f.command().isArchiving).toBe(false);
   });
 
-  it('restores only failed bulk IDs from the latest stream while preserving the bulk endpoint', async () => {
+  it('restores only failed IDs of a multi-archive from the latest stream', async () => {
     const f = fixture();
-    const run = f
-      .command()
-      .archiveColumn({ projectId: 'proj-1', ids: ['ws-1', 'ws-2'], kanbanColumn: 'WAITING' });
+    const run = f.command().archiveWorkspaces({ projectId: 'proj-1', ids: ['ws-1', 'ws-2'] });
     await f.waitForRequests();
-    expect(f.requests[0]?.path).toBe('workspace.bulkArchive');
-    expect(f.requests[0]?.input).toEqual({ projectId: 'proj-1', kanbanColumn: 'WAITING' });
+    expect(f.requests[0]?.path).toBe('workspace.archiveMany');
+    expect(f.requests[0]?.input).toEqual({ projectId: 'proj-1', ids: ['ws-1', 'ws-2'] });
     f.owner.apply(f.token, {
       type: 'snapshot_changed',
       workspaceId: 'ws-1',
@@ -358,44 +361,60 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     expect(f.rows().map((row) => [row.id, row.name])).toEqual([['ws-1', 'latest failed']]);
   });
 
-  it('reports failures for additional workspaces selected by the bulk endpoint', async () => {
+  it('reports a requested workspace the server returned no result for as failed', async () => {
     const f = fixture();
-    const run = f
-      .command()
-      .archiveColumn({ projectId: 'proj-1', ids: ['ws-1'], kanbanColumn: 'WAITING' });
+    const run = f.command().archiveWorkspaces({ projectId: 'proj-1', ids: ['ws-1', 'ws-2'] });
     await f.waitForRequests();
     f.requests[0]!.resolve({
       results: [
-        {
-          id: 'server-extra',
-          success: false,
-          error: 'Git locked',
-          code: 'CONFLICT',
-          applicationErrorKind: 'GIT_INDEX_LOCKED',
-        },
+        { id: 'ws-2', success: true },
+        { id: 'not-requested', success: true },
       ],
     });
     await expect(run).resolves.toEqual([
-      { id: 'ws-1', success: true },
-      {
-        id: 'server-extra',
-        success: false,
-        error: {
-          data: { code: 'CONFLICT', applicationErrorKind: 'GIT_INDEX_LOCKED' },
-          message: 'Git locked',
-        },
-      },
+      { id: 'ws-1', success: false, error: expect.any(Error) },
+      { id: 'ws-2', success: true },
     ]);
+    expect(f.rows().map((row) => row.id)).toEqual(['ws-1']);
+  });
+
+  it('splits a large selection into requests of the maximum size', async () => {
+    const f = fixture();
+    const ids = Array.from({ length: ARCHIVE_MANY_MAX_IDS + 1 }, (_, index) => `ws-${index + 1}`);
+    const run = f.command().archiveWorkspaces({ projectId: 'proj-1', ids });
+    await f.waitForRequests();
+    expect(f.requests[0]?.input).toEqual({
+      projectId: 'proj-1',
+      ids: ids.slice(0, ARCHIVE_MANY_MAX_IDS),
+    });
+    f.requests[0]!.reject(new Error('first chunk failed'));
+    await f.waitForRequests(2);
+    expect(f.requests[1]?.input).toEqual({
+      projectId: 'proj-1',
+      ids: ids.slice(ARCHIVE_MANY_MAX_IDS),
+    });
+    f.requests[1]!.resolve({ results: [{ id: ids.at(-1), success: true }] });
+    const outcomes = await run;
+    expect(outcomes).toHaveLength(ids.length);
+    expect(outcomes.filter((outcome) => outcome.success).map((outcome) => outcome.id)).toEqual([
+      ids.at(-1),
+    ]);
+    expect(outcomes[0]).toEqual({
+      id: 'ws-1',
+      success: false,
+      error: expect.objectContaining({ message: 'first chunk failed' }),
+    });
   });
 
   it('captures the requested IDs before cancellation or transport yields', async () => {
     const f = fixture();
     const ids = ['ws-1'];
-    const run = f.command().archiveColumn({ projectId: 'proj-1', ids, kanbanColumn: 'WAITING' });
+    const run = f.command().archiveWorkspaces({ projectId: 'proj-1', ids });
     ids.push('ws-2');
     await f.waitForRequests();
+    expect(f.requests[0]?.input).toEqual({ projectId: 'proj-1', ids: ['ws-1'] });
     expect(f.rows().map((row) => row.id)).toEqual(['ws-2']);
-    f.requests[0]!.resolve({ results: [] });
+    f.requests[0]!.resolve({ results: [{ id: 'ws-1', success: true }] });
     await expect(run).resolves.toEqual([{ id: 'ws-1', success: true }]);
   });
 
@@ -465,54 +484,6 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
       expect(f.rows().map((row) => row.id)).not.toContain('ws-1');
     }
   );
-
-  it('removes extra server-selected bulk successes even without an overlapping command', async () => {
-    const f = fixture();
-    const run = f
-      .command()
-      .archiveColumn({ projectId: 'proj-1', ids: ['ws-2'], kanbanColumn: 'WAITING' });
-    await f.waitForRequests();
-    f.requests[0]!.resolve({
-      results: [
-        { id: 'ws-1', success: true },
-        { id: 'ws-2', success: true },
-      ],
-    });
-    await run;
-    expect(f.rows()).toEqual([]);
-  });
-
-  it('settles an extra server-selected bulk success against another pending command', async () => {
-    const f = fixture();
-    const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
-    const single = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
-    const bulk = f
-      .command()
-      .archiveColumn({ projectId: 'proj-1', ids: ['ws-2'], kanbanColumn: 'WAITING' });
-    await f.waitForRequests(2);
-    f.requests[1]!.resolve({
-      results: [
-        { id: 'ws-1', success: true },
-        { id: 'ws-2', success: true },
-      ],
-    });
-    await expect(bulk).resolves.toEqual([
-      { id: 'ws-2', success: true },
-      { id: 'ws-1', success: true },
-    ]);
-    expect(invalidate).toHaveBeenCalledWith(
-      expect.objectContaining({ queryKey: getQueryKey(trpc.workspace.get, { id: 'ws-1' }, 'any') }),
-      undefined
-    );
-    f.owner.apply(f.token, {
-      type: 'snapshot_changed',
-      workspaceId: 'ws-1',
-      entry: entry({ name: 'late accepted bulk success' }),
-    });
-    f.requests[0]!.reject(new Error('single failed'));
-    await single;
-    expect(f.rows()).toEqual([]);
-  });
 
   it('cancels an in-flight HTTP request before hiding the row, so query cancellation cannot resurrect it', async () => {
     const f = fixture();

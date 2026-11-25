@@ -313,7 +313,7 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('findWorkspaceIdsInKanbanColumn returns only ids matching the live column', async () => {
+  it('derives a live WORKING column from session state, not the database row', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -343,12 +343,11 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
-      'proj-1',
-      KanbanColumn.WAITING
-    );
+    const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
-    expect(result).toEqual([]);
+    expect(result.map(({ id, kanbanColumn }) => ({ id, kanbanColumn }))).toEqual([
+      { id: 'w1', kanbanColumn: KanbanColumn.WORKING },
+    ]);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
@@ -406,7 +405,7 @@ describe('WorkspaceQueryService', () => {
     expect(result[0]).toMatchObject({ id: 'w-alive', kanbanColumn: 'WORKING', isWorking: true });
   });
 
-  it('findWorkspaceIdsInKanbanColumn matches a column only live session state produces', async () => {
+  it('derives a column only live session state produces', async () => {
     // SQL column filtering previously dropped this live WORKING workspace.
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
@@ -437,18 +436,17 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
-      'proj-1',
-      KanbanColumn.WORKING
-    );
+    const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
-    expect(result).toEqual(['w-live']);
+    expect(result.map(({ id, kanbanColumn }) => ({ id, kanbanColumn }))).toEqual([
+      { id: 'w-live', kanbanColumn: KanbanColumn.WORKING },
+    ]);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
 
-  it('findWorkspaceIdsInKanbanColumn returns FAILED workspaces for WAITING', async () => {
+  it('derives WAITING for FAILED workspaces', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -478,12 +476,11 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
 
-    const result = await workspaceQueryService.findWorkspaceIdsInKanbanColumn(
-      'proj-1',
-      KanbanColumn.WAITING
-    );
+    const { workspaces: result } = await workspaceQueryService.listForProject('proj-1');
 
-    expect(result).toEqual(['w1']);
+    expect(result.map(({ id, kanbanColumn }) => ({ id, kanbanColumn }))).toEqual([
+      { id: 'w1', kanbanColumn: KanbanColumn.WAITING },
+    ]);
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
@@ -977,16 +974,12 @@ describe('WorkspaceQueryService', () => {
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
 
     await workspaceQueryService.listForProject('p1');
-    await workspaceQueryService.findWorkspaceIdsInKanbanColumn('p1', KanbanColumn.WORKING);
     await workspaceQueryService.syncAllPRStatuses('p1');
 
     expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(1, 'p1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
     expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(2, 'p1', {
-      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
-    });
-    expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(3, 'p1', {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
   });
