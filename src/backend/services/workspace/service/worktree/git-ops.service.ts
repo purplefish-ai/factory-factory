@@ -44,7 +44,7 @@ export interface WorktreeCheckoutIdentity {
 export const APP_PRIVATE_REF_PREFIX = 'refs/factory-factory/';
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
-function assertAppPrivateRef(ref: string): void {
+export function assertAppPrivateRef(ref: string): void {
   if (!(ref.startsWith(APP_PRIVATE_REF_PREFIX) && /^[A-Za-z0-9/_-]+$/.test(ref))) {
     throw new ApplicationError('INTERNAL_ERROR', `Refusing to write non-private ref: ${ref}`);
   }

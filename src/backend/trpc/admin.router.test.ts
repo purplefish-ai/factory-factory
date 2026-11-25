@@ -8,6 +8,7 @@ const mockCancelUpdate = vi.hoisted(() => vi.fn());
 const mockExportData = vi.hoisted(() => vi.fn());
 const mockImportData = vi.hoisted(() => vi.fn());
 const mockRemoveOrphanedWorktrees = vi.hoisted(() => vi.fn());
+const mockRemoveArchivedBranches = vi.hoisted(() => vi.fn());
 const mockDecisionLogList = vi.hoisted(() => vi.fn());
 const mockFindAgentSessionsByIds = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<Record<string, unknown>[]>>(async () => [])
@@ -170,6 +171,9 @@ function createCaller(
         },
         orphanedWorktreeService: {
           removeOrphanedWorktrees: (...args: unknown[]) => mockRemoveOrphanedWorktrees(...args),
+        },
+        archivedBranchCleanupService: {
+          removeBranches: (...args: unknown[]) => mockRemoveArchivedBranches(...args),
         },
         decisionLogQueryService: {
           list: (...args: unknown[]) => mockDecisionLogList(...args),
@@ -673,6 +677,49 @@ describe('orphaned worktree removal trust boundary', () => {
       removed: ['/wt/workspace-1'],
       failed: [],
     });
+  });
+});
+
+describe('archived branch removal', () => {
+  const sha = 'a'.repeat(40);
+  const trusted = { remoteAddress: '127.0.0.1', isLocal: true, origin: 'http://localhost:3000' };
+
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+  ])('rejects removal from an untrusted request: %j', async (trust) => {
+    const { caller } = createCaller(trust);
+    mockRemoveArchivedBranches.mockClear();
+    await expect(
+      caller.removeArchivedBranches({ branches: [{ projectId: 'p1', name: 'user/x', sha }] })
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockRemoveArchivedBranches).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'an empty list', branches: [] },
+    { label: 'an abbreviated SHA', branches: [{ projectId: 'p1', name: 'user/x', sha: 'abc123' }] },
+    { label: 'an empty name', branches: [{ projectId: 'p1', name: '', sha }] },
+  ])('rejects $label before calling the service', async ({ branches }) => {
+    const { caller } = createCaller(trusted);
+    mockRemoveArchivedBranches.mockClear();
+    await expect(caller.removeArchivedBranches({ branches })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(mockRemoveArchivedBranches).not.toHaveBeenCalled();
+  });
+
+  it('passes the listed branches to the service from a trusted local client', async () => {
+    const { caller } = createCaller(trusted);
+    const branches = [{ projectId: 'p1', name: 'user/x', sha }];
+    const result = { removed: [{ ...branches[0], pinRef: 'refs/factory-factory/x' }] };
+    mockRemoveArchivedBranches.mockResolvedValue({ ...result, skipped: [], failed: [] });
+    await expect(caller.removeArchivedBranches({ branches })).resolves.toEqual({
+      ...result,
+      skipped: [],
+      failed: [],
+    });
+    expect(mockRemoveArchivedBranches).toHaveBeenCalledWith(branches);
   });
 });
 

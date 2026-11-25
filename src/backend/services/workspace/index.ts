@@ -69,6 +69,14 @@ export {
 } from './service/state/workspace-read-state';
 
 // --- Worktree management ---
+export {
+  type ArchivedBranchCandidate,
+  type ArchivedBranchCandidateGroup,
+  type ArchivedBranchCleanupResult,
+  type ArchivedBranchRemovalRequest,
+  type ArchivedBranchSafety,
+  archivedBranchCleanupService,
+} from './service/worktree/archived-branch-cleanup.service';
 export { gitCloneService, parseGithubUrl } from './service/worktree/git-clone.service';
 export { APP_PRIVATE_REF_PREFIX, gitOpsService } from './service/worktree/git-ops.service';
 export {

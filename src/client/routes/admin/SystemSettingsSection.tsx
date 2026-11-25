@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   ApiUsageSection,
   AppInfoSection,
+  ArchivedBranchCleanupSection,
   DataBackupSection,
   ProcessesSection,
   ProcessesSectionSkeleton,
@@ -92,6 +93,7 @@ export function SystemSettingsSection() {
       <AppInfoSection />
       <DataBackupSection />
       <WorktreeCleanupSection />
+      <ArchivedBranchCleanupSection />
       <ServerLogsSection />
     </>
   );

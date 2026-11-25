@@ -84,6 +84,7 @@ vi.mock('./admin/index', () => ({
   RatchetSettingsSection: () => createElement('section', null, 'Ratchet Pull Requests'),
   ServerLogsSection: () => createElement('section', null, 'Server Logs'),
   WorktreeCleanupSection: () => createElement('section', null, 'Worktree Cleanup'),
+  ArchivedBranchCleanupSection: () => createElement('section', null, 'Branch Cleanup'),
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
