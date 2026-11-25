@@ -1,7 +1,5 @@
-import { ApplicationError } from '@/backend/lib/application-error';
 import { createLogger } from '@/backend/services/logger.service';
 import {
-  type BranchCleanupProject,
   type BranchCleanupWorkspace,
   workspaceBranchCleanupAccessor,
 } from '@/backend/services/workspace/resources/workspace-branch-cleanup.accessor';
@@ -13,9 +11,15 @@ import {
   listBusyBranches,
   listLocalBranches,
   pinAndDeleteBranch,
-  resolveRepositoryIdentity,
   restoreDeletedBranch,
 } from './archived-branch-git';
+import {
+  type CleanupRepositories,
+  type CleanupRepository,
+  errorMessage,
+  resolveCleanupRepositories,
+  runExclusiveCleanup,
+} from './archived-cleanup-repositories';
 
 const logger = createLogger('archived-branch-cleanup');
 
@@ -49,60 +53,15 @@ export interface ArchivedBranchCleanupResult {
   failed: Array<{ projectId: string; name: string; error: string }>;
 }
 
-interface Repository {
-  identity: string;
-  repoPath: string;
-  /** Every project using the repository, archived or not. */
-  projects: BranchCleanupProject[];
-}
-
-/** A repository at least one active project uses; only these are cleaned. */
-interface ActiveRepository extends Repository {
-  activeProjects: BranchCleanupProject[];
-}
-
-interface Detection {
-  repositories: Map<string, ActiveRepository>;
-  repositoryByProject: Map<string, ActiveRepository>;
+interface Detection extends CleanupRepositories {
   /** Candidates by repository identity, then branch name. */
   candidates: Map<string, Map<string, ArchivedBranchCandidate>>;
   /** Every project seen; a project added later could use any repository. */
   knownProjectIds: string[];
-  /** Projects whose repository could not be identified. */
-  unresolvedProjectIds: Set<string>;
 }
 
 /** What the per-branch re-check consults besides the repository's own projects. */
 type ClaimScope = Pick<Detection, 'knownProjectIds' | 'unresolvedProjectIds'>;
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function groupRepositories(projects: BranchCleanupProject[]) {
-  const repositories = new Map<string, Repository>();
-  const unresolvedProjectIds = new Set<string>();
-  for (const project of projects) {
-    try {
-      const identity = await resolveRepositoryIdentity(project.repoPath);
-      const repository = repositories.get(identity) ?? {
-        identity,
-        repoPath: project.repoPath,
-        projects: [],
-      };
-      repository.projects.push(project);
-      repositories.set(identity, repository);
-    } catch (error) {
-      unresolvedProjectIds.add(project.id);
-      logger.warn('Skipping project whose repository could not be read', {
-        projectId: project.id,
-        repoPath: project.repoPath,
-        error: errorMessage(error),
-      });
-    }
-  }
-  return { repositories, unresolvedProjectIds };
-}
 
 /**
  * Branch names a repository's workspaces claim. An archived workspace owns its
@@ -128,7 +87,7 @@ function workspaceClaims(projectIds: Set<string>, workspaces: BranchCleanupWorks
 }
 
 async function detectRepositoryCandidates(
-  repository: Repository,
+  repository: CleanupRepository,
   workspaces: BranchCleanupWorkspace[],
   globallyProtected: Set<string>
 ): Promise<Map<string, ArchivedBranchCandidate>> {
@@ -185,8 +144,6 @@ async function mergedPrContainsTip(
 }
 
 class ArchivedBranchCleanupService {
-  private cleanupRunning = false;
-
   /**
    * Local branches that only archived workspaces used and whose commits are
    * safe elsewhere. See {@link detectRepositoryCandidates} and the admin
@@ -216,31 +173,17 @@ class ArchivedBranchCleanupService {
       workspaceBranchCleanupAccessor.listProjects(),
       workspaceBranchCleanupAccessor.listWorkspacesWithBranches(),
     ]);
-    const { repositories: allRepositories, unresolvedProjectIds } =
-      await groupRepositories(projects);
+    const resolved = await resolveCleanupRepositories(projects);
     // A workspace in a project whose repository cannot be identified could be
     // using any repository, so its branch name is protected everywhere.
     const globallyProtected = new Set(
       workspaces
-        .filter((ws) => unresolvedProjectIds.has(ws.projectId) && ws.status !== 'ARCHIVED')
+        .filter((ws) => resolved.unresolvedProjectIds.has(ws.projectId) && ws.status !== 'ARCHIVED')
         .map((ws) => ws.branchName)
     );
 
-    const repositories = new Map<string, ActiveRepository>();
-    const repositoryByProject = new Map<string, ActiveRepository>();
     const candidates = new Map<string, Map<string, ArchivedBranchCandidate>>();
-    for (const [identity, all] of allRepositories) {
-      // Repositories used only by archived projects are left alone.
-      const activeProjects = all.projects.filter((project) => !project.isArchived);
-      const [first] = activeProjects;
-      if (!first) {
-        continue;
-      }
-      const repository = { ...all, repoPath: first.repoPath, activeProjects };
-      repositories.set(identity, repository);
-      for (const project of activeProjects) {
-        repositoryByProject.set(project.id, repository);
-      }
+    for (const [identity, repository] of resolved.repositories) {
       try {
         candidates.set(
           identity,
@@ -254,11 +197,9 @@ class ArchivedBranchCleanupService {
       }
     }
     return {
-      repositories,
-      repositoryByProject,
+      ...resolved,
       candidates,
       knownProjectIds: projects.map((project) => project.id),
-      unresolvedProjectIds,
     };
   }
 
@@ -270,16 +211,7 @@ class ArchivedBranchCleanupService {
   async removeBranches(
     requests: ArchivedBranchRemovalRequest[]
   ): Promise<ArchivedBranchCleanupResult> {
-    // Set before the first await, so a concurrent call always sees it.
-    if (this.cleanupRunning) {
-      throw new ApplicationError('CONFLICT', 'A branch cleanup is already running');
-    }
-    this.cleanupRunning = true;
-    try {
-      return await this.runCleanup(requests);
-    } finally {
-      this.cleanupRunning = false;
-    }
+    return await runExclusiveCleanup(() => this.runCleanup(requests));
   }
 
   private async runCleanup(
@@ -327,7 +259,7 @@ class ArchivedBranchCleanupService {
   }
 
   private async deleteIfStillUnclaimed(
-    repository: Repository,
+    repository: CleanupRepository,
     candidate: ArchivedBranchCandidate,
     scope: ClaimScope
   ): Promise<BranchDeletionOutcome> {
@@ -363,7 +295,7 @@ class ArchivedBranchCleanupService {
 
 /** Why a branch must not be deleted right now, or null when nothing claims it. */
 async function claimOn(
-  repository: Repository,
+  repository: CleanupRepository,
   name: string,
   scope: ClaimScope
 ): Promise<string | null> {

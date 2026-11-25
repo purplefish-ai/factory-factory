@@ -77,6 +77,14 @@ export {
   type ArchivedBranchSafety,
   archivedBranchCleanupService,
 } from './service/worktree/archived-branch-cleanup.service';
+export {
+  type ArchivedRefCandidate,
+  type ArchivedRefCandidateGroup,
+  type ArchivedRefCleanupResult,
+  type ArchivedRefRemovalRequest,
+  type ArchivedRefTier,
+  archivedRefCleanupService,
+} from './service/worktree/archived-ref-cleanup.service';
 export { gitCloneService, parseGithubUrl } from './service/worktree/git-clone.service';
 export { APP_PRIVATE_REF_PREFIX, gitOpsService } from './service/worktree/git-ops.service';
 export {

@@ -9,6 +9,7 @@ const mockExportData = vi.hoisted(() => vi.fn());
 const mockImportData = vi.hoisted(() => vi.fn());
 const mockRemoveOrphanedWorktrees = vi.hoisted(() => vi.fn());
 const mockRemoveArchivedBranches = vi.hoisted(() => vi.fn());
+const mockRemoveArchivedRefs = vi.hoisted(() => vi.fn());
 const mockDecisionLogList = vi.hoisted(() => vi.fn());
 const mockFindAgentSessionsByIds = vi.hoisted(() =>
   vi.fn<(...args: unknown[]) => Promise<Record<string, unknown>[]>>(async () => [])
@@ -174,6 +175,9 @@ function createCaller(
         },
         archivedBranchCleanupService: {
           removeBranches: (...args: unknown[]) => mockRemoveArchivedBranches(...args),
+        },
+        archivedRefCleanupService: {
+          removeRefs: (...args: unknown[]) => mockRemoveArchivedRefs(...args),
         },
         decisionLogQueryService: {
           list: (...args: unknown[]) => mockDecisionLogList(...args),
@@ -720,6 +724,76 @@ describe('archived branch removal', () => {
       failed: [],
     });
     expect(mockRemoveArchivedBranches).toHaveBeenCalledWith(branches);
+  });
+});
+
+describe('archived ref removal', () => {
+  const sha = 'a'.repeat(40);
+  const ref = 'refs/factory-factory/archive/ws-1';
+  const trusted = { remoteAddress: '127.0.0.1', isLocal: true, origin: 'http://localhost:3000' };
+
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+  ])('rejects removal from an untrusted request: %j', async (trust) => {
+    const { caller } = createCaller(trust);
+    mockRemoveArchivedRefs.mockClear();
+    await expect(
+      caller.removeArchivedRefs({ refs: [{ projectId: 'p1', ref, sha, tier: 'REDUNDANT' }] })
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(mockRemoveArchivedRefs).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'an empty list', refs: [] },
+    {
+      label: 'a branch',
+      refs: [{ projectId: 'p1', ref: 'refs/heads/main', sha, tier: 'REDUNDANT' }],
+    },
+    {
+      label: 'another app-private ref',
+      refs: [{ projectId: 'p1', ref: 'refs/factory-factory/review/pr-1', sha, tier: 'REDUNDANT' }],
+    },
+    {
+      label: 'a path escape',
+      refs: [
+        {
+          projectId: 'p1',
+          ref: 'refs/factory-factory/archive/../heads/main',
+          sha,
+          tier: 'REDUNDANT',
+        },
+      ],
+    },
+    {
+      label: 'an abbreviated SHA',
+      refs: [{ projectId: 'p1', ref, sha: 'abc123', tier: 'REDUNDANT' }],
+    },
+    { label: 'an unknown tier', refs: [{ projectId: 'p1', ref, sha, tier: 'ANY' }] },
+  ])('rejects $label before calling the service', async ({ refs }) => {
+    const { caller } = createCaller(trusted);
+    mockRemoveArchivedRefs.mockClear();
+    await expect(caller.removeArchivedRefs({ refs } as never)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(mockRemoveArchivedRefs).not.toHaveBeenCalled();
+  });
+
+  it('passes the listed refs to the service from a trusted local client', async () => {
+    const { caller } = createCaller(trusted);
+    const refs = [
+      { projectId: 'p1', ref, sha, tier: 'REDUNDANT' as const },
+      {
+        projectId: 'p1',
+        ref: `refs/factory-factory/deleted-branches/user_2Fx/${sha}`,
+        sha,
+        tier: 'UNIQUE_WORK' as const,
+      },
+    ];
+    const result = { removed: [{ projectId: 'p1', ref }], skipped: [], failed: [] };
+    mockRemoveArchivedRefs.mockResolvedValue(result);
+    await expect(caller.removeArchivedRefs({ refs })).resolves.toEqual(result);
+    expect(mockRemoveArchivedRefs).toHaveBeenCalledWith(refs);
   });
 });
 

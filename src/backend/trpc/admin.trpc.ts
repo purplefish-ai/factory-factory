@@ -24,6 +24,16 @@ const archivedBranchRemovalSchema = z.object({
   sha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
 });
 
+const archivedRefRemovalSchema = z.object({
+  projectId: z.string().min(1),
+  ref: z
+    .string()
+    .max(1024)
+    .regex(/^refs\/factory-factory\/(?:archive|deleted-branches)\/[A-Za-z0-9/_-]+$/),
+  sha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
+  tier: z.enum(['REDUNDANT', 'UNIQUE_WORK']),
+});
+
 export const adminRouter = router({
   checkUpdates: publicProcedure.query(({ ctx }) =>
     ctx.appContext.services.applicationUpdateService.checkUpdates()
@@ -369,6 +379,25 @@ export const adminRouter = router({
     .input(z.object({ branches: z.array(archivedBranchRemovalSchema).min(1).max(10_000) }))
     .mutation(({ ctx, input }) =>
       ctx.appContext.services.archivedBranchCleanupService.removeBranches(input.branches)
+    ),
+
+  /**
+   * List archive refs and deleted-branch pins that can be deleted, in two
+   * tiers: redundant, and holding work found nowhere else (only once old).
+   */
+  listArchivedRefCandidates: publicProcedure.query(({ ctx }) =>
+    ctx.appContext.services.archivedRefCleanupService.findCandidates()
+  ),
+
+  /**
+   * Delete listed archive refs and pins. Candidates are re-detected
+   * server-side; a ref that moved, or that now holds work found nowhere else
+   * when it was listed as redundant, is skipped.
+   */
+  removeArchivedRefs: trustedLocalProcedure
+    .input(z.object({ refs: z.array(archivedRefRemovalSchema).min(1).max(10_000) }))
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.archivedRefCleanupService.removeRefs(input.refs)
     ),
 
   /**

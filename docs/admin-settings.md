@@ -17,8 +17,8 @@ bookmark it and use the browser's Back button:
 - **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
 - **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
 - **System** (`/admin/system`): API usage, processes, app information, backups,
-  and worktree and branch cleanup. Diagnostics poll only while this section is
-  open; loading or failed diagnostics never block other settings.
+  and worktree, branch and snapshot cleanup. Diagnostics poll only while this
+  section is open; loading or failed diagnostics never block other settings.
 - **Server logs** (`/admin/logs`): searchable logs; `/logs` remains available.
 - **Project settings** (`/admin/project`): expand a project row to edit its
   factory configuration and issue tracking inline. One project is expanded at a
@@ -371,10 +371,11 @@ Removal is only available from a trusted local client.
 
 ## Branch cleanup
 
-Archiving a workspace removes its worktree but keeps its local branch. **Branch
-cleanup** in **System** lists, per repository, local branches that are safe to
-delete, and **Delete N branches** deletes them after confirmation. Nothing is
-deleted automatically. A branch is listed only when all of these hold:
+Archiving a workspace removes its worktree but keeps its local branch. The
+**Branches** list in **Branch and snapshot cleanup** (**System**) shows, per
+repository, local branches that are safe to delete, and **Delete N branches**
+deletes them after confirmation. Nothing is deleted automatically. A branch is
+listed only when all of these hold:
 
 - An archived workspace of a project using that repository created a worktree on
   it, and no workspace that is not archived, in any project using that
@@ -405,7 +406,56 @@ that commit. A branch that moved, disappeared or is in use again is skipped. If
 it comes into use while it is being deleted, or that check fails, it is put back
 at the same commit. Remote branches and remote-tracking refs are never changed.
 To recreate a branch, run `git branch <name> <pin ref>`. Deletion is only
-available from a trusted local client, and one cleanup runs at a time.
+available from a trusted local client, and one branch or snapshot cleanup runs
+at a time.
+
+## Archive snapshot cleanup
+
+Archiving a workspace whose worktree has a commit points
+`refs/factory-factory/archive/<workspace id>` at a snapshot of the worktree, and
+every branch deleted by branch cleanup leaves a pin under
+`refs/factory-factory/deleted-branches/`. Both keep commits from being
+garbage-collected, and nothing removes them on its own. The **Archive
+snapshots** list in **Branch and snapshot cleanup** (**System**) shows, per
+repository, the ones that can be deleted, and **Delete N snapshots** deletes the
+selected ones after confirmation. Only these two ref families, with exactly the
+names the app writes and pointing at a commit, are considered; every other ref,
+including the app's other refs under `refs/factory-factory/`, is left alone.
+Repositories are chosen as for branch cleanup.
+
+An archive ref is considered only while its workspace is archived or no longer
+exists, and Git has no worktree registered under the workspace's folder name. A
+workspace still archiving, or one whose archive stopped part way (FAILED with
+`Archive incomplete:`), keeps its ref. A pin belongs to no workspace. The list
+has two tiers:
+
+- **Commits on a branch or remote** (selected by default): the ref's commit is
+  reachable from a local branch or a remote-tracking ref, so deleting the ref
+  loses nothing.
+- **Holding work found nowhere else** (selected one by one): no local branch or
+  remote-tracking ref reaches the commit, and the ref is at least 30 days old.
+  Its age is measured from the latest of the commit's date, the archived
+  workspace's last update and the loose ref file's last write, so a recent
+  archive or ref write keeps it out of the list (a packed ref has no file date,
+  so a deleted workspace's packed ref is dated by its commit). Each entry shows
+  how many of its commits no branch or remote reaches. Once deleted, Git can
+  garbage-collect that work and it cannot be recovered; the confirmation says
+  how many such snapshots are selected. Younger refs holding unique work are
+  never listed.
+
+Deletion re-detects the candidates on the server and deletes only refs that were
+listed at the commit shown. Just before each batch, it checks again which
+commits a branch or remote reaches; a ref listed as redundant that now holds
+unique work is skipped, and the registered worktrees are read again. Just before
+each archive ref, it checks the workspace again. Each ref is deleted with
+`git update-ref -d <ref> <commit>`, so one that moved is skipped. Deletion is
+only available from a trusted local client, and runs exclusively with branch
+cleanup.
+
+A workspace that no longer exists in this app's database is treated as gone. If
+another Factory Factory installation with its own database uses the same
+repository, its workspaces' archive refs look the same; the worktree check keeps
+the ones whose worktree is still registered.
 
 ## Factory configuration
 

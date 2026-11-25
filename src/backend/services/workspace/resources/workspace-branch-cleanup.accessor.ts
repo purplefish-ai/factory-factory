@@ -26,13 +26,25 @@ export interface BranchCleanupWorkspace {
   mergedPrHeads: MergedPrHead[];
 }
 
+/** The workspace an archive ref is named after. */
+export interface ArchiveRefWorkspace {
+  id: string;
+  name: string;
+  status: WorkspaceStatus;
+  /** Not earlier than when the workspace was archived. */
+  updatedAt: Date;
+}
+
+/** Ids per query, well under SQLite's bound-parameter limit. */
+const ID_CHUNK = 500;
+
 const mergedPrHeadRowSchema = z.object({
   workspaceId: z.string(),
   branch: z.string().min(1),
   sha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
 });
 
-/** Reads for the archived-branch cleanup. Selects only narrow columns; never blobs. */
+/** Reads for the archived-branch and archived-ref cleanups. Selects only narrow columns; never blobs. */
 class WorkspaceBranchCleanupAccessor {
   listProjects(): Promise<BranchCleanupProject[]> {
     return prisma.project.findMany({
@@ -97,6 +109,28 @@ class WorkspaceBranchCleanupAccessor {
       select: { id: true },
     });
     return row !== null;
+  }
+
+  /** The workspaces archive refs are named after, by id; ids with no row are absent. */
+  async findArchiveRefWorkspaces(ids: string[]): Promise<Map<string, ArchiveRefWorkspace>> {
+    const found = new Map<string, ArchiveRefWorkspace>();
+    const unique = [...new Set(ids)];
+    for (let start = 0; start < unique.length; start += ID_CHUNK) {
+      const rows = await prisma.workspace.findMany({
+        where: { id: { in: unique.slice(start, start + ID_CHUNK) } },
+        select: { id: true, name: true, status: true, updatedAt: true },
+      });
+      for (const row of rows) {
+        found.set(row.id, row);
+      }
+    }
+    return found;
+  }
+
+  /** A workspace's current status, or null when it no longer exists. */
+  async findWorkspaceStatus(id: string): Promise<WorkspaceStatus | null> {
+    const row = await prisma.workspace.findUnique({ where: { id }, select: { status: true } });
+    return row?.status ?? null;
   }
 }
 

@@ -1,10 +1,14 @@
 import { GitBranchIcon } from '@phosphor-icons/react/dist/csr/GitBranch';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { QueryState } from '@/client/components/query-state';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArchivedRefCleanup } from './ArchivedRefCleanup';
 import { SettingsSection } from './settings-section';
 
 function pluralizeBranches(count: number): string {
@@ -13,7 +17,7 @@ function pluralizeBranches(count: number): string {
 
 const SAFETY_LABEL = { ON_REMOTE: 'on a remote', MERGED_PR: 'PR merged' } as const;
 
-export function ArchivedBranchCleanupSection() {
+function ArchivedBranchCleanup() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const utils = trpc.useUtils();
   const candidatesQuery = trpc.admin.listArchivedBranchCandidates.useQuery();
@@ -39,6 +43,11 @@ export function ArchivedBranchCleanupSection() {
         utils.admin.listArchivedBranchCandidates.invalidate(),
         "Couldn't refresh archived workspace branches."
       );
+      // Each deleted branch leaves a pin, listed with the snapshots.
+      runInBackground(
+        utils.admin.listArchivedRefCandidates.invalidate(),
+        "Couldn't refresh archive snapshots."
+      );
     },
   });
 
@@ -53,13 +62,19 @@ export function ArchivedBranchCleanupSection() {
   const count = requests.length;
 
   return (
-    <>
-      <SettingsSection
-        title="Branch cleanup"
-        icon={<GitBranchIcon className="w-5 h-5" />}
-        description="Delete local branches that only archived workspaces used, once their commits are on a remote or in a merged PR"
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">Branches</h3>
+        <p className="text-sm text-muted-foreground">
+          Local branches that only archived workspaces used, once their commits are on a remote or
+          in a merged PR.
+        </p>
+      </div>
+      <QueryState
         query={candidatesQuery}
         errorTitle="Couldn't scan for archived workspace branches"
+        loading={<Skeleton className="h-10 w-full" />}
+        refreshErrorClassName="rounded-md border"
       >
         {() => (
           <>
@@ -99,7 +114,7 @@ export function ArchivedBranchCleanupSection() {
             </Button>
           </>
         )}
-      </SettingsSection>
+      </QueryState>
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
@@ -110,6 +125,21 @@ export function ArchivedBranchCleanupSection() {
         isPending={removeBranches.isPending}
         onConfirm={() => removeBranches.mutate({ branches: requests })}
       />
-    </>
+    </div>
+  );
+}
+
+/** Branches, archive snapshots and deleted-branch pins that archived workspaces left behind. */
+export function ArchivedBranchCleanupSection() {
+  return (
+    <SettingsSection
+      title="Branch and snapshot cleanup"
+      icon={<GitBranchIcon className="w-5 h-5" />}
+      description="Delete what archived workspaces leave behind in project repositories. Nothing is deleted without confirmation."
+    >
+      <ArchivedBranchCleanup />
+      <Separator />
+      <ArchivedRefCleanup />
+    </SettingsSection>
   );
 }

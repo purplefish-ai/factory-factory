@@ -85,8 +85,9 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
   base, configured) path's registration; nothing deletes under a deadline, and
   the reclaimer deletes only pattern-named entries. `worktree-trash.test.ts`,
   `git-ops.trash.integration.test.ts`, `git-ops.symlink.integration.test.ts`.
-- Branch cleanup pins a tip under `refs/factory-factory/deleted-branches/`, then
-  deletes only if unmoved. `archived-branch-cleanup.integration.test.ts`.
+- Branch cleanup pins tips; ref cleanup spares unarchived workspaces and unique
+  work under 30 days; both CAS. `archived-branch-cleanup.integration.test.ts`,
+  `archived-ref-cleanup.integration.test.ts`.
 
 ## Map
 
@@ -107,10 +108,9 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
   `project-management.service.ts` creates, updates and archives projects and
   runs the `FF_PROJECT_ROOT` location check.
 - `service/worktree/`: `git-ops.service.ts`, `worktree-lifecycle.service.ts`,
-  clone, orphaned-worktree and archived-branch cleanup and the trash
-  (`worktree-trash*.ts`); `project-root.ts`, whether a path is in
-  `FF_PROJECT_ROOT` and its real path; `project-repository-inspector.ts`, the
-  `origin` owner and name, default branch and readable-repository check.
+  clone, orphaned-worktree, archived branch and ref cleanup, the trash
+  (`worktree-trash*.ts`); `project-root.ts` (`FF_PROJECT_ROOT` membership, real
+  path); `project-repository-inspector.ts` (`origin`, default branch, readable).
 
 ## Decisions
 
