@@ -86,6 +86,8 @@ Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
 - Worktree removal deletes a Git registration only when it matches the canonical
   worktree path, or the configured path once the base no longer resolves.
   `git-ops.symlink.integration.test.ts`.
+- Branch cleanup pins a tip under `refs/factory-factory/deleted-branches/`, then
+  deletes only if unmoved. `archived-branch-cleanup.integration.test.ts`.
 
 ## Map
 
@@ -101,14 +103,13 @@ Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
   `archived-workspace-blob-retention.service.ts`.
 - [`service/snapshot/`](service/snapshot/AGENTS.md): the snapshot store, with
   branch and PR projection freshness.
-- `service/state/`: pure derivations (flow state, init policy, pending request
-  type).
+- `service/state/`: pure derivations (flow state, init policy, request type).
 - `service/query/`: list, summary, Git and notification queries;
   `project-management.service.ts` creates, updates and archives projects and
   runs the `FF_PROJECT_ROOT` location check.
 - `service/worktree/`: `git-ops.service.ts`, `worktree-lifecycle.service.ts`,
-  clone and orphaned-worktree cleanup; `project-root.ts`, whether a project path
-  lies inside `FF_PROJECT_ROOT` and the real path to store;
+  clone, orphaned-worktree and archived-branch cleanup; `project-root.ts`,
+  whether a project path lies in `FF_PROJECT_ROOT` and the real path to store;
   `project-repository-inspector.ts`, a repository's GitHub owner and name from
   `origin`, its default branch, and whether a path is a readable Git repository.
 

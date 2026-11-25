@@ -17,8 +17,8 @@ bookmark it and use the browser's Back button:
 - **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
 - **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
 - **System** (`/admin/system`): API usage, processes, app information, backups,
-  and worktree cleanup. Diagnostics poll only while this section is open;
-  loading or failed diagnostics never block other settings.
+  and worktree and branch cleanup. Diagnostics poll only while this section is
+  open; loading or failed diagnostics never block other settings.
 - **Server logs** (`/admin/logs`): searchable logs; `/logs` remains available.
 - **Project settings** (`/admin/project`): expand a project row to edit its
   factory configuration and issue tracking inline. One project is expanded at a
@@ -368,6 +368,44 @@ files are lost either way. Commits made in a linked worktree live in the project
 repository and stay on their branch. The server re-checks which folders are
 orphaned before removing anything and reports any folder it could not remove.
 Removal is only available from a trusted local client.
+
+## Branch cleanup
+
+Archiving a workspace removes its worktree but keeps its local branch. **Branch
+cleanup** in **System** lists, per repository, local branches that are safe to
+delete, and **Delete N branches** deletes them after confirmation. Nothing is
+deleted automatically. A branch is listed only when all of these hold:
+
+- An archived workspace of a project using that repository created a worktree on
+  it, and no workspace that is not archived, in any project using that
+  repository, records it. A workspace still setting up or archiving counts as
+  not archived. An archived workspace that never got a worktree is ignored,
+  since its branch can still be the base branch it started from.
+- It is not the default branch of any project using the repository.
+- It is not checked out in any worktree Git knows about, including the main
+  checkout, worktrees other tools created and worktrees whose folder is gone,
+  and no rebase or bisect in any worktree will return to it.
+- Its commits are safe elsewhere: its tip is reachable from a remote-tracking
+  branch, or the workspace has an attached pull request GitHub reported merged,
+  opened from a branch of the same name, whose last reported head commit is the
+  tip or contains it (as after a squash merge). A commit added locally after the
+  merge keeps the branch.
+
+Repositories used only by archived projects are skipped, as is a repository the
+app cannot read; a non-archived workspace in a project whose repository cannot
+be read protects its branch name in every repository.
+
+Deletion re-checks these rules on the server and deletes only branches that were
+listed at the commit shown. Immediately before each deletion it checks
+workspaces (including those of projects added since the list loaded) and
+worktrees again. It then pins the tip under
+`refs/factory-factory/deleted-branches/<encoded name>/<commit>`, so the commits
+are never garbage-collected, and deletes the branch only if it still points at
+that commit. A branch that moved, disappeared or is in use again is skipped. If
+it comes into use while it is being deleted, or that check fails, it is put back
+at the same commit. Remote branches and remote-tracking refs are never changed.
+To recreate a branch, run `git branch <name> <pin ref>`. Deletion is only
+available from a trusted local client, and one cleanup runs at a time.
 
 ## Factory configuration
 

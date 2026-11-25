@@ -18,6 +18,12 @@ const loggerName = 'admin-trpc';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
+const archivedBranchRemovalSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1).max(1024),
+  sha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
+});
+
 export const adminRouter = router({
   checkUpdates: publicProcedure.query(({ ctx }) =>
     ctx.appContext.services.applicationUpdateService.checkUpdates()
@@ -346,6 +352,24 @@ export const adminRouter = router({
   removeOrphanedWorktrees: trustedLocalProcedure.mutation(({ ctx }) =>
     ctx.appContext.services.orphanedWorktreeService.removeOrphanedWorktrees()
   ),
+
+  /**
+   * List local branches only archived workspaces used whose commits are safe
+   * on a remote or in a merged pull request.
+   */
+  listArchivedBranchCandidates: publicProcedure.query(({ ctx }) =>
+    ctx.appContext.services.archivedBranchCleanupService.findCandidates()
+  ),
+
+  /**
+   * Delete listed archived-workspace branches. Candidates are re-detected
+   * server-side; a branch that moved since it was listed is skipped.
+   */
+  removeArchivedBranches: trustedLocalProcedure
+    .input(z.object({ branches: z.array(archivedBranchRemovalSchema).min(1).max(10_000) }))
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.archivedBranchCleanupService.removeBranches(input.branches)
+    ),
 
   /**
    * Get parsed log entries from server.log with filtering and pagination.

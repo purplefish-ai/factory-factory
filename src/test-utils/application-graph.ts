@@ -367,6 +367,7 @@ vi.mock('@/backend/services/workspace', async () =>
     workspaceStateMachine: {},
     worktreeLifecycleService: {},
     orphanedWorktreeService: {},
+    archivedBranchCleanupService: {},
   })
 );
 vi.mock('@/backend/services/workspace-git-state.service', () =>

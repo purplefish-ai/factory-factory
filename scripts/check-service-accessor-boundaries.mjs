@@ -159,6 +159,10 @@ const ACCESSOR_POLICIES = {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-archived-blobs.accessor',
   },
+  workspaceBranchCleanupAccessor: {
+    owner: 'workspace',
+    module: 'src/backend/services/workspace/resources/workspace-branch-cleanup.accessor',
+  },
   workspaceRatchetAccessor: {
     owner: 'workspace',
     module: 'src/backend/services/workspace/resources/workspace-ratchet.accessor',
