@@ -10,6 +10,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   archiveWorkspace,
   type ArchiveWorkspaceDependencies,
+  withArchiveExcluded,
 } from './workspace-archive.orchestrator';
 
 const persistence = vi.hoisted(() => ({
@@ -304,5 +305,85 @@ describe('concurrent workspace archives', () => {
     const error = new Error('Database unavailable');
     vi.spyOn(workspaceStateMachine, 'startArchivingWithSourceStatus').mockRejectedValueOnce(error);
     await expect(archiveWorkspace(row, {}, services)).rejects.toBe(error);
+  });
+
+  it.each([
+    ['succeeds', undefined],
+    ['fails', new Error('Worktree cleanup failed')],
+  ])('runs an excluded operation only once the in-flight archive %s', async (_outcome, failure) => {
+    await expect(withArchiveExcluded(row.id, async () => 'idle')).resolves.toBe('idle');
+    const enteredCleanup = deferred();
+    const finishCleanup = deferred();
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementationOnce(
+      async () => {
+        enteredCleanup.resolve();
+        await finishCleanup.promise;
+        if (failure) {
+          throw failure;
+        }
+      }
+    );
+    const archive = archiveWorkspace(row, {}, services).catch((error: unknown) => error);
+    await enteredCleanup.promise;
+    const operation = vi.fn(async () => 'deleted');
+    const excluded = withArchiveExcluded(row.id, operation);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(operation).not.toHaveBeenCalled();
+    finishCleanup.resolve();
+    await expect(excluded).resolves.toBe('deleted');
+    expect(await archive).toEqual(failure ?? expect.objectContaining({ status: 'ARCHIVED' }));
+  });
+
+  it('refuses an archive that starts while an excluded operation runs', async () => {
+    const release = deferred();
+    const excluded = withArchiveExcluded(row.id, () => release.promise);
+    await expect(archiveWorkspace(row, {}, services)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: 'Workspace is being deleted',
+    });
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+    release.resolve();
+    await excluded;
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVED',
+    });
+  });
+
+  it('never runs an excluded operation alongside a joined lock-recovery retry', async () => {
+    const enteredCleanup = deferred();
+    const finishCleanup = deferred();
+    let cleaning = 0;
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree)
+      .mockImplementationOnce(async () => {
+        cleaning++;
+        enteredCleanup.resolve();
+        await finishCleanup.promise;
+        cleaning--;
+        throw new ApplicationError('CONFLICT', 'Index locked', { kind: 'GIT_INDEX_LOCKED' });
+      })
+      .mockImplementationOnce(async () => {
+        cleaning++;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        cleaning--;
+      });
+    const owner = archiveWorkspace(row, {}, services).catch((error: unknown) => error);
+    await enteredCleanup.promise;
+    const recovery = archiveWorkspace(row, { removeGitIndexLock: true }, services).catch(
+      (error: unknown) => error
+    );
+    const seen: number[] = [];
+    const excluded = withArchiveExcluded(row.id, async () => {
+      seen.push(cleaning);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      seen.push(cleaning);
+    });
+
+    finishCleanup.resolve();
+    await excluded;
+    await Promise.all([owner, recovery]);
+    expect(seen).toEqual([0, 0]);
+    // The retry ran first, so the exclusion waited for it rather than refusing it.
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(2);
   });
 });

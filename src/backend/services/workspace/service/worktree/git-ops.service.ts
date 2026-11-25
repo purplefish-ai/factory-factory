@@ -12,6 +12,8 @@ import {
 } from '@/backend/services/workspace-git-state.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { parseGitHubRemoteUrl } from './project-repository-inspector';
+import { detachWorktreeDirectory } from './worktree-trash';
+import { worktreeTrashReclaimer } from './worktree-trash-reclaimer.service';
 
 const logger = createLogger('git-ops');
 
@@ -231,12 +233,9 @@ class GitOpsService {
 
     // Git records real paths. Resolve the base separately so a missing worktree
     // still matches its registration and can be removed through Git.
-    let canonicalWorktreePath = expectedWorktreePath;
+    let canonicalBase: string | null = null;
     try {
-      canonicalWorktreePath = path.join(
-        await fs.realpath(path.dirname(expectedWorktreePath)),
-        worktreeName
-      );
+      canonicalBase = await fs.realpath(path.dirname(expectedWorktreePath));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
@@ -246,39 +245,58 @@ class GitOpsService {
         { worktreePath, worktreeBasePath: path.dirname(expectedWorktreePath) }
       );
     }
+    const canonicalWorktreePath = canonicalBase
+      ? path.join(canonicalBase, worktreeName)
+      : expectedWorktreePath;
     const registeredWorktree = (await gitClient.listWorktreesWithBranches()).find(
       (entry) => path.resolve(entry.path) === canonicalWorktreePath
     );
-    if (registeredWorktree) {
-      try {
-        await guard?.check();
-        guard?.assertCurrent();
-        await workspaceGitStateService.withWatchersSuspended(worktreePath, () =>
-          gitClient.deleteWorktree(worktreeName)
-        );
-      } catch (error) {
-        // A later snapshot read reinstalls watchers if the worktree survives.
-        workspaceGitStateService.invalidate(worktreePath);
-        throw error;
-      }
+    if (registeredWorktree?.locked) {
+      // `git worktree remove` refuses a locked worktree; refuse it before moving.
+      throw new Error(`Refusing to remove a locked worktree: ${registeredWorktree.path}`);
+    }
+    const directoryPresent = await worktreeEntryExists(worktreePath);
+    if (!(directoryPresent || registeredWorktree)) {
+      workspaceGitStateService.remove(worktreePath);
       return;
     }
 
-    if (await pathExists(worktreePath)) {
-      try {
-        await guard?.check();
-        guard?.assertCurrent();
-        await workspaceGitStateService.withWatchersSuspended(worktreePath, () =>
-          fs.rm(worktreePath, { recursive: true, force: true })
-        );
-        return;
-      } catch (error) {
-        // A later snapshot read reinstalls watchers if the worktree survives.
-        workspaceGitStateService.invalidate(worktreePath);
-        throw error;
-      }
+    try {
+      await guard?.check();
+      guard?.assertCurrent();
+      await workspaceGitStateService.withWatchersSuspended(worktreePath, async () => {
+        // Detach first, so the path is intact or gone and never half-deleted,
+        // then drop the registration. A retry after a failed Git step finds
+        // the directory gone and only removes the registration.
+        if (directoryPresent) {
+          await this.detachDirectory(worktreePath, canonicalBase);
+        }
+        if (registeredWorktree) {
+          if (await worktreeEntryExists(registeredWorktree.path)) {
+            // Git would delete it under the command deadline; never let it.
+            throw new Error('Refusing to remove a worktree registration whose directory remains');
+          }
+          await gitClient.removeWorktreeRegistration(registeredWorktree.path);
+        }
+      });
+    } catch (error) {
+      // A later snapshot read reinstalls watchers if the worktree survives.
+      workspaceGitStateService.invalidate(worktreePath);
+      throw error;
     }
-    workspaceGitStateService.remove(worktreePath);
+  }
+
+  private async detachDirectory(worktreePath: string, canonicalBase: string | null): Promise<void> {
+    const result = await detachWorktreeDirectory(worktreePath, canonicalBase);
+    if (result.kind === 'moved') {
+      worktreeTrashReclaimer.wake();
+      return;
+    }
+    logger.warn('Deleted worktree in place because it could not be moved to the trash', {
+      worktreePath,
+      error:
+        result.moveError instanceof Error ? result.moveError.message : String(result.moveError),
+    });
   }
 
   async ensureBaseBranchExists(

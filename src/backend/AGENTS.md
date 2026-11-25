@@ -29,6 +29,8 @@ two callers: `server.ts` and `disposeApplication`.
 - The owner exposes a `start` and a `stop`. `run` honours its abort signal,
   because `stop()` waits for the run in flight without a bound, and a job never
   overlaps itself. `job-runner.service.test.ts`.
+- Work an event makes due calls `jobRunner.wake(name)` instead of shortening the
+  interval; a wake never overlaps runs or starts a stopped job.
 - A new job adds a `ShutdownJob` entry, or a step, in `application-shutdown.ts`,
   and is named in the `after` of each step that tears down what it uses.
 - The steps: [add-background-job](../../docs/recipes/add-background-job.md).

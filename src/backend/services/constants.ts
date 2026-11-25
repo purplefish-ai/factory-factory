@@ -36,6 +36,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   snapshotReconciliation: 60_000, // Safety-net recompute of workspace snapshots
   prEventRetention: 30 * 60_000, // Bounded deletion of old terminal PR facts
   archivedWorkspaceBlobRetention: 10 * 60_000, // Bounded release of archived attachments/logs
+  worktreeTrashReclaim: 30 * 60_000, // Fallback; a worktree moved to the trash wakes it at once
 } as const);
 
 export const SERVICE_CACHE_TTL_MS = Object.freeze({

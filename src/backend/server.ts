@@ -427,6 +427,7 @@ export function createServer(application: Application, requestedPort?: number): 
       return;
     }
     periodicTaskService.start();
+    services.worktreeTrashReclaimer.start();
     services.agentRuntime?.start();
     // Provisioning (git, startup script, agent session) can take minutes, so it
     // must not hold back readiness. `stopPeriodicCleanup` drains it.

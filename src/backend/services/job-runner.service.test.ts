@@ -388,6 +388,108 @@ describe('jobRunner', () => {
     });
   });
 
+  describe('wake', () => {
+    it('ends the pending delay so the next run starts now', async () => {
+      const run = vi.fn().mockResolvedValue(undefined);
+      jobRunner.register({ name: 'woken', intervalMs: 60_000, runImmediately: true, run });
+      jobRunner.start('woken');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).toHaveBeenCalledTimes(1);
+
+      jobRunner.wake('woken');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).toHaveBeenCalledTimes(2);
+
+      // The regular delay resumes after the woken run.
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(run).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(run).toHaveBeenCalledTimes(3);
+    });
+
+    it('runs once more right after a run in flight, without overlapping it', async () => {
+      const job = controllableRun();
+      jobRunner.register({
+        name: 'busy',
+        intervalMs: 60_000,
+        runImmediately: true,
+        run: () => job.run(),
+      });
+      jobRunner.start('busy');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(job.starts).toBe(1);
+
+      jobRunner.wake('busy');
+      jobRunner.wake('busy');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(job.starts).toBe(1);
+
+      job.finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(job.starts).toBe(2);
+
+      job.finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(job.starts).toBe(2);
+    });
+
+    it('honours a wake sent while the next delay is being computed', async () => {
+      const run = vi.fn().mockResolvedValue(undefined);
+      let woken = false;
+      jobRunner.register({
+        name: 'self-waking',
+        intervalMs: 60_000,
+        runImmediately: true,
+        run,
+        computeDelay: (base) => {
+          if (!woken) {
+            woken = true;
+            jobRunner.wake('self-waking');
+          }
+          return base;
+        },
+      });
+      jobRunner.start('self-waking');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not carry a wake sent before a stop into the next start', async () => {
+      const job = controllableRun();
+      jobRunner.register({ name: 'restarted-wake', intervalMs: 1000, run: () => job.run() });
+      jobRunner.start('restarted-wake');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(job.starts).toBe(1);
+
+      jobRunner.wake('restarted-wake');
+      const stopping = jobRunner.stop('restarted-wake');
+      job.finish();
+      await stopping;
+
+      jobRunner.start('restarted-wake');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(job.starts).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(job.starts).toBe(2);
+      job.finish();
+    });
+
+    it('does not start a stopped job', async () => {
+      const run = vi.fn().mockResolvedValue(undefined);
+      jobRunner.register({ name: 'idle', intervalMs: 1000, run });
+
+      jobRunner.wake('idle');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(run).not.toHaveBeenCalled();
+
+      jobRunner.start('idle');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(run).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('start', () => {
     it('is idempotent, so a second call does not create a second loop', async () => {
       const run = vi.fn().mockResolvedValue(undefined);

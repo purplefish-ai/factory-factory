@@ -18,6 +18,7 @@ import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
   recoverStaleArchivingWorkspaces,
+  withArchiveExcluded,
 } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
 import {
   createChildWorkspace,
@@ -154,6 +155,7 @@ import {
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
+  worktreeTrashReclaimer,
 } from './services/workspace';
 import { workspaceGitStateService } from './services/workspace-git-state.service';
 
@@ -257,10 +259,12 @@ export type ApplicationServices = BridgeServices & {
   worktreeLifecycleService: typeof worktreeLifecycleService;
   orphanedWorktreeService: typeof orphanedWorktreeService;
   archivedBranchCleanupService: typeof archivedBranchCleanupService;
+  worktreeTrashReclaimer: typeof worktreeTrashReclaimer;
   computePendingRequestType: typeof computePendingRequestType;
   triggerAdversarialReview: typeof triggerAdversarialReview;
   archiveWorkspace: typeof archiveWorkspace;
   cleanupWorkspaceRuntimeResources: typeof cleanupWorkspaceRuntimeResources;
+  withArchiveExcluded: typeof withArchiveExcluded;
   cleanupWorkspaceScopedCaches(workspaceId: string): void;
   createChildWorkspace: (input: Parameters<typeof createChildWorkspace>[0]) => Promise<string>;
   deliverWorkspaceNotification: typeof deliverWorkspaceNotification;
@@ -538,8 +542,10 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     worktreeLifecycleService,
     orphanedWorktreeService,
     archivedBranchCleanupService,
+    worktreeTrashReclaimer,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,
+    withArchiveExcluded,
     cleanupWorkspaceScopedCaches: (workspaceId) => {
       if (!eventCollector) {
         throw new Error('Event collector is not initialized');
