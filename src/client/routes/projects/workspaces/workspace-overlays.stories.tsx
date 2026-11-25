@@ -106,6 +106,38 @@ export const EventInitialUnresolved: Story = {
     />
   ),
 };
+export const ArchiveIncomplete: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'An archive whose worktree removal failed. The message stands on its own, and setup cannot be retried; archiving again finishes it.',
+      },
+    },
+  },
+  render: () => (
+    <ScriptFailedBanner
+      workspaceId="test-workspace"
+      initErrorMessage="Archive incomplete: Failed to delete worktree: git worktree remove timed out after 300000ms. Archive again to finish."
+      initOutput="Saved setup output"
+      hasStartupScript
+      retryAvailability={{
+        status: 'BLOCKED',
+        reason: 'ARCHIVE_INCOMPLETE',
+        explanation:
+          'The archive did not finish, so setup cannot be retried. Archive the workspace again to finish.',
+      }}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText(/^Archive incomplete: Failed to delete worktree/)
+    ).toBeInTheDocument();
+    await expect(canvas.queryByText(/Init script failed/)).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument();
+  },
+};
 export const UnknownRetryAuthority: Story = {
   render: () => (
     <ScriptFailedBanner

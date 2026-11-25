@@ -2,8 +2,9 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
-import { getWorkspaceInitPolicy, hasArchiveIncompleteMarker } from '@/backend/services/workspace';
+import { getWorkspaceInitPolicy } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger('workspace-init-trpc');

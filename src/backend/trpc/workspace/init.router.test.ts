@@ -15,11 +15,8 @@ const mockRetryQueuedDispatchAfterWorkspaceReady = vi.hoisted(() => vi.fn());
 const mockExecuteStartupScriptPipeline = vi.hoisted(() => vi.fn());
 const mockReadConfig = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/services/workspace', async (importOriginal) => ({
+vi.mock('@/backend/services/workspace', () => ({
   getWorkspaceInitPolicy: (...args: unknown[]) => mockGetWorkspaceInitPolicy(...args),
-  hasArchiveIncompleteMarker: (
-    await importOriginal<typeof import('@/backend/services/workspace')>()
-  ).hasArchiveIncompleteMarker,
 }));
 
 import { workspaceInitRouter } from './init.trpc';

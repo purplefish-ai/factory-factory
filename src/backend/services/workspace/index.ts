@@ -58,10 +58,6 @@ export {
 
 // --- State derivation (pure functions) ---
 export {
-  formatArchiveIncompleteMessage,
-  hasArchiveIncompleteMarker,
-} from './service/state/archive-incomplete';
-export {
   deriveWorkspaceFlowState,
   deriveWorkspaceFlowStateFromWorkspace,
 } from './service/state/flow-state';

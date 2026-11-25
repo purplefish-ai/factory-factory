@@ -3,7 +3,8 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { workspaceRetryAuthorityService } from '@/backend/services/agent-definition';
 import { eventSessionAuthority, EventSessionFenceError } from '@/backend/services/session';
-import { hasArchiveIncompleteMarker, workspaceDataService } from '@/backend/services/workspace';
+import { workspaceDataService } from '@/backend/services/workspace';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import type { WorkspaceInitGuard, WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 
 type Workspace = {

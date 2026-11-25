@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { formatArchiveIncompleteMessage, hasArchiveIncompleteMarker } from './archive-incomplete';
+import {
+  formatArchiveIncompleteMessage,
+  hasArchiveIncompleteMarker,
+} from './workspace-archive-incomplete';
 
 it('formats a marked message that the marker check recognises', () => {
   const message = formatArchiveIncompleteMessage('git worktree remove timed out.');

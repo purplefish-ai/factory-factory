@@ -59,4 +59,36 @@ describe('ScriptFailedBanner', () => {
 
     root.unmount();
   });
+
+  it('shows an incomplete archive on its own, without a setup failure or retry', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const message =
+      'Archive incomplete: Failed to delete worktree: remove timed out. Archive again to finish.';
+
+    flushSync(() => {
+      root.render(
+        createElement(ScriptFailedBanner, {
+          workspaceId: 'workspace-1',
+          initErrorMessage: message,
+          initOutput: null,
+          hasStartupScript: false,
+          retryAvailability: {
+            status: 'BLOCKED',
+            reason: 'ARCHIVE_INCOMPLETE',
+            explanation: 'The archive did not finish, so setup cannot be retried.',
+          },
+        })
+      );
+    });
+
+    expect(Array.from(container.querySelectorAll('p')).map((node) => node.textContent)).toEqual([
+      message,
+    ]);
+    expect(container.textContent).not.toContain('Init script failed');
+    expect(container.textContent).not.toContain('Retry');
+
+    root.unmount();
+  });
 });

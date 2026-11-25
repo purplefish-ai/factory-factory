@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { StatusCallout } from '@/client/components/status-callout';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 import { InitOutputPanel } from './init-output-panel';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
@@ -40,6 +41,8 @@ export function ScriptFailedBanner({
 }: ScriptFailedBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const { retry, retryInit } = useRetryWorkspaceInit(workspaceId, retryAvailability);
+  // An unfinished archive is not a setup failure, and setup cannot run on its worktree again.
+  const archiveIncomplete = hasArchiveIncompleteMarker(initErrorMessage);
 
   return (
     <StatusCallout
@@ -54,17 +57,19 @@ export function ScriptFailedBanner({
               {expanded ? 'Hide output' : 'Show output'}
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={retry}
-            pending={retryInit.isPending}
-            pendingLabel="Retrying…"
-            disabled={retryAvailability?.status !== 'AVAILABLE'}
-          >
-            <ArrowsClockwiseIcon />
-            Retry
-          </Button>
+          {!archiveIncomplete && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={retry}
+              pending={retryInit.isPending}
+              pendingLabel="Retrying…"
+              disabled={retryAvailability?.status !== 'AVAILABLE'}
+            >
+              <ArrowsClockwiseIcon />
+              Retry
+            </Button>
+          )}
           {showPlay && (
             <Button variant="outline" size="xs" onClick={onPlay} disabled={!onPlay}>
               <PlayIcon />
@@ -79,8 +84,12 @@ export function ScriptFailedBanner({
         </>
       }
     >
-      <p>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</p>
-      {retryAvailability?.status !== 'AVAILABLE' && (
+      <p>
+        {archiveIncomplete
+          ? initErrorMessage
+          : `Init script failed${initErrorMessage ? `: ${initErrorMessage}` : ''}`}
+      </p>
+      {!archiveIncomplete && retryAvailability?.status !== 'AVAILABLE' && (
         <p className="mt-1 text-xs">
           {retryAvailability?.status === 'BLOCKED'
             ? retryAvailability.explanation

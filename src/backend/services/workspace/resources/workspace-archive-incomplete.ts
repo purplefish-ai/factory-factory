@@ -1,13 +1,7 @@
+import { ARCHIVE_INCOMPLETE_PREFIX } from '@/shared/workspace-archive-incomplete';
 import type { Prisma } from '@prisma-gen/client';
 
-/**
- * Marks a workspace whose archive reached worktree removal but did not finish.
- * Its worktree may be partly deleted, so it is never snapshotted again or
- * retried through setup; archiving again is the only way forward. The marker
- * lives in `initErrorMessage`, which every setup retry clears. The predicate
- * and message format are in `service/state/archive-incomplete.ts`.
- */
-export const ARCHIVE_INCOMPLETE_PREFIX = 'Archive incomplete:';
+/** Rows without the archive-incomplete marker (see `@/shared/workspace-archive-incomplete`). */
 
 export const withoutArchiveIncompleteMarker: Prisma.WorkspaceWhereInput = {
   OR: [

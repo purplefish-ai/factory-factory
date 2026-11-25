@@ -9,10 +9,7 @@ vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/backend/services/workspace', async (importOriginal) => ({
-  formatArchiveIncompleteMessage: (
-    await importOriginal<typeof import('@/backend/services/workspace')>()
-  ).formatArchiveIncompleteMessage,
+vi.mock('@/backend/services/workspace', () => ({
   archivedWorkspaceBlobRetentionService: {
     releaseAfterArchive: vi.fn(),
   },

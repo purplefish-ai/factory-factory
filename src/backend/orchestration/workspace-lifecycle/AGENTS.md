@@ -75,8 +75,7 @@ collector is given `fireLifecycleNotification` (typed from
   Once removal may have started, in this attempt or an earlier one (the "Archive
   incomplete:" marker, or an interrupted ARCHIVING row whose ref exists), a
   failure moves it to FAILED with the marker, never READY; nothing snapshots it
-  again and setup retry refuses it. `workspace-archive.orchestrator.test.ts`,
-  `workspace-archive-concurrency.test.ts`,
+  again and setup retry refuses it. `workspace-archive-concurrency.test.ts`,
   `workspace-retry-authority.integration.test.ts`.
 - Startup marks stale PROVISIONING workspaces FAILED unless their init script is
   still running, and initializes leftover NEW workspaces one at a time, holding

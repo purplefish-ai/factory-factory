@@ -370,7 +370,7 @@ describe('concurrent workspace archives', () => {
     await expect(withArchiveExcluded(row.id, async () => 'idle')).resolves.toBe('idle');
     const enteredCleanup = deferred();
     const finishCleanup = deferred();
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementationOnce(
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockImplementationOnce(
       async () => {
         enteredCleanup.resolve();
         await finishCleanup.promise;
@@ -398,7 +398,7 @@ describe('concurrent workspace archives', () => {
       code: 'CONFLICT',
       message: 'Workspace is being deleted',
     });
-    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
     release.resolve();
     await excluded;
     await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
@@ -410,7 +410,7 @@ describe('concurrent workspace archives', () => {
     const enteredCleanup = deferred();
     const finishCleanup = deferred();
     let cleaning = 0;
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree)
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree)
       .mockImplementationOnce(async () => {
         cleaning++;
         enteredCleanup.resolve();
@@ -440,6 +440,6 @@ describe('concurrent workspace archives', () => {
     await Promise.all([owner, recovery]);
     expect(seen).toEqual([0, 0]);
     // The retry ran first, so the exclusion waited for it rather than refusing it.
-    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledTimes(2);
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledTimes(2);
   });
 });

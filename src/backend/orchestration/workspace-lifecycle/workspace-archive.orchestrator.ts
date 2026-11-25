@@ -6,7 +6,6 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
   archivedWorkspaceBlobRetentionService,
-  formatArchiveIncompleteMessage,
   workspaceActivityService,
   workspaceDataService,
   workspaceMaintenanceService,
@@ -14,6 +13,7 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
+import { formatArchiveIncompleteMessage } from '@/shared/workspace-archive-incomplete';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');

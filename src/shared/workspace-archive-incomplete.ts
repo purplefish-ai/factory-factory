@@ -1,4 +1,10 @@
-import { ARCHIVE_INCOMPLETE_PREFIX } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
+/**
+ * Marks a workspace whose archive reached worktree removal but did not finish.
+ * Its worktree may be partly deleted, so it is never snapshotted again or set
+ * up again; archiving again is the only way forward. The marker is the start
+ * of the FAILED row's `initErrorMessage`, which every setup retry clears.
+ */
+export const ARCHIVE_INCOMPLETE_PREFIX = 'Archive incomplete:';
 
 const MAX_REASON_LENGTH = 500;
 
