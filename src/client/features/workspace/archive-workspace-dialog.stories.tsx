@@ -49,3 +49,23 @@ export const WithActiveChildren: Story = {
     await expect(args.onOpenChange).toHaveBeenCalledWith(false);
   },
 };
+
+/** Archiving again after an archive that stopped partway does not commit again. */
+export const ArchiveIncomplete: Story = {
+  args: {
+    archiveIncomplete: true,
+  },
+  play: async ({ args }) => {
+    const dialog = await within(document.body).findByRole('alertdialog');
+    await expect(
+      within(dialog).getByRole('heading', { name: 'Finish archiving workspace?' })
+    ).toBeVisible();
+    await expect(dialog).toHaveTextContent('The last archive of this workspace stopped partway');
+    await expect(dialog).toHaveTextContent('so nothing is committed again.');
+    await expect(dialog).not.toHaveTextContent('will be committed');
+    const archive = within(dialog).getByRole('button', { name: 'Archive again' });
+    await waitFor(() => expect(getComputedStyle(archive).pointerEvents).not.toBe('none'));
+    await userEvent.click(archive);
+    await expect(args.onConfirm).toHaveBeenCalledOnce();
+  },
+};

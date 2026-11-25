@@ -14,7 +14,10 @@ import {
 import { getNewChatUnavailableReason } from '@/client/features/workspace/session-limit';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import {
+  isWorkspaceArchiveIncomplete,
+  isWorkspaceDoneOrMerged,
+} from '@/client/lib/workspace-archive';
 import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
 import { isSessionSummaryWorking } from '@/shared/session-runtime';
@@ -319,6 +322,7 @@ export function WorkspaceDetailContainer() {
             open: archiveDialogOpen,
             setOpen: setArchiveDialogOpen,
             activeChildCount,
+            archiveIncomplete: isWorkspaceArchiveIncomplete(workspace),
             onConfirm: () => handleArchive(),
           }}
         />

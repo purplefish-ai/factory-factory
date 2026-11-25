@@ -6,6 +6,7 @@ import {
   findWorkspaceSessionRuntimeError,
   hasStartingSessionSummary,
 } from '@/shared/session-runtime';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import { deriveWorkspaceFlowState } from '@/shared/workspace-flow-state';
 import { deriveWorkspacePRSelection, type WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
@@ -103,6 +104,9 @@ function projectLegacyPRState(entry: WorkspaceSnapshotEntry, prs: WorkspacePullR
   });
   const statusReason = deriveWorkspaceStatusReason({
     lifecycle: entry.status,
+    archiveIncomplete:
+      entry.statusReason.code === 'ARCHIVE_INCOMPLETE' ||
+      hasArchiveIncompleteMarker(entry.initErrorMessage),
     hasHadSessions: entry.hasHadSessions,
     isWorking: entry.isWorking,
     isSessionStarting:

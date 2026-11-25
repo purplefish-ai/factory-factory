@@ -49,6 +49,16 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => createElement('div', null, children),
 }));
 
+const archiveDialogMock = vi.hoisted(() =>
+  vi.fn((props: { open: boolean; archiveIncomplete?: boolean }) =>
+    props.open ? `archive dialog: archiveIncomplete=${String(props.archiveIncomplete)}` : null
+  )
+);
+
+vi.mock('@/client/lib/trpc', () => ({
+  trpc: { workspace: { listChildren: { useQuery: () => ({ data: undefined }) } } },
+}));
+
 vi.mock('@/client/features/workspace', async () => ({
   WorkspaceParentLink: (
     await vi.importActual<typeof import('@/client/features/workspace')>(
@@ -56,7 +66,7 @@ vi.mock('@/client/features/workspace', async () => ({
     )
   ).WorkspaceParentLink,
   WorkspaceFamilyMenu: () => createElement('button', { type: 'button' }, 'Family'),
-  ArchiveWorkspaceDialog: () => null,
+  ArchiveWorkspaceDialog: archiveDialogMock,
   RatchetToggleButton: () => null,
   WorkspaceStatusBadge: ({ status }: { status: string }) => createElement('span', null, status),
 }));
@@ -90,7 +100,8 @@ const baseWorkspace = {
 function renderCard(
   workspace: WorkspaceWithKanban,
   onCardClick?: () => void,
-  unreadCount?: number
+  unreadCount?: number,
+  onArchive?: (workspaceId: string) => void
 ): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -105,6 +116,7 @@ function renderCard(
           workspace,
           projectSlug: 'project',
           unreadCount,
+          onArchive,
         })
       )
     );
@@ -290,6 +302,61 @@ describe('KanbanCard', () => {
 
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe('Needs permission');
+
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
+
+  it('names an incomplete archive and offers archiving again in plain view', () => {
+    const onArchive = vi.fn();
+    const { container, root } = renderCard(
+      {
+        ...baseWorkspace,
+        status: 'FAILED',
+        initErrorMessage: 'Archive incomplete: worktree is locked. Archive again to finish.',
+        statusReason: {
+          code: 'ARCHIVE_INCOMPLETE',
+          label: 'Archive incomplete',
+          tone: 'danger',
+          needsUser: true,
+        },
+      },
+      undefined,
+      undefined,
+      onArchive
+    );
+    const chips = container.querySelectorAll('[data-testid="kanban-status-chip"]');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe('Archive incomplete');
+    // No FAILED lifecycle badge (mocked as its status) beside the chip.
+    expect(container.textContent).not.toContain('FAILED');
+    expect(container.textContent).toContain(
+      'The last archive stopped partway. Archive again to finish.'
+    );
+
+    const archive = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Archive again"]'
+    );
+    expect(archive).not.toBeNull();
+    expect(archive?.className).not.toContain('hover-reveal');
+    actFlushSync(() => archive?.click());
+    expect(onArchive).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('archive dialog: archiveIncomplete=true');
+
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
+
+  it('keeps the ordinary archive button revealed on hover with the ordinary dialog', () => {
+    const { container, root } = renderCard(baseWorkspace, undefined, undefined, vi.fn());
+
+    expect(container.textContent).not.toContain('Archive again to finish');
+    const archive = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Archive workspace"]'
+    );
+    expect(archive?.className).toContain('hover-reveal');
+    actFlushSync(() => archive?.click());
+    expect(container.textContent).toContain('archive dialog: archiveIncomplete=false');
 
     actFlushSync(() => root.unmount());
     container.remove();

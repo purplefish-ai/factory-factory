@@ -8,6 +8,35 @@ import { ArchiveSelectionDialog, summarizeArchiveRisks } from './archive-selecti
 import { baseWorkspace } from './kanban-card.story-fixtures';
 
 const openPr = { ...deriveWorkspacePRSummary([], true), openCount: 1 };
+const archiveIncomplete = {
+  ...baseWorkspace,
+  status: 'FAILED',
+  statusReason: {
+    code: 'ARCHIVE_INCOMPLETE',
+    label: 'Archive incomplete',
+    tone: 'danger',
+    needsUser: true,
+  },
+  gitStats: { total: 1, additions: 1, deletions: 0, hasUncommitted: true },
+} as const;
+
+function renderDialog(workspaces: Parameters<typeof ArchiveSelectionDialog>[0]['workspaces']) {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      <ArchiveSelectionDialog
+        open
+        onOpenChange={vi.fn()}
+        workspaces={workspaces}
+        onConfirm={vi.fn()}
+      />
+    )
+  );
+  return { dialog: document.querySelector('[role="alertdialog"]')!, root };
+}
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -47,6 +76,22 @@ describe('summarizeArchiveRisks', () => {
     expect(summarizeArchiveRisks([{ ...baseWorkspace, name: 'Server', runScriptStatus }])).toEqual(
       flagged ? [{ label: 'Dev server running', names: ['Server'] }] : []
     );
+  });
+
+  it('does not flag uncommitted changes for a workspace whose archive did not finish', () => {
+    expect(
+      summarizeArchiveRisks([
+        { ...archiveIncomplete, name: 'Half archived', prSummary: openPr },
+        {
+          ...baseWorkspace,
+          name: 'Dirty',
+          gitStats: { total: 1, additions: 1, deletions: 0, hasUncommitted: true },
+        },
+      ])
+    ).toEqual([
+      { label: 'Uncommitted changes', names: ['Dirty'] },
+      { label: 'Open pull request', names: ['Half archived'] },
+    ]);
   });
 
   it('reports nothing for idle, clean workspaces without open PRs', () => {
@@ -115,6 +160,44 @@ describe('ArchiveSelectionDialog', () => {
     expect(dialog.textContent).toContain(
       'before the worktree is removed. Chat history and the branch are kept.'
     );
+    act(() => root.unmount());
+  });
+
+  it('does not promise a commit when every workspace is finishing an earlier archive', () => {
+    const { dialog, root } = renderDialog([
+      { ...archiveIncomplete, name: 'One' },
+      { ...archiveIncomplete, name: 'Two' },
+    ]);
+    expect(dialog.textContent).toContain(
+      'Their last archives stopped partway, so archiving again finishes removing the worktrees.'
+    );
+    expect(dialog.textContent).toContain('so nothing is committed again.');
+    expect(dialog.textContent).not.toContain('will be committed');
+    expect(dialog.textContent).not.toContain('Check before archiving');
+    expect(dialog.textContent).not.toContain('Finishing an earlier archive');
+    act(() => root.unmount());
+  });
+
+  it('words a single incomplete archive in the singular', () => {
+    const { dialog, root } = renderDialog([archiveIncomplete]);
+    expect(dialog.textContent).toContain(
+      'Its last archive stopped partway, so archiving again finishes removing the worktree.'
+    );
+    expect(dialog.textContent).not.toContain('will be committed');
+    act(() => root.unmount());
+  });
+
+  it('names the incomplete archives in a mixed selection', () => {
+    const { dialog, root } = renderDialog([
+      { ...baseWorkspace, name: 'Fresh' },
+      { ...archiveIncomplete, name: 'Half archived' },
+    ]);
+    expect(dialog.textContent).toContain(
+      'Uncommitted changes will be committed before the worktrees are removed, except for the workspace whose last archive stopped partway: nothing is committed again for it.'
+    );
+    expect(dialog.textContent).toContain('Finishing an earlier archive');
+    expect(dialog.textContent).toContain('Archive incomplete (1): Half archived');
+    expect(dialog.textContent).not.toContain('Uncommitted changes (');
     act(() => root.unmount());
   });
 });

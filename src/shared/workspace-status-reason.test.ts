@@ -251,6 +251,41 @@ describe('deriveWorkspaceStatusReason', () => {
     ).toMatchObject({ code: 'ARCHIVING' });
   });
 
+  it('reports an incomplete archive instead of a setup failure', () => {
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ lifecycle: 'FAILED', archiveIncomplete: true }))
+    ).toEqual({
+      code: 'ARCHIVE_INCOMPLETE',
+      label: 'Archive incomplete',
+      tone: 'danger',
+      needsUser: true,
+    });
+  });
+
+  it('lets an incomplete archive outrank a merged PR, a pending request and a session error', () => {
+    expect(
+      deriveWorkspaceStatusReason(
+        makeInput({
+          lifecycle: 'FAILED',
+          archiveIncomplete: true,
+          prState: 'MERGED',
+          flowPhase: 'MERGED',
+          pendingRequestType: 'permission_request',
+          hasSessionRuntimeError: true,
+        })
+      )
+    ).toMatchObject({ code: 'ARCHIVE_INCOMPLETE' });
+  });
+
+  it('ignores the archive-incomplete flag outside FAILED', () => {
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ lifecycle: 'READY', archiveIncomplete: true }))
+    ).toMatchObject({ code: 'READY_FOR_NEXT_PROMPT' });
+    expect(
+      deriveWorkspaceStatusReason(makeInput({ lifecycle: 'ARCHIVING', archiveIncomplete: true }))
+    ).toMatchObject({ code: 'ARCHIVING' });
+  });
+
   it('marks a reviewable pull request as needing the user', () => {
     expect(
       deriveWorkspaceStatusReason(

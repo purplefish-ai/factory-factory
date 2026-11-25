@@ -238,6 +238,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       open: true,
       setOpen: vi.fn(),
       activeChildCount,
+      archiveIncomplete: false,
       onConfirm: vi.fn(),
     },
   };
@@ -281,6 +282,18 @@ describe('WorkspaceDetailView', () => {
         .querySelector('[data-testid="archive-dialog"]')
         ?.getAttribute('data-active-child-count')
     ).toBe('2');
+
+    act(() => root.unmount());
+  });
+
+  it('passes an incomplete archive to the archive dialog', () => {
+    const props = createViewProps(0);
+    props.archiveDialog.archiveIncomplete = true;
+    const { root } = renderView(props);
+
+    expect(archiveDialogMock.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ archiveIncomplete: true })
+    );
 
     act(() => root.unmount());
   });

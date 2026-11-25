@@ -10,6 +10,7 @@ function makeInput(
 ): WorkspaceDerivedStateInput {
   return {
     lifecycle: WorkspaceStatus.READY,
+    archiveIncomplete: false,
     prUrl: null,
     prState: PRState.NONE,
     prCiStatus: 'UNKNOWN',
@@ -85,6 +86,33 @@ describe('assembleWorkspaceDerivedState', () => {
     });
     expect(working.statusReason.code).toBe('AGENT_WORKING');
     expect(working.kanbanColumn).toBe(KanbanColumn.WORKING);
+  });
+
+  it('keeps an incomplete archive with a merged PR on the board in Waiting', () => {
+    const derive = (archiveIncomplete: boolean) =>
+      assembleWorkspaceDerivedState(
+        makeInput({
+          lifecycle: WorkspaceStatus.FAILED,
+          archiveIncomplete,
+          prState: PRState.MERGED,
+          ratchetState: RatchetState.MERGED,
+          flowState: {
+            phase: 'MERGED',
+            ciObservation: 'CHECKS_PASSED',
+            shouldAnimateRatchetButton: false,
+          },
+        }),
+        { deriveSidebarStatus: () => ({ activityState: 'IDLE', ciState: 'MERGED' }) }
+      );
+
+    expect(derive(true)).toMatchObject({
+      kanbanColumn: KanbanColumn.WAITING,
+      statusReason: { code: 'ARCHIVE_INCOMPLETE', label: 'Archive incomplete' },
+    });
+    expect(derive(false)).toMatchObject({
+      kanbanColumn: KanbanColumn.DONE,
+      statusReason: { code: 'MERGED' },
+    });
   });
 
   it('maps flow fields and computed values into canonical derived shape', () => {

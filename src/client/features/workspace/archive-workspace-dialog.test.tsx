@@ -68,6 +68,32 @@ describe('ArchiveWorkspaceDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('does not promise a commit when archiving again after an incomplete archive', () => {
+    const onConfirm = vi.fn();
+    void act(() => {
+      root.render(
+        createElement(ArchiveWorkspaceDialog, {
+          open: true,
+          onOpenChange: vi.fn(),
+          onConfirm,
+          archiveIncomplete: true,
+        })
+      );
+    });
+
+    const dialog = document.querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain('Finish archiving workspace?');
+    expect(dialog?.textContent).toContain('The last archive of this workspace stopped partway');
+    expect(dialog?.textContent).toContain('so nothing is committed again.');
+    expect(dialog?.textContent).not.toContain('will be committed');
+
+    const archiveButton = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Archive again'
+    );
+    void act(() => archiveButton?.click());
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
   it('warns about active child workspaces inside the dialog', () => {
     void act(() => {
       root.render(

@@ -33,15 +33,18 @@ function importsFrom(file: string): string[] {
 }
 
 describe('workspace read-state pure import boundary', () => {
-  it('permits only shared session predicates at runtime, with no service or infrastructure dependencies', () => {
+  it('permits only shared session and archive-marker predicates at runtime, with no service or infrastructure dependencies', () => {
     expect(
       importsFrom('src/backend/services/workspace/service/state/workspace-read-state.ts')
-    ).toEqual(['@/shared/session-runtime']);
+    ).toEqual(['@/shared/session-runtime', '@/shared/workspace-archive-incomplete']);
   });
 
-  it('keeps the permitted shared session predicates free of runtime dependencies', () => {
-    expect(importsFrom('src/shared/session-runtime.ts')).toEqual([]);
-  });
+  it.each(['src/shared/session-runtime.ts', 'src/shared/workspace-archive-incomplete.ts'])(
+    'keeps the permitted shared predicates in %s free of runtime dependencies',
+    (file) => {
+      expect(importsFrom(file)).toEqual([]);
+    }
+  );
 
   it('ignores erased DTO/Prisma types while detecting runtime and side-effect imports', () => {
     const source = `
