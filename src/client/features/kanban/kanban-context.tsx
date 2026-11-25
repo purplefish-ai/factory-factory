@@ -27,6 +27,15 @@ function archiveErrorMessage(error: unknown): string | null {
     : null;
 }
 
+/** A server message as a sentence inside app copy, ending with punctuation. */
+function archiveErrorSentence(error: unknown): string | null {
+  const message = archiveErrorMessage(error)?.trim();
+  if (!message) {
+    return null;
+  }
+  return /[.!?]$/.test(message) ? message : `${message}.`;
+}
+
 /**
  * One toast for the failures of a multi-workspace archive, naming each
  * workspace. A request that failed as a whole shares one error, shown once.
@@ -37,13 +46,13 @@ function reportArchiveFailures(failures: { id: string; name: string; error: unkn
     return;
   }
   if (failures.length === 1) {
-    const message = archiveErrorMessage(first.error);
+    const message = archiveErrorSentence(first.error);
     toast.error(`Couldn't archive ${first.name}.${message ? ` ${message}` : ''}`);
     return;
   }
   const title = `Couldn't archive ${failures.length} workspaces.`;
   if (failures.every((failure) => failure.error === first.error)) {
-    const message = archiveErrorMessage(first.error);
+    const message = archiveErrorSentence(first.error);
     toast.error(message ? `${title} ${message}` : title);
     return;
   }
@@ -52,7 +61,7 @@ function reportArchiveFailures(failures: { id: string; name: string; error: unkn
       <ul className="list-disc pl-4">
         {failures.map((failure) => (
           <li key={failure.id}>
-            {failure.name}: {archiveErrorMessage(failure.error) ?? 'Archive failed'}
+            {failure.name}: {archiveErrorSentence(failure.error) ?? 'Archive failed.'}
           </li>
         ))}
       </ul>

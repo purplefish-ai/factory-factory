@@ -36,6 +36,19 @@ describe('summarizeArchiveRisks', () => {
     ]);
   });
 
+  it.each([
+    ['STARTING', true],
+    ['RUNNING', true],
+    ['STOPPING', true],
+    ['IDLE', false],
+    ['COMPLETED', false],
+    ['FAILED', false],
+  ] as const)('flags a dev server that is %s: %s', (runScriptStatus, flagged) => {
+    expect(summarizeArchiveRisks([{ ...baseWorkspace, name: 'Server', runScriptStatus }])).toEqual(
+      flagged ? [{ label: 'Dev server running', names: ['Server'] }] : []
+    );
+  });
+
   it('reports nothing for idle, clean workspaces without open PRs', () => {
     expect(summarizeArchiveRisks([baseWorkspace, { ...baseWorkspace, gitStats: null }])).toEqual(
       []
@@ -70,12 +83,38 @@ describe('ArchiveSelectionDialog', () => {
     expect(dialog.textContent).toContain('Archive 5 workspaces?');
     expect(dialog.textContent).toContain('This archives every workspace in Done. Running agents');
     expect(dialog.textContent).toContain('Agent running (5): A, B, C and 2 more');
+    expect(dialog.textContent).toContain(
+      'before the worktrees are removed. Chat history and branches are kept.'
+    );
     const confirm = [...dialog.querySelectorAll('button')].find(
       (button) => button.textContent === 'Archive 5'
     )!;
     act(() => confirm.click());
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+    act(() => root.unmount());
+  });
+
+  it('words the consequences for one workspace in the singular', () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <ArchiveSelectionDialog
+          open
+          onOpenChange={vi.fn()}
+          workspaces={[baseWorkspace]}
+          onConfirm={vi.fn()}
+        />
+      )
+    );
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Archive 1 workspace?');
+    expect(dialog.textContent).toContain(
+      'before the worktree is removed. Chat history and the branch are kept.'
+    );
     act(() => root.unmount());
   });
 });

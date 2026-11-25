@@ -12,6 +12,13 @@ export interface ArchiveRisk {
   names: string[];
 }
 
+/** Run-script states with a live process that archiving stops. */
+const ACTIVE_RUN_SCRIPT_STATUSES: ReadonlySet<string> = new Set([
+  'STARTING',
+  'RUNNING',
+  'STOPPING',
+]);
+
 const RISKS: { label: string; applies: (workspace: ArchiveRiskWorkspace) => boolean }[] = [
   { label: 'Agent running', applies: (workspace) => workspace.isWorking },
   {
@@ -19,7 +26,10 @@ const RISKS: { label: string; applies: (workspace: ArchiveRiskWorkspace) => bool
     applies: (workspace) => workspace.gitStats?.hasUncommitted === true,
   },
   { label: 'Open pull request', applies: (workspace) => workspace.prSummary.openCount > 0 },
-  { label: 'Dev server running', applies: (workspace) => workspace.runScriptStatus === 'RUNNING' },
+  {
+    label: 'Dev server running',
+    applies: (workspace) => ACTIVE_RUN_SCRIPT_STATUSES.has(workspace.runScriptStatus),
+  },
   {
     label: 'Has child workspaces, which stay active',
     applies: (workspace) => (workspace.childWorkspaceCount ?? 0) > 0,
@@ -75,7 +85,7 @@ export function ArchiveSelectionDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`Archive ${count} ${noun}?`}
-      description={`${scope ? `${scope} ` : ''}Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+      description={`${scope ? `${scope} ` : ''}Running agents and processes will stop. Uncommitted changes will be committed before ${count === 1 ? 'the worktree is' : 'the worktrees are'} removed. Chat history and ${count === 1 ? 'the branch are' : 'branches are'} kept. Worktree removal cannot be undone in the app.`}
       confirmText={`Archive ${count}`}
       variant="destructive"
       onConfirm={() => {

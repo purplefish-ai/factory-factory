@@ -410,6 +410,19 @@ function selectableCardClassName(selectionMode: boolean, selected: boolean) {
   return cn('select-none', selected && 'border-primary ring-2 ring-primary ring-inset');
 }
 
+/**
+ * Whether a click on the card came from a control of its own (the parent
+ * link, the family menu and its portaled items), which keeps its action
+ * instead of toggling the card.
+ */
+function isCardControlClick(event: React.MouseEvent<HTMLElement>) {
+  const target = event.target;
+  return (
+    !(target instanceof Node && event.currentTarget.contains(target)) ||
+    (target instanceof Element && target.closest('a, button, input, [role="menuitem"]') !== null)
+  );
+}
+
 /** In selection mode a click anywhere on the card toggles it; shift-click selects a range. */
 function selectableCardProps(
   workspaceId: string,
@@ -422,7 +435,11 @@ function selectableCardProps(
   }
   return {
     'data-selected': selected,
-    onClick: (event: React.MouseEvent) => onToggleSelected?.(workspaceId, event.shiftKey),
+    onClick: (event: React.MouseEvent<HTMLElement>) => {
+      if (!isCardControlClick(event)) {
+        onToggleSelected?.(workspaceId, event.shiftKey);
+      }
+    },
   };
 }
 

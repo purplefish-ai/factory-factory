@@ -176,7 +176,7 @@ export const SelectionArchivePartialFailure: Story = {
     const canvas = within(context.canvasElement);
     const body = within(context.canvasElement.ownerDocument.body);
     await expect(
-      await body.findByText("Couldn't archive Waiting task C. Worktree removal failed")
+      await body.findByText("Couldn't archive Waiting task C. Worktree removal failed.")
     ).toBeVisible();
     await waitFor(() => expect(canvas.queryByText('Waiting task B')).not.toBeInTheDocument());
     await expect(canvas.getByRole('checkbox', { name: 'Select Waiting task C' })).toBeChecked();

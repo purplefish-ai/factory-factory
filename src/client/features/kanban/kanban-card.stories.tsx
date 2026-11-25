@@ -451,6 +451,33 @@ export const SelectionMode: Story = {
   },
 };
 
+/** In selection mode the card's own links keep their action instead of toggling it. */
+export const SelectionModeParentLink: Story = {
+  args: {
+    ...SelectionMode.args,
+    onToggleSelected: fn(),
+    workspace: {
+      ...baseWorkspace,
+      creationSource: 'CHILD_WORKSPACE',
+      parentWorkspace: {
+        id: 'ws-parent',
+        name: 'Parent workspace',
+        projectId: baseWorkspace.projectId,
+        projectName: 'Demo',
+        projectSlug: 'demo',
+      },
+    },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('link', { name: 'Parent workspace: Parent workspace' }));
+    await expect(args.onToggleSelected).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByText(baseWorkspace.name));
+    await expect(args.onToggleSelected).toHaveBeenCalledOnce();
+    await expect(args.onToggleSelected).toHaveBeenCalledWith(baseWorkspace.id, false);
+  },
+};
+
 export const SelectedInSelectionMode: Story = {
   args: { ...SelectionMode.args, selected: true },
   play: async ({ canvasElement }) => {

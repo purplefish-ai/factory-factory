@@ -404,7 +404,7 @@ describe('KanbanProvider archive failure handling', () => {
     );
 
     expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
-      "Couldn't archive Workspace one. Archive unavailable"
+      "Couldn't archive Workspace one. Archive unavailable."
     );
     expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(2);
     expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
@@ -422,7 +422,7 @@ describe('KanbanProvider archive failure handling', () => {
       ['workspace-1', 'workspace-2']
     );
     expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
-      "Couldn't archive 2 workspaces. One shared request failure"
+      "Couldn't archive 2 workspaces. One shared request failure."
     );
   });
 
@@ -448,8 +448,8 @@ describe('KanbanProvider archive failure handling', () => {
       descriptionRoot.render((toastOptions as { description: ReactNode }).description)
     );
     expect([...description.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
-      'Workspace one: workspace-1 failed',
-      'Workspace two: workspace-2 failed',
+      'Workspace one: workspace-1 failed.',
+      'Workspace two: workspace-2 failed.',
     ]);
     flushSync(() => descriptionRoot.unmount());
 
@@ -535,7 +535,7 @@ describe('KanbanProvider archive failure handling', () => {
     ]);
     expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
     expect(mocks.toastErrorMock).toHaveBeenCalledWith(
-      "Couldn't archive Workspace one. Archive service unavailable"
+      "Couldn't archive Workspace one. Archive service unavailable."
     );
   });
 
@@ -557,7 +557,7 @@ describe('KanbanProvider archive failure handling', () => {
 
     expectVisibleWorkspaceIds(['workspace-2', 'workspace-3']);
     expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
-      "Couldn't archive Workspace three. The server returned no result for this workspace"
+      "Couldn't archive Workspace three. The server returned no result for this workspace."
     );
   });
 
