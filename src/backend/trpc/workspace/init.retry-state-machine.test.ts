@@ -87,3 +87,47 @@ describe('workspaceInitRouter.retryInit with the workspace state machine', () =>
     });
   });
 });
+
+describe('setup retry of a workspace whose archive did not finish', () => {
+  const incompleteArchive = {
+    ...readyWithWarningButNoWorktree,
+    status: 'FAILED' as const,
+    worktreePath: '/tmp/worktrees/w1',
+    initErrorMessage: 'Archive incomplete: remove failed. Archive again to finish.',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFindUnique.mockResolvedValue(incompleteArchive);
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it('is refused by the router before any retry effect', async () => {
+    const captureWorkspaceRetryGuard = vi.fn();
+    const caller = workspaceInitRouter.createCaller({
+      appContext: {
+        services: {
+          captureWorkspaceRetryGuard,
+          workspaceDataService: { findByIdWithProject: vi.fn(async () => incompleteArchive) },
+          workspaceStateMachine,
+        },
+      },
+    } as never);
+
+    await expect(caller.retryInit({ id: 'w1' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'The archive did not finish. Archive the workspace again to finish.',
+    });
+    expect(captureWorkspaceRetryGuard).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+    expect(initializeWorkspaceWorktree).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['startProvisioning', () => workspaceStateMachine.startProvisioning('w1')],
+    ['resetToNew', () => workspaceStateMachine.resetToNew('w1')],
+  ])('is refused by the state machine in %s', async (_name, retry) => {
+    await expect(retry()).rejects.toThrow('the workspace archive did not finish');
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+});

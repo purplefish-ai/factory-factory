@@ -36,6 +36,7 @@ import {
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { selectWorkspacePR } from '@/shared/workspace-pr';
 import { Prisma, type Workspace, type WorkspacePRDiscovery } from '@prisma-gen/client';
+import { retryableFailedWorkspace } from './workspace-archive-incomplete';
 import { workspaceChildOriginAccessor } from './workspace-child-origin.accessor';
 import { deleteWorkspace } from './workspace-delete.accessor';
 import {
@@ -667,11 +668,7 @@ class WorkspaceAccessor {
   ): Promise<{ count: number }> {
     return withWorkspaceInitGuard(id, guard, (transaction) =>
       transaction.workspace.updateMany({
-        where: {
-          id,
-          status: 'FAILED',
-          initRetryCount: { lt: maxRetries },
-        },
+        where: retryableFailedWorkspace(id, maxRetries),
         data: {
           status: 'PROVISIONING',
           initRetryCount: { increment: 1 },
@@ -722,11 +719,7 @@ class WorkspaceAccessor {
   ): Promise<{ count: number }> {
     return withWorkspaceInitGuard(id, guard, (transaction) =>
       transaction.workspace.updateMany({
-        where: {
-          id,
-          status: 'FAILED',
-          initRetryCount: { lt: maxRetries },
-        },
+        where: retryableFailedWorkspace(id, maxRetries),
         data: {
           status: 'NEW',
           initRetryCount: { increment: 1 },

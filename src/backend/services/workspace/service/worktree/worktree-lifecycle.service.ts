@@ -1,9 +1,13 @@
 import { lstat, realpath } from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathExists } from '@/backend/lib/file-helpers';
+import { createLogger } from '@/backend/services/logger.service';
+import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
-import { gitOpsService } from './git-ops.service';
+import { archiveSnapshotRef, gitOpsService } from './git-ops.service';
+
+const logger = createLogger('worktree-lifecycle');
 
 export class WorktreePathSafetyError extends Error {
   constructor(message: string) {
@@ -144,7 +148,29 @@ class WorktreeLifecycleService {
     return true;
   }
 
-  async cleanupWorkspaceWorktree(
+  /**
+   * Whether an earlier archive attempt may have started removing this
+   * worktree, so its contents must not be snapshotted: either the row carries
+   * the archive-incomplete marker, or an interrupted ARCHIVING row already has
+   * its snapshot ref, which is written just before removal starts.
+   */
+  async archiveRemovalMayHaveStarted(workspace: WorkspaceWithProject): Promise<boolean> {
+    if (hasArchiveIncompleteMarker(workspace.initErrorMessage)) {
+      return true;
+    }
+    if (workspace.status !== 'ARCHIVING' || !workspace.worktreePath) {
+      return false;
+    }
+    const project = getProjectOrThrow(workspace);
+    const snapshot = await gitOpsService.readPrivateRef(
+      project.repoPath,
+      archiveSnapshotRef(workspace.id)
+    );
+    return snapshot !== null;
+  }
+
+  /** Snapshot the worktree before removal; see `gitOpsService.snapshotForArchive`. */
+  async snapshotWorkspaceWorktree(
     workspace: WorkspaceWithProject,
     options: WorktreeArchiveOptions
   ): Promise<void> {
@@ -155,18 +181,48 @@ class WorktreeLifecycleService {
 
     const project = getProjectOrThrow(workspace);
     await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
-
-    const worktreeExists = await pathExists(worktreePath);
-    if (worktreeExists) {
-      if (options.removeGitIndexLock) {
-        await gitOpsService.commitIfNeeded(worktreePath, workspace.name, {
-          removeGitIndexLock: true,
-        });
-      } else {
-        await gitOpsService.commitIfNeeded(worktreePath, workspace.name);
-      }
+    if (!(await pathExists(worktreePath))) {
+      return;
     }
+
+    const ref = archiveSnapshotRef(workspace.id);
+    const snapshot = await gitOpsService.snapshotForArchive(worktreePath, {
+      ref,
+      message: `Archive workspace ${workspace.name}`,
+      workspaceBranch: workspace.branchName,
+      ...(options.removeGitIndexLock && { removeGitIndexLock: true }),
+    });
+    if (snapshot.capture !== 'none') {
+      logger.info('Archive snapshot captured uncommitted changes', {
+        workspaceId: workspace.id,
+        ref,
+        sha: snapshot.sha,
+        capture: snapshot.capture,
+        changes: snapshot.changes,
+      });
+    }
+  }
+
+  async removeWorkspaceWorktree(workspace: WorkspaceWithProject): Promise<void> {
+    const worktreePath = workspace.worktreePath;
+    if (!worktreePath) {
+      return;
+    }
+
+    const project = getProjectOrThrow(workspace);
+    await assertWorktreePathSafe(worktreePath, project.worktreeBasePath);
     await gitOpsService.removeWorktree(worktreePath, project);
+  }
+
+  /** Snapshot (unless removal may have started) then remove, for workspace deletion. */
+  async cleanupWorkspaceWorktree(
+    workspace: WorkspaceWithProject,
+    options: WorktreeArchiveOptions
+  ): Promise<void> {
+    if (!(await this.archiveRemovalMayHaveStarted(workspace))) {
+      await this.snapshotWorkspaceWorktree(workspace, options);
+    }
+    await this.removeWorkspaceWorktree(workspace);
   }
 }
 

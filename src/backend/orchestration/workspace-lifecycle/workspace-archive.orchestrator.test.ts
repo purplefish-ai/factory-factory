@@ -9,7 +9,10 @@ vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/backend/services/workspace', () => ({
+vi.mock('@/backend/services/workspace', async (importOriginal) => ({
+  formatArchiveIncompleteMessage: (
+    await importOriginal<typeof import('@/backend/services/workspace')>()
+  ).formatArchiveIncompleteMessage,
   archivedWorkspaceBlobRetentionService: {
     releaseAfterArchive: vi.fn(),
   },
@@ -28,7 +31,9 @@ vi.mock('@/backend/services/workspace', () => ({
     transition: vi.fn(),
   },
   worktreeLifecycleService: {
-    cleanupWorkspaceWorktree: vi.fn(),
+    archiveRemovalMayHaveStarted: vi.fn(),
+    snapshotWorkspaceWorktree: vi.fn(),
+    removeWorkspaceWorktree: vi.fn(),
   },
 }));
 
@@ -118,7 +123,9 @@ describe('archiveWorkspace', () => {
       unsafeCoerce({ id: 'ws-1', status: 'READY' })
     );
     vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([]);
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
+    vi.mocked(worktreeLifecycleService.archiveRemovalMayHaveStarted).mockResolvedValue(false);
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockResolvedValue(undefined);
+    vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
       undefined as never
     );
@@ -147,7 +154,7 @@ describe('archiveWorkspace', () => {
       const [sweepOrder] = vi.mocked(sweepWorktreeProcesses).mock.invocationCallOrder;
       const [terminalOrder] = vi.mocked(services.terminalService.destroyWorkspaceTerminals).mock
         .invocationCallOrder;
-      const [worktreeOrder] = vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mock
+      const [worktreeOrder] = vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mock
         .invocationCallOrder;
       expect(terminalOrder).toBeLessThan(sweepOrder ?? 0);
       expect(sweepOrder).toBeLessThan(worktreeOrder ?? 0);
@@ -159,7 +166,7 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(worktreeWorkspace())).resolves.toMatchObject({
         status: 'ARCHIVED',
       });
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledOnce();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledOnce();
     });
 
     it('does not sweep when owned runtime cleanup fails and the archive rolls back', async () => {
@@ -216,7 +223,8 @@ describe('archiveWorkspace', () => {
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(services.sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
     });
   });
 
@@ -238,10 +246,11 @@ describe('archiveWorkspace', () => {
       });
       expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
       expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledWith(
         workspace,
         defaultOptions
       );
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledWith(workspace);
     });
 
     it('marks workspace as archived after cleanup', async () => {
@@ -288,7 +297,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, { removeGitIndexLock: true });
 
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledWith(workspace, {
         removeGitIndexLock: true,
       });
     });
@@ -325,7 +334,8 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
         /Failed to cleanup workspace resources before archive/
       );
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
     });
 
@@ -360,7 +370,8 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
         /Failed to cleanup workspace resources before archive/
       );
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
     });
 
@@ -373,7 +384,8 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
         /Failed to cleanup workspace resources before archive/
       );
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
     });
 
@@ -386,7 +398,8 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
         /Failed to cleanup workspace resources before archive/
       );
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
     });
   });
@@ -394,7 +407,7 @@ describe('archiveWorkspace', () => {
   describe('worktree cleanup failure', () => {
     it('re-throws when worktree cleanup fails', async () => {
       const cleanupError = new Error('worktree cleanup failed');
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(cleanupError);
+      vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValue(cleanupError);
       const workspace = makeWorkspace();
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
@@ -403,7 +416,7 @@ describe('archiveWorkspace', () => {
     });
 
     it('does not mark workspace as archived when worktree cleanup fails', async () => {
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
+      vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValue(
         new Error('cleanup failed')
       );
       const workspace = makeWorkspace();
@@ -421,14 +434,15 @@ describe('archiveWorkspace', () => {
       expect(archivedWorkspaceBlobRetentionService.releaseAfterArchive).not.toHaveBeenCalled();
     });
 
-    it('rolls status back when archive fails after entering ARCHIVING', async () => {
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
-        new Error('cleanup failed')
+    it('rolls status back when the snapshot fails, before removal starts', async () => {
+      vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockRejectedValue(
+        new Error('snapshot failed')
       );
       const workspace = makeWorkspace();
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'READY');
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).not.toHaveBeenCalled();
     });
 
     it('rolls status back using the captured source status from ARCHIVING transition', async () => {
@@ -438,13 +452,68 @@ describe('archiveWorkspace', () => {
           previousStatus: 'FAILED',
         })
       );
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
-        new Error('cleanup failed')
+      vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockRejectedValue(
+        new Error('snapshot failed')
       );
       const workspace = makeWorkspace();
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'FAILED');
+    });
+
+    it('moves forward to FAILED, never READY, once worktree removal fails', async () => {
+      vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValue(
+        new Error('git worktree remove timed out after 300000ms.')
+      );
+
+      await expect(archiveWorkspace(makeWorkspace(), defaultOptions)).rejects.toThrow(
+        'git worktree remove timed out'
+      );
+      expect(workspaceStateMachine.transition).toHaveBeenCalledExactlyOnceWith('ws-1', 'FAILED', {
+        errorMessage:
+          'Archive incomplete: git worktree remove timed out after 300000ms. Archive again to finish.',
+      });
+    });
+
+    it('moves forward to FAILED when the ARCHIVED write fails after removal', async () => {
+      vi.mocked(workspaceStateMachine.markArchived).mockRejectedValue(new Error('CAS lost'));
+
+      await expect(archiveWorkspace(makeWorkspace(), defaultOptions)).rejects.toThrow('CAS lost');
+      expect(workspaceStateMachine.transition).toHaveBeenCalledExactlyOnceWith('ws-1', 'FAILED', {
+        errorMessage: 'Archive incomplete: CAS lost. Archive again to finish.',
+      });
+    });
+
+    it('retries an incomplete archive without a snapshot and never rolls it back', async () => {
+      const incomplete = makeWorkspace({
+        status: 'FAILED' as never,
+        initErrorMessage: 'Archive incomplete: removal timed out. Archive again to finish.',
+      });
+      vi.mocked(worktreeLifecycleService.archiveRemovalMayHaveStarted).mockResolvedValue(true);
+      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
+        unsafeCoerce({ workspace: { id: 'ws-1', status: 'ARCHIVING' }, previousStatus: 'FAILED' })
+      );
+
+      await expect(archiveWorkspace(incomplete, defaultOptions)).resolves.toMatchObject({
+        status: 'ARCHIVED',
+      });
+      expect(worktreeLifecycleService.archiveRemovalMayHaveStarted).toHaveBeenCalledWith(
+        incomplete
+      );
+      expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledWith(incomplete);
+
+      // Even a failure before removal in the retry keeps the marker.
+      vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockRejectedValueOnce(
+        new Error('session stop failed')
+      );
+      await expect(archiveWorkspace(incomplete, defaultOptions)).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(workspaceStateMachine.transition).toHaveBeenCalledExactlyOnceWith('ws-1', 'FAILED', {
+        errorMessage:
+          'Archive incomplete: Failed to cleanup workspace resources before archive. Archive again to finish.',
+      });
     });
   });
 
@@ -564,8 +633,12 @@ describe('archiveWorkspace', () => {
       vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         callOrder.push('destroyTerminals');
       });
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementation((() => {
-        callOrder.push('cleanupWorktree');
+      vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockImplementation((() => {
+        callOrder.push('snapshotWorktree');
+        return Promise.resolve();
+      }) as never);
+      vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockImplementation((() => {
+        callOrder.push('removeWorktree');
         return Promise.resolve();
       }) as never);
       vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockImplementation((() => {
@@ -584,17 +657,23 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(makeWorkspace(), defaultOptions);
 
-      const worktreeIdx = callOrder.indexOf('cleanupWorktree');
+      const snapshotIdx = callOrder.indexOf('snapshotWorktree');
+      const worktreeIdx = callOrder.indexOf('removeWorktree');
       const archiveIdx = callOrder.indexOf('markArchived');
-      expect(worktreeIdx).toBeGreaterThan(-1);
+      expect(snapshotIdx).toBeGreaterThan(-1);
+      expect(worktreeIdx).toBeGreaterThan(snapshotIdx);
       expect(archiveIdx).toBeGreaterThan(worktreeIdx);
-      expect(callOrder.indexOf('stopSessions')).toBeLessThan(worktreeIdx);
+      expect(callOrder.indexOf('stopSessions')).toBeLessThan(snapshotIdx);
     });
 
     it('archives after worktree cleanup but before GitHub comment', async () => {
       const callOrder: string[] = [];
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementation((() => {
-        callOrder.push('cleanupWorktree');
+      vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockImplementation((() => {
+        callOrder.push('snapshotWorktree');
+        return Promise.resolve();
+      }) as never);
+      vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockImplementation((() => {
+        callOrder.push('removeWorktree');
         return Promise.resolve();
       }) as never);
       vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockImplementation((() => {
@@ -625,7 +704,8 @@ describe('archiveWorkspace', () => {
 
       expect(callOrder).toEqual([
         'startArchiving',
-        'cleanupWorktree',
+        'snapshotWorktree',
+        'removeWorktree',
         'markArchived',
         'addIssueComment',
       ]);
@@ -643,7 +723,9 @@ describe('recoverStaleArchivingWorkspaces', () => {
     vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'FAILED' })
     );
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
+    vi.mocked(worktreeLifecycleService.archiveRemovalMayHaveStarted).mockResolvedValue(false);
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockResolvedValue(undefined);
+    vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockResolvedValue(
       undefined as never
     );
@@ -675,7 +757,8 @@ describe('recoverStaleArchivingWorkspaces', () => {
     });
     expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
     expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
-    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});
+    expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledWith(workspace);
     expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
     expect(archivedWorkspaceBlobRetentionService.releaseAfterArchive).toHaveBeenCalledWith('ws-1');
@@ -684,7 +767,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
   it('marks a stale ARCHIVING workspace as FAILED when recovery cannot complete', async () => {
     const workspace = makeWorkspace({ status: 'ARCHIVING' as never });
     vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([workspace]);
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockRejectedValue(
       new Error('worktree cleanup failed')
     );
 
@@ -707,7 +790,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
       failedWorkspace,
       archivedWorkspace,
     ]);
-    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree)
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree)
       .mockRejectedValueOnce(new Error('cleanup failed'))
       .mockResolvedValueOnce(undefined);
 
@@ -720,6 +803,40 @@ describe('recoverStaleArchivingWorkspaces', () => {
     expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-archived');
     expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-failed', 'FAILED', {
       errorMessage: 'Archive recovery failed after restart: cleanup failed',
+    });
+  });
+
+  it('marks an archive incomplete when recovery fails after removal may have started', async () => {
+    const resumed = makeWorkspace({ id: 'ws-resumed', status: 'ARCHIVING' as never });
+    const removing = makeWorkspace({ id: 'ws-removing', status: 'ARCHIVING' as never });
+    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([
+      resumed,
+      removing,
+    ]);
+    // The first row's snapshot ref exists, so a crash may have interrupted its removal.
+    vi.mocked(worktreeLifecycleService.archiveRemovalMayHaveStarted)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockRejectedValueOnce(
+      new Error('session stop failed')
+    );
+    vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValueOnce(
+      new Error('remove failed')
+    );
+
+    await recoverStaleArchivingWorkspaces(services);
+
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledExactlyOnceWith(
+      removing,
+      {}
+    );
+    expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-resumed', 'FAILED', {
+      errorMessage:
+        'Archive incomplete: recovery after restart failed: Failed to cleanup workspace resources before archive. Archive again to finish.',
+    });
+    expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-removing', 'FAILED', {
+      errorMessage:
+        'Archive incomplete: recovery after restart failed: remove failed. Archive again to finish.',
     });
   });
 });

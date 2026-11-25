@@ -3,7 +3,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { workspaceRetryAuthorityService } from '@/backend/services/agent-definition';
 import { eventSessionAuthority, EventSessionFenceError } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
+import { hasArchiveIncompleteMarker, workspaceDataService } from '@/backend/services/workspace';
 import type { WorkspaceInitGuard, WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
 
 type Workspace = {
@@ -125,6 +125,12 @@ export async function readWorkspaceRetryAvailability(
     )
   ) {
     return blocked('NOT_RETRYABLE', 'Workspace setup does not need retrying.');
+  }
+  if (workspace.status === 'FAILED' && hasArchiveIncompleteMarker(workspace.initErrorMessage)) {
+    return blocked(
+      'ARCHIVE_INCOMPLETE',
+      'The archive did not finish, so setup cannot be retried. Archive the workspace again to finish.'
+    );
   }
   if (workspace.initRetryCount >= 3) {
     return blocked('RETRY_LIMIT', 'Maximum setup retry attempts (3) exceeded.');

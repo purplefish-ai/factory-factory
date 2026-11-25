@@ -15,16 +15,24 @@ import { EventEmitter } from 'node:events';
  *   READY → PROVISIONING (retry setup script when workspace is READY+warning)
  *   READY → ARCHIVING → ARCHIVED
  *   FAILED → ARCHIVING → ARCHIVED
- *   ARCHIVING → READY/FAILED (rollback on archive failure)
+ *   ARCHIVING → READY/FAILED (rollback before worktree removal starts)
+ *   ARCHIVING → FAILED (archive incomplete once removal has started; only
+ *     ARCHIVING may follow, so setup retries refuse it)
  */
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
+import { hasArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 
 const logger = createLogger('workspace-state-machine');
+
+export {
+  formatArchiveIncompleteMessage,
+  hasArchiveIncompleteMarker,
+} from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 
 /**
  * Valid state transitions for workspace status.
@@ -74,6 +82,18 @@ async function findRetryLimitWorkspaceOrThrowCasError(
   }
 
   return workspace;
+}
+
+/** A partly removed worktree must not be set up again; only archiving may follow. */
+function assertNotArchiveIncomplete(workspace: Workspace, toStatus: WorkspaceStatus): void {
+  if (workspace.status === 'FAILED' && hasArchiveIncompleteMarker(workspace.initErrorMessage)) {
+    throw new WorkspaceStateMachineError(
+      workspace.id,
+      workspace.status,
+      toStatus,
+      'Cannot retry setup: the workspace archive did not finish. Archive it again to finish.'
+    );
+  }
 }
 
 export interface TransitionOptions {
@@ -317,6 +337,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     // FAILED → PROVISIONING (retry)
     if (currentStatus === 'FAILED') {
+      assertNotArchiveIncomplete(workspace, 'PROVISIONING');
       // Use atomic conditional update to check retry count
       const result = await workspaceAccessor.startProvisioningRetryIfAllowed(
         workspaceId,
@@ -540,6 +561,7 @@ class WorkspaceStateMachineService extends EventEmitter {
         'Can only reset to NEW from FAILED status'
       );
     }
+    assertNotArchiveIncomplete(workspace, 'NEW');
 
     // Use atomic conditional update to check retry count
     const result = await workspaceAccessor.resetToNewIfAllowed(workspaceId, maxRetries, guard);

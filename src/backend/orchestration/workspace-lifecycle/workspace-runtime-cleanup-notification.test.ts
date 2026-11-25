@@ -97,12 +97,13 @@ it.each([
       await new Promise<void>((resolve) => setImmediate(resolve));
       counts.push(notify.mock.calls.length);
     };
-    vi.spyOn(worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockImplementation(async () => {
+    vi.spyOn(worktreeLifecycleService, 'snapshotWorkspaceWorktree').mockImplementation(async () => {
       await finishLatePrompt();
       if (rollback) {
         throw new Error('worktree cleanup failed');
       }
     });
+    vi.spyOn(worktreeLifecycleService, 'removeWorkspaceWorktree').mockResolvedValue(undefined);
     vi.mocked(workspaceStateMachine.transition).mockImplementation(async () => {
       await finishLatePrompt();
       return unsafeCoerce({ status: 'READY' });

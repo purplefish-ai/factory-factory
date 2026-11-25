@@ -6,6 +6,6 @@
   "src/backend/services/github/service/github-cli.service.test.ts": 1241,
   "src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.handler.test.ts": 1482,
   "src/backend/services/session/service/lifecycle/session.service.test.ts": 2338,
-  "src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts": 1087,
+  "src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts": 1065,
   "src/client/features/chat/chat-reducer.test.ts": 3807
 }

@@ -406,6 +406,21 @@ it('projects the same retry budget enforced by the writer', async () => {
   );
   expect(initialize).not.toHaveBeenCalled();
 });
+it('offers no setup retry once an archive has started removing the worktree', async () => {
+  await finished();
+  await db.prisma.workspace.update({
+    where: { id: workspaceId },
+    data: {
+      status: 'FAILED',
+      initErrorMessage: 'Archive incomplete: remove failed. Archive again to finish.',
+    },
+  });
+  expect(await caller.getInitStatus({ id: workspaceId })).toMatchObject({
+    retryAvailability: { status: 'BLOCKED', reason: 'ARCHIVE_INCOMPLETE' },
+  });
+  await expect(caller.retryInit({ id: workspaceId })).rejects.toThrow('The archive did not finish');
+  expect(initialize).not.toHaveBeenCalled();
+});
 it.each(['mode-read', 'mode-write', 'config'] as const)(
   'rejects stale authority after actual router %s await',
   async (stage) => {

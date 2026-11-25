@@ -50,6 +50,87 @@ describe('worktreeLifecycleService path safety', () => {
   });
 });
 
+const noSnapshot = { sha: null, capture: 'none', changes: null } as const;
+
+describe('worktreeLifecycleService archive snapshot rule', () => {
+  type Workspace = Parameters<typeof worktreeLifecycleService.archiveRemovalMayHaveStarted>[0];
+  const project = { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' };
+  const workspace = (overrides: Record<string, unknown>) =>
+    unsafeCoerce<Workspace>({
+      id: 'ws-1',
+      status: 'READY',
+      name: 'Workspace',
+      branchName: 'ws-branch',
+      initErrorMessage: null,
+      worktreePath: '/tmp/worktrees/workspace',
+      project,
+      ...overrides,
+    });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('treats the archive-incomplete marker as started removal without asking Git', async () => {
+    const readRef = vi.spyOn(gitOpsService, 'readPrivateRef');
+
+    await expect(
+      worktreeLifecycleService.archiveRemovalMayHaveStarted(
+        workspace({
+          status: 'FAILED',
+          initErrorMessage: 'Archive incomplete: removal timed out. Archive again to finish.',
+        })
+      )
+    ).resolves.toBe(true);
+    expect(readRef).not.toHaveBeenCalled();
+  });
+
+  it.each(['READY', 'FAILED'])(
+    'always snapshots a %s workspace without the marker, whatever refs exist',
+    async (status) => {
+      const readRef = vi.spyOn(gitOpsService, 'readPrivateRef').mockResolvedValue('a'.repeat(40));
+
+      await expect(
+        worktreeLifecycleService.archiveRemovalMayHaveStarted(
+          workspace({ status, initErrorMessage: 'Setup failed' })
+        )
+      ).resolves.toBe(false);
+      expect(readRef).not.toHaveBeenCalled();
+    }
+  );
+
+  it('resumes an interrupted ARCHIVING row past the snapshot only once its ref exists', async () => {
+    const readRef = vi
+      .spyOn(gitOpsService, 'readPrivateRef')
+      .mockResolvedValueOnce('a'.repeat(40))
+      .mockResolvedValueOnce(null);
+
+    await expect(
+      worktreeLifecycleService.archiveRemovalMayHaveStarted(workspace({ status: 'ARCHIVING' }))
+    ).resolves.toBe(true);
+    await expect(
+      worktreeLifecycleService.archiveRemovalMayHaveStarted(workspace({ status: 'ARCHIVING' }))
+    ).resolves.toBe(false);
+    expect(readRef).toHaveBeenCalledWith('/tmp/repo', 'refs/factory-factory/archive/ws-1');
+  });
+
+  it('deletes a workspace whose archive was incomplete without snapshotting it', async () => {
+    const snapshot = vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
+    const remove = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
+
+    await worktreeLifecycleService.cleanupWorkspaceWorktree(
+      workspace({
+        status: 'FAILED',
+        initErrorMessage: 'Archive incomplete: removal timed out. Archive again to finish.',
+      }),
+      {}
+    );
+
+    expect(snapshot).not.toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledWith('/tmp/worktrees/workspace', project);
+  });
+});
+
 describe('worktreeLifecycleService cleanup', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -60,7 +141,7 @@ describe('worktreeLifecycleService cleanup', () => {
     const worktreeBasePath = path.join(tempRoot, 'worktrees');
     const victimWorktreePath = path.join(worktreeBasePath, 'victim');
     const swappedWorktreePath = path.join(worktreeBasePath, 'swapped');
-    const commitSpy = vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    const snapshotSpy = vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
     const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
 
     await mkdir(victimWorktreePath, { recursive: true });
@@ -81,7 +162,7 @@ describe('worktreeLifecycleService cleanup', () => {
       await expect(
         worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {})
       ).rejects.toThrow(WorktreePathSafetyError);
-      expect(commitSpy).not.toHaveBeenCalled();
+      expect(snapshotSpy).not.toHaveBeenCalled();
       expect(removeSpy).not.toHaveBeenCalled();
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
@@ -93,20 +174,27 @@ describe('worktreeLifecycleService cleanup', () => {
     const worktreeBasePath = path.join(tempRoot, 'worktrees');
     const worktreePath = path.join(worktreeBasePath, 'workspace');
     await mkdir(worktreePath, { recursive: true });
-    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
     vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
     const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
     const workspace = unsafeCoerce<
       Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
     >({
+      id: 'ws-1',
+      status: 'READY',
       name: 'Workspace',
+      branchName: 'ws-branch',
       worktreePath,
       project: { repoPath: path.join(tempRoot, 'repo'), worktreeBasePath },
     });
 
     try {
       await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
-      expect(gitOpsService.commitIfNeeded).toHaveBeenCalledWith(worktreePath, 'Workspace');
+      expect(gitOpsService.snapshotForArchive).toHaveBeenCalledWith(worktreePath, {
+        ref: 'refs/factory-factory/archive/ws-1',
+        message: 'Archive workspace Workspace',
+        workspaceBranch: 'ws-branch',
+      });
       expect(removeStateSpy).not.toHaveBeenCalled();
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
@@ -116,7 +204,7 @@ describe('worktreeLifecycleService cleanup', () => {
   it('delegates registered worktree cleanup when the directory is already missing', async () => {
     const worktreePath = '/tmp/worktrees/missing-workspace';
     const project = { repoPath: '/tmp/repo', worktreeBasePath: '/tmp/worktrees' };
-    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
     vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
     const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
     const workspace = unsafeCoerce<
@@ -129,7 +217,7 @@ describe('worktreeLifecycleService cleanup', () => {
 
     await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
 
-    expect(gitOpsService.commitIfNeeded).not.toHaveBeenCalled();
+    expect(gitOpsService.snapshotForArchive).not.toHaveBeenCalled();
     expect(gitOpsService.removeWorktree).toHaveBeenCalledWith(worktreePath, project);
     expect(removeStateSpy).not.toHaveBeenCalled();
   });
@@ -139,7 +227,7 @@ describe('worktreeLifecycleService cleanup', () => {
     const worktreeBasePath = path.join(tempRoot, 'worktrees');
     const worktreePath = path.join(worktreeBasePath, 'workspace');
     await mkdir(worktreePath, { recursive: true });
-    vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
     vi.spyOn(gitOpsService, 'removeWorktree').mockRejectedValue(new Error('remove failed'));
     const removeStateSpy = vi.spyOn(workspaceGitStateService, 'remove');
     const workspace = unsafeCoerce<
@@ -165,7 +253,7 @@ describe('worktreeLifecycleService cleanup', () => {
     const worktreeBasePath = path.join(tempRoot, 'worktrees');
     const worktreePath = path.join(worktreeBasePath, 'workspace');
     await mkdir(worktreePath, { recursive: true });
-    const commitSpy = vi.spyOn(gitOpsService, 'commitIfNeeded').mockResolvedValue(undefined);
+    const snapshotSpy = vi.spyOn(gitOpsService, 'snapshotForArchive').mockResolvedValue(noSnapshot);
     vi.spyOn(gitOpsService, 'removeWorktree').mockResolvedValue(undefined);
     const workspace = unsafeCoerce<
       Parameters<typeof worktreeLifecycleService.cleanupWorkspaceWorktree>[0]
@@ -180,9 +268,10 @@ describe('worktreeLifecycleService cleanup', () => {
         removeGitIndexLock: true,
       });
 
-      expect(commitSpy).toHaveBeenCalledWith(worktreePath, 'Workspace', {
-        removeGitIndexLock: true,
-      });
+      expect(snapshotSpy).toHaveBeenCalledWith(
+        worktreePath,
+        expect.objectContaining({ removeGitIndexLock: true })
+      );
     } finally {
       await rm(tempRoot, { recursive: true, force: true });
     }

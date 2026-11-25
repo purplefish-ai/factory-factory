@@ -18,6 +18,8 @@ export {
 } from './service/lifecycle/event-workspace-init.service';
 export type { EventWorkspaceSource } from './service/lifecycle/event-workspace-source';
 export {
+  formatArchiveIncompleteMessage,
+  hasArchiveIncompleteMarker,
   WORKSPACE_CREATED,
   type WorkspaceCreatedEvent,
   WORKSPACE_STATE_CHANGED,

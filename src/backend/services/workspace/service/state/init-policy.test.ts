@@ -51,6 +51,19 @@ describe('getWorkspaceInitPolicy', () => {
     expect(policy.banner?.showRetry).toBe(true);
   });
 
+  it('blocks dispatch and offers no retry after an incomplete archive', () => {
+    const message = 'Archive incomplete: remove failed. Archive again to finish.';
+    const policy = getWorkspaceInitPolicy({
+      status: 'FAILED',
+      worktreePath: '/tmp/worktree',
+      initErrorMessage: message,
+    });
+
+    expect(policy.phase).toBe('BLOCKED_FAILED');
+    expect(policy.dispatchPolicy).toBe('blocked');
+    expect(policy.banner).toMatchObject({ message, showRetry: false, showPlay: false });
+  });
+
   it('blocks dispatch when workspace is READY but has no worktree path', () => {
     const policy = getWorkspaceInitPolicy({
       status: 'READY',
