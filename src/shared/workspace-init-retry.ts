@@ -14,6 +14,7 @@ export const workspaceRetryAvailabilitySchema = z.discriminatedUnion('status', [
       'INITIAL_UNRESOLVED',
       'INITIAL_ACTIVE',
       'AUTHORITY_UNAVAILABLE',
+      'ARCHIVE_INCOMPLETE',
     ]),
     explanation: z.string().max(500),
   }),

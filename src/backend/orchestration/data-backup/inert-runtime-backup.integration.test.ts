@@ -489,7 +489,9 @@ it('keeps actual startup and idle consumers away from imported process and workf
   vi.spyOn(terminalService, 'createTerminal').mockImplementation(forbidden);
   vi.spyOn(terminalService, 'destroyWorkspaceTerminals').mockImplementation(forbidden);
   vi.spyOn(sessionLifecycleService, 'startSession').mockImplementation(forbidden);
-  vi.spyOn(worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockImplementation(forbidden);
+  vi.spyOn(worktreeLifecycleService, 'archiveRemovalMayHaveStarted').mockImplementation(forbidden);
+  vi.spyOn(worktreeLifecycleService, 'snapshotWorkspaceWorktree').mockImplementation(forbidden);
+  vi.spyOn(worktreeLifecycleService, 'removeWorkspaceWorktree').mockImplementation(forbidden);
   vi.spyOn(workspaceChildren, 'fireLifecycleNotification').mockImplementation(forbidden);
   vi.spyOn(terminalService, 'destroyTerminal').mockImplementation(forbidden);
   const archive: ArchiveWorkspaceDependencies = {

@@ -67,6 +67,16 @@ collector is given `fireLifecycleNotification` (typed from
 - Archive and delete stop sessions, the run script and terminals first and abort
   if any fails; only then does the leftover process sweep run, and its failure
   never blocks them. `workspace-archive.orchestrator.test.ts`.
+- An archive snapshots the worktree once, before removal, committing onto the
+  workspace's own branch only (otherwise aside, moving no branch, HEAD or
+  index), and points `refs/factory-factory/archive/<id>` at it.
+  `src/backend/services/workspace/service/worktree/archive-snapshot.integration.test.ts`.
+- Archive rolls back to the previous status only before worktree removal starts.
+  Once removal may have started, in this attempt or an earlier one (the "Archive
+  incomplete:" marker, or an interrupted ARCHIVING row whose ref exists), a
+  failure moves it to FAILED with the marker, never READY; nothing snapshots it
+  again and setup retry refuses it. `workspace-archive-concurrency.test.ts`,
+  `workspace-retry-authority.integration.test.ts`.
 - Startup marks stale PROVISIONING workspaces FAILED unless their init script is
   still running, and initializes leftover NEW workspaces one at a time, holding
   periodic reconciliation until that pass settles.
@@ -107,3 +117,4 @@ collector is given `fireLifecycleNotification` (typed from
 - [Setup finishes before the agent starts](../../../../docs/decisions/2026-11-13-setup-finishes-before-the-agent-starts.md)
 - [Slow startup recovery runs after readiness](../../../../docs/decisions/2026-11-13-slow-startup-recovery-runs-after-readiness.md)
 - [The leftover process sweep matches location only](../../../../docs/decisions/2026-11-13-leftover-process-sweep-matches-location-only.md)
+- [Archive moves forward after its snapshot](../../../../docs/decisions/2026-11-25-archive-moves-forward-after-its-snapshot.md)

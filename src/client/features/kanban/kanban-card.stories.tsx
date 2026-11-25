@@ -451,6 +451,51 @@ export const SelectionMode: Story = {
   },
 };
 
+const archiveIncompleteWorkspace: WorkspaceWithKanban = {
+  ...baseWorkspace,
+  name: 'Archive left incomplete',
+  status: 'FAILED',
+  initErrorMessage:
+    'Archive incomplete: Failed to delete worktree: git worktree remove timed out. Archive again to finish.',
+  statusReason: { code: 'SETUP_FAILED', label: 'Setup failed', tone: 'danger', needsUser: true },
+};
+
+/** A FAILED workspace whose archive did not finish can be archived again from its card. */
+export const ArchiveIncompleteCanArchiveAgain: Story = {
+  args: {
+    workspace: archiveIncompleteWorkspace,
+    projectSlug: 'my-project',
+    onArchive: fn(),
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', { name: 'Archive workspace' })
+    ).toBeInTheDocument();
+  },
+};
+
+/** The same workspace can be chosen for the board's multi-select archive. */
+export const ArchiveIncompleteSelectable: Story = {
+  args: {
+    workspace: archiveIncompleteWorkspace,
+    projectSlug: 'my-project',
+    onArchive: fn(),
+    selectionMode: true,
+    selected: false,
+    onToggleSelected: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole('checkbox', { name: `Select ${archiveIncompleteWorkspace.name}` })
+    );
+    await expect(args.onToggleSelected).toHaveBeenLastCalledWith(
+      archiveIncompleteWorkspace.id,
+      false
+    );
+  },
+};
+
 /** In selection mode the card's own links keep their action instead of toggling it. */
 export const SelectionModeParentLink: Story = {
   args: {

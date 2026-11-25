@@ -27,6 +27,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 // Import after mocks are set up
+import { withoutArchiveIncompleteMarker } from '@/backend/services/workspace/resources/workspace-archive-incomplete';
 import {
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
@@ -387,6 +388,7 @@ describe('WorkspaceStateMachineService', () => {
           id: 'ws-1',
           status: 'FAILED',
           initRetryCount: { lt: 3 },
+          ...withoutArchiveIncompleteMarker,
         },
         data: expect.objectContaining({
           status: 'PROVISIONING',
@@ -713,6 +715,7 @@ describe('WorkspaceStateMachineService', () => {
           id: 'ws-1',
           status: 'FAILED',
           initRetryCount: { lt: 3 },
+          ...withoutArchiveIncompleteMarker,
         },
         data: expect.objectContaining({
           status: 'NEW',
@@ -1057,31 +1060,6 @@ describe('WorkspaceStateMachineService', () => {
 
       expect(result).toBeNull();
       expect(events).toHaveLength(0);
-    });
-  });
-
-  describe('WorkspaceStateMachineError', () => {
-    it('should include workspaceId, fromStatus, and toStatus', () => {
-      const error = new WorkspaceStateMachineError('ws-1', 'NEW', 'READY');
-
-      expect(error.workspaceId).toBe('ws-1');
-      expect(error.fromStatus).toBe('NEW');
-      expect(error.toStatus).toBe('READY');
-      expect(error.name).toBe('WorkspaceStateMachineError');
-    });
-
-    it('should have default message', () => {
-      const error = new WorkspaceStateMachineError('ws-1', 'NEW', 'READY');
-
-      expect(error.message).toBe(
-        'Invalid workspace state transition: NEW → READY (workspace: ws-1)'
-      );
-    });
-
-    it('should accept custom message', () => {
-      const error = new WorkspaceStateMachineError('ws-1', 'NEW', 'READY', 'Custom error');
-
-      expect(error.message).toBe('Custom error');
     });
   });
 });

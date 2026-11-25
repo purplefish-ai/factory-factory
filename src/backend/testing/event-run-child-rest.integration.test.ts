@@ -362,7 +362,8 @@ it.each(['archive', 'delete'] as const)(
       typeof import('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator')
     >('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator');
     vi.spyOn(children, 'fireLifecycleNotification').mockResolvedValue();
-    vi.spyOn(h.workspace.worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockResolvedValue();
+    vi.spyOn(h.workspace.worktreeLifecycleService, 'snapshotWorkspaceWorktree').mockResolvedValue();
+    vi.spyOn(h.workspace.worktreeLifecycleService, 'removeWorkspaceWorktree').mockResolvedValue();
     const services = {
       sessionLifecycleService: h.session.sessionLifecycleService,
       runScriptService: {

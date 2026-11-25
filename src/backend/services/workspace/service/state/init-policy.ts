@@ -1,4 +1,5 @@
 import type { WorkspaceStatus } from '@/shared/core';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
 
 export interface WorkspaceInitPolicyInput {
@@ -50,7 +51,8 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
       banner: {
         kind: 'error',
         message: getBlockedFailedMessage(input),
-        showRetry: true,
+        // An incomplete archive's worktree may be partly gone; only archiving may follow.
+        showRetry: !hasArchiveIncompleteMarker(input.initErrorMessage),
         showPlay: false,
         showDismiss: false,
       },
@@ -107,9 +109,12 @@ function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceIni
     return hasWorktree ? 'RUNNING_INIT_SCRIPT' : 'CREATING_WORKTREE';
   }
 
-  // Legacy compatibility: FAILED with a worktree means script failed after worktree creation.
+  // Legacy compatibility: FAILED with a worktree means script failed after worktree creation,
+  // unless an archive started removing that worktree.
   if (input.status === 'FAILED') {
-    return hasWorktree ? 'READY_WITH_WARNING' : 'BLOCKED_FAILED';
+    return hasWorktree && !hasArchiveIncompleteMarker(input.initErrorMessage)
+      ? 'READY_WITH_WARNING'
+      : 'BLOCKED_FAILED';
   }
 
   if (!hasWorktree) {

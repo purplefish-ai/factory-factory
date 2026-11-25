@@ -4,6 +4,7 @@ import { toError } from '@/backend/lib/error-utils';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { getWorkspaceInitPolicy } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router, trustedLocalProcedure } from '@/backend/trpc/trpc';
+import { hasArchiveIncompleteMarker } from '@/shared/workspace-archive-incomplete';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger('workspace-init-trpc');
@@ -215,6 +216,14 @@ export const workspaceInitRouter = router({
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Can only retry failed, setup-warning, or missing-worktree initializations',
+        });
+      }
+
+      // The worktree may be partly removed; only archiving again may follow.
+      if (isRetryableFromFailed && hasArchiveIncompleteMarker(workspace.initErrorMessage)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'The archive did not finish. Archive the workspace again to finish.',
         });
       }
 

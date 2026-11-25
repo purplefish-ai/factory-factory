@@ -11,6 +11,13 @@ import {
   workspaceGitStateService,
 } from '@/backend/services/workspace-git-state.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
+import {
+  type ArchivedPathSummary,
+  commitWorkingTreeAside,
+  readHeadBranch,
+  resolveCommit,
+  summarizeSnapshotPaths,
+} from './archive-snapshot-git';
 import { parseGitHubRemoteUrl } from './project-repository-inspector';
 import { detachWorktreeDirectory } from './worktree-trash';
 import { worktreeTrashReclaimer } from './worktree-trash-reclaimer.service';
@@ -24,8 +31,22 @@ interface ProjectPaths {
   worktreeBasePath: string;
 }
 
-interface CommitIfNeededOptions {
+interface ArchiveSnapshotOptions {
+  /** Private ref left pointing at the snapshot. */
+  ref: string;
+  message: string;
+  /** The workspace's own branch; only it may receive the snapshot commit. */
+  workspaceBranch: string | null;
   removeGitIndexLock?: boolean;
+}
+
+export interface ArchiveSnapshot {
+  /** The snapshot commit; null when the worktree has no commit to point at. */
+  sha: string | null;
+  /** How uncommitted changes were captured: none, onto the branch, or aside. */
+  capture: 'none' | 'branch' | 'private';
+  /** What the snapshot commit changed, when it captured anything. */
+  changes: ArchivedPathSummary | null;
 }
 
 /**
@@ -42,8 +63,13 @@ export interface WorktreeCheckoutIdentity {
   origin: { owner: string; repo: string } | null;
 }
 
-/** Private namespace for refs the app fetches without touching branches. */
+/** Private namespace for refs the app writes without touching branches. */
 export const APP_PRIVATE_REF_PREFIX = 'refs/factory-factory/';
+
+/** Keeps an archived workspace's final state reachable after its worktree is gone. */
+export function archiveSnapshotRef(workspaceId: string): string {
+  return `${APP_PRIVATE_REF_PREFIX}archive/${workspaceId}`;
+}
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 
 export function assertAppPrivateRef(ref: string): void {
@@ -168,16 +194,21 @@ class GitOpsService {
     }
   }
 
-  async commitIfNeeded(
+  /**
+   * Snapshot the worktree for archive and point `options.ref` at it, so the
+   * work stays reachable after the worktree is removed. Uncommitted changes are
+   * committed onto the branch (hooks skipped) only when HEAD is on the
+   * workspace's own branch; otherwise they are committed aside without moving
+   * any branch, HEAD or the index. A clean tree's snapshot is HEAD.
+   */
+  async snapshotForArchive(
     worktreePath: string,
-    workspaceName: string,
-    options: CommitIfNeededOptions = {}
-  ): Promise<void> {
-    // Check if this is a valid git repo first - if not, skip commit
-    // This can happen if the worktree was corrupted or the .git file was removed
-    const isValid = await this.isValidGitRepo(worktreePath);
-    if (!isValid) {
-      return;
+    options: ArchiveSnapshotOptions
+  ): Promise<ArchiveSnapshot> {
+    assertAppPrivateRef(options.ref);
+    // A corrupted worktree (for example a removed .git file) has nothing Git can snapshot.
+    if (!(await this.isValidGitRepo(worktreePath))) {
+      return { sha: null, capture: 'none', changes: null };
     }
 
     if (options.removeGitIndexLock) {
@@ -191,26 +222,64 @@ class GitOpsService {
       });
     }
 
+    const head = await resolveCommit(worktreePath, 'HEAD');
     if (statusResult.stdout.trim().length === 0) {
-      return;
+      if (head) {
+        await this.writePrivateRef(worktreePath, options.ref, head);
+      }
+      return { sha: head, capture: 'none', changes: null };
     }
 
+    const branch = await readHeadBranch(worktreePath);
+    const onWorkspaceBranch =
+      branch !== null &&
+      options.workspaceBranch !== null &&
+      branch === this.normalizeBranchName(options.workspaceBranch);
+    let sha: string;
     try {
-      const addResult = await gitCommand(['add', '-A'], worktreePath);
-      if (addResult.code !== 0) {
-        throw await this.createGitOperationError(worktreePath, addResult, 'Git add failed');
-      }
-
-      const commitMessage = `Archive workspace ${workspaceName}`;
-      const commitResult = await gitCommand(
-        ['commit', '-m', commitMessage, '--no-verify'],
-        worktreePath
-      );
-      if (commitResult.code !== 0) {
-        throw await this.createGitOperationError(worktreePath, commitResult, 'Git commit failed');
-      }
+      sha = onWorkspaceBranch
+        ? await this.commitOnCurrentBranch(worktreePath, options.message)
+        : await commitWorkingTreeAside(worktreePath, head, options.message);
     } finally {
       workspaceGitStateService.invalidate(worktreePath);
+    }
+    await this.writePrivateRef(worktreePath, options.ref, sha);
+    return {
+      sha,
+      capture: onWorkspaceBranch ? 'branch' : 'private',
+      changes: await summarizeSnapshotPaths(worktreePath, sha),
+    };
+  }
+
+  private async commitOnCurrentBranch(worktreePath: string, message: string): Promise<string> {
+    const addResult = await gitCommand(['add', '-A'], worktreePath);
+    if (addResult.code !== 0) {
+      throw await this.createGitOperationError(worktreePath, addResult, 'Git add failed');
+    }
+    const commitResult = await gitCommand(['commit', '-m', message, '--no-verify'], worktreePath);
+    if (commitResult.code !== 0) {
+      throw await this.createGitOperationError(worktreePath, commitResult, 'Git commit failed');
+    }
+    const sha = await resolveCommit(worktreePath, 'HEAD');
+    if (!sha) {
+      throw new ApplicationError('INTERNAL_ERROR', 'Git commit left HEAD unresolved');
+    }
+    return sha;
+  }
+
+  /** The commit a private ref points at, or null when the ref does not exist. */
+  readPrivateRef(cwd: string, ref: string): Promise<string | null> {
+    assertAppPrivateRef(ref);
+    return resolveCommit(cwd, ref);
+  }
+
+  private async writePrivateRef(cwd: string, ref: string, sha: string): Promise<void> {
+    assertCommitSha(sha);
+    const result = await gitCommand(['update-ref', ref, sha], cwd);
+    if (result.code !== 0) {
+      throw new ApplicationError('INTERNAL_ERROR', `Failed to write ref ${ref}`, {
+        cause: result,
+      });
     }
   }
 
