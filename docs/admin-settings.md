@@ -397,14 +397,15 @@ be read protects its branch name in every repository.
 
 Deletion re-checks these rules on the server and deletes only branches that were
 listed at the commit shown. Immediately before each deletion it checks
-workspaces and worktrees again. It then pins the tip under
+workspaces (including those of projects added since the list loaded) and
+worktrees again. It then pins the tip under
 `refs/factory-factory/deleted-branches/<encoded name>/<commit>`, so the commits
 are never garbage-collected, and deletes the branch only if it still points at
 that commit. A branch that moved, disappeared or is in use again is skipped. If
-it comes into use while it is being deleted, it is put back at the same commit.
-Remote branches and remote-tracking refs are never changed. To recreate a
-branch, run `git branch <name> <pin ref>`. Deletion is only available from a
-trusted local client, and one cleanup runs at a time.
+it comes into use while it is being deleted, or that check fails, it is put back
+at the same commit. Remote branches and remote-tracking refs are never changed.
+To recreate a branch, run `git branch <name> <pin ref>`. Deletion is only
+available from a trusted local client, and one cleanup runs at a time.
 
 ## Factory configuration
 

@@ -66,7 +66,14 @@ interface Detection {
   repositoryByProject: Map<string, ActiveRepository>;
   /** Candidates by repository identity, then branch name. */
   candidates: Map<string, Map<string, ArchivedBranchCandidate>>;
+  /** Every project seen; a project added later could use any repository. */
+  knownProjectIds: string[];
+  /** Projects whose repository could not be identified. */
+  unresolvedProjectIds: Set<string>;
 }
+
+/** What the per-branch re-check consults besides the repository's own projects. */
+type ClaimScope = Pick<Detection, 'knownProjectIds' | 'unresolvedProjectIds'>;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -246,7 +253,13 @@ class ArchivedBranchCleanupService {
         });
       }
     }
-    return { repositories, repositoryByProject, candidates };
+    return {
+      repositories,
+      repositoryByProject,
+      candidates,
+      knownProjectIds: projects.map((project) => project.id),
+      unresolvedProjectIds,
+    };
   }
 
   /**
@@ -273,7 +286,8 @@ class ArchivedBranchCleanupService {
     requests: ArchivedBranchRemovalRequest[]
   ): Promise<ArchivedBranchCleanupResult> {
     const result: ArchivedBranchCleanupResult = { removed: [], skipped: [], failed: [] };
-    const { repositoryByProject, candidates } = await this.detect();
+    const detection = await this.detect();
+    const { repositoryByProject, candidates } = detection;
 
     for (const request of requests) {
       const { projectId, name } = request;
@@ -288,7 +302,7 @@ class ArchivedBranchCleanupService {
         continue;
       }
       try {
-        const outcome = await this.deleteIfStillUnclaimed(repository, candidate);
+        const outcome = await this.deleteIfStillUnclaimed(repository, candidate, detection);
         if (outcome.status === 'removed') {
           result.removed.push({ projectId, name, pinRef: outcome.pinRef });
         } else if (outcome.status === 'skipped') {
@@ -314,9 +328,10 @@ class ArchivedBranchCleanupService {
 
   private async deleteIfStillUnclaimed(
     repository: Repository,
-    candidate: ArchivedBranchCandidate
+    candidate: ArchivedBranchCandidate,
+    scope: ClaimScope
   ): Promise<BranchDeletionOutcome> {
-    const claim = await claimOn(repository, candidate.name);
+    const claim = await claimOn(repository, candidate.name, scope);
     if (claim) {
       return { status: 'skipped', reason: claim };
     }
@@ -325,24 +340,41 @@ class ArchivedBranchCleanupService {
       return outcome;
     }
     // Git has no lock shared with checkouts or the app's workspace creation,
-    // so check once more and put the branch back if it came into use meanwhile.
-    if (!(await claimOn(repository, candidate.name))) {
+    // so check once more and put the branch back if it came into use meanwhile,
+    // or if that can no longer be ruled out.
+    let lateClaim: string | null;
+    try {
+      lateClaim = await claimOn(repository, candidate.name, scope);
+    } catch (error) {
+      lateClaim = `Could not re-check the branch after deleting it: ${errorMessage(error)}`;
+    }
+    if (!lateClaim) {
       return outcome;
     }
     if (await restoreDeletedBranch(repository.repoPath, candidate.name, candidate.sha)) {
-      return { status: 'skipped', reason: 'Branch came into use during deletion; restored it' };
+      return { status: 'skipped', reason: `${lateClaim}; restored the branch` };
     }
     return {
       status: 'failed',
-      error: `Branch came into use during deletion and could not be restored; its commit is kept at ${outcome.pinRef}`,
+      error: `${lateClaim}, and the branch could not be restored; its commit is kept at ${outcome.pinRef}`,
     };
   }
 }
 
 /** Why a branch must not be deleted right now, or null when nothing claims it. */
-async function claimOn(repository: Repository, name: string): Promise<string | null> {
-  const projectIds = repository.projects.map((project) => project.id);
-  if (await workspaceBranchCleanupAccessor.hasNonArchivedWorkspaceWithBranch(projectIds, name)) {
+async function claimOn(
+  repository: Repository,
+  name: string,
+  scope: ClaimScope
+): Promise<string | null> {
+  const claimed = await workspaceBranchCleanupAccessor.hasNonArchivedWorkspaceWithBranch(name, {
+    projectIds: [
+      ...repository.projects.map((project) => project.id),
+      ...scope.unresolvedProjectIds,
+    ],
+    knownProjectIds: scope.knownProjectIds,
+  });
+  if (claimed) {
     return 'A workspace now uses this branch';
   }
   if ((await listBusyBranches(repository.repoPath)).has(name)) {

@@ -256,9 +256,8 @@ export async function pinAndDeleteBranch(
 ): Promise<BranchDeletionOutcome> {
   const pinRef = deletedBranchPinRef(name, expectedSha);
   const branchRef = `${HEADS_PREFIX}${name}`;
-  // An earlier deletion at the same commit may already own this pin; only a
-  // pin this call created is removed again when the deletion is skipped.
-  const pinExisted = (await readRefSha(repoPath, pinRef)) !== null;
+  // Create the pin only if it is absent, so this call knows whether it owns
+  // it; an earlier deletion at the same commit may already rely on it.
   const pin = await execCommand('git', [
     '-C',
     repoPath,
@@ -267,8 +266,10 @@ export async function pinAndDeleteBranch(
     `factory-factory: pin before deleting ${branchRef}`,
     pinRef,
     expectedSha,
+    '0'.repeat(expectedSha.length),
   ]);
-  if (pin.code !== 0) {
+  const createdPin = pin.code === 0;
+  if (!(createdPin || (await readRefSha(repoPath, pinRef)) === expectedSha)) {
     return { status: 'failed', error: `Could not pin the branch tip: ${pin.stderr.trim()}` };
   }
   const deletion = await execCommand('git', [
@@ -287,8 +288,11 @@ export async function pinAndDeleteBranch(
   if (current === expectedSha) {
     return { status: 'failed', error: deletion.stderr.trim() || `exit ${deletion.code}` };
   }
-  if (!pinExisted) {
-    // Best effort: a leftover pin only keeps a commit reachable.
+  // Remove a pin this call created only while the branch still exists at
+  // another commit. When the branch is gone, someone else may have deleted it
+  // relying on this pin, so it stays; a leftover pin only keeps a commit
+  // reachable.
+  if (createdPin && current !== null) {
     await execCommand('git', ['-C', repoPath, 'update-ref', '-d', pinRef, expectedSha]);
   }
   return current === null

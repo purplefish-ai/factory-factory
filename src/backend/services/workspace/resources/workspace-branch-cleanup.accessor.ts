@@ -77,13 +77,23 @@ class WorkspaceBranchCleanupAccessor {
     return heads;
   }
 
-  /** Whether a workspace that is not ARCHIVED, in any of the projects, records this branch. */
+  /**
+   * Whether a workspace that is not ARCHIVED records this branch, in one of
+   * `projectIds` or in a project created after `knownProjectIds` was read.
+   */
   async hasNonArchivedWorkspaceWithBranch(
-    projectIds: string[],
-    branchName: string
+    branchName: string,
+    scope: { projectIds: string[]; knownProjectIds: string[] }
   ): Promise<boolean> {
     const row = await prisma.workspace.findFirst({
-      where: { projectId: { in: projectIds }, branchName, status: { not: 'ARCHIVED' } },
+      where: {
+        branchName,
+        status: { not: 'ARCHIVED' },
+        OR: [
+          { projectId: { in: scope.projectIds } },
+          { projectId: { notIn: scope.knownProjectIds } },
+        ],
+      },
       select: { id: true },
     });
     return row !== null;

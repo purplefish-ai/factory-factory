@@ -400,14 +400,17 @@ describe('archived branch removal', () => {
       reason: 'Branch moved since it was listed',
     });
     expect(await branchSha('user/raced')).toBe(tip);
+    // A deletion skipped because the branch moved removes the pin it created.
+    expect(await git(repoPath, 'for-each-ref', 'refs/factory-factory/')).toBe('');
+
+    // When the branch is gone, someone may have deleted it relying on the pin.
     await expect(pinAndDeleteBranch(repoPath, 'user/gone', stale)).resolves.toEqual({
       status: 'skipped',
       reason: 'Branch no longer exists',
     });
-    // A skipped deletion removes the pin it created...
-    expect(await git(repoPath, 'for-each-ref', 'refs/factory-factory/')).toBe('');
+    expect(await git(repoPath, 'rev-parse', deletedBranchPinRef('user/gone', stale))).toBe(stale);
 
-    // ...but keeps one an earlier deletion at the same commit left.
+    // A pin an earlier deletion at the same commit left is never removed.
     const earlierPin = deletedBranchPinRef('user/raced', stale);
     await git(repoPath, 'update-ref', earlierPin, stale);
     await expect(pinAndDeleteBranch(repoPath, 'user/raced', stale)).resolves.toMatchObject({
@@ -455,11 +458,66 @@ describe('archived branch removal', () => {
         {
           projectId: 'project',
           name: 'user/pushed',
-          reason: 'Branch came into use during deletion; restored it',
+          reason: 'A workspace now uses this branch; restored the branch',
         },
       ],
       failed: [],
     });
+    expect(await branchSha('user/pushed')).toBe(tip);
+  });
+
+  it('puts a branch back when the re-check after deletion fails', async () => {
+    const tip = await createBranch('user/pushed', { push: true });
+    await createWorkspace('user/pushed');
+    vi.spyOn(workspaceBranchCleanupAccessor, 'hasNonArchivedWorkspaceWithBranch')
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(new Error('database is locked'));
+
+    const result = await archivedBranchCleanupService.removeBranches([
+      { projectId: 'project', name: 'user/pushed', sha: tip },
+    ]);
+
+    expect(result.skipped).toEqual([
+      {
+        projectId: 'project',
+        name: 'user/pushed',
+        reason:
+          'Could not re-check the branch after deleting it: database is locked; restored the branch',
+      },
+    ]);
+    expect(await branchSha('user/pushed')).toBe(tip);
+  });
+
+  it('counts workspaces in projects added after detection', async () => {
+    const tip = await createBranch('user/pushed', { push: true });
+    await createWorkspace('user/pushed');
+    const recheck = workspaceBranchCleanupAccessor.hasNonArchivedWorkspaceWithBranch.bind(
+      workspaceBranchCleanupAccessor
+    );
+    vi.spyOn(
+      workspaceBranchCleanupAccessor,
+      'hasNonArchivedWorkspaceWithBranch'
+    ).mockImplementationOnce(async (...args) => {
+      await db.prisma.project.create({
+        data: {
+          id: 'late-project',
+          name: 'Late',
+          slug: 'late',
+          repoPath,
+          worktreeBasePath: path.join(testRoot, 'worktrees-late'),
+        },
+      });
+      await createWorkspace('user/pushed', { projectId: 'late-project', status: 'NEW' });
+      return recheck(...args);
+    });
+
+    const result = await archivedBranchCleanupService.removeBranches([
+      { projectId: 'project', name: 'user/pushed', sha: tip },
+    ]);
+
+    expect(result.skipped).toEqual([
+      { projectId: 'project', name: 'user/pushed', reason: 'A workspace now uses this branch' },
+    ]);
     expect(await branchSha('user/pushed')).toBe(tip);
   });
 
