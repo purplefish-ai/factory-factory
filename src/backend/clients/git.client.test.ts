@@ -518,24 +518,24 @@ describe('GitClient', () => {
       await expect(client.isBlankRepository()).resolves.toBe(false);
     });
 
-    it('deletes worktree with force', async () => {
+    it('removes one worktree registration by its registered path', async () => {
       mockGitCommandC.mockResolvedValue(commandSuccess());
 
-      await client.deleteWorktree('ws-1');
+      await client.removeWorktreeRegistration('/canonical/worktrees/ws-1');
 
       expect(mockGitCommandC).toHaveBeenCalledWith('/test/repo', [
         'worktree',
         'remove',
-        '/test/worktrees/ws-1',
         '--force',
+        '/canonical/worktrees/ws-1',
       ]);
     });
 
-    it('throws when deleting worktree fails', async () => {
+    it('throws when removing a worktree registration fails', async () => {
       mockGitCommandC.mockResolvedValue(commandFailure('remove failed'));
 
-      await expect(client.deleteWorktree('ws-1')).rejects.toThrow(
-        'Failed to delete worktree: remove failed'
+      await expect(client.removeWorktreeRegistration('/test/worktrees/ws-1')).rejects.toThrow(
+        'Failed to remove worktree registration: remove failed'
       );
     });
 
@@ -550,6 +550,9 @@ describe('GitClient', () => {
             'worktree /test/worktrees/ws-2',
             'branch origin/feature-2',
             'worktree /test/worktrees/ws-3',
+            'locked',
+            'worktree /test/worktrees/ws-4',
+            'locked moved to a USB drive',
           ].join('\n')
         )
       );
@@ -558,7 +561,8 @@ describe('GitClient', () => {
         { path: '/test/repo' },
         { path: '/test/worktrees/ws-1', branchName: 'feature-1' },
         { path: '/test/worktrees/ws-2', branchName: 'origin/feature-2' },
-        { path: '/test/worktrees/ws-3' },
+        { path: '/test/worktrees/ws-3', locked: true },
+        { path: '/test/worktrees/ws-4', locked: true },
       ]);
     });
 

@@ -11,6 +11,7 @@ import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
   recoverStaleArchivingWorkspaces,
+  withArchiveExcluded,
 } from './workspace-archive.orchestrator';
 
 vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
@@ -167,6 +168,7 @@ it.each([false, true])(
           services: {
             workspaceActivityService,
             cleanupWorkspaceRuntimeResources,
+            withArchiveExcluded,
             cleanupWorkspaceScopedCaches: () =>
               workspaceActivityService.clearWorkspace(workspaceId),
             createLogger: () => ({ error: vi.fn() }),

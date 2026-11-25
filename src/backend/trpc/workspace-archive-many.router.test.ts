@@ -107,6 +107,41 @@ describe('workspace.archiveMany', () => {
     );
   });
 
+  it('returns a per-ID CONFLICT for a workspace a delete is cleaning up', async () => {
+    const orchestrator = await vi.importActual<
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator');
+    const f = fixture();
+    f.archive.mockImplementation((workspace, options, services) =>
+      workspace.id === 'w-deleting'
+        ? orchestrator.archiveWorkspace(workspace, options, services)
+        : Promise.resolve(archived)
+    );
+    const release = deferred();
+    const deleting = orchestrator.withArchiveExcluded('w-deleting', () => release.promise);
+
+    try {
+      await expect(
+        f.caller.archiveMany({ projectId: 'p1', ids: ['w-deleting', 'w-other'] })
+      ).resolves.toEqual({
+        results: [
+          {
+            id: 'w-deleting',
+            success: false,
+            error: 'Workspace is being deleted',
+            code: 'CONFLICT',
+            applicationErrorKind: null,
+          },
+          { id: 'w-other', success: true },
+        ],
+        total: 2,
+      });
+    } finally {
+      release.resolve();
+      await deleting;
+    }
+  });
+
   it('refuses workspaces from another project without archiving them', async () => {
     const f = fixture({ projects: { 'w-other': 'p2' } });
 

@@ -14,6 +14,8 @@ export interface GitWorktreeInfo {
 export interface GitWorktreeEntry {
   path: string;
   branchName?: string;
+  /** Set when `git worktree lock` protects it from removal. */
+  locked?: true;
 }
 
 async function isLocalBehindOrigin(
@@ -60,6 +62,10 @@ function parseWorktreeEntries(output: string): GitWorktreeEntry[] {
     if (current && line.startsWith('branch ')) {
       const ref = line.substring('branch '.length);
       current.branchName = ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+    }
+
+    if (current && (line === 'locked' || line.startsWith('locked '))) {
+      current.locked = true;
     }
   }
 
@@ -296,17 +302,20 @@ export class GitClient {
     return result.code !== 0;
   }
 
-  async deleteWorktree(name: string): Promise<void> {
-    const worktreePath = this.getWorktreePath(name);
-
+  /**
+   * Remove one worktree registration, given the path Git lists for it, once its
+   * directory is gone. Targeted on purpose: `git worktree prune` would also drop
+   * registrations other tools keep in the same repository. The branch is kept.
+   */
+  async removeWorktreeRegistration(registeredPath: string): Promise<void> {
     const result = await gitCommandC(this.baseRepoPath, [
       'worktree',
       'remove',
-      worktreePath,
       '--force',
+      registeredPath,
     ]);
     if (result.code !== 0) {
-      throw new Error(`Failed to delete worktree: ${result.stderr || result.stdout}`);
+      throw new Error(`Failed to remove worktree registration: ${result.stderr || result.stdout}`);
     }
   }
 

@@ -378,42 +378,51 @@ export const workspaceCoreRouter = router({
     }),
 
   // Delete a workspace
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const logger = getLogger(ctx);
-    const { cleanupWorkspaceRuntimeResources, workspaceDataService, worktreeLifecycleService } =
-      ctx.appContext.services;
-    const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, input.id);
-    return ctx.appContext.services.workspaceActivityService.withNotificationsSuppressed(
-      input.id,
-      async () => {
-        // Clean up running sessions, terminals, and dev processes before deleting
-        await cleanupWorkspaceRuntimeResources(
-          input.id,
-          ctx.appContext.services,
-          'delete',
-          workspace
-        );
-        ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
+    const {
+      cleanupWorkspaceRuntimeResources,
+      withArchiveExcluded,
+      workspaceDataService,
+      worktreeLifecycleService,
+    } = ctx.appContext.services;
+    // Clean up after an archive of this workspace in flight, never alongside one.
+    return withArchiveExcluded(input.id, async () => {
+      const workspace = await getWorkspaceWithProjectOrThrow(workspaceDataService, input.id);
+      return ctx.appContext.services.workspaceActivityService.withNotificationsSuppressed(
+        input.id,
+        async () => {
+          // Clean up running sessions, terminals, and dev processes before deleting
+          await cleanupWorkspaceRuntimeResources(
+            input.id,
+            ctx.appContext.services,
+            'delete',
+            workspace
+          );
+          ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
 
-        try {
-          await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
-        } catch (error) {
-          logger.error('Failed to cleanup workspace worktree before delete', {
-            workspaceId: workspace.id,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
+          try {
+            await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, {});
+          } catch (error) {
+            logger.error('Failed to cleanup workspace worktree before delete', {
+              workspaceId: workspace.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
 
-        const deletedSessions =
-          await ctx.appContext.services.sessionDataService.findAgentSessionsByWorkspaceId(input.id);
-        const result = await workspaceDataService.delete(input.id);
-        for (const session of deletedSessions) {
-          ctx.appContext.services.sessionDomainService.forgetProviderHistoryIdentity(session.id);
+          const deletedSessions =
+            await ctx.appContext.services.sessionDataService.findAgentSessionsByWorkspaceId(
+              input.id
+            );
+          const result = await workspaceDataService.delete(input.id);
+          for (const session of deletedSessions) {
+            ctx.appContext.services.sessionDomainService.forgetProviderHistoryIdentity(session.id);
+          }
+          ctx.appContext.services.cleanupWorkspaceScopedCaches(input.id);
+          return result;
         }
-        ctx.appContext.services.cleanupWorkspaceScopedCaches(input.id);
-        return result;
-      }
-    );
+      );
+    });
   }),
 
   // Refresh factory-factory.json configuration for all workspaces

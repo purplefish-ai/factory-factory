@@ -74,6 +74,7 @@ const jobStops = ({ services, lifecycle }: Harness) => ({
   snapshotReconciliation: vi.mocked(lifecycle.snapshotReconciliation.stop),
   ratchet: vi.mocked(services.ratchetService.stop),
   periodicTasks: vi.mocked(services.periodicTaskService.stop),
+  worktreeTrash: vi.mocked(services.worktreeTrashReclaimer.stop),
 });
 
 describe('server background job shutdown', () => {
@@ -135,6 +136,7 @@ describe('server background job shutdown', () => {
       snapshotReconciliation: 4200,
       ratchet: 3000,
       periodicTasks: 1500,
+      worktreeTrash: 2500,
     };
     for (const [job, stop] of Object.entries(jobStops(harness))) {
       const ms = durations[job as keyof typeof durations];

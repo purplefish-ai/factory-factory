@@ -8,6 +8,7 @@ import { workspaceAccessor } from '@/backend/services/workspace/resources/worksp
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { gitOpsService } from './git-ops.service';
 import { orphanedWorktreeService } from './orphaned-worktree.service';
+import { trashEntryName, WORKTREE_TRASH_DIR_NAME } from './worktree-trash';
 
 describe('orphanedWorktreeService', () => {
   let tempRoot: string;
@@ -61,6 +62,21 @@ describe('orphanedWorktreeService', () => {
         path: path.join(worktreeBasePath, 'workspace-archived'),
       },
     ]);
+  });
+
+  it('never treats the worktree trash or the worktrees moved into it as orphans', async () => {
+    const trash = path.join(worktreeBasePath, WORKTREE_TRASH_DIR_NAME);
+    await mkdir(path.join(trash, trashEntryName('workspace-gone')), { recursive: true });
+    await mkdir(path.join(trash, 'workspace-nested'));
+    vi.spyOn(workspaceAccessor, 'findNonArchivedWorktreeRefs').mockResolvedValue([]);
+    const removeSpy = vi.spyOn(gitOpsService, 'removeWorktree');
+
+    await expect(orphanedWorktreeService.findOrphanedWorktrees()).resolves.toEqual([]);
+    await expect(orphanedWorktreeService.removeOrphanedWorktrees()).resolves.toEqual({
+      removed: [],
+      failed: [],
+    });
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 
   it('never reports standalone repositories or unrecognized Git metadata', async () => {

@@ -2,8 +2,7 @@
 
 Projects, workspaces and their side tables; worktrees; the workspace snapshot
 store. The [services guide](../AGENTS.md) covers capsule layout and boundaries.
-Bare file names below are under this directory; paths that start with `src/` are
-from the repository root.
+Bare file names are under this directory; `src/` paths are from the repo root.
 
 ## Owns, and does not own
 
@@ -20,16 +19,14 @@ not own:
   `src/backend/services/session/`.
 - Run-script and startup-script processes, which persist their state through
   `workspaceRunScriptService` here: `src/backend/services/run-script/`.
-- Snapshot event collection and periodic reconciliation:
-  `src/backend/orchestration/snapshots/`.
+- Snapshot events and reconciliation: `src/backend/orchestration/snapshots/`.
 - PR monitoring that coordinates the `WorkspacePR*` tables:
   `src/backend/orchestration/pull-requests/`.
 - The backup format: `src/backend/orchestration/data-backup/`.
 
 ## Public surface
 
-Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
-`bridges.ts`.
+Orchestration wires the bridges declared in `service/bridges.ts`.
 
 ## Invariants
 
@@ -83,9 +80,11 @@ Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
   newer; only the serialized accepted writer may tie.
   `workspace-snapshot-store.names.test.ts`,
   `workspace-snapshot-store.branches.test.ts`.
-- Worktree removal deletes a Git registration only when it matches the canonical
-  worktree path, or the configured path once the base no longer resolves.
-  `git-ops.symlink.integration.test.ts`.
+- Removal refuses a locked worktree, moves it into the canonical base's
+  `.ff-trash` (else deletes in place), then drops only the canonical (with no
+  base, configured) path's registration; nothing deletes under a deadline, and
+  the reclaimer deletes only pattern-named entries. `worktree-trash.test.ts`,
+  `git-ops.trash.integration.test.ts`, `git-ops.symlink.integration.test.ts`.
 - Branch cleanup pins a tip under `refs/factory-factory/deleted-branches/`, then
   deletes only if unmoved. `archived-branch-cleanup.integration.test.ts`.
 
@@ -108,13 +107,14 @@ Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
   `project-management.service.ts` creates, updates and archives projects and
   runs the `FF_PROJECT_ROOT` location check.
 - `service/worktree/`: `git-ops.service.ts`, `worktree-lifecycle.service.ts`,
-  clone, orphaned-worktree and archived-branch cleanup; `project-root.ts`,
-  whether a project path lies in `FF_PROJECT_ROOT` and the real path to store;
-  `project-repository-inspector.ts`, a repository's GitHub owner and name from
-  `origin`, its default branch, and whether a path is a readable Git repository.
+  clone, orphaned-worktree and archived-branch cleanup and the trash
+  (`worktree-trash*.ts`); `project-root.ts`, whether a path is in
+  `FF_PROJECT_ROOT` and its real path; `project-repository-inspector.ts`, the
+  `origin` owner and name, default branch and readable-repository check.
 
 ## Decisions
 
 - [Side tables flatten under their original names](../../../../docs/decisions/2026-11-13-workspace-side-tables-flatten-under-original-names.md)
 - [The run-script row caches config and persists runtime](../../../../docs/decisions/2026-11-13-run-script-row-caches-config-and-persists-runtime.md)
 - [Worktree cleanup matches canonical paths only](../../../../docs/decisions/2026-11-13-worktree-cleanup-matches-canonical-paths-only.md)
+- [Worktree removal detaches, then reclaims](../../../../docs/decisions/2026-11-25-worktree-removal-detaches-then-reclaims.md)

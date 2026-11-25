@@ -31,6 +31,8 @@ type ArchiveSourceStatus = Awaited<
 >['previousStatus'];
 
 const pendingArchives = new Map<string, PendingArchive>();
+/** Workspaces a delete is cleaning up; archives of them are refused meanwhile. */
+const archiveExclusions = new Map<string, number>();
 // Only a failed rollback proves that this process abandoned an ARCHIVING row.
 const interruptedArchiveSources = new Map<string, ArchiveSourceStatus>();
 
@@ -270,6 +272,9 @@ export async function archiveWorkspace(
   if (pending) {
     return await joinPendingArchive(pending, workspace, options, services);
   }
+  if (archiveExclusions.has(workspace.id)) {
+    throw new ApplicationError('CONFLICT', 'Workspace is being deleted');
+  }
 
   const operation = performArchive(workspace, options, services);
   pendingArchives.set(workspace.id, {
@@ -280,6 +285,42 @@ export async function archiveWorkspace(
     return await operation;
   } finally {
     pendingArchives.delete(workspace.id);
+  }
+}
+
+/**
+ * Run `operation` (delete) with no archive of the workspace in this process:
+ * waits for an in-flight archive to settle, however it ends, and refuses
+ * archives that start while `operation` runs, so delete cleans up after an
+ * archive and never alongside one.
+ */
+export async function withArchiveExcluded<T>(
+  workspaceId: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  // A joined lock-recovery retry can start a new archive as the first settles.
+  for (
+    let pending = pendingArchives.get(workspaceId);
+    pending;
+    pending = pendingArchives.get(workspaceId)
+  ) {
+    try {
+      await pending.result;
+    } catch {
+      // The archive's caller reports its failure; delete only waits for it.
+    }
+  }
+  // Same synchronous step as the last check: no archive can register between.
+  archiveExclusions.set(workspaceId, (archiveExclusions.get(workspaceId) ?? 0) + 1);
+  try {
+    return await operation();
+  } finally {
+    const remaining = (archiveExclusions.get(workspaceId) ?? 1) - 1;
+    if (remaining === 0) {
+      archiveExclusions.delete(workspaceId);
+    } else {
+      archiveExclusions.set(workspaceId, remaining);
+    }
   }
 }
 

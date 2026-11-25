@@ -53,6 +53,10 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       start: vi.fn<(...args: unknown[]) => void>(),
       stop: vi.fn(async () => undefined),
     },
+    worktreeTrashReclaimer: {
+      start: vi.fn<(...args: unknown[]) => void>(),
+      stop: vi.fn(async () => undefined),
+    },
     agentRuntime: {
       start: vi.fn<(...args: unknown[]) => void>(),
       stop: vi.fn(async () => undefined),

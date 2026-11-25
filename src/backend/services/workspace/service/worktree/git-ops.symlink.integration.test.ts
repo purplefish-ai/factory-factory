@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { gitOpsService } from './git-ops.service';
+import { WORKTREE_TRASH_DIR_NAME } from './worktree-trash';
 
 const execFileAsync = promisify(execFile);
 let testRoot: string | undefined;
@@ -71,6 +72,13 @@ describe('worktree removal through a symlinked base directory', () => {
 
       await gitOpsService.removeWorktree(worktreePath, { repoPath, worktreeBasePath });
 
+      // The directory moves into the trash of the canonical base, beside it.
+      const trash = path.join(actualBase, WORKTREE_TRASH_DIR_NAME);
+      if (missing === 'worktree-missing') {
+        await expect(readdir(trash)).rejects.toMatchObject({ code: 'ENOENT' });
+      } else {
+        expect(await readdir(trash)).toEqual([expect.stringMatching(/^workspace\./)]);
+      }
       expect((await git('worktree', 'list', '--porcelain')).stdout).not.toContain(
         'refs/heads/test-branch'
       );

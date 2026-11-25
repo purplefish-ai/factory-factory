@@ -59,6 +59,11 @@ collector is given `fireLifecycleNotification` (typed from
   `workspace-archive-concurrency.test.ts`.
 - An archiving workspace with no failed local archive is acknowledged without
   taking over its cleanup. `workspace-archive-concurrency.test.ts`.
+- Delete runs inside `withArchiveExcluded`: it starts after this process's
+  in-flight archive of the workspace settles, and archives requested meanwhile
+  are refused, so the two never clean up together.
+  `workspace-archive-concurrency.test.ts`,
+  `src/backend/trpc/workspace-delete.router.test.ts`.
 - Archive and delete stop sessions, the run script and terminals first and abort
   if any fails; only then does the leftover process sweep run, and its failure
   never blocks them. `workspace-archive.orchestrator.test.ts`.

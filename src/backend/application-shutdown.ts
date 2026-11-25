@@ -19,6 +19,7 @@ export type ShutdownGraph = {
     readonly schedulerService: { stop(): Promise<void> };
     readonly ratchetService: { stop(): Promise<void> };
     readonly periodicTaskService: { stop(): Promise<void> };
+    readonly worktreeTrashReclaimer: { stop(): Promise<void> };
     readonly agentRuntime?: { stop(): Promise<void> };
     readonly workspaceMetadata?: { stop(): Promise<void> };
     readonly claudeModelCatalogService?: { stop(): Promise<void> };
@@ -85,6 +86,8 @@ export function createShutdownPlan(
     { name: 'snapshot-reconciliation', stop: () => lifecycle.snapshotReconciliation.stop() },
     { name: 'pr-event-poll', stop: () => services.ratchetService.stop() },
     { name: 'periodic-task-poll', stop: () => services.periodicTaskService.stop() },
+    // Aborting kills the deletion in flight; the next start resumes it.
+    { name: 'worktree-trash-reclaim', stop: () => services.worktreeTrashReclaimer.stop() },
     {
       name: 'session-launch-options',
       stop: () => services.sessionConfigService?.stopLaunchOptions(),
@@ -143,6 +146,7 @@ export function createShutdownPlan(
       after: [
         'pr-event-poll',
         'periodic-task-poll',
+        'worktree-trash-reclaim',
         'reconciliation-cleanup',
         'claude-model-catalog',
       ],

@@ -22,9 +22,11 @@
  * a wall-clock boundary; every interval here is minutes and every run is
  * seconds, so the drift is not observable.
  *
- * Deliberately absent: a public "run this job now" API. The two loops that had
- * a cancellable sleep only ever cancelled it from their own `stop()`, so
- * interruptibility is a shutdown concern, not a scheduling feature.
+ * `wake()` ends a running job's pending delay so its next run starts now, or,
+ * when a run is in flight, makes the next run follow it without a delay. It
+ * never overlaps runs and never starts a stopped job. It exists for work that
+ * an event makes due, such as reclaiming a worktree that was just moved to the
+ * trash; a job that only polls has no use for it.
  *
  * Expected usage, which is what the guarantees below are worth defending:
  * a job is registered once when its service is constructed, and started and
@@ -100,6 +102,8 @@ interface JobState {
   currentRun: Promise<void> | null;
   /** Settles the pending sleep early. Null when the job is not sleeping. */
   cancelSleep: (() => void) | null;
+  /** A `wake()` not yet honoured by a run: the next sleep is skipped. */
+  wakeRequested: boolean;
 }
 
 export class JobRunner {
@@ -133,6 +137,7 @@ export class JobRunner {
       abortController: new AbortController(),
       currentRun: null,
       cancelSleep: null,
+      wakeRequested: false,
     });
   }
 
@@ -157,6 +162,8 @@ export class JobRunner {
     // check cannot carry on; clearing it is the last thing that happens before
     // a new loop exists, and the only place it happens.
     state.stopping = false;
+    // A wake belongs to the loop it was sent to, not to a later start.
+    state.wakeRequested = false;
     // Fresh controller per start: a job stopped and started again must not
     // hand its runs a signal that is already aborted.
     state.abortController = new AbortController();
@@ -189,6 +196,21 @@ export class JobRunner {
     }
 
     logger.info('Job started', { job: name, intervalMs: state.definition.intervalMs });
+  }
+
+  /**
+   * Run a started job as soon as it is free: end its pending delay now, or,
+   * while a run is in flight, start the next run straight after it. Wakes that
+   * arrive before a run begins collapse into that run. A stopped or stopping
+   * job ignores the wake; `start()` is what runs it.
+   */
+  wake(name: string): void {
+    const state = this.get(name);
+    if (state.stopping || (state.loop === null && !state.starting)) {
+      return;
+    }
+    state.wakeRequested = true;
+    state.cancelSleep?.();
   }
 
   startAll(): void {
@@ -315,6 +337,8 @@ export class JobRunner {
 
   private async runOnce(state: JobState): Promise<void> {
     const { signal } = state.abortController;
+    // This run serves every wake requested so far; a later one runs again.
+    state.wakeRequested = false;
 
     // Published *before* the callback is invoked. Building the promise from
     // the call would leave `currentRun` unset for the callback's synchronous
@@ -341,12 +365,16 @@ export class JobRunner {
   }
 
   private sleep(state: JobState): Promise<void> {
-    if (state.stopping) {
+    if (state.stopping || state.wakeRequested) {
       return Promise.resolve();
     }
 
     const { intervalMs, computeDelay } = state.definition;
     const delayMs = computeDelay ? computeDelay(intervalMs) : intervalMs;
+    // `computeDelay` may have woken the job; no sleep is cancellable yet to see it.
+    if (state.wakeRequested) {
+      return Promise.resolve();
+    }
 
     return new Promise((resolve) => {
       let settled = false;

@@ -88,5 +88,6 @@ export {
   assertWorktreePathSafe,
   worktreeLifecycleService,
 } from './service/worktree/worktree-lifecycle.service';
+export { worktreeTrashReclaimer } from './service/worktree/worktree-trash-reclaimer.service';
 
 export type { WorkspaceDeletionCapture } from './types';

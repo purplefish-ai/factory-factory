@@ -192,4 +192,15 @@ describe('project persistence contracts', () => {
     );
     await expect(projectAccessor.archive('missing')).rejects.toMatchObject({ code: 'P2025' });
   });
+
+  it('lists every worktree base, archived projects included, for trash reclamation', async () => {
+    const project = await createProject();
+    await createProject('other');
+    await projectAccessor.archive(project.id);
+
+    expect((await projectAccessor.listWorktreeBasePaths()).sort()).toEqual([
+      '/worktrees/demo',
+      '/worktrees/other',
+    ]);
+  });
 });

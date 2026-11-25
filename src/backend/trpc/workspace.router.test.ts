@@ -208,6 +208,7 @@ function createCaller(requestTrust?: {
       attachAndRefreshPR: vi.fn(),
     }),
     archiveWorkspace: (...args) => mockArchiveWorkspace(...args),
+    withArchiveExcluded: <T>(_id: string, operation: () => Promise<T>) => operation(),
     cleanupWorkspaceRuntimeResources: (...args) => mockCleanupWorkspaceRuntimeResources(...args),
     initializeWorkspaceWorktree: (...args) => mockInitializeWorkspaceWorktree(...args),
     launchWorkspace: (source) =>

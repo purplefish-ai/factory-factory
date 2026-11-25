@@ -128,6 +128,12 @@ class ProjectAccessor {
     });
   }
 
+  /** Every project's configured worktree base, archived projects included. */
+  async listWorktreeBasePaths(): Promise<string[]> {
+    const projects = await prisma.project.findMany({ select: { worktreeBasePath: true } });
+    return projects.map((project) => project.worktreeBasePath);
+  }
+
   archive(id: string): Promise<Project> {
     return prisma.project.update({
       where: { id },
