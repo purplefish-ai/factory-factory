@@ -266,9 +266,10 @@ about it — the label and the column used to be derived independently and could
 There is also one project-scoped read behind it. `workspace.listForProject`
 returns every live workspace in a project with its derived state, and the board
 and the sidebar select what they render from that single list — the board
-dropping rows whose column is `null`. Column-wide actions use
-`findWorkspaceIdsInKanbanColumn`, which derives the column rather than filtering
-in SQL, because live session state is not in the database.
+dropping rows whose column is `null`. Actions on several workspaces, such as
+Archive All and the board's selection mode, send the IDs the user confirmed to
+`workspace.archiveMany` rather than asking the server to re-derive a column, so
+the server never archives a workspace the confirmation did not count.
 
 ## Where the PR Cache Lives
 

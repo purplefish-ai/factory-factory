@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
   archiveWorkspace: vi.fn(async (_workspaceId: string) => undefined),
   toggleWorkspaceRatcheting: vi.fn(),
   renameWorkspace: vi.fn(async (_workspaceId: string, _name: string) => undefined),
-  bulkArchiveColumn: vi.fn(async (_kanbanColumn: string) => undefined),
+  archiveWorkspaces: vi.fn(async (_ids: readonly string[]) => ({ failedIds: [] as string[] })),
   columnProps: [] as Array<{
     column: { id: string };
     workspaces: WorkspaceWithKanban[];
@@ -127,7 +127,10 @@ vi.mock('./kanban-context', () => ({
     renameWorkspace: mocks.renameWorkspace,
     // The real context keeps each command for its lifetime (kanban-context.test.tsx).
     archiveWorkspace: mocks.archiveWorkspace,
-    bulkArchiveColumn: mocks.bulkArchiveColumn,
+    archiveWorkspaces: mocks.archiveWorkspaces,
+    isSelecting: false,
+    startSelecting: vi.fn(),
+    stopSelecting: vi.fn(),
     archiveGitLockWorkspaceIds: ['workspace-1'],
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,
     retryGitLockedArchives: mocks.retryGitLockedArchives,
@@ -200,7 +203,7 @@ describe('KanbanBoard', () => {
     mocks.inlineFormRequest = 0;
     mocks.workspacesError = null;
     mocks.refetch.mockClear();
-    mocks.bulkArchiveColumn.mockClear();
+    mocks.archiveWorkspaces.mockClear();
     mocks.workspaces = [
       {
         ...createOptimisticWorkspaceSummary({
@@ -289,10 +292,13 @@ describe('KanbanBoard', () => {
     const done = mocks.columnProps.findLast((props) => props.column.id === 'DONE')!;
     expect(done.workspaces.map((workspace) => workspace.name)).toEqual(['Visible done']);
     act(() => done.onBulkArchive());
-    expect(document.body.textContent).toContain('archive all 2 workspaces in this column');
-    const confirm = findButton(document.body, 'Archive');
+    expect(document.body.textContent).toContain('Archive 2 workspaces?');
+    expect(document.body.textContent).toContain(
+      'This archives every workspace in Done, including any hidden by filters.'
+    );
+    const confirm = findButton(document.body, 'Archive 2');
     await act(async () => confirm!.click());
-    expect(mocks.bulkArchiveColumn).toHaveBeenCalledExactlyOnceWith('DONE');
+    expect(mocks.archiveWorkspaces).toHaveBeenCalledExactlyOnceWith(['done-0', 'done-1']);
   });
 
   it.each([true, false])(

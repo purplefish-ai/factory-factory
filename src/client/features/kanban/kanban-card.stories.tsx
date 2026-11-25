@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, fn, userEvent, within } from 'storybook/test';
+import { expect, fireEvent, fn, userEvent, within } from 'storybook/test';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { baseWorkspace } from './kanban-card.story-fixtures';
@@ -415,6 +415,81 @@ export const RatchetTogglePending: Story = {
     await expect(toggle).toHaveAttribute('aria-busy', 'true');
     await expect(toggle.querySelector('[data-slot=spinner]')).toBeVisible();
   },
+};
+
+/**
+ * Selection mode: a labelled checkbox replaces the link, the card's own actions
+ * hide, and a click anywhere toggles selection (shift-click asks for a range).
+ */
+export const SelectionMode: Story = {
+  args: {
+    workspace: baseWorkspace,
+    projectSlug: 'my-project',
+    onArchive: fn(),
+    onRename: fn(),
+    onOpenQuickChat: fn(),
+    selectionMode: true,
+    selected: false,
+    onToggleSelected: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const checkbox = canvas.getByRole('checkbox', { name: `Select ${baseWorkspace.name}` });
+    await expect(checkbox).not.toBeChecked();
+    await expect(canvas.queryByRole('link')).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('button', { name: 'Archive workspace' })
+    ).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('button', { name: 'Rename workspace' })
+    ).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByText(baseWorkspace.name));
+    await expect(args.onToggleSelected).toHaveBeenLastCalledWith(baseWorkspace.id, false);
+    await fireEvent.click(checkbox, { shiftKey: true });
+    await expect(args.onToggleSelected).toHaveBeenLastCalledWith(baseWorkspace.id, true);
+    await expect(args.onToggleSelected).toHaveBeenCalledTimes(2);
+  },
+};
+
+/** In selection mode the card's own links keep their action instead of toggling it. */
+export const SelectionModeParentLink: Story = {
+  args: {
+    ...SelectionMode.args,
+    onToggleSelected: fn(),
+    workspace: {
+      ...baseWorkspace,
+      creationSource: 'CHILD_WORKSPACE',
+      parentWorkspace: {
+        id: 'ws-parent',
+        name: 'Parent workspace',
+        projectId: baseWorkspace.projectId,
+        projectName: 'Demo',
+        projectSlug: 'demo',
+      },
+    },
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('link', { name: 'Parent workspace: Parent workspace' }));
+    await expect(args.onToggleSelected).not.toHaveBeenCalled();
+    await userEvent.click(canvas.getByText(baseWorkspace.name));
+    await expect(args.onToggleSelected).toHaveBeenCalledOnce();
+    await expect(args.onToggleSelected).toHaveBeenCalledWith(baseWorkspace.id, false);
+  },
+};
+
+export const SelectedInSelectionMode: Story = {
+  args: { ...SelectionMode.args, selected: true },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('checkbox', { name: `Select ${baseWorkspace.name}` })
+    ).toBeChecked();
+  },
+};
+
+export const SelectedInSelectionModeDark: Story = {
+  ...SelectedInSelectionMode,
+  globals: { theme: 'dark' },
 };
 
 export const AgentWorkspace: Story = {

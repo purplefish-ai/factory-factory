@@ -19,7 +19,7 @@ import {
 } from '@/backend/services/workspace/service/state/workspace-read-state';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { gitOpsService } from '@/backend/services/workspace/service/worktree/git-ops.service';
-import { deriveWorkspaceSidebarStatus, type KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus, WorkspaceStatus } from '@/shared/core';
 import { hasWorkingSessionSummary } from '@/shared/session-runtime';
 
 const logger = createLogger('workspace-query');
@@ -323,23 +323,6 @@ class WorkspaceQueryService {
       ),
       reviewCount,
     };
-  }
-
-  /**
-   * Workspace ids whose live Kanban column is `kanbanColumn`, for column-wide
-   * actions.
-   *
-   * The column depends on session state the database cannot see, so this
-   * derives it rather than filtering in SQL.
-   */
-  async findWorkspaceIdsInKanbanColumn(
-    projectId: string,
-    kanbanColumn: KanbanColumn
-  ): Promise<string[]> {
-    const derived = await this.deriveProjectWorkspaces(projectId);
-    return derived
-      .filter(({ derivedState }) => derivedState.kanbanColumn === kanbanColumn)
-      .map(({ workspace }) => workspace.id);
   }
 
   /**

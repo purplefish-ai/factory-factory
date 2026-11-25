@@ -1,8 +1,10 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
+import type { ColumnSelectionState } from './board-selection';
 import type { WaitingSortOrder } from './board-view';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 import { WaitingSortMenu } from './waiting-sort-menu';
@@ -46,6 +48,15 @@ interface KanbanColumnProps {
   isBulkArchiving?: boolean;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
+  /** Present in selection mode; see `KanbanCard`. */
+  selection?: ColumnSelectionProps;
+}
+
+export interface ColumnSelectionProps {
+  selectedIds: ReadonlySet<string>;
+  state: ColumnSelectionState;
+  onToggle: (workspaceId: string, range: boolean) => void;
+  onToggleAll: () => void;
 }
 
 export function KanbanColumn({
@@ -62,16 +73,29 @@ export function KanbanColumn({
   isBulkArchiving,
   onOpenQuickChat,
   onRename,
+  selection,
 }: KanbanColumnProps) {
   const showSortMenu = column.id === 'WAITING' && waitingSortOrder && onWaitingSortOrderChange;
   const isEmpty = workspaces.length === 0;
-  const showBulkArchiveButton = column.id === 'DONE' && !isEmpty;
+  const showBulkArchiveButton = column.id === 'DONE' && !isEmpty && !selection;
 
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
       {/* Section headings remain visible in the stacked mobile list. */}
       <div className="flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
+          {selection && !isEmpty && (
+            <Checkbox
+              aria-label={`Select all in ${column.label}`}
+              checked={
+                selection.state === 'all' ? true : selection.state === 'some' && 'indeterminate'
+              }
+              onClick={(event) => {
+                event.preventDefault();
+                selection.onToggleAll();
+              }}
+            />
+          )}
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" size="count">
             {workspaces.length}
@@ -116,6 +140,9 @@ export function KanbanColumn({
                 onArchive={onArchive}
                 onOpenQuickChat={onOpenQuickChat}
                 onRename={onRename}
+                selectionMode={selection !== undefined}
+                selected={selection?.selectedIds.has(workspace.id) ?? false}
+                onToggleSelected={selection?.onToggle}
               />
             </div>
           ))

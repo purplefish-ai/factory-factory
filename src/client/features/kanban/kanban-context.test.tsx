@@ -20,6 +20,7 @@ interface ArchiveError {
 
 interface WorkspaceListItem {
   id: string;
+  name?: string;
   kanbanColumn: 'WORKING' | 'WAITING' | 'DONE' | null;
   githubIssueNumber: number | null;
   linearIssueId: string | null;
@@ -30,7 +31,7 @@ interface ProjectWorkspaceCache {
   reviewCount: number;
 }
 
-interface BulkArchiveResult {
+interface ArchiveManyResult {
   id: string;
   success: boolean;
   error?: string;
@@ -47,8 +48,8 @@ let archiveInputs = createTestEventLog<unknown>();
 const mocks = vi.hoisted(() => ({
   archiveError: undefined as ArchiveError | undefined,
   archiveResponse: undefined as Promise<unknown> | undefined,
-  bulkArchiveError: undefined as ArchiveError | undefined,
-  bulkArchiveResults: [] as BulkArchiveResult[],
+  archiveManyError: undefined as ArchiveError | undefined,
+  archiveManyResults: [] as ArchiveManyResult[],
   toastErrorMock: vi.fn(),
   workspaceListCancelMock: vi.fn(),
   workspaceListGetDataMock: vi.fn(),
@@ -59,7 +60,7 @@ const mocks = vi.hoisted(() => ({
   workspaceListInvalidateMock: vi.fn(),
   refetchGitHubIssuesMock: vi.fn(),
   refetchLinearIssuesMock: vi.fn(),
-  bulkArchiveInputs: [] as unknown[],
+  archiveManyInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
   toggleRatchetingMutate: vi.fn(),
@@ -170,10 +171,10 @@ vi.mock('@/client/lib/trpc', () => ({
         () => mocks.archiveResponse,
         (input) => archiveInputs.record(input)
       ),
-      bulkArchive: rejectingMutation(
-        () => mocks.bulkArchiveError,
-        () => ({ results: mocks.bulkArchiveResults, total: mocks.bulkArchiveResults.length }),
-        (input) => mocks.bulkArchiveInputs.push(input)
+      archiveMany: rejectingMutation(
+        () => mocks.archiveManyError,
+        () => ({ results: mocks.archiveManyResults, total: mocks.archiveManyResults.length }),
+        (input) => mocks.archiveManyInputs.push(input)
       ),
     },
   },
@@ -229,6 +230,14 @@ async function expectArchiveToResolve(action: () => Promise<void>) {
   flushSync(() => undefined);
 }
 
+async function expectArchiveManyFailures(
+  action: () => Promise<{ failedIds: string[] }>,
+  failedIds: string[]
+) {
+  await expect(action()).resolves.toEqual({ failedIds });
+  flushSync(() => undefined);
+}
+
 function expectVisibleWorkspaceIds(expectedIds: string[]) {
   expect(context?.workspaces?.map((workspace) => workspace.id)).toEqual(expectedIds);
 }
@@ -244,10 +253,10 @@ beforeEach(() => {
   });
   mocks.archiveError = undefined;
   mocks.archiveResponse = undefined;
-  mocks.bulkArchiveError = undefined;
+  mocks.archiveManyError = undefined;
   archiveInputs = createTestEventLog<unknown>();
-  mocks.bulkArchiveInputs = [];
-  mocks.bulkArchiveResults = [{ id: 'workspace-1', success: true }];
+  mocks.archiveManyInputs = [];
+  mocks.archiveManyResults = [{ id: 'workspace-1', success: true }];
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
   mocks.workspaceListInvalidateMock.mockResolvedValue(undefined);
   mocks.githubIssues = [];
@@ -256,12 +265,14 @@ beforeEach(() => {
     workspaces: [
       {
         id: 'workspace-1',
+        name: 'Workspace one',
         kanbanColumn: 'WAITING',
         githubIssueNumber: null,
         linearIssueId: null,
       },
       {
         id: 'workspace-2',
+        name: 'Workspace two',
         kanbanColumn: 'WORKING',
         githubIssueNumber: null,
         linearIssueId: null,
@@ -289,6 +300,17 @@ afterEach(() => {
   root = undefined;
   context = undefined;
   document.body.innerHTML = '';
+});
+
+describe('KanbanProvider selection mode', () => {
+  it('starts off and turns on and off through its commands', () => {
+    const kanban = renderProvider();
+    expect(kanban.isSelecting).toBe(false);
+    flushSync(() => kanban.startSelecting());
+    expect(context?.isSelecting).toBe(true);
+    flushSync(() => kanban.stopSelecting());
+    expect(context?.isSelecting).toBe(false);
+  });
 });
 
 describe('KanbanProvider PR sync', () => {
@@ -369,16 +391,21 @@ describe('KanbanProvider archive failure handling', () => {
     });
   });
 
-  it('handles a bulk archive failure and rolls back the optimistic removals', async () => {
-    mocks.bulkArchiveError = {
+  it('handles a whole multi-archive failure and rolls back the optimistic removals', async () => {
+    mocks.archiveManyError = {
       data: { code: 'INTERNAL_SERVER_ERROR' },
-      message: 'Bulk archive unavailable',
+      message: 'Archive unavailable',
     };
     const kanban = renderProvider();
 
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1']),
+      ['workspace-1']
+    );
 
-    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Bulk archive unavailable');
+    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't archive Workspace one. Archive unavailable."
+    );
     expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(2);
     expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
       'workspace-1',
@@ -387,33 +414,72 @@ describe('KanbanProvider archive failure handling', () => {
     expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
   });
 
-  it('reports one whole-request bulk failure once for a multi-workspace column', async () => {
-    mocks.workspaceListState!.workspaces[1]!.kanbanColumn = 'WAITING';
-    mocks.bulkArchiveError = { message: 'One shared request failure' };
+  it('reports one whole-request failure once for several workspaces', async () => {
+    mocks.archiveManyError = { message: 'One shared request failure' };
     const kanban = renderProvider();
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
-    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith('One shared request failure');
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1', 'workspace-2']),
+      ['workspace-1', 'workspace-2']
+    );
+    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't archive 2 workspaces. One shared request failure."
+    );
   });
 
-  it('reports distinct per-result bulk errors separately and collects every shared lock ID', async () => {
-    mocks.workspaceListState!.workspaces[1]!.kanbanColumn = 'WAITING';
-    mocks.bulkArchiveResults = ['workspace-1', 'workspace-2'].map((id) => ({
+  it('names each failed workspace in one toast and collects every lock ID', async () => {
+    mocks.archiveManyResults = ['workspace-1', 'workspace-2'].map((id) => ({
       id,
       success: false,
-      error: 'Distinct result failure',
+      error: `${id} failed`,
     }));
     const kanban = renderProvider();
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
-    expect(mocks.toastErrorMock).toHaveBeenCalledTimes(2);
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1', 'workspace-2']),
+      ['workspace-1', 'workspace-2']
+    );
+    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't archive 2 workspaces.",
+      expect.objectContaining({ description: expect.anything() })
+    );
+    const [, toastOptions] = mocks.toastErrorMock.mock.calls[0] ?? [];
+    const description = document.createElement('div');
+    const descriptionRoot = createRoot(description);
+    flushSync(() =>
+      descriptionRoot.render((toastOptions as { description: ReactNode }).description)
+    );
+    expect([...description.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      'Workspace one: workspace-1 failed.',
+      'Workspace two: workspace-2 failed.',
+    ]);
+    flushSync(() => descriptionRoot.unmount());
+
     mocks.toastErrorMock.mockClear();
-    mocks.bulkArchiveError = {
+    mocks.archiveManyError = {
       data: { applicationErrorKind: 'GIT_INDEX_LOCKED' },
-      message: 'Git locked',
+      message: 'Index locked',
     };
     rerenderProvider();
-    await expectArchiveToResolve(() => context!.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(
+      () => context!.archiveWorkspaces(['workspace-1', 'workspace-2']),
+      ['workspace-1', 'workspace-2']
+    );
     rerenderProvider();
     expect(context!.archiveGitLockWorkspaceIds).toEqual(['workspace-1', 'workspace-2']);
+    expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('archives exactly the requested workspaces', async () => {
+    mocks.workspaceListState!.workspaces[1]!.kanbanColumn = 'WAITING';
+    const kanban = renderProvider();
+
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1', 'workspace-1']),
+      []
+    );
+    rerenderProvider();
+
+    expect(mocks.archiveManyInputs).toEqual([{ projectId: 'project-1', ids: ['workspace-1'] }]);
+    expectVisibleWorkspaceIds(['workspace-2']);
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
   });
 
@@ -431,10 +497,11 @@ describe('KanbanProvider archive failure handling', () => {
     expectVisibleWorkspaceIds(['workspace-2']);
   });
 
-  it('keeps a successful bulk archive removed when cache invalidation fails', async () => {
+  it('keeps a successful multi-archive removed when cache invalidation fails', async () => {
+    mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(() => kanban.archiveWorkspaces(['workspace-1']), []);
     rerenderProvider();
 
     expect(mocks.workspaceListSetDataMock).toHaveBeenCalledTimes(1);
@@ -444,8 +511,8 @@ describe('KanbanProvider archive failure handling', () => {
     expectVisibleWorkspaceIds(['workspace-2']);
   });
 
-  it('restores bulk items that fail when post-archive refreshes also fail', async () => {
-    mocks.bulkArchiveResults = [
+  it('restores failed items of a multi-archive when post-archive refreshes also fail', async () => {
+    mocks.archiveManyResults = [
       {
         id: 'workspace-1',
         success: false,
@@ -456,7 +523,10 @@ describe('KanbanProvider archive failure handling', () => {
     mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1']),
+      ['workspace-1']
+    );
     rerenderProvider();
 
     expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
@@ -464,27 +534,31 @@ describe('KanbanProvider archive failure handling', () => {
       'workspace-2',
     ]);
     expectVisibleWorkspaceIds(['workspace-1', 'workspace-2']);
-    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Archive service unavailable');
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith(
+      "Couldn't archive Workspace one. Archive service unavailable."
+    );
   });
 
-  it('keeps workspaces omitted from bulk archive results removed', async () => {
+  it('restores and reports a workspace the server returned no result for', async () => {
     mocks.workspaceListState?.workspaces.push({
       id: 'workspace-3',
+      name: 'Workspace three',
       kanbanColumn: 'WAITING',
       githubIssueNumber: null,
       linearIssueId: null,
     });
-    mocks.workspaceListInvalidateMock.mockRejectedValueOnce(new Error('Workspace refetch failed'));
     const kanban = renderProvider();
 
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1', 'workspace-3']),
+      ['workspace-3']
+    );
     rerenderProvider();
 
-    expect(mocks.workspaceListState?.workspaces.map((workspace) => workspace.id)).toEqual([
-      'workspace-2',
-    ]);
-    expectVisibleWorkspaceIds(['workspace-2']);
-    expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+    expectVisibleWorkspaceIds(['workspace-2', 'workspace-3']);
+    expect(mocks.toastErrorMock).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't archive Workspace three. The server returned no result for this workspace."
+    );
   });
 
   it('suppresses issue intake immediately from a complete snapshot-first board row', () => {
@@ -572,8 +646,8 @@ describe('KanbanProvider archive failure handling', () => {
     expect(context!.issues?.map((issue) => issue.id)).toHaveLength(1);
   });
 
-  it('offers recovery only for the locked subset of a bulk archive', async () => {
-    mocks.bulkArchiveResults = [
+  it('offers recovery only for the locked subset of a multi-archive', async () => {
+    mocks.archiveManyResults = [
       {
         id: 'workspace-1',
         success: false,
@@ -584,12 +658,15 @@ describe('KanbanProvider archive failure handling', () => {
     ];
     const kanban = renderProvider();
 
-    await expectArchiveToResolve(() => kanban.bulkArchiveColumn('WAITING'));
+    await expectArchiveManyFailures(
+      () => kanban.archiveWorkspaces(['workspace-1']),
+      ['workspace-1']
+    );
     rerenderProvider();
 
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
     expect(context?.archiveGitLockWorkspaceIds).toEqual(['workspace-1']);
-    expect(mocks.bulkArchiveInputs).toEqual([{ projectId: 'project-1', kanbanColumn: 'WAITING' }]);
+    expect(mocks.archiveManyInputs).toEqual([{ projectId: 'project-1', ids: ['workspace-1'] }]);
   });
 });
 

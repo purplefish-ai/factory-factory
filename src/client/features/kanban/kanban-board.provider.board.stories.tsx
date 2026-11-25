@@ -160,7 +160,10 @@ export const ArchiveDoneColumn: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Archive All' }));
     const dialog = await within(document.body).findByRole('alertdialog');
-    await expect(dialog).toHaveTextContent('archive all 1 workspace in this column');
+    await expect(dialog).toHaveTextContent('Archive 1 workspace?');
+    await expect(dialog).toHaveTextContent(
+      'This archives every workspace in Done, including any hidden by filters.'
+    );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
   },
 };

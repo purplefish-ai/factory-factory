@@ -47,6 +47,30 @@ export const Desktop: Story = {
   },
 };
 
+/** Selection mode is entered and left from the board's overflow menu. */
+export const SelectWorkspaces: Story = {
+  args: { onToggleSelecting: fn() },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Board actions' }));
+    await userEvent.click(
+      await within(document.body).findByRole('menuitem', { name: 'Select workspaces' })
+    );
+    await expect(args.onToggleSelecting).toHaveBeenCalledOnce();
+  },
+};
+
+export const StopSelecting: Story = {
+  args: { isSelecting: true, onToggleSelecting: fn() },
+  play: async ({ canvasElement, args }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Board actions' }));
+    await userEvent.click(
+      await within(document.body).findByRole('menuitem', { name: 'Stop selecting' })
+    );
+    await expect(args.onToggleSelecting).toHaveBeenCalledOnce();
+  },
+};
+
 /** Phones retain a shortcut that opens Todo even when another tab is selected. */
 export const Mobile: Story = {
   args: { isMobile: true },

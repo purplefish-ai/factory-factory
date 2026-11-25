@@ -1,12 +1,23 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
-import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
+import { ArchiveGitLockDialog } from '@/client/features/workspace';
+import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
+import { ArchiveSelectionDialog } from './archive-selection-dialog';
+import {
+  type BoardSelection,
+  columnSelectionState,
+  EMPTY_BOARD_SELECTION,
+  selectedBoardIds,
+  toggleBoardSelection,
+  toggleColumnSelection,
+} from './board-selection';
+import { BoardSelectionBar } from './board-selection-bar';
 import { filterBoardWorkspaces, sortBoardWorkspaces } from './board-view';
 import { BoardViewControls } from './board-view-controls';
 import { IssuesColumn } from './issues-column';
@@ -25,6 +36,20 @@ interface WorkspacesByColumn {
 }
 
 const EMPTY_WORKSPACES: WorkspaceWithKanban[] = [];
+const SELECTABLE_COLUMNS = ['WORKING', 'WAITING', 'DONE'] as const;
+
+interface ArchiveTarget {
+  source: 'column' | 'selection';
+  workspaces: WorkspaceWithKanban[];
+  scope?: string;
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+  );
+}
 
 export function KanbanBoard() {
   const { workspaces, projectId } = useKanban();
@@ -51,7 +76,9 @@ function KanbanBoardContent() {
     togglingWorkspaceIds,
     renameWorkspace,
     archiveWorkspace,
-    bulkArchiveColumn,
+    archiveWorkspaces,
+    isSelecting,
+    stopSelecting,
     archiveGitLockWorkspaceIds,
     dismissArchiveGitLock,
     retryGitLockedArchives,
@@ -94,18 +121,19 @@ function KanbanBoardContent() {
   const [workspaceCreationRequest, setWorkspaceCreationRequest] = useState(0);
   const [search, setSearch] = useState('');
   const [waitingSortOrder, setWaitingSortOrder] = useWaitingSortOrder();
-  const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
-  const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  // Captured when the dialog opens, so confirming archives exactly what it listed.
+  const [archiveTarget, setArchiveTarget] = useState<ArchiveTarget | null>(null);
 
   const handleBulkArchive = (columnId: string) => {
-    setBulkArchiveColumnId(columnId);
-    setBulkArchiveDialogOpen(true);
-  };
-
-  const handleBulkArchiveConfirm = async () => {
-    if (bulkArchiveColumnId) {
-      await bulkArchiveColumn(bulkArchiveColumnId);
-    }
+    const column = columns.find((candidate) => candidate.id === columnId);
+    setArchiveTarget({
+      source: 'column',
+      // The unfiltered list: Archive All includes cards the filter hides.
+      workspaces: (workspaces ?? []).filter((workspace) => workspace.kanbanColumn === columnId),
+      scope: `This archives every workspace in ${column?.label ?? 'this column'}, including any hidden by filters.`,
+    });
+    setArchiveDialogOpen(true);
   };
 
   // Keep snapshot order untouched; filtering and sorting affect this view only.
@@ -131,6 +159,111 @@ function KanbanBoardContent() {
 
     return grouped;
   }, [workspaces, search, waitingSortOrder]);
+
+  const [selection, setSelection] = useState<BoardSelection>(EMPTY_BOARD_SELECTION);
+  const [selectionFor, setSelectionFor] = useState(isSelecting);
+  if (selectionFor !== isSelecting) {
+    // Entering or leaving selection mode starts from nothing selected.
+    setSelectionFor(isSelecting);
+    setSelection(EMPTY_BOARD_SELECTION);
+  }
+  const [selectionArchives, setSelectionArchives] = useState(0);
+  // Changes whenever selection mode starts or stops, so a late archive result
+  // cannot end a later selection.
+  const selectionSession = useRef(0);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const cancelSelectionRef = useRef<HTMLButtonElement>(null);
+  const archiveSelectionRef = useRef<HTMLButtonElement>(null);
+  // Only cards on the board count: hidden or archived cards stay out of the
+  // count and the archive, even if they were selected earlier.
+  const selectedIds = selectedBoardIds(
+    selection,
+    SELECTABLE_COLUMNS.flatMap((column) => workspacesByColumn[column].map(({ id }) => id))
+  );
+
+  const toggleSelected = useStableCallback((workspaceId: string, range: boolean) => {
+    const column = SELECTABLE_COLUMNS.find((candidate) =>
+      workspacesByColumn[candidate].some(({ id }) => id === workspaceId)
+    );
+    const columnIds = column ? workspacesByColumn[column].map(({ id }) => id) : [];
+    setSelection((current) => toggleBoardSelection(current, columnIds, workspaceId, range));
+  });
+
+  useEffect(() => {
+    selectionSession.current += 1;
+    if (!isSelecting) {
+      return;
+    }
+    // After the menu that started the mode has closed and released focus.
+    const timer = setTimeout(() => {
+      const firstCheckbox = boardRef.current?.querySelector<HTMLElement>(
+        '[data-board-selection-checkbox]'
+      );
+      (firstCheckbox ?? cancelSelectionRef.current)?.focus();
+    });
+    return () => clearTimeout(timer);
+  }, [isSelecting]);
+
+  useEffect(() => {
+    if (!(isSelecting && !archiveDialogOpen)) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // A dialog or menu that handles Escape marks it handled first.
+      if (event.key === 'Escape' && !event.defaultPrevented && !isEditableTarget(event.target)) {
+        stopSelecting();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSelecting, archiveDialogOpen, stopSelecting]);
+
+  const handleArchiveSelection = () => {
+    const ids = new Set(selectedIds);
+    setArchiveTarget({
+      source: 'selection',
+      workspaces: (workspaces ?? []).filter((workspace) => ids.has(workspace.id)),
+    });
+    setArchiveDialogOpen(true);
+  };
+
+  const archiveSelection = async (ids: string[]) => {
+    const session = selectionSession.current;
+    setSelectionArchives((count) => count + 1);
+    try {
+      const { failedIds } = await archiveWorkspaces(ids);
+      // Failed cards come back still selected, so the user can retry or deselect them.
+      if (failedIds.length === 0 && session === selectionSession.current) {
+        stopSelecting();
+      }
+    } finally {
+      setSelectionArchives((count) => count - 1);
+    }
+  };
+
+  const handleArchiveDialogOpenChange = (open: boolean) => {
+    setArchiveDialogOpen(open);
+    if (open || archiveTarget?.source !== 'selection') {
+      return;
+    }
+    // The dialog has no trigger to return focus to; give it back to the bar.
+    // Archive is disabled while an archive runs, so Cancel takes it then.
+    setTimeout(() => {
+      const archive = archiveSelectionRef.current;
+      (archive && !archive.disabled ? archive : cancelSelectionRef.current)?.focus();
+    });
+  };
+
+  const handleArchiveConfirm = () => {
+    if (!archiveTarget) {
+      return;
+    }
+    const ids = archiveTarget.workspaces.map((workspace) => workspace.id);
+    runInBackground(
+      archiveTarget.source === 'selection' ? archiveSelection(ids) : archiveWorkspaces(ids),
+      "Couldn't archive workspaces."
+    );
+  };
 
   const visibleIssues = (issues ?? []).filter((issue) =>
     `${issue.title} ${issue.displayId}`
@@ -184,6 +317,15 @@ function KanbanBoardContent() {
     );
   }
 
+  const columnSelection = (columnId: KanbanColumnType) => {
+    const columnIds = workspacesByColumn[columnId].map(({ id }) => id);
+    return {
+      selectedIds: selection.selectedIds,
+      state: columnSelectionState(selection, columnIds),
+      onToggle: toggleSelected,
+      onToggleAll: () => setSelection((current) => toggleColumnSelection(current, columnIds)),
+    };
+  };
   const renderColumn = (column: (typeof columns)[number]) =>
     column.id === 'ISSUES' ? (
       <IssuesColumn
@@ -213,14 +355,11 @@ function KanbanBoardContent() {
         isBulkArchiving={isBulkArchiving}
         onOpenQuickChat={openQuickChat}
         onRename={renameWorkspace}
+        selection={isSelecting ? columnSelection(column.id) : undefined}
       />
     );
-  const columnArchiveCount = bulkArchiveColumnId
-    ? (workspaces ?? []).filter((workspace) => workspace.kanbanColumn === bulkArchiveColumnId)
-        .length
-    : 0;
   return (
-    <div className="flex flex-col h-full min-h-0 gap-3">
+    <div ref={boardRef} className="flex flex-col h-full min-h-0 gap-3">
       {error ? (
         <QueryRefreshError
           title="Couldn't refresh workspaces"
@@ -269,13 +408,22 @@ function KanbanBoardContent() {
           {columns.map(renderColumn)}
         </div>
       )}
-      <ArchiveWorkspaceDialog
-        open={bulkArchiveDialogOpen}
-        onOpenChange={setBulkArchiveDialogOpen}
-        onConfirm={() =>
-          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.")
-        }
-        description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
+      {isSelecting && (
+        <BoardSelectionBar
+          count={selectedIds.length}
+          isArchiving={selectionArchives > 0}
+          onArchive={handleArchiveSelection}
+          onCancel={stopSelecting}
+          archiveRef={archiveSelectionRef}
+          cancelRef={cancelSelectionRef}
+        />
+      )}
+      <ArchiveSelectionDialog
+        open={archiveDialogOpen}
+        onOpenChange={handleArchiveDialogOpenChange}
+        workspaces={archiveTarget?.workspaces ?? []}
+        scope={archiveTarget?.scope}
+        onConfirm={handleArchiveConfirm}
       />
       {archiveGitLockDialog}
       <LazyQuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
