@@ -45,9 +45,9 @@ published, use the CLI below.
 
 ### Command line
 
-Install Git and a stable Node.js release with npx. The CLI supports Node.js 24.x
-(starting at 24.0.0) and Node.js 26.8.1 or later. Run this command in your
-terminal.
+Install Git and a stable Node.js release. Node includes npx. The CLI supports
+Node.js 24.x (starting at 24.0.0) and Node.js 26.8.1 or later. Run this command
+in your terminal.
 
 ```bash
 npx factory-factory@latest serve

@@ -12,9 +12,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
 import { basename, dirname, join, sep } from 'node:path';
+import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
+import { stopProcessGroup } from './sandbox/process-group.mjs';
 
 const [cacheArg, packageArg, tarball, cwd, databaseArg] = process.argv.slice(2);
 const cache = realpathSync(cacheArg);
@@ -54,25 +55,15 @@ const env = {
   HOME: join(cwd, 'home'),
   npm_config_yes: 'true',
   CI: 'true',
+  FF_EMIT_BACKEND_PORT: '1',
+  CORS_ALLOWED_ORIGINS: '',
+  FF_TAILSCALE_ORIGIN: '',
   npm_config_cache: cache,
   BASE_DIR: dirname(databasePath),
   DATABASE_PATH: databasePath,
 };
 const bootstrap = join(packageRoot, 'dist/src/cli/bootstrap.mjs');
-const listener = createServer().listen(0, '127.0.0.1');
-await once(listener, 'listening');
-const port = String(listener.address().port);
-await new Promise((done) => listener.close(done));
-const launchArgs = [
-  'serve',
-  '--no-open',
-  '--host',
-  '127.0.0.1',
-  '--port',
-  port,
-  '--database-path',
-  databasePath,
-];
+const launchArgs = ['serve', '--no-open', '--host', '127.0.0.1', '--database-path', databasePath];
 
 // A migration that fails after the probe must still report the migration error.
 const invalid = join(mkdtempSync(join(cwd, 'migration-failure-')), 'invalid.db');
@@ -133,14 +124,25 @@ const repaired = spawn('npm', relaunch, {
   cwd,
   env,
   detached: true,
-  stdio: ['ignore', 'inherit', 'inherit'],
+  stdio: ['ignore', 'pipe', 'inherit'],
 });
 const exited = once(repaired, 'exit');
-const origin = `http://127.0.0.1:${port}`;
+let origin;
+createInterface({ input: repaired.stdout }).on('line', (line) => {
+  console.log(line);
+  const match = /^BACKEND_PORT:(\d+)$/.exec(line);
+  if (match) {
+    origin = `http://127.0.0.1:${match[1]}`;
+  }
+});
 async function verifyRelaunch() {
   // A cold dependency reinstall can take longer than the server's own startup.
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline && repaired.exitCode === null && repaired.signalCode === null) {
+    if (!origin) {
+      await delay(500);
+      continue;
+    }
     const health = await fetch(`${origin}/health/database`, {
       signal: AbortSignal.timeout(1500),
     }).catch(() => undefined);
@@ -164,20 +166,15 @@ async function verifyRelaunch() {
   }
   throw new Error('Timed out waiting for the printed relaunch command');
 }
-function signalGroup(signal) {
-  if (!repaired.pid) {
-    return;
-  }
-  try {
-    process.kill(-repaired.pid, signal);
-  } catch (error) {
-    if (error.code !== 'ESRCH') {
-      throw error;
-    }
-  }
+const cancellation = new AbortController();
+const interrupt = () => cancellation.abort(new Error('Packed recovery check interrupted'));
+const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+for (const signal of signals) {
+  process.on(signal, interrupt);
 }
 try {
   await Promise.race([
+    once(cancellation.signal, 'abort').then(() => cancellation.signal.throwIfAborted()),
     verifyRelaunch(),
     exited.then(([code, signal]) => {
       throw new Error(`Repaired serve exited: ${code ?? signal}`);
@@ -187,8 +184,14 @@ try {
     'The printed relaunch command served the UI and connected database with both sentinels intact.'
   );
 } finally {
-  signalGroup('SIGTERM');
-  await Promise.race([exited, delay(5000, null, { ref: false })]).finally(() =>
-    signalGroup('SIGKILL')
-  );
+  try {
+    if (repaired.pid) {
+      await stopProcessGroup(repaired.pid, { baseDir: dirname(databasePath), graceMs: 5000 });
+    }
+  } finally {
+    for (const signal of signals) {
+      process.off(signal, interrupt);
+    }
+  }
 }
+cancellation.signal.throwIfAborted();

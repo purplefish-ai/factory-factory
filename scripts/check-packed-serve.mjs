@@ -60,13 +60,18 @@ async function verifyTerminal(origin) {
           const message = terminalMessage.parse(JSON.parse(data.toString()));
           if (message.type === 'created') {
             // The expected line never appears in the echoed shell command.
-            const data = windows ? 'echo packed-^ready\r' : "printf 'packed-%s\\n' ready\r";
+            const data = windows
+              ? 'echo packed-^ready & exit 0\r'
+              : "printf 'packed-%s\\n' ready; exit 0\r";
             socket.send(JSON.stringify({ type: 'input', data }));
           } else if (message.type === 'output') {
             output = (output + message.data).slice(-8192);
-            if (output.includes('packed-ready')) {
-              done();
-            }
+          } else if (
+            message.type === 'exit' &&
+            message.exitCode === 0 &&
+            output.includes('packed-ready')
+          ) {
+            done();
           } else {
             fail(new Error(`Setup terminal: ${JSON.stringify(message)}`));
           }
@@ -80,6 +85,21 @@ async function verifyTerminal(origin) {
     });
   } finally {
     socket.terminate();
+  }
+}
+
+function stopWindowsTree(pid) {
+  try {
+    execFileSync('taskkill.exe', ['/pid', String(pid), '/t', '/f'], { timeout: 10_000 });
+  } catch (error) {
+    try {
+      process.kill(pid, 0);
+    } catch (probeError) {
+      if (probeError.code === 'ESRCH') {
+        return;
+      }
+    }
+    throw error;
   }
 }
 
@@ -176,9 +196,7 @@ try {
     if (child.pid) {
       if (windows) {
         if (child.exitCode === null && child.signalCode === null) {
-          execFileSync('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
-            timeout: 10_000,
-          });
+          stopWindowsTree(child.pid);
         }
       } else {
         await stopProcessGroup(child.pid, { baseDir, graceMs: 5000 });
