@@ -1,6 +1,8 @@
-import { readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { type Stats } from 'node:fs';
+import { readdir, readFile, realpath, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import {
@@ -12,7 +14,11 @@ import {
 import { readFilePrefix } from '@/backend/lib/file-preview';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import { getLanguageFromPath } from '@/lib/language-detection';
-import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
+import {
+  getWorkspaceWithWorktree,
+  getWorkspaceWithWorktreeOrThrow,
+  getWorkspaceWorktreeContextOrThrow,
+} from './workspace-helpers';
 
 const loggerName = 'workspace-files-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
@@ -30,6 +36,111 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 const SCREENSHOT_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+
+async function previewFile(
+  fullPath: string,
+  displayPath: string,
+  boundary?: { root: string; validate: (stats: Stats) => Promise<void> }
+) {
+  const mimeType = IMAGE_MIME_TYPES[path.extname(displayPath).toLowerCase()];
+  if (mimeType) {
+    const { buffer, size, truncated } = await readFilePrefix(fullPath, {
+      maxBytes: MAX_IMAGE_BYTES,
+      withinDirectory: boundary?.root,
+      validateFile: async (stats) => {
+        if (stats.size > MAX_IMAGE_BYTES) {
+          throw new Error('Image is too large to preview (maximum 20 MB)');
+        }
+        await boundary?.validate(stats);
+      },
+    });
+    if (truncated) {
+      throw new Error('Image is too large to preview (maximum 20 MB)');
+    }
+    return {
+      content: '',
+      language: 'image',
+      truncated: false,
+      size,
+      isBinary: true,
+      image: { mimeType, data: buffer.toString('base64') },
+    };
+  }
+
+  const { buffer, size, truncated } = await readFilePrefix(fullPath, {
+    withinDirectory: boundary?.root,
+    validateFile: boundary?.validate,
+  });
+  if (isBinaryContent(buffer)) {
+    return {
+      content: '[Binary file - cannot display]',
+      language: 'text',
+      truncated: false,
+      size,
+      isBinary: true,
+    };
+  }
+
+  // Hold back any incomplete UTF-8 character at a truncated byte boundary.
+  const decoder = new StringDecoder('utf8');
+  return {
+    content: truncated ? decoder.write(buffer) : decoder.end(buffer),
+    language: getLanguageFromPath(displayPath),
+    truncated,
+    size,
+    isBinary: false,
+  };
+}
+
+async function previewTemporaryFile(filePath: string) {
+  const invalidPath = () => new TRPCError({ code: 'BAD_REQUEST', message: 'Invalid file path' });
+  if (
+    (process.platform !== 'darwin' && process.platform !== 'linux') ||
+    filePath.includes('\0') ||
+    filePath.split('/').includes('..')
+  ) {
+    throw invalidPath();
+  }
+
+  const tempRoot = '/tmp';
+  const canonicalRoot = await realpath(tempRoot);
+  const fullPath = path.normalize(filePath);
+  if (!(fullPath.startsWith(`${tempRoot}/`) || fullPath.startsWith(`${canonicalRoot}/`))) {
+    throw invalidPath();
+  }
+
+  try {
+    const canonicalPath = await realpath(fullPath);
+    if (!canonicalPath.startsWith(`${canonicalRoot}/`)) {
+      throw invalidPath();
+    }
+    return await previewFile(canonicalPath, fullPath, {
+      root: canonicalRoot,
+      async validate(opened) {
+        // Check both the linked path and the opened inode when validating the preview.
+        if ((await realpath(fullPath)) !== canonicalPath) {
+          throw invalidPath();
+        }
+        const current = await stat(canonicalPath);
+        if (
+          current.dev !== opened.dev ||
+          current.ino !== opened.ino ||
+          (await realpath(fullPath)) !== canonicalPath
+        ) {
+          throw invalidPath();
+        }
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'File no longer exists' });
+    }
+    if (error instanceof Error && 'code' in error && error.code === 'ELOOP') {
+      throw invalidPath();
+    }
+    throw error;
+  }
+}
 
 async function validateScreenshotPath(
   workspaceDataService: Context['appContext']['services']['workspaceDataService'],
@@ -193,6 +304,14 @@ export const workspaceFilesRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
+      if (input.path.startsWith('/')) {
+        await getWorkspaceWorktreeContextOrThrow(
+          ctx.appContext.services.workspaceDataService,
+          input.workspaceId
+        );
+        return previewTemporaryFile(input.path);
+      }
+
       const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(
         ctx.appContext.services.workspaceDataService,
         input.workspaceId
@@ -205,55 +324,7 @@ export const workspaceFilesRouter = router({
 
       const fullPath = path.join(worktreePath, input.path);
 
-      const mimeType = IMAGE_MIME_TYPES[path.extname(input.path).toLowerCase()];
-      if (mimeType) {
-        const { buffer, size, truncated } = await readFilePrefix(fullPath, {
-          maxBytes: MAX_IMAGE_BYTES,
-          validateFile: (stats) => {
-            if (stats.size > MAX_IMAGE_BYTES) {
-              throw new Error('Image is too large to preview (maximum 20 MB)');
-            }
-            return Promise.resolve();
-          },
-        });
-        if (truncated) {
-          throw new Error('Image is too large to preview (maximum 20 MB)');
-        }
-        return {
-          content: '',
-          language: 'image',
-          truncated: false,
-          size,
-          isBinary: true,
-          image: { mimeType, data: buffer.toString('base64') },
-        };
-      }
-
-      const { buffer, size: fileSize, truncated } = await readFilePrefix(fullPath);
-
-      // Check if binary
-      if (isBinaryContent(buffer)) {
-        return {
-          content: '[Binary file - cannot display]',
-          language: 'text',
-          truncated: false,
-          size: fileSize,
-          isBinary: true,
-        };
-      }
-
-      // Hold back any incomplete UTF-8 character at a truncated byte boundary.
-      // At EOF, preserve Buffer.toString's replacement of malformed trailing bytes.
-      const decoder = new StringDecoder('utf8');
-      const content = truncated ? decoder.write(buffer) : decoder.end(buffer);
-
-      return {
-        content,
-        language: getLanguageFromPath(input.path),
-        truncated,
-        size: fileSize,
-        isBinary: false,
-      };
+      return previewFile(fullPath, input.path);
     }),
 
   // List screenshots in .factory-factory/screenshots/

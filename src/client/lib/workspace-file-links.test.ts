@@ -71,8 +71,8 @@ describe('resolveWorkspaceFileLink', () => {
   it('preserves backslashes as literal characters in POSIX paths', () => {
     expect(
       resolveWorkspaceFileLink(
-        'file:///tmp/work/tree/src/client/App%20Shell.md',
-        String.raw`/tmp/work\tree`,
+        'file:///repo/work/tree/src/client/App%20Shell.md',
+        String.raw`/repo/work\tree`,
         ORIGIN
       )
     ).toBeNull();
@@ -82,6 +82,37 @@ describe('resolveWorkspaceFileLink', () => {
     expect(
       resolveWorkspaceFileLink('/Users/martin/factory-factory/other/README.md:3', WORKTREE, ORIGIN)
     ).toBeNull();
+  });
+
+  it.each([
+    ['/tmp/build%20log.txt:12:4', '/tmp/build log.txt'],
+    ['file:///tmp/screenshot.png', '/tmp/screenshot.png'],
+    ['/private/tmp/screenshot.png', '/private/tmp/screenshot.png'],
+  ])('opens a host temporary file link %s', (href, filePath) => {
+    expect(resolveWorkspaceFileLink(href, WORKTREE, ORIGIN)).toBe(filePath);
+  });
+
+  it('recognizes temporary files even when the workspace has no worktree', () => {
+    expect(resolveWorkspaceFileLink('/tmp/build.log', null, ORIGIN)).toBe('/tmp/build.log');
+  });
+
+  it.each([String.raw`C:\repo`, String.raw`\\server\repo`])(
+    'leaves temporary links external for a Windows worktree %s',
+    (worktree) => {
+      expect(resolveWorkspaceFileLink('/tmp/build.log', worktree, ORIGIN)).toBeNull();
+    }
+  );
+
+  it.each([
+    '/tmp/../etc/hosts',
+    '/tmp/%2e%2e%2fetc/hosts',
+    '/tmp-other/build.log',
+    'https://example.com/tmp/build.log',
+    '//example.com/tmp/build.log',
+    'file://example.com/tmp/build.log',
+    'tmp/build.log',
+  ])('does not treat %s as a host temporary file', (href) => {
+    expect(resolveWorkspaceFileLink(href, WORKTREE, ORIGIN)).toBeNull();
   });
 
   it('rejects decoded path traversal outside the workspace', () => {

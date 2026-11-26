@@ -51,6 +51,23 @@ function decodeRawPath(path: string): string {
   }
 }
 
+function resolveTempFileLink(href: string): string | null {
+  const rawPath = href.trim().replace(/^file:\/\/(?=\/)/i, '');
+  if (!rawPath.startsWith('/')) {
+    return null;
+  }
+  const path = stripLineSuffix(decodeRawPath(rawPath.split(/[?#]/, 1)[0] ?? ''));
+  if (
+    !/^\/(?:private\/)?tmp\/.+/.test(path) ||
+    path.endsWith('/') ||
+    path.includes('\0') ||
+    path.split('/').includes('..')
+  ) {
+    return null;
+  }
+  return path;
+}
+
 function getPathnameFromHref(href: string, origin?: string): string | null {
   const trimmed = href.trim();
   if (!trimmed) {
@@ -85,16 +102,22 @@ export function resolveWorkspaceFileLink(
   worktreePath: string | null | undefined,
   origin = typeof window !== 'undefined' ? window.location.origin : undefined
 ): string | null {
-  if (!(href && worktreePath)) {
+  if (!href) {
     return null;
+  }
+  const usesWindowsPathSemantics = /^[A-Za-z]:[\\/]/.test(worktreePath ?? '');
+  const windowsHost = usesWindowsPathSemantics || worktreePath?.startsWith('\\\\');
+  // The path belongs to the host, which can differ from the browser's platform.
+  const temporaryPath = windowsHost ? null : resolveTempFileLink(href);
+  if (!worktreePath) {
+    return temporaryPath;
   }
 
   const pathname = getPathnameFromHref(href, origin);
   if (!pathname) {
-    return null;
+    return temporaryPath;
   }
 
-  const usesWindowsPathSemantics = /^[A-Za-z]:[\\/]/.test(worktreePath);
   const filePath = normalizePathForComparison(stripLineSuffix(pathname), usesWindowsPathSemantics);
   const workspaceRoot = normalizePathForComparison(worktreePath, usesWindowsPathSemantics);
   const comparableFilePath = usesWindowsPathSemantics ? filePath.toLowerCase() : filePath;
@@ -107,7 +130,7 @@ export function resolveWorkspaceFileLink(
       comparableFilePath.startsWith(`${comparableWorkspaceRoot}/`)
     )
   ) {
-    return null;
+    return temporaryPath;
   }
 
   const relativePath = filePath.slice(workspaceRoot.length).replace(/^\/+/, '');

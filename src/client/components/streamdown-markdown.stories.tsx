@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useRef, useState } from 'react';
+import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from './markdown';
 import { renderStreamdownContent } from './streamdown-markdown';
@@ -15,7 +16,9 @@ const BURSTY_CHUNKS = [0, 0, 0, 8, 0, 0, 160, 0, 0, 0, 48];
 const CODE_CHUNKS = [80];
 
 function resolveFile(href: string) {
-  return href.startsWith('/demo/repo/') || href.startsWith('C:/repo/') ? 'src/file.ts:12' : null;
+  return href.startsWith('/demo/repo/') || href.startsWith('C:/repo/')
+    ? 'src/file.ts:12'
+    : resolveWorkspaceFileLink(href, '/demo/repo');
 }
 
 interface ComparisonProps {

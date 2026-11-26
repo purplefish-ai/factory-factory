@@ -203,13 +203,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   );
 
   // Custom image renderers own source validation and local-path resolution.
-  // `defaultUrlTransform` blanks `C:` as an unknown protocol. Keep drive paths
-  // that resolve to a workspace file so the link handler can open them;
+  // Keep local file URLs and drive paths that the file link handler can open;
   // everything else, including `javascript:`, goes through the default.
   const urlTransform = useCallback(
     (url: string, key: string) =>
       (key === 'src' && renderImage) ||
-      (hasWorkspaceFileHandler && WINDOWS_DRIVE_PATH.test(url) && resolveWorkspaceFileLink?.(url))
+      (key === 'href' &&
+        hasWorkspaceFileHandler &&
+        (WINDOWS_DRIVE_PATH.test(url) || /^file:\/\/\//i.test(url)) &&
+        resolveWorkspaceFileLink?.(url))
         ? url
         : defaultUrlTransform(url),
     [hasWorkspaceFileHandler, resolveWorkspaceFileLink, renderImage]

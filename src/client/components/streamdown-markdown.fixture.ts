@@ -49,6 +49,8 @@ export const STREAMING_LINKS = [
   '',
   '[Windows workspace file](C:/repo/src/file.ts:12)',
   '',
+  '[Temporary build log](/tmp/build.log)',
+  '',
   '[GitHub pull request](https://github.com/purplefish-ai/factory-factory/pull/2880)',
   '',
   '![Local image fallback](./design/mockup.png)',

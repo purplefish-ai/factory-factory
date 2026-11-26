@@ -3,6 +3,7 @@
 import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { renderStreamdownContent } from './streamdown-markdown';
 
@@ -123,6 +124,22 @@ describe('Streamdown Markdown adapter', () => {
     expect(second).toHaveBeenCalledWith('src/file.ts');
     expect(first).not.toHaveBeenCalled();
   });
+
+  it.each(['/tmp/build%20log.txt:12', 'file:///tmp/build%20log.txt:12'])(
+    'opens the host file tab when clicked: %s',
+    async (href) => {
+      const openFile = vi.fn();
+      await render({
+        content: `[Build log](${href})`,
+        resolveWorkspaceFileLink: (link) => resolveWorkspaceFileLink(link, '/repo'),
+        onWorkspaceFileLink: openFile,
+      });
+
+      expect(openFile).not.toHaveBeenCalled();
+      await act(() => container.querySelector('a')?.click());
+      expect(openFile).toHaveBeenCalledExactlyOnceWith('/tmp/build log.txt');
+    }
+  );
 
   it('preserves local image sources, literal HTML and the existing unsafe-link policy', async () => {
     const sources: (string | undefined)[] = [];

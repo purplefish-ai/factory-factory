@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
 import { useRef, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
 import { StatusCallout } from '@/client/components/status-callout';
 import { ErrorBoundary } from '@/client/error-boundary';
@@ -37,10 +38,11 @@ type FileData = RouterOutputs['workspace']['readFile'];
 
 export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   const { resolvedTheme } = useTheme();
-  const query = trpc.workspace.readFile.useQuery({
-    workspaceId,
-    path: filePath,
-  });
+  const isTemporaryFile = filePath.startsWith('/');
+  const query = trpc.workspace.readFile.useQuery(
+    { workspaceId, path: filePath },
+    isTemporaryFile ? { staleTime: 0 } : undefined
+  );
   const syntaxTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
 
   // A refresh notice sits above the loaded file, so the file fills the rest of the column.
@@ -51,6 +53,11 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
         errorTitle="Couldn't load file"
         loadingMessage="Loading file…"
         className="h-full"
+        notFound={
+          isTemporaryFile ? (
+            <EmptyState icon={FileCodeIcon} title="File no longer exists" className="h-full" />
+          ) : undefined
+        }
       >
         {(data) => (
           <FileViewerLoaded

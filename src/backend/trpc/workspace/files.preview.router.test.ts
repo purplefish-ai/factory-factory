@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { closeSync, constants, openSync } from 'node:fs';
-import { mkdir, open, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockWorkspace = vi.hoisted(() => vi.fn());
+const mockWorktreeContext = vi.hoisted(() => vi.fn());
 vi.mock('./workspace-helpers', () => ({
+  getWorkspaceWorktreeContextOrThrow: mockWorktreeContext,
   getWorkspaceWithWorktreeOrThrow: mockWorkspace,
 }));
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -288,3 +290,66 @@ describe('workspace file previews', () => {
     });
   });
 });
+
+describe.skipIf(process.platform !== 'darwin' && process.platform !== 'linux')(
+  'temporary file previews',
+  () => {
+    let directory: string;
+    const preview = (path: string) => caller.readFile({ workspaceId: 'w1', path });
+
+    beforeEach(async () => {
+      vi.restoreAllMocks();
+      directory = await mkdtemp('/tmp/ff-preview-');
+      mockWorktreeContext.mockResolvedValue({ worktreePath: null });
+    });
+
+    afterEach(async () => {
+      await rm(directory, { recursive: true, force: true });
+    });
+
+    it('reads logs and images using the temp directory and its canonical alias', async () => {
+      const log = join(directory, 'build.log');
+      const image = join(directory, 'screenshot.png');
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0xff]);
+      await writeFile(log, 'test output');
+      await writeFile(image, bytes);
+
+      await expect(preview(log)).resolves.toMatchObject({ content: 'test output' });
+      await expect(preview(await realpath(image))).resolves.toMatchObject({
+        image: { mimeType: 'image/png', data: bytes.toString('base64') },
+      });
+    });
+
+    it('explains when the file is gone', async () => {
+      await expect(preview(join(directory, 'removed.log'))).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: 'File no longer exists',
+      });
+    });
+
+    it('rejects absolute paths, traversal, and symlinks outside the temp directory', async () => {
+      await symlink('/etc', join(directory, 'outside'));
+      for (const path of ['/etc/hosts', '/tmp/../etc/hosts', join(directory, 'outside', 'hosts')]) {
+        await expect(preview(path)).rejects.toThrow('Invalid file path');
+      }
+    });
+
+    it('rejects a directory', async () => {
+      await expect(preview(directory)).rejects.toThrow('Path is a directory');
+    });
+
+    it('rejects a parent directory replaced with a symlink during open', async () => {
+      const parent = join(directory, 'nested');
+      await mkdir(parent);
+      await writeFile(join(parent, 'hosts'), 'test output');
+      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+      vi.mocked(open).mockImplementationOnce(async (...args) => {
+        await rename(parent, join(directory, 'old'));
+        await symlink('/etc', parent);
+        return actual.open(...args);
+      });
+
+      await expect(preview(join(parent, 'hosts'))).rejects.toThrow('Invalid file path');
+    });
+  }
+);

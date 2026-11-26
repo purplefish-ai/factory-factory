@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useQueryClient } from '@tanstack/react-query';
+import { TRPCError } from '@trpc/server';
 import { ThemeProvider } from 'next-themes';
 import type { CSSProperties } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -126,6 +127,22 @@ export const LoadError: Story = {
     await expect(await canvas.findByText("Couldn't load file")).toBeVisible();
     await expect(canvas.getByText(/ENOENT: no such file or directory/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
+export const MissingTemporaryFile: Story = {
+  args: { filePath: '/tmp/build.log' },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'File no longer exists' });
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText('File no longer exists')).toBeVisible();
   },
 };
 
