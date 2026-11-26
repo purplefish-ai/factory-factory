@@ -8,6 +8,33 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.14] - 2026-11-26
+
+### Added
+
+- Select and archive multiple workspaces from the Kanban board (#3317)
+- Clean up merged branches from archived workspaces and prune archive snapshots
+  and deleted-branch pins from System Settings (#3314, #3320)
+- See answered questions in the session transcript (#3313)
+
+### Changed
+
+- Use more compact forms for agent questions (#3312)
+- Show automation run history using Kanban cards (#3323)
+- Move archived worktrees to trash and reclaim disk space in the background
+  (#3315)
+
+### Fixed
+
+- Preserve worktree changes when archiving, show incomplete archives on the
+  board and in archive dialogs, and automatically retry interrupted archives
+  (#3316, #3318, #3319)
+- Keep asynchronous Codex question replies consistent when replaying sessions
+  and leave replayed subagent completion times unknown (#3325, #3326)
+- Open temporary file links in the workspace viewer on supported hosts (#3324)
+- Remove the gap above mobile Kanban tabs and center tab close icons in their
+  touch targets (#3321, #3322)
+
 ## [0.5.13] - 2026-11-23
 
 ### Added
