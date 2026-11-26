@@ -74,6 +74,7 @@ function previousRuns(periodicTaskId: string): AgentRun[] {
       periodicTaskId,
       launchSnapshot: null,
       workspaceId: 'archived-run',
+      workspace: { status: 'ARCHIVED' },
       status: 'PR_CREATED',
       startedAt: new Date('2026-01-12T14:00:00.000Z'),
       completedAt: new Date('2026-01-12T14:10:00.000Z'),
@@ -83,7 +84,9 @@ function previousRuns(periodicTaskId: string): AgentRun[] {
     },
   ];
 }
-const review: Agent = {
+type MobileAgent = Omit<Agent, 'executions'> & { executions: AgentRun[] };
+
+const review: MobileAgent = {
   id: 'review',
   projectId: project.id,
   name: 'Review recent changes',
@@ -99,7 +102,7 @@ const review: Agent = {
   updatedAt: new Date('2026-01-12T14:00:00.000Z'),
   executions: previousRuns('review'),
 };
-const dependencies: Agent = {
+const dependencies: MobileAgent = {
   ...review,
   id: 'dependencies',
   name: 'Keep dependencies current',
@@ -257,7 +260,7 @@ function MobileAgentsSession() {
                             onCancel={() => setFormMode(null)}
                             onSave={(values) => {
                               const now = new Date();
-                              const base: Agent =
+                              const base: MobileAgent =
                                 formMode === 'create'
                                   ? {
                                       id: `fixture-agent-${nextAgentId.current++}`,

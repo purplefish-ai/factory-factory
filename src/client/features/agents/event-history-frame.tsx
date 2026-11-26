@@ -84,9 +84,7 @@ export function EventHistoryFrame({
           className="rounded-lg border border-dashed"
         />
       )}
-      {count !== undefined && count > 0 && (
-        <div className="divide-y rounded-lg border">{children}</div>
-      )}
+      {count !== undefined && count > 0 && children}
       {query.hasNextPage && !query.isFetchNextPageError && (
         <Button
           variant="outline"

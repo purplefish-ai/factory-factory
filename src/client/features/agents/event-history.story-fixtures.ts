@@ -33,6 +33,7 @@ export function eventRunFixture(overrides: Partial<EventRun> = {}): EventRun {
     reservedSessionId: 'session-pr',
     workspaceId: 'workspace-pr',
     workspaceState: 'LIVE',
+    workspaceStatus: null,
     ...overrides,
   });
 }

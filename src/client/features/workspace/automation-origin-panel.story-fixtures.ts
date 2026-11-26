@@ -36,6 +36,7 @@ export function automationOriginFixture({
     reservedSessionId: 'session-pr',
     workspaceId,
     workspaceState: 'LIVE',
+    workspaceStatus: 'READY',
   });
   const origin = agentWorkspaceOriginSchema.parse({
     origin: {

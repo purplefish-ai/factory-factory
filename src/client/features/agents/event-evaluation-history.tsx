@@ -122,13 +122,15 @@ export function EventEvaluationHistory({
       query={query}
       count={evaluations?.length}
     >
-      {evaluations?.map((evaluation) => (
-        <EventEvaluationItem
-          key={evaluation.id}
-          evaluation={evaluation}
-          triggerLabel={triggerLabels?.[evaluation.triggerId]}
-        />
-      ))}
+      <div className="divide-y rounded-lg border">
+        {evaluations?.map((evaluation) => (
+          <EventEvaluationItem
+            key={evaluation.id}
+            evaluation={evaluation}
+            triggerLabel={triggerLabels?.[evaluation.triggerId]}
+          />
+        ))}
+      </div>
     </EventHistoryFrame>
   );
 }

@@ -36,7 +36,12 @@ const meta = {
   parameters: {
     trpc: {
       handlers: {
-        'automation.runs': () => ({ items: eventRunPageFixture(), nextCursor: null }),
+        'automation.runs': () => ({
+          items: eventRunPageFixture().map((run) =>
+            run.id === 'run-completed' ? { ...run, workspaceStatus: 'ARCHIVED' } : run
+          ),
+          nextCursor: null,
+        }),
       },
     },
   },
@@ -51,6 +56,7 @@ export const Populated: Story = {
     await expect(await canvas.findByText('Needs attention')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /PR #42/ })).toBeVisible();
     await expect(canvas.getByText('Workspace deleted')).toBeVisible();
+    await expect(canvas.getByText('Workspace archived')).toBeVisible();
   },
 };
 

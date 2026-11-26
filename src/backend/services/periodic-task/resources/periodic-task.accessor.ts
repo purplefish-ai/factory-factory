@@ -689,11 +689,12 @@ export const periodicTaskAccessor = {
     return await prisma.periodicTaskExecution.update({ where: { id }, data });
   },
 
-  async listExecutions(periodicTaskId: string, limit = 20): Promise<PeriodicTaskExecution[]> {
+  async listExecutions(periodicTaskId: string, limit = 20) {
     return await prisma.periodicTaskExecution.findMany({
       where: { periodicTaskId },
       orderBy: { startedAt: 'desc' },
       take: limit,
+      include: { workspace: { select: { status: true } } },
     });
   },
 

@@ -148,9 +148,7 @@ export function AutomationOriginPanel({
         )}
       </div>
       <section aria-label="This workspace's run" className="p-3">
-        <div className="rounded-lg border">
-          <EventRunItem run={run} projectSlug={slug ?? ''} showWorkspaceLink={false} />
-        </div>
+        <EventRunItem run={run} projectSlug={slug ?? ''} showWorkspaceLink={false} />
       </section>
     </div>
   );

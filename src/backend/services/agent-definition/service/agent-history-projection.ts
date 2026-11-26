@@ -74,5 +74,6 @@ export function runHistoryProjection(
     workspaceId: row.workspaceId,
     // Only workspace-owner coordination can confirm LIVE or DELETED provenance.
     workspaceState: row.reservedWorkspaceId ? 'RESERVED' : 'UNRESERVED',
+    workspaceStatus: null,
   });
 }

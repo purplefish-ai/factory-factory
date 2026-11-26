@@ -1,9 +1,7 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
 import { useEventRunPages } from '@/client/lib/agent-query-cache';
 import { formatDateTime } from '@/client/lib/date-time';
-import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { Badge } from '@/components/ui/badge';
 import {
   EventHistoryDetails,
@@ -11,6 +9,7 @@ import {
   EventReason,
   EventTime,
 } from './event-history-frame';
+import { RunHistoryCard, RunHistoryWorkspace } from './run-history-card';
 import type { EventRun } from './types';
 
 type BadgeVariant = 'outline' | 'info' | 'warning' | 'success' | 'secondary' | 'destructive';
@@ -114,18 +113,23 @@ export function EventRunItem({
   const workspaceId = liveWorkspaceId(run);
   const pullRequests = run.result?.pullRequests ?? [];
   return (
-    <article data-run-id={run.id} className="min-w-0 space-y-2 p-4 text-xs">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Badge variant={status.variant}>{status.label}</Badge>
-        {run.startedAt ? (
-          <EventTime value={run.startedAt} prefix="Started" />
-        ) : (
-          <EventTime value={run.createdAt} prefix="Queued" />
-        )}
-        {run.completedAt && !isActive(run) && (
-          <EventTime value={run.completedAt} prefix="Finished" />
-        )}
-      </div>
+    <RunHistoryCard
+      runId={run.id}
+      workspaceStatus={run.workspaceStatus}
+      header={
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Badge variant={status.variant}>{status.label}</Badge>
+          {run.startedAt ? (
+            <EventTime value={run.startedAt} prefix="Started" />
+          ) : (
+            <EventTime value={run.createdAt} prefix="Queued" />
+          )}
+          {run.completedAt && !isActive(run) && (
+            <EventTime value={run.completedAt} prefix="Finished" />
+          )}
+        </div>
+      }
+    >
       <EventReason
         code={run.reasonCode}
         fallback={run.status === 'QUEUED' ? 'Waiting for a free run slot.' : undefined}
@@ -150,17 +154,15 @@ export function EventRunItem({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {showWorkspaceLink &&
-          (workspaceId ? (
-            <Link
-              to={`${getProjectSectionPath(projectSlug, 'workspaces')}/${encodeURIComponent(workspaceId)}`}
-              className="font-medium text-primary underline underline-offset-4"
-            >
-              Open workspace <span className="sr-only">for run {run.id}</span>
-            </Link>
-          ) : (
-            <span className="text-muted-foreground">{missingWorkspaceLabel(run)}</span>
-          ))}
+        {showWorkspaceLink && (
+          <RunHistoryWorkspace
+            runId={run.id}
+            projectSlug={projectSlug}
+            workspaceId={workspaceId}
+            workspaceStatus={run.workspaceStatus}
+            missingLabel={missingWorkspaceLabel(run)}
+          />
+        )}
         {pullRequests.map((pr) => (
           <a
             key={pr.url}
@@ -177,7 +179,7 @@ export function EventRunItem({
       </div>
       {actions}
       <EventHistoryDetails rows={runDetails(run)} />
-    </article>
+    </RunHistoryCard>
   );
 }
 
@@ -206,14 +208,16 @@ export function EventRunHistory({
       query={query}
       count={runs?.length}
     >
-      {runs?.map((run) => (
-        <EventRunItem
-          key={run.id}
-          run={run}
-          projectSlug={projectSlug}
-          actions={renderRunActions?.(run)}
-        />
-      ))}
+      <div className="grid gap-3">
+        {runs?.map((run) => (
+          <EventRunItem
+            key={run.id}
+            run={run}
+            projectSlug={projectSlug}
+            actions={renderRunActions?.(run)}
+          />
+        ))}
+      </div>
     </EventHistoryFrame>
   );
 }

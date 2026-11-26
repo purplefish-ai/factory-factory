@@ -125,6 +125,7 @@ function StoryContent({
             periodicTaskId: agent.id,
             launchSnapshot: null,
             workspaceId: 'run-today',
+            workspace: { status: 'READY' },
             status: 'RUNNING',
             startedAt: new Date('2026-10-29T13:00:00Z'),
             completedAt: null,
@@ -137,6 +138,7 @@ function StoryContent({
             periodicTaskId: agent.id,
             launchSnapshot: null,
             workspaceId: 'run-yesterday',
+            workspace: { status: 'ARCHIVED' },
             status: 'PR_CREATED',
             startedAt: new Date('2026-10-28T13:00:00Z'),
             completedAt: new Date('2026-10-28T13:10:00Z'),
@@ -149,6 +151,7 @@ function StoryContent({
             periodicTaskId: agent.id,
             launchSnapshot: null,
             workspaceId: 'run-nothing-to-do',
+            workspace: { status: 'READY' },
             status: 'COMPLETED',
             startedAt: new Date('2026-10-27T18:00:00Z'),
             completedAt: new Date('2026-10-27T18:06:00Z'),
@@ -161,6 +164,7 @@ function StoryContent({
             periodicTaskId: agent.id,
             launchSnapshot: null,
             workspaceId: null,
+            workspace: null,
             status: 'FAILED',
             startedAt: new Date('2026-10-27T13:00:00Z'),
             completedAt: new Date('2026-10-27T13:01:00Z'),
@@ -258,6 +262,7 @@ export const Populated: Story = {
       await expect(time).toHaveAttribute('datetime');
     }
     await expect(within(canvasElement).getByText('Run history')).toBeVisible();
+    await expect(within(canvasElement).getByText('Workspace archived')).toBeVisible();
   },
 };
 export const Empty: Story = { args: { state: 'empty' } };

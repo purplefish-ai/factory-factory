@@ -14,7 +14,7 @@ export const workspaceLaunchOriginAccessor = {
       });
       const workspace = await tx.workspace.findUnique({
         where: { id: input.workspaceId },
-        select: { projectId: true, creationSource: true, creationMetadata: true },
+        select: { projectId: true, creationSource: true, creationMetadata: true, status: true },
       });
       if (
         (workspace && workspace.projectId !== input.projectId) ||
@@ -26,12 +26,15 @@ export const workspaceLaunchOriginAccessor = {
         assertLiveIdentity(origin, workspace);
       }
       return origin
-        ? retainedEventOriginSchema.parse({
-            projectId: origin.projectId,
-            workspaceId: origin.workspaceId,
-            runId: origin.runId,
-            workspaceState: workspace ? 'LIVE' : 'DELETED',
-          })
+        ? {
+            origin: retainedEventOriginSchema.parse({
+              projectId: origin.projectId,
+              workspaceId: origin.workspaceId,
+              runId: origin.runId,
+              workspaceState: workspace ? 'LIVE' : 'DELETED',
+            }),
+            workspaceStatus: workspace?.status ?? null,
+          }
         : null;
     });
   },
