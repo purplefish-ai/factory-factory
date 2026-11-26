@@ -37,7 +37,7 @@ function Gallery() {
   };
   return (
     <div className="flex flex-col gap-3 bg-shell p-2">
-      <TabList aria-label="Default size" className="flex-wrap gap-0.5">
+      <TabList aria-label="Default size" className="gap-0.5 overflow-x-auto p-1">
         <TabButton
           label="Chat 1"
           icon={<SessionStatusIcon status={deriveSessionTabRuntime(undefined, 'RUNNING')} />}
@@ -129,6 +129,7 @@ export const Dark: Story = { ...Light, globals: { theme: 'dark' } };
 export const Phone: Story = {
   ...Light,
   globals: { theme: 'light', viewport: { value: 'phone', isRotated: false } },
+  parameters: { layout: 'padded' },
 };
 
 /** Enter and Space select the focused tab exactly once each (no extra native click). */
