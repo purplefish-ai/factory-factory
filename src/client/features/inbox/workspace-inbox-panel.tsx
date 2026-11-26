@@ -42,7 +42,6 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
       mail.data?.pages.flatMap((page) => page.items).map((item) => [item.id, item])
     ).values(),
   ];
-  const unread = items.filter(isUnread).length;
   // Retry repeats the failed action: an older page, or the list itself.
   const mailQuery = {
     data: mail.data,
@@ -62,25 +61,6 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
   }
   return (
     <section aria-label="Workspace inbox" className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
-        <div className="flex items-center gap-2 text-xs font-medium">
-          <EnvelopeSimpleIcon className="size-4 text-muted-foreground" />
-          <h2>Inbox</h2>
-          {mail.data && (
-            <span className="text-muted-foreground">
-              {unread} unread{mail.hasNextPage ? ' loaded' : ''}
-            </span>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="compact"
-          disabled={mail.isFetching}
-          onClick={() => void mail.refetch()}
-        >
-          Refresh
-        </Button>
-      </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {mail.data?.pages.at(-1)?.wakeAmbiguous && (
           <div className="space-y-2 border-b bg-muted/30 p-3 text-xs">

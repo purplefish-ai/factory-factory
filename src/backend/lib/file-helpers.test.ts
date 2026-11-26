@@ -381,6 +381,45 @@ describe('file-helpers', () => {
       expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/z', expect.anything());
     });
 
+    it('ranks nested filename matches ahead of weaker matches even at the result limit', async () => {
+      mockDirectoryTree(
+        new Map([
+          [
+            '/repo',
+            [
+              createDirent('billing-team.ts', 'file'),
+              createDirent('bt', 'directory'),
+              createDirent('src', 'directory'),
+            ],
+          ],
+          ['/repo/bt', [createDirent('notes.md', 'file')]],
+          ['/repo/src', [createDirent('Button.tsx', 'file'), createDirent('bt-client.ts', 'file')]],
+        ])
+      );
+
+      await expect(
+        searchFilesRecursive('/repo', { query: 'BT', match: 'fuzzy', limit: 2 })
+      ).resolves.toEqual([path.join('src', 'bt-client.ts'), 'billing-team.ts']);
+      await expect(
+        searchFilesRecursive('/repo', { query: 'bttn', match: 'fuzzy' })
+      ).resolves.toEqual([path.join('src', 'Button.tsx')]);
+    });
+
+    it('can find dotfiles in fuzzy mode without entering excluded directories', async () => {
+      mockDirectoryTree(
+        new Map([
+          ['/repo', [createDirent('.github', 'directory'), createDirent('.git', 'directory')]],
+          ['/repo/.github', [createDirent('config.yml', 'file')]],
+          ['/repo/.git', [createDirent('config', 'file')]],
+        ])
+      );
+
+      await expect(
+        searchFilesRecursive('/repo', { query: 'cfg', match: 'fuzzy' })
+      ).resolves.toEqual([path.join('.github', 'config.yml')]);
+      expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/.git', expect.anything());
+    });
+
     it('respects the max depth bound', async () => {
       mockDirectoryTree(
         new Map([

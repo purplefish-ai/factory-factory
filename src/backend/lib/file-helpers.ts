@@ -43,9 +43,6 @@ const DEFAULT_FILE_IGNORE_PATTERNS = [
   '.idea',
 ];
 
-const shouldIgnoreFileSearchEntry = (name: string, ignorePatterns: string[]): boolean =>
-  ignorePatterns.includes(name) || name.startsWith('.');
-
 const resolveSymlinkTargetPath = async (candidatePath: string): Promise<string | null> => {
   let candidateStats: Awaited<ReturnType<typeof lstat>>;
 
@@ -151,19 +148,13 @@ export interface SearchFilesRecursiveOptions {
   limit?: number;
   maxDepth?: number;
   ignorePatterns?: string[];
+  match?: 'fuzzy';
+  signal?: AbortSignal;
 }
 
 interface PendingSearchDirectory {
   relativePath: string;
   depth: number;
-}
-
-interface FileSearchTraversalState {
-  directories: PendingSearchDirectory[];
-  files: string[];
-  ignorePatterns: string[];
-  limit: number;
-  queryLower: string | undefined;
 }
 
 const readSortedSearchDirents = async (directoryPath: string) => {
@@ -175,82 +166,118 @@ const readSortedSearchDirents = async (directoryPath: string) => {
   }
 };
 
-const sortFileSearchResults = (files: string[], queryLower?: string): string[] =>
-  files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
-
-const matchesFileSearchQuery = (filePath: string, queryLower?: string): boolean =>
-  !queryLower || filePath.toLowerCase().includes(queryLower);
-
-type SearchDirent = Awaited<ReturnType<typeof readSortedSearchDirents>>[number];
-
-const collectFileSearchEntry = (
-  state: FileSearchTraversalState,
-  dirent: SearchDirent,
-  relativePath: string,
-  depth: number
-): boolean => {
-  if (shouldIgnoreFileSearchEntry(dirent.name, state.ignorePatterns)) {
-    return false;
+function fuzzyFilenameRank(name: string, query: string): number | undefined {
+  const filename = name.toLowerCase();
+  if (filename === query) {
+    return 0;
   }
-
-  const filePath = relativePath ? path.join(relativePath, dirent.name) : dirent.name;
-
-  if (dirent.isDirectory()) {
-    state.directories.push({ relativePath: filePath, depth: depth + 1 });
-    return false;
+  if (filename.startsWith(query)) {
+    return 1;
   }
-
-  if (!matchesFileSearchQuery(filePath, state.queryLower)) {
-    return false;
+  if (filename.includes(query)) {
+    return 2;
   }
-
-  state.files.push(filePath);
-  return state.files.length >= state.limit;
-};
+  let position = 0;
+  for (const character of query) {
+    const found = filename.indexOf(character, position);
+    if (found === -1) {
+      return undefined;
+    }
+    position = found + character.length;
+  }
+  return 3;
+}
 
 /**
- * Recursively searches files with a bounded result set for autocomplete.
- * Traversal is breadth-first and deterministic so shallow paths are considered
- * before deep paths, then the bounded candidates are relevance-sorted.
+ * Visit shallow paths first. Returning true from the visitor stops traversal.
  */
-export async function searchFilesRecursive(
+async function walkSearchFiles(
   rootPath: string,
   {
-    query,
-    limit = 50,
     maxDepth = 10,
     ignorePatterns = DEFAULT_FILE_IGNORE_PATTERNS,
-  }: SearchFilesRecursiveOptions = {}
-): Promise<string[]> {
-  if (limit <= 0) {
-    return [];
-  }
-
-  const queryLower = query?.toLowerCase();
-  const state: FileSearchTraversalState = {
-    directories: [{ relativePath: '', depth: 0 }],
-    files: [],
-    ignorePatterns,
-    limit,
-    queryLower,
-  };
-
-  for (const { relativePath, depth } of state.directories) {
+    signal,
+  }: SearchFilesRecursiveOptions,
+  includeHidden: boolean,
+  visit: (filePath: string, name: string) => boolean
+): Promise<void> {
+  const directories: PendingSearchDirectory[] = [{ relativePath: '', depth: 0 }];
+  const ignoredNames = new Set(ignorePatterns);
+  for (const { relativePath, depth } of directories) {
+    signal?.throwIfAborted();
     if (depth >= maxDepth) {
       continue;
     }
 
     const fullPath = path.join(rootPath, relativePath);
-    const dirents = await readSortedSearchDirents(fullPath);
+    const dirents = (await readSortedSearchDirents(fullPath)).filter(
+      ({ name }) => !ignoredNames.has(name) && (includeHidden || !name.startsWith('.'))
+    );
 
     for (const dirent of dirents) {
-      if (collectFileSearchEntry(state, dirent, relativePath, depth)) {
-        return sortFileSearchResults(state.files, queryLower);
+      const filePath = relativePath ? path.join(relativePath, dirent.name) : dirent.name;
+      if (dirent.isDirectory()) {
+        directories.push({ relativePath: filePath, depth: depth + 1 });
+      } else if (visit(filePath, dirent.name)) {
+        return;
       }
     }
   }
+}
 
-  return sortFileSearchResults(state.files, queryLower);
+async function searchFuzzyFilenames(
+  rootPath: string,
+  options: SearchFilesRecursiveOptions,
+  query: string,
+  limit: number
+): Promise<string[]> {
+  // Cap each tier independently so early weak matches leave room for stronger ones.
+  const rankedFiles = new Map<number, string[]>();
+  await walkSearchFiles(rootPath, options, true, (filePath, name) => {
+    const rank = fuzzyFilenameRank(name, query);
+    if (rank === undefined) {
+      return false;
+    }
+    let matches = rankedFiles.get(rank);
+    if (!matches) {
+      matches = [];
+      rankedFiles.set(rank, matches);
+    }
+    if (matches.length < limit) {
+      matches.push(filePath);
+    }
+    return rank === 0 && matches.length >= limit;
+  });
+
+  return [...rankedFiles.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([, paths]) => paths.sort((a, b) => compareFilesByRelevance(a, b)))
+    .slice(0, limit);
+}
+
+/** Recursively searches files with a bounded result set. */
+export async function searchFilesRecursive(
+  rootPath: string,
+  options: SearchFilesRecursiveOptions = {}
+): Promise<string[]> {
+  const { query, limit = 50, match } = options;
+  if (limit <= 0) {
+    return [];
+  }
+  const queryLower = query?.toLowerCase();
+  const fuzzyQuery = match === 'fuzzy' ? queryLower?.trim() : undefined;
+  if (fuzzyQuery) {
+    return searchFuzzyFilenames(rootPath, options, fuzzyQuery, limit);
+  }
+
+  const files: string[] = [];
+  await walkSearchFiles(rootPath, options, false, (filePath) => {
+    if (!queryLower || filePath.toLowerCase().includes(queryLower)) {
+      files.push(filePath);
+    }
+    return files.length >= limit;
+  });
+  return files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
 }
 
 /**
