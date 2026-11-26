@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import {
-  workspaceMaintenanceService,
+  workspaceArchiveLeaseService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -60,6 +60,7 @@ describe('concurrent workspace archives', () => {
       id: 'archive-concurrency',
       name: 'Concurrent archive',
       status: 'READY',
+      updatedAt: new Date(),
       githubIssueNumber: null,
       prs: [],
       project: { id: 'project' },
@@ -71,12 +72,24 @@ describe('concurrent workspace archives', () => {
       if (row.status !== expectedStatus) {
         return Promise.resolve({ count: 0 });
       }
-      row = { ...row, ...data };
+      // Like Prisma's @updatedAt, every write moves the row's lease.
+      row = { ...row, ...data, updatedAt: new Date(row.updatedAt.getTime() + 1000) };
       return Promise.resolve({ count: 1 });
     });
+    // The accessor's compare-and-swap on `updatedAt`, against the shared row.
+    vi.spyOn(workspaceArchiveLeaseService, 'claim').mockImplementation((_id, observed) => {
+      if (row.status !== 'ARCHIVING' || row.updatedAt.getTime() !== observed.getTime()) {
+        return Promise.resolve(null);
+      }
+      row = { ...row, updatedAt: new Date(observed.getTime() + 1) };
+      return Promise.resolve(row.updatedAt);
+    });
+    vi.spyOn(workspaceArchiveLeaseService, 'hold').mockImplementation((_id, stamp) => ({
+      stamp,
+      release: async () => stamp,
+    }));
     vi.spyOn(worktreeLifecycleService, 'snapshotWorkspaceWorktree').mockResolvedValue(undefined);
     vi.spyOn(worktreeLifecycleService, 'removeWorkspaceWorktree').mockResolvedValue(undefined);
-    vi.spyOn(workspaceMaintenanceService, 'findStaleArchiving').mockResolvedValue([]);
     services = {
       cleanupWorkspaceScopedCaches: vi.fn(),
       githubCLIService: { addIssueComment: vi.fn() },
@@ -284,14 +297,92 @@ describe('concurrent workspace archives', () => {
     }
   );
 
-  it('does not take over a stale archive that could still belong to another process', async () => {
-    row = { ...row, status: 'ARCHIVING', updatedAt: new Date(0) };
-    vi.mocked(workspaceMaintenanceService.findStaleArchiving).mockResolvedValue([row]);
+  it('acknowledges a fresh ARCHIVING row that another process may still be archiving', async () => {
+    row = { ...row, status: 'ARCHIVING', updatedAt: new Date() };
     await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
       status: 'ARCHIVING',
     });
+    expect(workspaceArchiveLeaseService.claim).not.toHaveBeenCalled();
     expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
     expect(persistence.transitionWithCas).not.toHaveBeenCalled();
+  });
+
+  it('claims and takes over a stale ARCHIVING row that no local archive owns', async () => {
+    const leaseWrittenAt = new Date(Date.now() - 10 * 60_000);
+    row = { ...row, status: 'ARCHIVING', updatedAt: leaseWrittenAt };
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVED',
+    });
+    expect(workspaceArchiveLeaseService.claim).toHaveBeenCalledExactlyOnceWith(
+      row.id,
+      leaseWrittenAt
+    );
+    // Only ARCHIVING -> ARCHIVED; the row is resumed, not started again.
+    expect(persistence.transitionWithCas).toHaveBeenCalledExactlyOnceWith(
+      row.id,
+      'ARCHIVING',
+      expect.objectContaining({ status: 'ARCHIVED' }),
+      undefined
+    );
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).toHaveBeenCalledTimes(1);
+    expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a stale row to whichever of two processes wins the claim', async () => {
+    const leaseWrittenAt = new Date(Date.now() - 10 * 60_000);
+    row = { ...row, status: 'ARCHIVING', updatedAt: leaseWrittenAt };
+    // Another process read the same row and claimed it first.
+    await expect(workspaceArchiveLeaseService.claim(row.id, leaseWrittenAt)).resolves.toEqual(
+      expect.any(Date)
+    );
+    // This process's request read the row before that claim landed.
+    persistence.findByIdWithProject.mockResolvedValueOnce({ ...row, updatedAt: leaseWrittenAt });
+
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVING',
+    });
+    expect(workspaceArchiveLeaseService.claim).toHaveBeenCalledTimes(2);
+    expect(worktreeLifecycleService.snapshotWorkspaceWorktree).not.toHaveBeenCalled();
+    expect(services.sessionLifecycleService.stopWorkspaceSessions).not.toHaveBeenCalled();
+  });
+
+  it('never takes over a stale row a delete is handling', async () => {
+    row = { ...row, status: 'ARCHIVING', updatedAt: new Date(0) };
+    const release = deferred();
+    const excluded = withArchiveExcluded(row.id, () => release.promise);
+    await expect(archiveWorkspace(row, {}, services)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(workspaceArchiveLeaseService.claim).not.toHaveBeenCalled();
+    release.resolve();
+    await excluded;
+  });
+
+  it('fails a taken-over row forward, since its previous status is unknown', async () => {
+    row = { ...row, status: 'ARCHIVING', updatedAt: new Date(0) };
+    vi.mocked(worktreeLifecycleService.snapshotWorkspaceWorktree).mockRejectedValueOnce(
+      new Error('snapshot failed')
+    );
+    await expect(archiveWorkspace(row, {}, services)).rejects.toThrow('snapshot failed');
+    expect(row).toMatchObject({
+      status: 'FAILED',
+      initErrorMessage: 'Archive recovery failed after restart: snapshot failed',
+    });
+  });
+
+  it('acknowledges a fresh ARCHIVING row after this process lost track of its interrupted archive', async () => {
+    const error = new Error('git worktree remove timed out');
+    vi.mocked(worktreeLifecycleService.removeWorkspaceWorktree).mockRejectedValueOnce(error);
+    vi.spyOn(workspaceStateMachine, 'transition').mockRejectedValueOnce(
+      new Error('Database unavailable')
+    );
+    await expect(archiveWorkspace(row, {}, services)).rejects.toBe(error);
+    // Another process wrote the row since, so this process's record no longer proves ownership.
+    row = { ...row, updatedAt: new Date() };
+
+    await expect(archiveWorkspace(row, {}, services)).resolves.toMatchObject({
+      status: 'ARCHIVING',
+    });
+    expect(workspaceArchiveLeaseService.claim).not.toHaveBeenCalled();
+    expect(worktreeLifecycleService.removeWorkspaceWorktree).toHaveBeenCalledTimes(1);
   });
 
   it('retries a transition lost to an archive that rolled back', async () => {

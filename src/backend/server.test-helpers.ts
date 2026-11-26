@@ -142,7 +142,10 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       start: vi.fn<(...args: unknown[]) => void>(),
       stop: vi.fn(async () => undefined),
     },
-    recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
+    archiveRecovery: {
+      start: vi.fn<() => void>(),
+      stop: vi.fn(async () => undefined),
+    },
   };
 
   const application = unsafeCoerce<Application>({ services, lifecycle, config: {} });

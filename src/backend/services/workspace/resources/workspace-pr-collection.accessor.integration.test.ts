@@ -377,13 +377,6 @@ it('respects disabled monitoring state in every project metadata read', async ()
   expect(
     (await workspaceAccessor.findNeedingWorktree()).find((w) => w.id === row.id)
   ).toMatchObject(expected);
-  await db.prisma.workspace.update({
-    where: { id: row.id },
-    data: { status: 'ARCHIVING', updatedAt: new Date('2025-01-01') },
-  });
-  expect(
-    (await workspaceAccessor.findStaleArchivingWithProject()).find((w) => w.id === row.id)
-  ).toMatchObject(expected);
 });
 
 it('keeps scalar PR selection stable across workspace and ratchet snapshot reads', async () => {

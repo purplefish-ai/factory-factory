@@ -41,6 +41,7 @@ export type ShutdownGraph = {
     readonly interceptors: { stop(): Promise<void> };
     readonly eventCollector: { stop(): void };
     readonly snapshotReconciliation: { stop(): Promise<void> };
+    readonly archiveRecovery: { stop(): Promise<void> };
     readonly jobs: { stopAll(): Promise<void> };
     readonly database: { $disconnect(): Promise<void> };
   };
@@ -88,6 +89,8 @@ export function createShutdownPlan(
     { name: 'periodic-task-poll', stop: () => services.periodicTaskService.stop() },
     // Aborting kills the deletion in flight; the next start resumes it.
     { name: 'worktree-trash-reclaim', stop: () => services.worktreeTrashReclaimer.stop() },
+    // A resume in flight is not cut short: it finishes or settles its row.
+    { name: 'archive-recovery', stop: () => lifecycle.archiveRecovery.stop() },
     {
       name: 'session-launch-options',
       stop: () => services.sessionConfigService?.stopLaunchOptions(),
@@ -97,7 +100,12 @@ export function createShutdownPlan(
     // Agent intake closes admission and drains committed launches before
     // sessions stop, so new agent work fails fast instead of racing teardown.
     { name: 'agent-runtime', stop: () => services.agentRuntime?.stop() },
-    { name: 'server-work', stop: () => hooks.settleServerWork?.() },
+    // Archive recovery still uses sessions, run scripts, caches and the database.
+    {
+      name: 'server-work',
+      after: ['archive-recovery'],
+      stop: () => hooks.settleServerWork?.(),
+    },
     { name: 'interceptors', stop: () => lifecycle.interceptors.stop() },
     { name: 'workspace-metadata', stop: () => services.workspaceMetadata?.stop() },
     { name: 'transports', stop: () => hooks.closeTransports?.() },

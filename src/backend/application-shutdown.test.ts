@@ -44,6 +44,15 @@ describe('createShutdownPlan', () => {
     expect(stopStoreRetention).toHaveBeenCalledOnce();
   });
 
+  it('holds teardown of what archive recovery uses until its run has drained', () => {
+    const { steps } = createShutdownPlan(graph);
+    const serverWork = steps.findIndex((step) => step.name === 'server-work');
+    expect(steps[serverWork]?.after).toContain('archive-recovery');
+    for (const dependency of ['interceptors', 'sessions', 'terminals', 'run-scripts']) {
+      expect(steps.findIndex((step) => step.name === dependency)).toBeGreaterThan(serverWork);
+    }
+  });
+
   it('holds account teardown until discovery that reads account context has drained', () => {
     const accounts = createShutdownPlan(graph).steps.find((step) => step.name === 'codex-accounts');
     expect(accounts?.after).toEqual(

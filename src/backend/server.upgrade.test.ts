@@ -7,6 +7,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket, type WebSocketServer } from 'ws';
 import { deferred } from '@/test-utils/deferred';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const { handlers, handlerFactories, transportDisposers } = vi.hoisted(() => {
   const upgradeHandlers = {
@@ -409,7 +410,7 @@ describe('server websocket upgrade routing', () => {
       continueReconciliation.resolve();
       await expect(startPromise).rejects.toThrow('Server startup interrupted by shutdown');
       expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
-      expect(harness.lifecycle.recoverStaleArchivingWorkspaces).not.toHaveBeenCalled();
+      expect(harness.lifecycle.archiveRecovery.start).not.toHaveBeenCalled();
       expect(harness.lifecycle.snapshotReconciliation.start).not.toHaveBeenCalled();
       expect(harness.services.agentRuntime.start).not.toHaveBeenCalled();
       expect(server.getHttpServer().listening).toBe(false);
@@ -446,9 +447,6 @@ describe('server websocket upgrade routing', () => {
     vi.mocked(harness.services.runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
       new Error('run script recovery failed')
     );
-    vi.mocked(harness.lifecycle.recoverStaleArchivingWorkspaces).mockRejectedValueOnce(
-      new Error('archive recovery failed')
-    );
 
     const server = createTestServer(harness.application, 0);
 
@@ -468,10 +466,6 @@ describe('server websocket upgrade routing', () => {
     );
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to recover stale run script states on startup',
-      expect.any(Object)
-    );
-    expect(harness.logger.error).toHaveBeenCalledWith(
-      'Failed to recover stale archiving workspaces on startup',
       expect.any(Object)
     );
   });
@@ -494,17 +488,18 @@ describe('server websocket upgrade routing', () => {
     );
   });
 
-  it('serves requests and signals readiness while archive recovery is pending', async () => {
+  it('serves requests and signals readiness while the archive recovery run is pending', async () => {
     const harness = createTestHarness({ isRunScriptProxyEnabled: true });
     const { promise: recovery, resolve: finishRecovery } = deferred();
-    harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
-      await recovery;
-      return { archived: [], failed: [] };
-    });
+    // A first run that never settles: startup must not wait for it in any form.
+    harness.lifecycle.archiveRecovery.start.mockImplementationOnce(() =>
+      unsafeCoerce<undefined>(recovery)
+    );
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const server = createTestServer(harness.application, 0);
     try {
       await server.start();
+      expect(harness.lifecycle.archiveRecovery.start).toHaveBeenCalledOnce();
       expect(writeSpy).toHaveBeenCalledWith('BACKEND_PORT:0\n');
       expect((await request(server.getHttpServer()).get('/health')).status).toBe(200);
 
@@ -528,9 +523,9 @@ describe('server websocket upgrade routing', () => {
   it('drains archive recovery before shutting down its dependencies', async () => {
     const harness = createTestHarness();
     const { promise: recovery, resolve: finishRecovery } = deferred();
-    harness.lifecycle.recoverStaleArchivingWorkspaces.mockImplementationOnce(async () => {
+    harness.lifecycle.archiveRecovery.stop.mockImplementationOnce(async () => {
       await recovery;
-      return { archived: [], failed: [] };
+      return undefined;
     });
     const agentRuntimeStopped = deferred();
     harness.services.agentRuntime.stop.mockImplementationOnce(() => {

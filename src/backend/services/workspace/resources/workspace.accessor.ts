@@ -60,13 +60,6 @@ export type RunScriptExecutionState = RunScriptExecutionFields;
  */
 const STALE_PROVISIONING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
-/**
- * Threshold for considering an ARCHIVING workspace as stale.
- * ARCHIVING is a persisted transient state; after this threshold, no
- * in-flight archive from the current process should still be active.
- */
-const STALE_ARCHIVING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-
 interface FindByProjectIdFilters {
   excludeStatuses?: WorkspaceStatus[];
 }
@@ -767,21 +760,17 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Find ARCHIVING workspaces that have been stuck long enough to recover.
-   * Includes project data so the archive workflow can safely clean up worktrees.
+   * IDs of the oldest ARCHIVING workspaces last written at or before `cutoff`.
+   * Polled, so identifiers only; the archive reads each row it takes over.
    */
-  async findStaleArchivingWithProject(): Promise<WorkspaceWithProject[]> {
-    const staleThreshold = new Date(Date.now() - STALE_ARCHIVING_THRESHOLD_MS);
-
+  async findStaleArchivingIds(cutoff: Date, take: number): Promise<string[]> {
     const rows = await prisma.workspace.findMany({
-      where: {
-        status: 'ARCHIVING',
-        updatedAt: { lt: staleThreshold },
-      },
-      include: projectAndPR,
+      where: { status: 'ARCHIVING', updatedAt: { lte: cutoff } },
+      select: { id: true },
       orderBy: { updatedAt: 'asc' },
+      take,
     });
-    return rows.map(withProjectAndPR);
+    return rows.map((row) => row.id);
   }
 
   /**

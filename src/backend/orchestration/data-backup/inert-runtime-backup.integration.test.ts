@@ -10,7 +10,7 @@ import type { PRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-m
 import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
 import {
-  recoverStaleArchivingWorkspaces,
+  resumeStaleArchives,
   type ArchiveWorkspaceDependencies,
 } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
 import * as workspaceChildren from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
@@ -521,7 +521,9 @@ it('keeps actual startup and idle consumers away from imported process and workf
     for (const row of backup.data.workspaces) {
       expect(await runScriptStateMachine.verifyRunning(row.id)).toBe('IDLE');
     }
-    expect(await recoverStaleArchivingWorkspaces(archive)).toEqual({ archived: [], failed: [] });
+    expect(
+      await resumeStaleArchives(archive, { limit: 10, signal: new AbortController().signal })
+    ).toEqual({ archived: [], failed: [], skipped: [] });
     await db.prisma.$disconnect();
     await db.prisma.$connect();
   }

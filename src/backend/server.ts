@@ -83,7 +83,7 @@ export function createServer(application: Application, requestedPort?: number): 
     sessionFileLogger,
     sessionLifecycleService,
   } = services;
-  const { interceptors, recoverStaleArchivingWorkspaces, snapshotReconciliation } = lifecycle;
+  const { archiveRecovery, interceptors, snapshotReconciliation } = lifecycle;
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
@@ -96,7 +96,6 @@ export function createServer(application: Application, requestedPort?: number): 
   let cleanupStarted = false;
   let eventLoopMonitorStarted = false;
   let cleanupPromise: Promise<void> | null = null;
-  let archiveRecoveryPromise: Promise<void> | null = null;
 
   const app = express();
 
@@ -400,16 +399,6 @@ export function createServer(application: Application, requestedPort?: number): 
     }
   };
 
-  const recoverStaleArchivingOnStartup = async (): Promise<void> => {
-    const recovered = await recoverStaleArchivingWorkspaces(services);
-    if (recovered.archived.length > 0 || recovered.failed.length > 0) {
-      logger.info('Recovered stale archiving workspaces on startup', {
-        archived: recovered.archived,
-        failed: recovered.failed,
-      });
-    }
-  };
-
   /**
    * Cleanup stops every background job as soon as it begins, so a start issued
    * after that would revive a job that nothing stops again before the database
@@ -475,9 +464,7 @@ export function createServer(application: Application, requestedPort?: number): 
     // steps still run, and cleanup then rejects.
     const stepFailures: unknown[] = [];
     const plan = createShutdownPlan(application, {
-      settleServerWork: async () => {
-        // Archive recovery still uses sessions, run scripts, caches and the database.
-        await archiveRecoveryPromise;
+      settleServerWork: () => {
         clearInterval(heartbeatInterval);
         if (indexHtmlReloadInterval !== null) {
           clearInterval(indexHtmlReloadInterval);
@@ -567,12 +554,9 @@ export function createServer(application: Application, requestedPort?: number): 
           throw new Error('Server startup interrupted by shutdown');
         }
 
-        // Git worktree cleanup can outlast the CLI startup deadline. Keep these
-        // workspaces ARCHIVING while recovery runs without delaying readiness.
-        archiveRecoveryPromise = runStartupTask(
-          'Failed to recover stale archiving workspaces on startup',
-          recoverStaleArchivingOnStartup
-        );
+        // Resuming interrupted archives can outlast the CLI startup deadline, so
+        // the job's first run starts now without delaying readiness.
+        archiveRecovery.start();
 
         snapshotReconciliation.start();
         services.workspaceMetadata?.start();
