@@ -23,13 +23,9 @@ on:
 
 jobs:
   verify:
-    name: Verify package (Node ${{ matrix.node-version }})
+    name: Build release tarball
     if: ${{ github.event_name == 'release' || github.event.inputs.finalize_release != 'true' }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ['26.8.1', '26.12.1']
     permissions:
       contents: read
     env:
@@ -66,7 +62,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: '.node-version'
           package-manager-cache: false
 
       - name: Install npm CLI
@@ -93,34 +89,54 @@ jobs:
       - name: Verify packed artifact contains no development files
         run: node scripts/check-production-artifact.mjs --tarball factory-factory-*.tgz
 
-      - name: Smoke test packed artifact with npm exec
-        run: |
-          set -euo pipefail
-          ROOT_DIR="$PWD"
-          TARBALL=$(ls factory-factory-*.tgz | head -n1)
-          INSTALL_DIRECTORY=$(mktemp -d)
-          cd "$INSTALL_DIRECTORY"
-          # Consumer compatibility: isolate npm exec from previous installation caches.
-          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory serve --help
-          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$INSTALL_DIRECTORY/test.db"
-          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- sh -c 'node "$1" "$(dirname "$(readlink -f "$(command -v factory-factory)")")/../../.."' -- "$ROOT_DIR/scripts/check-installed-native-runtime.mjs"
-
       - name: Publish to npm (dry run)
-        if: ${{ matrix.node-version == '26.12.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
-        run: npm publish --dry-run
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        run: npm publish --dry-run ./factory-factory-*.tgz
 
       - name: Upload npm package
-        if: ${{ matrix.node-version == '26.12.1' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true')) }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: npm-package
+          name: ${{ github.event.inputs.dry_run == 'true' && 'dry-run-package' || 'npm-package' }}
           path: factory-factory-*.tgz
           if-no-files-found: error
           retention-days: 7
 
+  consumer:
+    name: Packed CLI (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: ['26.8.1', '26.12.1']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ github.event.inputs.dry_run == 'true' && 'dry-run-package' || 'npm-package' }}
+          path: npm-package
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          package-manager-cache: false
+      - name: Launch with bundled npm
+        run: bash scripts/check-packed-consumer.sh cold
+      - name: Switch the existing installation to the development runtime
+        if: matrix.node-version == '26.8.1'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.node-version'
+          package-manager-cache: false
+      - name: Relaunch from the same npx cache
+        if: matrix.node-version == '26.8.1'
+        run: bash scripts/check-packed-consumer.sh upgrade
+
   stage:
     name: Stage package on npm
-    needs: verify
+    needs: [verify, consumer]
     if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true') }}
     runs-on: ubuntu-latest
     environment: npm-publish
