@@ -11,7 +11,7 @@ import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileTree, getFileIcon } from './file-tree';
+import { FileTree, getFileIcon, NoWorkspaceFiles } from './file-tree';
 import { FileTreeProvider } from './file-tree-context';
 import { FileTreeRow } from './file-tree-row';
 import { useWorkspacePanelActions } from './workspace-panel-context';
@@ -67,7 +67,7 @@ function WorkspaceFiles({ workspaceId }: FileBrowserPanelProps) {
               value={filter}
               onChange={(event) => setFilter(event.currentTarget.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Escape' && filter) {
+                if (event.key === 'Escape' && filter && !event.nativeEvent.isComposing) {
                   event.stopPropagation();
                   setFilter('');
                 }
@@ -125,7 +125,11 @@ function FileSearchResults({
 }) {
   const results = trpc.workspace.listAllFiles.useQuery(
     { workspaceId, query, match: 'fuzzy' },
-    { trpc: { abortOnUnmount: true } }
+    {
+      trpc: { abortOnUnmount: true },
+      // Reuse recent queries when typing back through a filename. Refresh invalidates them.
+      staleTime: 20_000,
+    }
   );
 
   return (
@@ -135,7 +139,13 @@ function FileSearchResults({
       loadingMessage="Searching files…"
       errorTitle="Couldn't search files"
       isEmpty={({ files }) => files.length === 0}
-      empty={<EmptyState size="compact" title="No matching files" />}
+      empty={
+        results.data?.hasWorktree === false ? (
+          <NoWorkspaceFiles />
+        ) : (
+          <EmptyState size="compact" title="No matching files" />
+        )
+      }
     >
       {({ files }) => (
         <ul aria-label="File search results">

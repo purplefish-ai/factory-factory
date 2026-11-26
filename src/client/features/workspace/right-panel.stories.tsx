@@ -421,7 +421,9 @@ export const EmptyInbox: Story = {
     await userEvent.click(canvas.getByRole('tab', { name: 'Inbox' }));
     await expect(await canvas.findByText('No messages yet')).toBeVisible();
     await expect(canvas.getByRole('tab', { name: 'Inbox' })).toBeVisible();
-    await expect(canvas.queryByText('0 unread')).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('img', { name: '0 unread inbox messages' })
+    ).not.toBeInTheDocument();
   },
 };
 

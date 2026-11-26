@@ -420,6 +420,25 @@ describe('file-helpers', () => {
       expect(mockedReaddir).not.toHaveBeenCalledWith('/repo/.git', expect.anything());
     });
 
+    it('rejects a search cancelled while reading its last directory', async () => {
+      const controller = new AbortController();
+      const reason = new Error('Cancelled search');
+      mockedReaddir.mockImplementationOnce((() =>
+        Promise.resolve().then(() => {
+          controller.abort(reason);
+          return [createDirent('index.ts', 'file')];
+        })) as never);
+
+      await expect(
+        searchFilesRecursive('/repo', {
+          query: 'index.ts',
+          match: 'fuzzy',
+          limit: 1,
+          signal: controller.signal,
+        })
+      ).rejects.toBe(reason);
+    });
+
     it('respects the max depth bound', async () => {
       mockDirectoryTree(
         new Map([

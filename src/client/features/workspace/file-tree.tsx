@@ -67,6 +67,17 @@ export function getFileIcon(name: string) {
   return <FileIcon className="h-4 w-4" />;
 }
 
+export function NoWorkspaceFiles() {
+  return (
+    <EmptyState
+      size="compact"
+      icon={FolderIcon}
+      title="No files available"
+      description="This workspace doesn't have a directory yet."
+    />
+  );
+}
+
 // =============================================================================
 // Sub-Components
 // =============================================================================
@@ -187,14 +198,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
   if (entries.length === 0) {
     // Show different message based on whether workspace has a worktree
     if (!hasWorktree && depth === 0) {
-      return (
-        <EmptyState
-          size="compact"
-          icon={FolderIcon}
-          title="No files available"
-          description="This workspace doesn't have a directory yet."
-        />
-      );
+      return <NoWorkspaceFiles />;
     }
 
     return (

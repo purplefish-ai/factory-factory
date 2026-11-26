@@ -210,11 +210,13 @@ async function walkSearchFiles(
     }
 
     const fullPath = path.join(rootPath, relativePath);
-    const dirents = (await readSortedSearchDirents(fullPath)).filter(
+    const dirents = await readSortedSearchDirents(fullPath);
+    signal?.throwIfAborted();
+    const searchableEntries = dirents.filter(
       ({ name }) => !ignoredNames.has(name) && (includeHidden || !name.startsWith('.'))
     );
 
-    for (const dirent of dirents) {
+    for (const dirent of searchableEntries) {
       const filePath = relativePath ? path.join(relativePath, dirent.name) : dirent.name;
       if (dirent.isDirectory()) {
         directories.push({ relativePath: filePath, depth: depth + 1 });
@@ -301,8 +303,8 @@ export function compareFilesByRelevance(a: string, b: string, queryLower?: strin
     }
   }
 
-  const aDepth = a.split('/').length;
-  const bDepth = b.split('/').length;
+  const aDepth = a.split(path.sep).length;
+  const bDepth = b.split(path.sep).length;
   if (aDepth !== bDepth) {
     return aDepth - bDepth;
   }

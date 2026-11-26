@@ -146,3 +146,29 @@ it('searches collapsed folders, opens a result, and returns to the tree after cl
     expect(folder()?.textContent).toBe('src');
   });
 });
+
+it('clears search on Escape after composition has ended', async () => {
+  await withFileBrowser(async ({ container }) => {
+    await vi.waitFor(() => expect(container.textContent).toContain('before.ts'));
+    const input = container.querySelector<HTMLInputElement>('[aria-label="Search files"]');
+    await act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'bfr');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector('ul[aria-label="File search results"]')).not.toBeNull()
+    );
+
+    await act(() => {
+      input?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, isComposing: true })
+      );
+    });
+    expect(input?.value).toBe('bfr');
+    await act(() => {
+      input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(input?.value).toBe('');
+    expect(container.querySelector('button[aria-expanded="false"]')?.textContent).toBe('src');
+  });
+});
