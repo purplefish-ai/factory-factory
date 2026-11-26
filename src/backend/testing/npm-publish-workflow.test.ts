@@ -21,7 +21,9 @@ const workflowJobSchema = z.object({
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   permissions: z.record(z.string(), z.string()),
   steps: z.array(workflowStepSchema),
-  strategy: z.object({ matrix: z.object({ 'node-version': z.array(z.string()) }) }).optional(),
+  strategy: z
+    .object({ matrix: z.object({ os: z.array(z.string()), 'node-version': z.array(z.string()) }) })
+    .optional(),
 });
 
 const workflowDispatchInputSchema = z.object({
@@ -74,17 +76,24 @@ function githubExpression(expression: string): string {
 }
 
 describe('npm publish workflow', () => {
-  it('verifies both runtimes and publishes on the development pin', () => {
+  it('tests a single packed artifact on the supported runtimes before staging', () => {
     const nodeVersion = readFileSync(
       new URL('../../../.node-version', import.meta.url),
       'utf8'
     ).trim();
     const verifyJob = getJob('verify');
+    expect(getStep(verifyJob, 'Setup Node.js').with?.['node-version-file']).toBe('.node-version');
+    const consumer = getJob('consumer');
+    expect(consumer.needs).toBe('verify');
+    expect(consumer.strategy?.matrix.os).toEqual(['ubuntu-latest', 'macos-latest']);
+    expect(getStep(consumer, 'Launch with bundled npm').run).toBe(
+      'bash scripts/check-packed-consumer.sh cold'
+    );
     const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
-    expect(verifyJob.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
-    for (const name of ['Publish to npm (dry run)', 'Upload npm package']) {
-      expect(getStep(verifyJob, name).if).toContain(`matrix.node-version == '${nodeVersion}'`);
-    }
+    expect(consumer.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
+    expect(getStep(consumer, 'Relaunch from the same npx cache').run).toBe(
+      'bash scripts/check-packed-consumer.sh upgrade'
+    );
     for (const name of ['stage', 'finalize-release']) {
       expect(getStep(getJob(name), 'Setup Node.js').with?.['node-version']).toBe(nodeVersion);
     }
@@ -123,16 +132,19 @@ describe('npm publish workflow', () => {
     const dryRunStep = getStep(verifyJob, 'Publish to npm (dry run)');
     expect(dryRunStep.if).toBe(
       githubExpression(
-        "matrix.node-version == '26.12.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
+        "github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
       )
     );
-    expect(dryRunStep.run).toBe('npm publish --dry-run');
+    expect(dryRunStep.env?.npm_config_force).toBe(
+      githubExpression("github.ref != 'refs/heads/main'")
+    );
+    expect(dryRunStep.run).toBe('npm publish --dry-run ./factory-factory-*.tgz');
   });
 
   it('stages the packed artifact only in the protected OIDC job', () => {
     const stageJob = getJob('stage');
 
-    expect(stageJob.needs).toBe('verify');
+    expect(stageJob.needs).toEqual(['verify', 'consumer']);
     expect(stageJob.if).toBe(
       githubExpression(
         "github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true')"
@@ -165,13 +177,10 @@ describe('npm publish workflow', () => {
 
   it('retains the package artifact for the protected-environment approval window', () => {
     const uploadStep = getStep(getJob('verify'), 'Upload npm package');
-    expect(uploadStep.if).toBe(
-      githubExpression(
-        "matrix.node-version == '26.12.1' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true'))"
-      )
-    );
     expect(uploadStep.with).toEqual({
-      name: 'npm-package',
+      name: githubExpression(
+        "github.event.inputs.dry_run == 'true' && 'dry-run-package' || 'npm-package'"
+      ),
       path: 'factory-factory-*.tgz',
       'if-no-files-found': 'error',
       'retention-days': 7,
