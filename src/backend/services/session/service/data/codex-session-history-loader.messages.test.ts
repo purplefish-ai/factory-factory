@@ -151,6 +151,152 @@ describe('Codex response-item history messages', () => {
     });
   });
 
+  it('folds delivered async answers into their questions, even with a legacy user event in the turn', async () => {
+    const turnId = 'active-turn';
+    const question = 'Does the [preview](preview.png) look ready?';
+    const reply = (toolId: string, index: number, answer: string) => ({
+      questionItemId: JSON.stringify(['request_user_input_async', toolId, index]),
+      question: 'The shortened question from Codex',
+      answer,
+    });
+    const wrap = (body: unknown) =>
+      `<send_user_message_question_reply>\n${JSON.stringify(body)}\n</send_user_message_question_reply>`;
+    const delivered = wrap([
+      reply('ask', 1, 'Ship it\n\nKeep the notes'),
+      reply('other-ask', 0, 'Yes'),
+    ]);
+    const history = await load([
+      event('task_started', undefined, turnId),
+      event('user_message', 'Review the preview', turnId),
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'ask',
+          arguments: JSON.stringify({
+            questions: [{ title: 'Anything else?' }, { title: question }],
+          }),
+        },
+      },
+      response('assistant', 'Work in progress', { phase: 'commentary', turnId }),
+      {
+        ...response('user', delivered, { kinds: ['user.text'], turnId }),
+        timestamp: '2026-10-18T12:01:00Z',
+      },
+      event('user_message', delivered, turnId),
+      {
+        type: 'response_item',
+        payload: { type: 'function_call_output', call_id: 'ask', output: '{"accepted":true}' },
+      },
+      response('user', wrap(reply('ask', 0, 'No')), { turnId }),
+      response('user', wrap(reply('ask', 0, 'Repeated answer')), { turnId }),
+      response('assistant', 'Done', { phase: 'final_answer', turnId }),
+    ]);
+    expect(history.map(({ type }) => type)).toEqual([
+      'user',
+      'assistant',
+      'question_response',
+      'question_response',
+      'assistant',
+    ]);
+    expect(history[2]).toMatchObject({
+      timestamp: '2026-10-18T12:01:00Z',
+      questionResponse: {
+        toolUseId: 'ask',
+        status: 'answered',
+        questions: [
+          { question: 'Anything else?', answers: ['No'] },
+          { question, answers: ['Ship it\n\nKeep the notes'] },
+        ],
+      },
+      questionToolDetails: { result: '{"accepted":true}' },
+    });
+    expect(history[3]).toMatchObject({
+      questionResponse: {
+        toolUseId: 'other-ask',
+        status: 'unavailable',
+        questions: [{ question: 'The shortened question from Codex', answers: [] }],
+      },
+    });
+    expect(JSON.stringify(history)).not.toContain('send_user_message_question_reply');
+  });
+
+  it('keeps malformed question reply wrappers as ordinary user text', async () => {
+    const text =
+      '<send_user_message_question_reply>[{"question":"Example"}]</send_user_message_question_reply>';
+    expect(await load([response('user', text)])).toMatchObject([{ type: 'user', content: text }]);
+  });
+
+  it('keeps an unavailable question when a delivered reply refers to a stale field index', async () => {
+    const body = JSON.stringify({
+      questionItemId: JSON.stringify(['request_user_input_async', 'stale', 2]),
+      question: 'Old field',
+      answer: 'answer-for-stale-field',
+    });
+    const history = await load([
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'stale',
+          arguments: JSON.stringify({ questions: [{ title: 'Current field' }] }),
+        },
+      },
+      response(
+        'user',
+        `<send_user_message_question_reply>${body}</send_user_message_question_reply>`
+      ),
+    ]);
+    expect(history).toMatchObject([
+      {
+        type: 'question_response',
+        questionResponse: {
+          status: 'unavailable',
+          questions: [{ question: 'Current field', answers: [] }],
+        },
+      },
+    ]);
+    expect(JSON.stringify(history)).not.toContain('answer-for-stale-field');
+  });
+
+  it('omits a delivered answer when the original question is marked private', async () => {
+    const body = JSON.stringify({
+      questionItemId: JSON.stringify(['request_user_input_async', 'private', 0]),
+      question: 'What is your token?',
+      answer: 'private-answer',
+    });
+    const history = await load([
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'private',
+          arguments: JSON.stringify({
+            questions: [{ title: 'What is your token?', isSecret: true }],
+          }),
+        },
+      },
+      response(
+        'user',
+        `<send_user_message_question_reply>${body}</send_user_message_question_reply>`
+      ),
+    ]);
+    expect(history).toMatchObject([
+      {
+        type: 'question_response',
+        questionResponse: {
+          status: 'answered',
+          questions: [{ question: 'What is your token?', redacted: true, answers: [] }],
+        },
+      },
+    ]);
+    expect(history[0]).not.toHaveProperty('questionToolDetails');
+    expect(JSON.stringify(history)).not.toContain('private-answer');
+  });
+
   it('restores generated tool images as structured results after reload', async () => {
     const png =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';

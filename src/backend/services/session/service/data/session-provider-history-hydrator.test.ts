@@ -57,6 +57,49 @@ describe('history hydration after provider identity rollover', () => {
     sessionDomainService.clearAllSessions();
   });
 
+  it.each([
+    { delivery: '2026-01-01T00:00:02Z', expected: ['delivered'] },
+    { delivery: '2026-01-01T00:00:00Z', expected: ['delivered', 'elicitation:live'] },
+  ])(
+    'reconciles live async replies against rollout delivery at $delivery',
+    async ({ delivery, expected }) => {
+      const sessionId = 'history-session';
+      const summary = {
+        toolUseId: 'elicitation:live',
+        status: 'answered' as const,
+        questions: [{ question: 'Use the preview?', answers: ['Yes'] }],
+      };
+      const details = { toolName: 'request_user_input_async' };
+      sessionDomainService.upsertQuestionResponse(sessionId, 0, {
+        type: 'question_response',
+        timestamp: '2026-01-01T00:00:01Z',
+        questionResponse: summary,
+        questionToolDetails: details,
+      });
+      loadCodex.mockResolvedValueOnce({
+        ...loaded('saved turn'),
+        history: [
+          ...loaded('saved turn').history,
+          {
+            type: 'question_response',
+            content: '',
+            timestamp: delivery,
+            questionResponse: { ...summary, toolUseId: 'delivered' },
+            questionToolDetails: details,
+          },
+        ],
+      });
+      await hydrateProviderHistoryIfNeeded(sessionId, record('saved'));
+      const rows = sessionDomainService.getTranscriptSnapshot(sessionId);
+      expect(rows[0]?.text).toBe('saved turn');
+      expect(
+        rows.flatMap(({ message }) =>
+          message?.type === 'question_response' ? [message.questionResponse.toolUseId] : []
+        )
+      ).toEqual(expected);
+    }
+  );
+
   it.each(['CLAUDE', 'CODEX'] as const)(
     'hydrates %s provider history alongside a local failed PR update',
     async (provider) => {

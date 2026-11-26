@@ -35,7 +35,12 @@ interface AssistantMessageRendererProps {
   onWorkspaceFileLink?: (path: string) => void;
 }
 
-function renderTranscriptCard(message: AgentMessage, className?: string) {
+function renderTranscriptCard({
+  message,
+  className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
+}: AssistantMessageRendererProps) {
   if (message.type === 'session_lifecycle') {
     return <SessionLifecycleMessageRenderer message={message} className={className} />;
   }
@@ -45,7 +50,14 @@ function renderTranscriptCard(message: AgentMessage, className?: string) {
   }
 
   if (message.type === 'question_response') {
-    return <QuestionResponseRenderer message={message} className={className} />;
+    return (
+      <QuestionResponseRenderer
+        message={message}
+        className={className}
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
+      />
+    );
   }
 
   return null;
@@ -61,7 +73,12 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
 }: AssistantMessageRendererProps) {
-  const transcriptCard = renderTranscriptCard(message, className);
+  const transcriptCard = renderTranscriptCard({
+    message,
+    className,
+    resolveWorkspaceFileLink,
+    onWorkspaceFileLink,
+  });
   if (transcriptCard) {
     return transcriptCard;
   }

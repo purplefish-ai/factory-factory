@@ -3,6 +3,21 @@ import { getAskUserQuestions, isSecretQuestion } from './question-input';
 
 type QuestionAnswers = Record<string, string[]>;
 
+/** Codex delivers a question's selections and optional note together as answer text. */
+export function normalizeCodexAsyncQuestionResponse(summary: QuestionResponse): QuestionResponse {
+  return {
+    ...summary,
+    questions: summary.questions.map(({ question, answers, note, redacted }) => {
+      const text = [...answers, note ?? ''].filter((part) => part.trim()).join('\n\n');
+      return {
+        question: question.trim(),
+        answers: text && !redacted ? [text] : [],
+        ...(redacted ? { redacted } : {}),
+      };
+    }),
+  };
+}
+
 export function summarizeQuestionResponse(
   input: Record<string, unknown>,
   identity: Pick<QuestionResponse, 'toolUseId' | 'requestId'>,

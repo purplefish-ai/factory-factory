@@ -58,6 +58,13 @@ only lines that contain its marker.
   history stores only summaries, and provider-marked answer values are omitted.
   `claude-history-question-responses.test.ts`,
   `session-question-response-history.integration.test.ts`.
+- Codex async question replies are restored from the delivered steer in the
+  rollout at the first delivery position, correlated by tool-use ID and question
+  index. An acknowledgment without delivery leaves the outcome unavailable.
+  Older locally persisted async summaries replace the provider card when the
+  full questions and submitted text match exactly once on each side.
+  `codex-session-history-loader.messages.test.ts`,
+  `session-question-response-history.integration.test.ts`.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.
@@ -70,8 +77,9 @@ only lines that contain its marker.
   `codex-session-history-loader.service.ts`: find and parse each provider's
   history file, restoring prompt images through `history-image-attachment.ts`.
 - `claude-history-question-responses.ts` restores structured provider answers.
-  `codex-history-question-responses.ts` projects acknowledgment-only requests.
-  `session-question-response-history.ts` persists and restores local summaries.
+  `codex-history-question-responses.ts` projects async acknowledgments and
+  replies. `session-question-response-history.ts` persists and restores local
+  summaries.
 - `session-history-jsonl-reader.ts`: the cooperative line reader both use.
 - `session-history-file.ts`: the file identity a read observed.
 - `provider-history-transcript-loader.ts`: the shared read and projection.

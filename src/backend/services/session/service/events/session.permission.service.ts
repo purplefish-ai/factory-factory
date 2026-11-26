@@ -6,9 +6,15 @@ import type { SessionDomainService } from '@/backend/services/session/service/st
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { ChatMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
-import { buildQuestionToolDetails } from '@/shared/acp-protocol/protocol/question-response';
+import {
+  buildQuestionToolDetails,
+  CODEX_ASYNC_QUESTION_TOOL,
+} from '@/shared/acp-protocol/protocol/question-response';
 import { hasSecretQuestion } from '@/shared/acp-protocol/question-input';
-import { summarizeQuestionResponse } from '@/shared/acp-protocol/question-response-summary';
+import {
+  normalizeCodexAsyncQuestionResponse,
+  summarizeQuestionResponse,
+} from '@/shared/acp-protocol/question-response-summary';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import {
   getAskUserQuestions,
@@ -21,7 +27,7 @@ type InteractiveRequest = {
   delta: SessionDeltaEvent;
   pending: PendingInteractiveRequest;
   question?: {
-    order: number;
+    order: number | null;
     providerSessionId?: string;
     isCurrent?: () => boolean;
     rawInput: Record<string, unknown>;
@@ -170,9 +176,7 @@ export class SessionPermissionService {
         };
     const request: InteractiveRequest = {
       delta,
-      ...(isUserQuestion
-        ? { question: this.captureQuestion(sessionId, toolInput, event.resolveElicitationResponse) }
-        : {}),
+      ...(isUserQuestion ? { question: this.captureQuestion(sessionId, toolInput, event) } : {}),
       pending: {
         requestId,
         toolName,
@@ -204,18 +208,19 @@ export class SessionPermissionService {
   private captureQuestion(
     sessionId: string,
     rawInput: Record<string, unknown>,
-    resolveElicitationResponse: AcpPermissionRequestEvent['resolveElicitationResponse']
+    event: AcpPermissionRequestEvent
   ): NonNullable<InteractiveRequest['question']> {
+    const asynchronous = event.elicitation === 'form' && rawInput.delivery === 'async';
     const providerSessionId = this.getProviderSessionId?.(sessionId);
     const fence = providerSessionId
       ? this.sessionDomainService.createProviderHistoryFence(sessionId, providerSessionId)
       : undefined;
     return {
-      order: this.sessionDomainService.allocateOrder(sessionId),
+      order: asynchronous ? null : this.sessionDomainService.allocateOrder(sessionId),
       providerSessionId,
       isCurrent: fence === null ? () => false : fence,
       rawInput,
-      resolveElicitationResponse,
+      resolveElicitationResponse: event.resolveElicitationResponse,
     };
   }
 
@@ -242,14 +247,21 @@ export class SessionPermissionService {
     const details =
       hasSecretQuestion(rawInput) || questionResponse.questions.some((item) => item.redacted)
         ? undefined
-        : buildQuestionToolDetails(toolName, rawInput);
-    const message = this.sessionDomainService.upsertQuestionResponse(sessionId, order, {
-      type: 'question_response',
-      questionResponse,
-      questionToolDetails: details,
-      timestamp,
-    });
-    return providerSessionId
+        : buildQuestionToolDetails(order === null ? CODEX_ASYNC_QUESTION_TOOL : toolName, rawInput);
+    // Async replies appear where the user answers while the model is still working.
+    const message = this.sessionDomainService.upsertQuestionResponse(
+      sessionId,
+      order ?? this.sessionDomainService.allocateOrder(sessionId),
+      {
+        type: 'question_response',
+        questionResponse:
+          order === null ? normalizeCodexAsyncQuestionResponse(questionResponse) : questionResponse,
+        questionToolDetails: details,
+        timestamp: order === null ? new Date().toISOString() : timestamp,
+      }
+    );
+    // Only Codex knows whether its steer landed. Its rollout supplies the durable response.
+    return providerSessionId && order !== null
       ? this.persistQuestionResponse?.(sessionId, providerSessionId, message)
       : undefined;
   }

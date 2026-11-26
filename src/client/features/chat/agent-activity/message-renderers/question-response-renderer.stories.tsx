@@ -86,6 +86,31 @@ export const AnsweredOnPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
 
+export const AsyncAnswerWithPreview: Story = {
+  args: {
+    message: {
+      type: 'question_response',
+      questionResponse: {
+        toolUseId: 'preview-review',
+        status: 'answered',
+        questions: [
+          {
+            question: 'Does the [preview](https://example.com/preview) look ready?',
+            answers: ['Approve the wording'],
+          },
+        ],
+      },
+      questionToolDetails: { toolName: 'request_user_input_async', result: '{"accepted":true}' },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const region = within(canvasElement).getByRole('region', { name: 'Answered' });
+    await expect(within(region).getByRole('link', { name: 'preview' })).toBeVisible();
+    await expect(within(region).getByText('Approve the wording')).toBeVisible();
+    await expect(within(region).queryByText('Raw tool details')).not.toBeInTheDocument();
+  },
+};
+
 export const PrivateAnswer: Story = {
   args: {
     message: {

@@ -17,6 +17,7 @@ const urlRequestSchema = z.object({
   url: z.url().refine((url) => /^https?:\/\//i.test(url)),
   elicitationId: z.string(),
 });
+const asyncDelivery = z.object({ codex: z.object({ delivery: z.literal('async') }) });
 
 type ElicitationPresentation = {
   title: string;
@@ -46,6 +47,7 @@ function createPresentation(params: CreateElicitationRequest): ElicitationPresen
       rawInput: {
         type: 'AskUserQuestion',
         message: params.message,
+        ...(asyncDelivery.safeParse(params._meta).success ? { delivery: 'async' } : {}),
         questions: form.questions.map((question, index) =>
           index === 0 && params.message.trim() !== question.question
             ? {

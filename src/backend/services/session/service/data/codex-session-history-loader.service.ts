@@ -9,7 +9,10 @@ import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.se
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
 import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
-import { createCodexQuestionHistoryAppender } from './codex-history-question-responses';
+import {
+  createCodexQuestionHistoryAppender,
+  parseCodexAsyncQuestionReply,
+} from './codex-history-question-responses';
 import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
 import {
@@ -522,7 +525,11 @@ function appendHistoryTurn(turn: CodexHistoryTurn): void {
     (item) => item.source === 'response' && item.message.type === 'user' && item.message.attachments
   )?.message.attachments;
   for (const { source, message } of turn.messages) {
-    if (source === 'event' || !eventTypes.has(message.type)) {
+    if (
+      source === 'event' ||
+      message.type === 'question_response' ||
+      !eventTypes.has(message.type)
+    ) {
       const needsAttachments =
         source === 'event' && message.type === 'user' && !message.attachments;
       turn.append(
@@ -898,9 +905,10 @@ class CodexSessionHistoryLoaderService {
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     let hadReadError = false;
     const history: HistoryMessage[] = [];
+    const { append, finish } = createCodexQuestionHistoryAppender(history);
     const turn: CodexHistoryTurn = {
       messages: [],
-      append: createCodexQuestionHistoryAppender(history),
+      append,
     };
     const fallbackBaseTimestampMs = Date.now();
 
@@ -928,7 +936,7 @@ class CodexSessionHistoryLoaderService {
 
     appendHistoryTurn(turn);
 
-    return { history, hadReadError };
+    return { history: finish(), hadReadError };
   }
 
   private appendHistoryFromLine(
@@ -979,11 +987,11 @@ class CodexSessionHistoryLoaderService {
 
 function parseCodexHistoryMessages(entry: CodexHistoryEntry, timestamp: string): HistoryMessage[] {
   const eventMessage = parseCodexEventMessage(entry, timestamp);
-  if (eventMessage) {
-    return [eventMessage];
-  }
-
-  return parseCodexResponseItemMessages(entry, timestamp);
+  const messages = eventMessage ? [eventMessage] : parseCodexResponseItemMessages(entry, timestamp);
+  return messages.flatMap((message) => {
+    const replies = parseCodexAsyncQuestionReply(message);
+    return replies.length > 0 ? replies : [message];
+  });
 }
 
 export const codexSessionHistoryLoaderService = new CodexSessionHistoryLoaderService();

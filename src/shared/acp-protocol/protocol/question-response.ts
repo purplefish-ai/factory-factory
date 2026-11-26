@@ -4,6 +4,8 @@ import {
   ArchivedToolResultContentSchema,
 } from './archived-content-schema';
 
+export const CODEX_ASYNC_QUESTION_TOOL = 'request_user_input_async';
+
 export const QuestionResponseSchema = z.object({
   toolUseId: z.string().min(1),
   requestId: z.string().optional(),
