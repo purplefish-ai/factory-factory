@@ -33,7 +33,6 @@ files:
   # pnpm store entries for Prisma (resolved symlinks)
   - node_modules/.pnpm/@prisma+client@*/**/*
   - node_modules/.pnpm/@prisma+client-runtime-utils@*/**/*
-  - node_modules/.pnpm/@prisma+adapter-better-sqlite3@*/**/*
   - node_modules/.pnpm/.prisma+client@*/**/*
   # pnpm store entries for native modules
   - node_modules/.pnpm/better-sqlite3@*/**/*

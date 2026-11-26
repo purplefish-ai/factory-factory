@@ -94,9 +94,6 @@ importers:
       '@linear/sdk':
         specifier: ^101.1.0
         version: 101.1.0(graphql@17.0.2)
-      '@prisma/adapter-better-sqlite3':
-        specifier: 7.10.1
-        version: 7.10.1
       '@prisma/client':
         specifier: 7.10.1
         version: 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@13.2.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
@@ -151,6 +148,9 @@ importers:
       tree-kill:
         specifier: ^1.2.2
         version: 1.2.2
+      undici:
+        specifier: 7.30.1
+        version: 7.30.1
       ws:
         specifier: ^8.23.0
         version: 8.23.0
@@ -173,6 +173,9 @@ importers:
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
+      '@prisma/adapter-better-sqlite3':
+        specifier: 7.10.1
+        version: 7.10.1
       '@radix-ui/react-alert-dialog':
         specifier: ^1.2.1
         version: 1.2.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -338,6 +341,9 @@ importers:
       electron-builder:
         specifier: ^26.18.0
         version: 26.18.0(supports-color@10.2.2)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       husky:
         specifier: ^9.1.7
         version: 9.1.7

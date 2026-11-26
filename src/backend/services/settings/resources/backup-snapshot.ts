@@ -1,8 +1,7 @@
 import { isAbsolute } from 'node:path';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
+import { PrismaBetterSqlite3, TunedPrismaBetterSqlite3 } from '@/backend/lib/sqlite-adapter';
 import { createLogger } from '@/backend/services/logger.service';
 import { PrismaClient, type Prisma } from '@prisma-gen/client';
 
