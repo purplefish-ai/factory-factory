@@ -6,6 +6,7 @@ import {
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import { retainUndeliveredCodexReplies } from './codex-legacy-question-overlays';
 import {
   loadProviderHistoryTranscript,
   type ProviderHistorySession,
@@ -216,7 +217,10 @@ function handleLoadedProviderHistory(
     return;
   }
 
-  const retainedLocalMessages = localMessages(latestTranscript);
+  const retainedLocalMessages = retainUndeliveredCodexReplies(
+    loadedTranscript,
+    localMessages(latestTranscript)
+  );
   const mergedTranscript =
     retainedLocalMessages.length === 0
       ? loadedTranscript

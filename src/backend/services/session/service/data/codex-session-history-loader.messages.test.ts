@@ -228,6 +228,39 @@ describe('Codex response-item history messages', () => {
     expect(await load([response('user', text)])).toMatchObject([{ type: 'user', content: text }]);
   });
 
+  it('keeps an unavailable question when a delivered reply refers to a stale field index', async () => {
+    const body = JSON.stringify({
+      questionItemId: JSON.stringify(['request_user_input_async', 'stale', 2]),
+      question: 'Old field',
+      answer: 'answer-for-stale-field',
+    });
+    const history = await load([
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'request_user_input_async',
+          call_id: 'stale',
+          arguments: JSON.stringify({ questions: [{ title: 'Current field' }] }),
+        },
+      },
+      response(
+        'user',
+        `<send_user_message_question_reply>${body}</send_user_message_question_reply>`
+      ),
+    ]);
+    expect(history).toMatchObject([
+      {
+        type: 'question_response',
+        questionResponse: {
+          status: 'unavailable',
+          questions: [{ question: 'Current field', answers: [] }],
+        },
+      },
+    ]);
+    expect(JSON.stringify(history)).not.toContain('answer-for-stale-field');
+  });
+
   it('omits a delivered answer when the original question is marked private', async () => {
     const body = JSON.stringify({
       questionItemId: JSON.stringify(['request_user_input_async', 'private', 0]),

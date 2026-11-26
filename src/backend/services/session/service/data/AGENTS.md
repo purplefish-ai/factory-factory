@@ -63,7 +63,8 @@ only lines that contain its marker.
   index. An acknowledgment without delivery leaves the outcome unavailable.
   Older locally persisted async summaries replace the provider card when the
   full questions and submitted text match exactly once on each side.
-  `codex-session-history-loader.messages.test.ts`.
+  `codex-session-history-loader.messages.test.ts`,
+  `session-question-response-history.integration.test.ts`.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.

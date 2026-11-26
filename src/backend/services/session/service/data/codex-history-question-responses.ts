@@ -195,6 +195,7 @@ function projectDeliveredReply(
 ): void {
   foldAnswer(pending, reply.questionResponse.questions);
   if (pending.answers.size === 0) {
+    history[pending.index] = projectQuestion(pending);
     return;
   }
   if (!pending.delivery) {

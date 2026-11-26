@@ -43,14 +43,12 @@ function indexLegacyResponses(restored: StoredResponse[]): Map<string, string | 
   return local;
 }
 
-/** Older async forms had synthetic IDs. Correlate only unambiguous matches to delivered replies. */
-export function reconcileLegacyCodexQuestionOverlays(
+function matchDeliveredReplies(
   transcript: ChatMessage[],
-  restored: StoredResponse[]
-): { transcript: ChatMessage[]; restored: StoredResponse[] } {
-  const local = indexLegacyResponses(restored);
+  local: Map<string, string | null>
+): Map<string, string> {
   if (local.size === 0) {
-    return { transcript, restored };
+    return new Map();
   }
 
   const delivered = new Map<string, string | null>();
@@ -74,6 +72,49 @@ export function reconcileLegacyCodexQuestionOverlays(
       matches.set(legacyId, toolUseId);
     }
   }
+  return matches;
+}
+
+/** Keep a live reply until its matching delivered row is present in the rollout. */
+export function retainUndeliveredCodexReplies(
+  history: ChatMessage[],
+  localRows: ChatMessage[]
+): ChatMessage[] {
+  const local = new Map<string, string | null>();
+  for (const { id, message } of localRows) {
+    if (
+      message?.type === 'question_response' &&
+      message.questionToolDetails?.toolName === CODEX_ASYNC_QUESTION_TOOL
+    ) {
+      const signature = answerSignature(message.questionResponse);
+      if (signature !== undefined) {
+        addUnique(local, signature, id);
+      }
+    }
+  }
+  const matches = matchDeliveredReplies(history, local);
+  if (matches.size === 0) {
+    return localRows;
+  }
+  const deliveredAt = new Map<string, number>();
+  for (const { message, timestamp } of history) {
+    if (message?.type === 'question_response') {
+      deliveredAt.set(message.questionResponse.toolUseId, Date.parse(timestamp));
+    }
+  }
+  return localRows.filter(({ id, timestamp }) => {
+    const toolUseId = matches.get(id);
+    const deliveredTime = toolUseId ? deliveredAt.get(toolUseId) : undefined;
+    return !(deliveredTime !== undefined && deliveredTime >= Date.parse(timestamp));
+  });
+}
+
+/** Older async forms had synthetic IDs. Correlate only unambiguous matches to delivered replies. */
+export function reconcileLegacyCodexQuestionOverlays(
+  transcript: ChatMessage[],
+  restored: StoredResponse[]
+): { transcript: ChatMessage[]; restored: StoredResponse[] } {
+  const matches = matchDeliveredReplies(transcript, indexLegacyResponses(restored));
   if (matches.size === 0) {
     return { transcript, restored };
   }

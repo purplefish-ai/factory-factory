@@ -63,8 +63,9 @@ afterAll(async () => {
 it('merges a previously saved async answer with its delivered Codex reply', async () => {
   const domain = new SessionDomainService();
   const question = 'Does the preview look ready?';
-  const local = domain.upsertQuestionResponse('session', 1, {
+  const local = domain.upsertQuestionResponse('session', 0, {
     type: 'question_response',
+    timestamp: '2026-10-18T12:00:00Z',
     questionResponse: {
       toolUseId: 'elicitation:legacy-preview',
       status: 'answered',
@@ -81,8 +82,17 @@ it('merges a previously saved async answer with its delivered Codex reply', asyn
   });
   await persistQuestionResponse('session', 'legacy-codex', local);
   await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
-  domain.upsertQuestionResponse('session', 0, {
+  const before = domain.upsertClaudeEvent(
+    'session',
+    {
+      type: 'assistant',
+      timestamp: '2026-10-18T12:00:01Z',
+    },
+    1
+  );
+  const delivered = domain.upsertQuestionResponse('session', 2, {
     type: 'question_response',
+    timestamp: '2026-10-18T12:00:02Z',
     questionResponse: {
       toolUseId: 'provider-preview',
       status: 'answered',
@@ -90,10 +100,22 @@ it('merges a previously saved async answer with its delivered Codex reply', asyn
     },
     questionToolDetails: { toolName: 'request_user_input_async' },
   });
+  const after = domain.upsertClaudeEvent(
+    'session',
+    {
+      type: 'assistant',
+      timestamp: '2026-10-18T12:00:03Z',
+    },
+    3
+  );
   await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
   await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
   expect(domain.getTranscriptSnapshot('session')).toMatchObject([
+    { id: before, order: 1 },
     {
+      id: delivered.id,
+      order: 2,
+      timestamp: '2026-10-18T12:00:02Z',
       message: {
         type: 'question_response',
         questionResponse: {
@@ -102,6 +124,7 @@ it('merges a previously saved async answer with its delivered Codex reply', asyn
         },
       },
     },
+    { id: after, order: 3 },
   ]);
 });
 
