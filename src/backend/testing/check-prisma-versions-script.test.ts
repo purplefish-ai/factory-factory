@@ -19,12 +19,12 @@ describe('check-prisma-versions script', () => {
     }
   });
 
-  function run(dependencies: Record<string, string>) {
+  function run(dependencies: Record<string, string>, adapterVersion = '7.9.0') {
     tempRoot = mkdtempSync(join(tmpdir(), 'ff-prisma-versions-'));
     const manifestPath = join(tempRoot, 'package.json');
     writeFileSync(
       manifestPath,
-      `${JSON.stringify({ dependencies, devDependencies: {} }, null, 2)}\n`,
+      `${JSON.stringify({ dependencies, devDependencies: { '@prisma/adapter-better-sqlite3': adapterVersion } }, null, 2)}\n`,
       'utf8'
     );
 
@@ -35,7 +35,6 @@ describe('check-prisma-versions script', () => {
   }
 
   const alignedDependencies = {
-    '@prisma/adapter-better-sqlite3': '7.9.0',
     '@prisma/client': '7.9.0',
     prisma: '7.9.0',
   };
@@ -53,6 +52,14 @@ describe('check-prisma-versions script', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('prisma must be pinned exactly in dependencies, got undefined');
+  });
+
+  it('rejects an unpinned build-time adapter version', () => {
+    const result = run(alignedDependencies, '^7.9.0');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      '@prisma/adapter-better-sqlite3 must be pinned exactly in devDependencies'
+    );
   });
 
   it('rejects a ranged Prisma version', () => {

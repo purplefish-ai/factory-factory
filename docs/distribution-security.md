@@ -1,5 +1,16 @@
 # Distribution security
 
+## SQLite in release artifacts
+
+The CLI and Electron builds bundle the JavaScript from the pinned Prisma SQLite
+adapter into `dist/src/backend/lib/sqlite-adapter.js`. Its native dependency,
+`better-sqlite3`, stays external so Prisma and migrations open the same driver.
+The upstream adapter is a development dependency because its published manifest
+still requests v12. The pnpm override aligns source checkouts with the v13
+driver shipped to users. Keep these paths aligned when upgrading Prisma or
+SQLite. The packed-consumer check compares both real paths and runs a Prisma
+query against the installed artifact.
+
 ## Container images
 
 The Dockerfile pins the Node/Alpine multi-platform image by its OCI index

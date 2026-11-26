@@ -1,5 +1,15 @@
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
+
+it('supplies the Slack socket client HTTP peer to the Electron production tree', () => {
+  // Electron Builder omits a peer installed solely for a transitive dependency.
+  const app = createRequire(join(import.meta.dirname, '../package.json'));
+  const slack = createRequire(app.resolve('@slack/socket-mode'));
+  expect(app('./package.json').dependencies.undici).toBeDefined();
+  expect(app.resolve('undici')).toBe(slack.resolve('undici'));
+});
 
 it('packs unpacked files and compares filtered directories with patched glob dependencies', () => {
   // Resolve through the real packaging graph rather than hoisted test dependencies.

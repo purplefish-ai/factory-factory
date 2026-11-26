@@ -1,5 +1,7 @@
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 
+export { PrismaBetterSqlite3 };
+
 /**
  * Connection pragmas for the app database.
  *

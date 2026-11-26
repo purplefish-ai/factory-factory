@@ -15,7 +15,8 @@ vi.mock('@prisma-gen/client', () => ({
     $disconnect = state.disconnect;
   },
 }));
-vi.mock('@/backend/lib/sqlite-adapter', () => ({
+vi.mock('@/backend/lib/sqlite-adapter', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/lib/sqlite-adapter')>()),
   TunedPrismaBetterSqlite3: class {
     constructor(options: unknown) {
       state.adapter(options);
