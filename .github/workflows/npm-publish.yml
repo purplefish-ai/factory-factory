@@ -91,6 +91,9 @@ jobs:
 
       - name: Publish to npm (dry run)
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        # Feature branches can exercise the current tarball after its version ships.
+        env:
+          npm_config_force: ${{ github.ref != 'refs/heads/main' }}
         run: npm publish --dry-run ./factory-factory-*.tgz
 
       - name: Upload npm package
