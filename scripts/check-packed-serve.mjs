@@ -143,8 +143,15 @@ function signalGroup(signal) {
   }
 }
 
+const cancelled = new Promise((_, reject) => {
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.once(signal, () => reject(new Error(`Consumer check interrupted by ${signal}`)));
+  }
+});
+
 try {
   await Promise.race([
+    cancelled,
     verifyServer(),
     exited.then(([code, signal]) => {
       throw new Error(`serve exited: ${code ?? signal}`);
