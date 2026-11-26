@@ -188,11 +188,20 @@ describe('configService environment accessors', () => {
     });
   });
 
-  it('defaults shell path when SHELL is not provided', () => {
-    Reflect.deleteProperty(process.env, 'SHELL');
-    configService.reload();
-
-    expect(configService.getShellPath()).toBe('/bin/bash');
+  it.each([
+    ['linux', '/bin/bash'],
+    ['darwin', '/bin/bash'],
+    ['win32', 'cmd.exe'],
+  ])('defaults the shell on %s when SHELL is absent', (platform, expected) => {
+    const original = process.platform;
+    try {
+      Object.defineProperty(process, 'platform', { value: platform });
+      delete process.env.SHELL;
+      configService.reload();
+      expect(configService.getShellPath()).toBe(expected);
+    } finally {
+      Object.defineProperty(process, 'platform', { value: original });
+    }
   });
 
   it('keeps event classifier settings separate from execution and metadata settings', () => {

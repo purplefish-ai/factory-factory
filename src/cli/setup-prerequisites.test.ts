@@ -35,21 +35,36 @@ function setup({
 afterEach(() => vi.restoreAllMocks());
 
 describe('Node requirement', () => {
-  it.each(['26.8.1', '26.13.0', '27.0.0'])('accepts %s', (version) => {
-    expect(supportsNode(version, '26.8.1')).toBe(true);
-  });
-  it.each(['26.8.0', '26.7.9', '25.99.9', '26.8.1-rc.1', 'garbage'])('rejects %s', (version) => {
-    expect(supportsNode(version, '26.8.1')).toBe(false);
+  const requirement = '^24.0.0 || >=26.8.1';
+  it.each(['24.0.0', '24.22.0', '26.8.1', '26.13.0', '27.0.0', '24.0.0+build.1'])(
+    'accepts %s',
+    (version) => expect(supportsNode(version, requirement)).toBe(true)
+  );
+  it.each([
+    '23.11.1',
+    '24.0.0-rc.1',
+    '24.22.0-rc.1',
+    '25.0.0',
+    '26.8.0',
+    '26.8.1-rc.1',
+    '27.0.0-nightly.1',
+    '24.0.0+invalid_metadata',
+    'garbage',
+  ])('rejects %s', (version) => expect(supportsNode(version, requirement)).toBe(false));
+  it('enforces the patch boundary when the LTS line starts after its first release', () => {
+    const patched = '^24.1.2 || >=26.8.1';
+    expect(supportsNode('24.1.1', patched)).toBe(false);
+    expect(supportsNode('24.1.2', patched)).toBe(true);
   });
   it('does not ask or probe when Node is supported', async () => {
     const { io } = setup();
-    expect(await ensureNode('26.8.1', '26.8.1', io)).toBe(true);
+    expect(await ensureNode('26.8.1', requirement, io)).toBe(true);
     expect(io.ask).not.toHaveBeenCalled();
     expect(io.probe).not.toHaveBeenCalled();
   });
   it('offers an installed fnm and requires a restart after installation', async () => {
     const { io, commands, messages } = setup({ available: ['fnm'], answers: ['y'] });
-    expect(await ensureNode('22.0.0', '26.8.1', io)).toBe(false);
+    expect(await ensureNode('22.0.0', requirement, io)).toBe(false);
     expect(commands).toEqual([['fnm', 'install', '26.8.1']]);
     expect(messages.join('\n')).toContain('fnm use 26.8.1');
   });

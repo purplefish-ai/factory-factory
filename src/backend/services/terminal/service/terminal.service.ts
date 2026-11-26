@@ -325,7 +325,7 @@ export class TerminalService {
 
       const userEnv = buildUserProcessEnv(configService.getChildProcessEnv());
       // Determine shell to use
-      const shellPath = shell || userEnv.SHELL || '/bin/bash';
+      const shellPath = shell || userEnv.SHELL || configService.getShellPath();
       const shellArgs: string[] = [];
 
       logger.info('Creating terminal', {

@@ -5,7 +5,7 @@
   "private": false,
   "license": "MIT",
   "engines": {
-    "node": ">=26.8.1"
+    "node": "^24.0.0 || >=26.8.1"
   },
   "repository": {
     "type": "git",

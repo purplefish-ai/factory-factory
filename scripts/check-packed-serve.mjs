@@ -1,5 +1,5 @@
 // Run via npm exec in an isolated consumer directory, with the tarball on PATH.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -9,11 +9,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { stopProcessGroup } from './sandbox/process-group.mjs';
 
 const [cachePath, phase = 'cold'] = process.argv.slice(2);
+const windows = process.platform === 'win32';
+const executable = windows ? 'factory-factory.cmd' : 'factory-factory';
 const cache = realpathSync(cachePath);
 const bin = (process.env.PATH ?? '').split(delimiter).find((dir) => {
   const keyDir = dirname(dirname(dir));
   return (
-    existsSync(join(dir, 'factory-factory')) &&
+    existsSync(join(dir, executable)) &&
     existsSync(keyDir) &&
     dirname(realpathSync(keyDir)) === join(cache, '_npx')
   );
@@ -58,12 +60,18 @@ async function verifyTerminal(origin) {
           const message = terminalMessage.parse(JSON.parse(data.toString()));
           if (message.type === 'created') {
             // The expected line never appears in the echoed shell command.
-            socket.send(JSON.stringify({ type: 'input', data: "printf 'packed-%s\\n' ready\r" }));
+            const data = windows
+              ? 'echo packed-^ready & exit 0\r'
+              : "printf 'packed-%s\\n' ready; exit 0\r";
+            socket.send(JSON.stringify({ type: 'input', data }));
           } else if (message.type === 'output') {
             output = (output + message.data).slice(-8192);
-            if (output.includes('packed-ready')) {
-              done();
-            }
+          } else if (
+            message.type === 'exit' &&
+            message.exitCode === 0 &&
+            output.includes('packed-ready')
+          ) {
+            done();
           } else {
             fail(new Error(`Setup terminal: ${JSON.stringify(message)}`));
           }
@@ -80,24 +88,56 @@ async function verifyTerminal(origin) {
   }
 }
 
+function stopWindowsTree(pid) {
+  try {
+    execFileSync('taskkill.exe', ['/pid', String(pid), '/t', '/f'], { timeout: 10_000 });
+  } catch (error) {
+    try {
+      process.kill(pid, 0);
+    } catch (probeError) {
+      if (probeError.code === 'ESRCH') {
+        return;
+      }
+    }
+    throw error;
+  }
+}
+
 const consumerHome = resolve('home');
 mkdirSync(consumerHome, { recursive: true });
 const baseDir = resolve('data');
-const child = spawn(join(bin, 'factory-factory'), ['serve', '--no-open', '--host', '127.0.0.1'], {
-  detached: true,
-  stdio: ['ignore', 'pipe', 'inherit'],
-  env: {
-    PATH: process.env.PATH,
-    HOME: consumerHome,
-    TMPDIR: process.env.TMPDIR,
-    npm_config_cache: cache,
-    CI: 'true',
-    FF_EMIT_BACKEND_PORT: '1',
-    BASE_DIR: baseDir,
-    DATABASE_PATH: resolve('data', 'test.db'),
-    SHELL: '/bin/sh',
-  },
-});
+const serveArgs = ['serve', '--no-open', '--host', '127.0.0.1'];
+const child = spawn(
+  windows ? 'cmd.exe' : join(bin, executable),
+  windows ? ['/d', '/c', executable, ...serveArgs] : serveArgs,
+  {
+    detached: !windows,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'inherit'],
+    env: {
+      PATH: [bin, process.env.PATH].join(delimiter),
+      HOME: consumerHome,
+      npm_config_cache: cache,
+      CI: 'true',
+      RUNNER_TRACKING_ID: process.env.RUNNER_TRACKING_ID,
+      BASE_DIR: baseDir,
+      FF_EMIT_BACKEND_PORT: '1',
+      DATABASE_PATH: resolve('data', 'test.db'),
+      ...(windows
+        ? {
+            USERPROFILE: consumerHome,
+            APPDATA: join(consumerHome, 'AppData', 'Roaming'),
+            LOCALAPPDATA: join(consumerHome, 'AppData', 'Local'),
+            SystemRoot: process.env.SystemRoot,
+            ComSpec: process.env.ComSpec,
+            PATHEXT: process.env.PATHEXT,
+            TEMP: process.env.TEMP,
+            TMP: process.env.TMP,
+          }
+        : { SHELL: '/bin/sh', TMPDIR: process.env.TMPDIR }),
+    },
+  }
+);
 // The backend reports the port it actually bound, including after a collision.
 const lines = createInterface({ input: child.stdout });
 let origin;
@@ -121,10 +161,10 @@ async function verifyServer() {
     const response = await fetch(`${origin}/health/database`, {
       signal: AbortSignal.timeout(1500),
     }).catch(() => undefined);
-    if (response?.ok) {
+    if (response?.status === 200) {
       z.object({ database: z.literal('connected') }).parse(await response.json());
       const page = await fetch(origin, { signal: AbortSignal.timeout(5000) });
-      if (!page.ok || !(await page.text()).includes('id="root"')) {
+      if (page.status !== 200 || !(await page.text()).includes('id="root"')) {
         throw new Error('Missing packed UI');
       }
       await verifyTerminal(origin);
@@ -154,7 +194,13 @@ try {
 } finally {
   try {
     if (child.pid) {
-      await stopProcessGroup(child.pid, { baseDir, graceMs: 5000 });
+      if (windows) {
+        if (child.exitCode === null && child.signalCode === null) {
+          stopWindowsTree(child.pid);
+        }
+      } else {
+        await stopProcessGroup(child.pid, { baseDir, graceMs: 5000 });
+      }
     }
   } finally {
     for (const signal of signals) {

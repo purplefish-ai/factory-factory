@@ -14,20 +14,17 @@ while (!existsSync(join(root, 'package.json')) && dirname(root) !== root) {
 }
 
 async function main() {
-  const minimum = readFileSync(join(root, '.node-minimum'), 'utf8').trim();
-  if (!/^\d+\.\d+\.\d+$/.test(minimum)) {
-    throw new Error(
-      'The installation has an invalid Node.js requirement. Reinstall Factory Factory.'
-    );
-  }
-  if (!(await ensureNode(process.versions.node, minimum))) {
+  const requirement = readFileSync(join(root, '.node-minimum'), 'utf8').trim();
+  if (!(await ensureNode(process.versions.node, requirement))) {
     process.exitCode = 1;
     return;
   }
 
   const source = existsSync(join(directory, 'index.ts'));
   const args = process.argv.slice(2);
-  if (source && args[0] === 'serve' && !args.includes('--help') && !args.includes('-h')) {
+  const serve =
+    args[0] === 'serve' && !args.some((arg) => ['--help', '-h', '--version', '-V'].includes(arg));
+  if (source && serve) {
     const native = spawnSync(
       process.execPath,
       [join(root, 'scripts', 'ensure-native-modules.mjs'), 'node'],

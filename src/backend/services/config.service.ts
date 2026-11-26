@@ -268,6 +268,10 @@ function resolveNodeExecPath(env: ConfigEnv): string {
   return env.FF_NODE_EXEC_PATH ?? process.execPath;
 }
 
+function resolveShellPath(env: ConfigEnv): string {
+  return env.SHELL ?? (process.platform === 'win32' ? 'cmd.exe' : '/bin/bash');
+}
+
 /**
  * Load system configuration from environment
  */
@@ -314,7 +318,7 @@ function loadSystemConfig(): SystemConfig {
     backendHost: env.BACKEND_HOST,
     nodeEnv,
     webConcurrency: env.WEB_CONCURRENCY,
-    shellPath: env.SHELL ?? '/bin/bash',
+    shellPath: resolveShellPath(env),
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
     databasePath: databasePathFromEnv ?? join(baseDir, 'data.db'),

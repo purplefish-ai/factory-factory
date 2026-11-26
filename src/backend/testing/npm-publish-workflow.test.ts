@@ -85,12 +85,22 @@ describe('npm publish workflow', () => {
     expect(getStep(verifyJob, 'Setup Node.js').with?.['node-version-file']).toBe('.node-version');
     const consumer = getJob('consumer');
     expect(consumer.needs).toBe('verify');
-    expect(consumer.strategy?.matrix.os).toEqual(['ubuntu-latest', 'macos-latest']);
+    expect(consumer.strategy?.matrix.os).toEqual([
+      'ubuntu-latest',
+      'macos-latest',
+      'windows-latest',
+    ]);
     expect(getStep(consumer, 'Launch with bundled npm').run).toBe(
       'bash scripts/check-packed-consumer.sh cold'
     );
     const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
-    expect(consumer.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
+    const [ltsFloor, currentFloor] = minimum.match(/\d+\.\d+\.\d+/g) ?? [];
+    expect(consumer.strategy?.matrix['node-version']).toEqual([
+      ltsFloor,
+      '24.x',
+      currentFloor,
+      nodeVersion,
+    ]);
     expect(getStep(consumer, 'Relaunch from the same npx cache').run).toBe(
       'bash scripts/check-packed-consumer.sh upgrade'
     );

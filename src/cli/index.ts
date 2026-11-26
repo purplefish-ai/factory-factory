@@ -19,6 +19,7 @@ import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
+import { bindingRecovery } from './native-binding-recovery.mjs';
 import { runProxyCommand } from './proxy';
 import { registerProxyCommand } from './proxy-mode';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
@@ -26,6 +27,7 @@ import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { checkServePrerequisites } from './serve-prerequisites';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { ensureServeTools } from './setup-prerequisites.mjs';
+import { NativeBindingError, probeSqliteDrivers, resolveSqliteDrivers } from './sqlite-runtime.mjs';
 import { registerStudioCommand } from './studio';
 import { runSupervisedServeSession } from './supervised-serve-session';
 import { registerTailscaleCommand } from './tailscale';
@@ -193,6 +195,13 @@ function requireServePrerequisites(dev: boolean): boolean {
   return false;
 }
 
+function reportServeStartupError(error: unknown): void {
+  console.error(chalk.red(`\n  ✗ ${error instanceof Error ? error.message : String(error)}`));
+  if (error instanceof NativeBindingError) {
+    console.error(bindingRecovery(PROJECT_ROOT, process.argv.slice(2)));
+  }
+}
+
 program
   .name('ff')
   .description('FACTORY FACTORY - Workspace-based coding environment')
@@ -229,13 +238,6 @@ program
       return;
     }
 
-    // Ensure data directory exists
-    if (verbose) {
-      console.log(chalk.gray('  Ensuring data directory exists...'));
-    }
-    ensureDataDir(databasePath);
-
-    const { frontendPort, backendPort } = await resolvePortsOrExit(options, verbose);
     let releaseRunningMarker: (() => void) | undefined;
     if (
       !options.dev &&
@@ -248,20 +250,30 @@ program
         join(dirname(PROJECT_ROOT), `.factory-factory-running-${process.pid}`)
       );
     }
+    let ports: Awaited<ReturnType<typeof resolvePortsOrExit>>;
     try {
       if (!options.dev && (await recoverInterruptedApplicationUpdate(PROJECT_ROOT, databasePath))) {
         releaseRunningMarker?.();
         const restarted = spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit' });
         process.exit(restarted.status ?? 1);
       }
+      if (!(options.dev || existsSync(join(__dirname, 'index.ts')))) {
+        probeSqliteDrivers(resolveSqliteDrivers(PROJECT_ROOT));
+      }
+      if (verbose) {
+        console.log(chalk.gray('  Ensuring data directory exists...'));
+      }
+      ensureDataDir(databasePath);
+      ports = await resolvePortsOrExit(options, verbose);
       await runMigrationsOrExit(databasePath, verbose, !!options.dev);
     } catch (error) {
       releaseRunningMarker?.();
-      console.error(chalk.red(`\n  ✗ ${error instanceof Error ? error.message : String(error)}`));
+      reportServeStartupError(error);
       process.exitCode = 1;
       return;
     }
 
+    const { frontendPort, backendPort } = ports;
     const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
 
     const controller = new AbortController();

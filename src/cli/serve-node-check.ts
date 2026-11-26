@@ -12,7 +12,7 @@ if (process.argv[2] === 'serve') {
     root = dirname(root);
   }
   const metadata = z
-    .object({ engines: z.object({ node: z.string().regex(/^>=\d+\.\d+\.\d+$/) }) })
+    .object({ engines: z.object({ node: z.string() }) })
     .parse(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')));
   const issue = getNodeRuntimeIssue(process.versions.node, metadata.engines.node);
   if (issue) {

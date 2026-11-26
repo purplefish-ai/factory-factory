@@ -16,11 +16,11 @@ query against the installed artifact.
 The Dockerfile pins the Node/Alpine multi-platform image by its OCI index
 digest. The index selects the correct Linux amd64 or arm64 image. Update the
 Node tag, index digest, and development pin in `.node-version` together. The
-CLI's user minimum is tracked separately in `.node-minimum` and `package.json`
-(`engines.node`); keep those two requirements in sync without raising them for
-routine Docker or development-pin updates. Raise the user minimum only for
-required runtime APIs, dependency compatibility, security fixes, or end of
-support.
+published CLI has its own supported runtime range in `.node-minimum` and
+`package.json` (`engines.node`). Keep those ranges identical. A Docker or
+development pin update can ship independently of changes to consumer support.
+Test each supported line against the packed tarball before staging it for
+release.
 
 Cloudflared and uv use versioned release assets with committed SHA-256 hashes
 for both supported architectures. Hashes are verified before either executable

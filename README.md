@@ -34,48 +34,44 @@ terminals, issues, and pull request status together in one place.
 
 ## Quick start
 
-You will need:
+### macOS desktop
 
-- Node.js 26.8.1+ for the CLI; development uses the version pinned in
-  `.node-version`. The desktop app uses Electron 45.0's bundled Node.js 24.22
-  runtime
-- macOS 13 (Ventura) or newer for the macOS desktop app
-- A local git repository
-- At least one agent provider:
-  - Claude (runtime included), authenticated through the setup terminal in
-    Settings or with `pnpm dlx factory-factory@latest claude auth login`
-  - A ChatGPT/Codex account configured for Codex sessions
-- The authenticated [GitHub CLI](https://cli.github.com/) for GitHub issues and
-  pull requests
+The desktop app runs on macOS 13 (Ventura) or newer and includes its own Node.js
+runtime through Electron. Check
+[GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases) for
+a signed disk image (`.dmg`). When one is available, open it, drag Factory
+Factory to Applications, and launch the app. Until the first desktop release is
+published, use the CLI below.
 
-Start Factory Factory without installing it:
+### Command line
+
+Install Git and a stable Node.js release. Node includes npx. The CLI supports
+Node.js 24.x (starting at 24.0.0) and Node.js 26.8.1 or later. Run this command
+in your terminal.
 
 ```bash
 npx factory-factory@latest serve
 ```
 
-Before starting, `ff serve` checks the Node.js version, Git, and the files
-needed for the selected mode. Development mode (`--dev`) also checks for the
-checkout's local tsx and Vite tools. Missing builds or development tools print
-checkout-specific recovery commands before creating the database or starting
-servers.
-
 Factory Factory opens in your browser and stores its database in
-`~/factory-factory/` by default.
+`~/factory-factory/` by default. The CLI checks Node.js, Git and the files
+needed for the selected mode before creating a database. Development mode
+(`--dev`) also checks for the checkout's tsx and Vite tools.
 
-`serve` checks Node.js and Git before starting. When a prerequisite needs
-fixing, it shows the command and offers to run it with
-`Run this command? [y/N]`. **The default is No**: press Enter to decline.
-Commands run only after an explicit `y` or `yes`, with separate confirmation for
-each fix. Ctrl+C cancels startup. Scripts and noninteractive terminals receive
-instructions without running fixes.
+If a prerequisite is missing, the CLI prints the fix and asks before running it.
+Press Enter to decline, type `y` or `yes` to accept, or press Ctrl+C to cancel
+startup. In noninteractive terminals the CLI prints the instructions. Setup can
+use fnm, Homebrew or WinGet when available. After installing Node.js, activate
+it in your shell and rerun the command.
 
-Automatic installation uses an existing fnm (for Node), Homebrew, or WinGet;
-otherwise, installation links are provided. After a Node upgrade, activate the
-new version and rerun `serve`. Tool installations may also require a new
-terminal so your PATH updates. Missing GitHub CLI or authentication prompts for
-optional setup; declining still lets you use local projects. Agent
-authentication remains available through onboarding and Settings.
+### Projects, agents and integrations
+
+Choose a local Git repository when you add your first project. To start an agent
+session, sign in to Claude or Codex using the setup terminal in Settings. Claude
+also supports `npx factory-factory@latest claude auth login`. To work with
+GitHub issues and pull requests, install the
+[GitHub CLI](https://cli.github.com/) and run `gh auth login`. You can skip
+GitHub setup when working locally.
 
 See [Settings](docs/admin-settings.md) for IDE commands, default chat models,
 and project configuration.
