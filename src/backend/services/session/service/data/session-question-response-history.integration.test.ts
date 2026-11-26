@@ -60,6 +60,51 @@ afterAll(async () => {
   await destroyIntegrationDatabase(db);
 });
 
+it('merges a previously saved async answer with its delivered Codex reply', async () => {
+  const domain = new SessionDomainService();
+  const question = 'Does the preview look ready?';
+  const local = domain.upsertQuestionResponse('session', 1, {
+    type: 'question_response',
+    questionResponse: {
+      toolUseId: 'elicitation:legacy-preview',
+      status: 'answered',
+      questions: [
+        {
+          question,
+          header:
+            'Codex keeps working while you answer. An answer sent after it finishes is not delivered.',
+          answers: ['Yes'],
+          note: 'Keep the notes',
+        },
+      ],
+    },
+  });
+  await persistQuestionResponse('session', 'legacy-codex', local);
+  await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
+  domain.upsertQuestionResponse('session', 0, {
+    type: 'question_response',
+    questionResponse: {
+      toolUseId: 'provider-preview',
+      status: 'answered',
+      questions: [{ question, answers: ['Yes\n\nKeep the notes'] }],
+    },
+    questionToolDetails: { toolName: 'request_user_input_async' },
+  });
+  await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
+  await hydrateQuestionResponseHistory(domain, 'session', 'legacy-codex');
+  expect(domain.getTranscriptSnapshot('session')).toMatchObject([
+    {
+      message: {
+        type: 'question_response',
+        questionResponse: {
+          toolUseId: 'provider-preview',
+          questions: [{ question, answers: ['Yes\n\nKeep the notes'] }],
+        },
+      },
+    },
+  ]);
+});
+
 it('reopens a completed question from SQLite at its provider tool position', async () => {
   const live = new SessionDomainService();
   const restored = new SessionDomainService();

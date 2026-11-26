@@ -4,6 +4,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/st
 import { mergeQuestionResponseHistory } from '@/backend/services/session/service/store/session-question-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { QuestionResponseSchema } from '@/shared/acp-protocol/protocol/question-response';
+import { reconcileLegacyCodexQuestionOverlays } from './codex-legacy-question-overlays';
 import {
   createProviderHistoryHydrator,
   getProviderHistorySessionId,
@@ -104,8 +105,14 @@ export async function hydrateQuestionResponseHistory(
         : [];
     });
     if (restored.length > 0) {
-      const transcript = domain.getTranscriptSnapshot(sessionId);
-      domain.replaceTranscript(sessionId, mergeQuestionResponseHistory(transcript, restored));
+      const reconciled = reconcileLegacyCodexQuestionOverlays(
+        domain.getTranscriptSnapshot(sessionId),
+        restored
+      );
+      domain.replaceTranscript(
+        sessionId,
+        mergeQuestionResponseHistory(reconciled.transcript, reconciled.restored)
+      );
     }
   } catch {
     logger.warn('Unable to hydrate question responses', { sessionId });

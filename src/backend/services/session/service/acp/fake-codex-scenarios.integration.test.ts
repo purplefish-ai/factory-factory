@@ -39,11 +39,13 @@ async function playScenario(
     stopAfterFirstChunk = false,
     chunkDelayMs,
     stopAfterRetry = false,
+    answers,
   }: {
     optionId?: string;
     stopAfterFirstChunk?: boolean;
     chunkDelayMs?: number;
     stopAfterRetry?: boolean;
+    answers?: Record<string, string[]>;
   } = {}
 ) {
   // The session working directory arrives resolved; macOS temp dirs live under /private.
@@ -107,7 +109,7 @@ async function playScenario(
           }
         } else if (event.type === 'acp_permission_request') {
           events.push({ type: 'permission', params: event.params });
-          bridge.resolvePermission(event.requestId, optionId);
+          bridge.resolvePermission(event.requestId, optionId, answers);
         }
       },
     },
@@ -236,6 +238,16 @@ it('permission-request replies without running the command once declined', async
   expect(played.response.stopReason).toBe('end_turn');
   expect(played.sequence).toEqual(['permission', 'agent_message_chunk']);
   expect(played.chunks).toEqual(['You declined the command, so I did not run it.']);
+}, 20_000);
+
+it('steers an async question response while the Codex turn is still running', async () => {
+  const played = await playScenario('async-question', {
+    optionId: 'accept',
+    answers: { question_0: ['Approve wording'] },
+  });
+  expect(played.response.stopReason).toBe('end_turn');
+  expect(played.permissions).toMatchObject([{ toolCall: { rawInput: { delivery: 'async' } } }]);
+  expect(played.chunks).toContain('The async answer reached Codex.');
 }, 20_000);
 
 it('error ends the turn with a session failure the client can show', async () => {

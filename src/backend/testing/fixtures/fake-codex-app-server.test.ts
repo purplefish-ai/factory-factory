@@ -347,7 +347,7 @@ describe('fake Codex app-server scenarios', () => {
     const [code] = await once(child, 'close');
     expect(code).toBe(2);
     expect(stderr).toBe(
-      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, tool-call, permission-request, error, retry-recover, retry-fail, slow-stream\n`
+      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, tool-call, permission-request, async-question, error, retry-recover, retry-fail, slow-stream\n`
     );
   });
 });

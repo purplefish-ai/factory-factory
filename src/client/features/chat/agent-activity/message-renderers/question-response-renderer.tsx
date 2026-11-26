@@ -1,13 +1,17 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { QuestionIcon } from '@phosphor-icons/react/dist/csr/Question';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
+import { MarkdownRenderer } from '@/client/components/markdown';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { cn } from '@/lib/utils';
 import type { AgentMessage } from '@/shared/acp-protocol';
+import { CODEX_ASYNC_QUESTION_TOOL } from '@/shared/acp-protocol/protocol/question-response';
 
 type QuestionResponseRendererProps = {
   message: Extract<AgentMessage, { type: 'question_response' }>;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 };
 
 const presentation = {
@@ -16,11 +20,18 @@ const presentation = {
   unavailable: { label: 'Question outcome unavailable', Icon: QuestionIcon },
 };
 
-export function QuestionResponseRenderer({ message, className }: QuestionResponseRendererProps) {
+export function QuestionResponseRenderer({
+  message,
+  className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
+}: QuestionResponseRendererProps) {
   const { status, questions } = message.questionResponse;
-  const details = questions.some((question) => question.redacted)
-    ? null
-    : message.questionToolDetails;
+  const details = message.questionToolDetails;
+  const showDetails =
+    details &&
+    !questions.some((question) => question.redacted) &&
+    !(status === 'answered' && details.toolName === CODEX_ASYNC_QUESTION_TOOL);
   const { label, Icon } = presentation[status];
   const rows = withOccurrenceKeys(questions, ({ id, question, header }) =>
     JSON.stringify(id === undefined ? [header, question] : [id])
@@ -42,7 +53,12 @@ export function QuestionResponseRenderer({ message, className }: QuestionRespons
                 {header && header !== question && (
                   <span className="block text-xs font-normal text-muted-foreground">{header}</span>
                 )}
-                {question}
+                <MarkdownRenderer
+                  content={question}
+                  className="[&_p]:my-0"
+                  resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+                  onWorkspaceFileLink={onWorkspaceFileLink}
+                />
               </dt>
               {status === 'answered' && (
                 <dd className="mt-0.5 whitespace-pre-wrap">
@@ -57,7 +73,7 @@ export function QuestionResponseRenderer({ message, className }: QuestionRespons
           ))}
         </dl>
       )}
-      {details && (
+      {showDetails && (
         <details className="mt-2 text-xs text-muted-foreground">
           <summary className="cursor-pointer hover:text-foreground">Raw tool details</summary>
           <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2">

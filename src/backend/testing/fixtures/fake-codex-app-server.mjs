@@ -87,6 +87,30 @@ const scenarios = {
       await turn.reply(['You declined the command, so I did not run it.']);
     }
   },
+  'async-question': async (turn) => {
+    const question = 'Does the [preview](README.md) look ready?';
+    const answer = new Promise((resolve) => pendingSteers.set(turn.id, resolve));
+    turn.notify('item/completed', {
+      threadId: turn.threadId,
+      turnId: turn.id,
+      completedAtMs: Date.now(),
+      item: {
+        type: 'agentMessage',
+        id: 'async-preview-question',
+        text: question,
+        phase: 'commentary',
+        memoryCitation: null,
+        delivery: 'async',
+        questions: [{ title: question, options: ['Approve wording', 'Revise wording'] }],
+      },
+    });
+    await turn.reply(['I am still working while you review.']);
+    const input = await Promise.race([answer, turn.wait(60_000)]);
+    pendingSteers.delete(turn.id);
+    if (Array.isArray(input) && input.some(({ text }) => text?.includes('Approve wording'))) {
+      await turn.reply(['The async answer reached Codex.']);
+    }
+  },
   error: (turn) => {
     const error = {
       message: 'Sandbox scenario error: the fake provider failed this turn on purpose.',
@@ -175,6 +199,7 @@ const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const notify = (method, params) => send({ method, params });
 const pendingServerRequests = new Map();
 const interrupts = new Map();
+const pendingSteers = new Map();
 let serverRequestCount = 0;
 
 /** Plays the selected scenario as one turn, with the item shapes of the Codex app-server protocol. */
@@ -362,6 +387,12 @@ appServerInput?.on('line', (line) => {
     case 'turn/interrupt':
       interrupts.get(request.params.turnId)?.();
       break;
+    case 'turn/steer': {
+      const turnId = request.params.expectedTurnId;
+      pendingSteers.get(turnId)?.(request.params.input);
+      result = { turnId };
+      break;
+    }
     case 'mcpServerStatus/list':
       result = { data: [], nextCursor: null };
       break;

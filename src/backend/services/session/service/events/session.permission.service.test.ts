@@ -249,6 +249,83 @@ describe('SessionPermissionService', () => {
     expect(JSON.stringify(rows)).not.toContain('private-token');
   });
 
+  it('shows an async Codex answer after work streamed while its question was open', async () => {
+    const domain = new SessionDomainService();
+    const persist = vi.fn().mockResolvedValue(undefined);
+    const service = new SessionPermissionService({
+      sessionDomainService: domain,
+      getProviderSessionId: () => 'native',
+      persistQuestionResponse: persist,
+    });
+    const handler = new AcpClientHandler(
+      'session-1',
+      (sessionId, event) => {
+        if (event.type === 'acp_permission_request') {
+          service.handlePermissionRequest(sessionId, event);
+        }
+      },
+      service.createPermissionBridge('session-1')
+    );
+    const response = handler.createElicitation({
+      mode: 'form',
+      sessionId: 'native',
+      message: 'Codex keeps working while you answer.',
+      requestedSchema: {
+        properties: {
+          question_0: {
+            type: 'string',
+            title: 'Should I use the preview?',
+            _meta: { codex: { isOther: true } },
+            oneOf: [
+              { const: 'Yes', title: 'Yes' },
+              { const: 'No', title: 'No' },
+            ],
+          },
+          question_0_note: {
+            type: 'string',
+            title: 'Additional answer or note',
+            _meta: { codex: { role: 'user_note', questionId: 'question_0' } },
+          },
+        },
+      },
+      _meta: { codex: { delivery: 'async' } },
+    });
+    domain.appendClaudeEvent('session-1', {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Work in progress' }] },
+    });
+    const requestId = domain.getPendingInteractiveRequest('session-1')!.requestId;
+    const emit = vi.spyOn(domain, 'upsertQuestionResponse');
+    await service.respondToPermission('session-1', requestId, 'accept', {
+      question_0: ['Yes'],
+      question_0_note: ['Keep the notes'],
+    });
+    await expect(response).resolves.toEqual({
+      action: 'accept',
+      content: { question_0: 'Yes', question_0_note: 'Keep the notes' },
+    });
+    expect(domain.getTranscriptSnapshot('session-1')).toMatchObject([
+      { message: { type: 'assistant' } },
+      {
+        message: {
+          type: 'question_response',
+          questionResponse: {
+            status: 'answered',
+            questions: [
+              { question: 'Should I use the preview?', answers: ['Yes\n\nKeep the notes'] },
+            ],
+          },
+        },
+      },
+    ]);
+    expect(emit).toHaveBeenCalledOnce();
+    const answer = domain.getTranscriptSnapshot('session-1')[1]?.message;
+    expect(answer?.type === 'question_response' && answer.questionResponse.questions).toEqual([
+      { question: 'Should I use the preview?', answers: ['Yes\n\nKeep the notes'] },
+    ]);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it.each([
     { optionId: 'accept', answers: { count: ['0'] }, action: 'cancel' },
     { optionId: 'decline', answers: { count: ['1'] }, action: 'decline' },

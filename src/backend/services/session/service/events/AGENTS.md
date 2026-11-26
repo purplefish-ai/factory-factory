@@ -42,6 +42,10 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   publishes its outcome at the original tool use or permission request. Invalid
   or cancelled requests produce cancelled rows.
   `session.permission.service.test.ts`.
+- Codex async elicitation outcomes appear at submission time in the live
+  transcript. Codex steers the answer after accepting the form response, so its
+  rollout is the durable record of delivery.
+  `session.permission.service.test.ts`.
 - An adversarial-review session's permission requests are never shown or
   answerable: each is rejected with its reject option, or cancelled if it has
   none. `session.permission.service.test.ts`.
