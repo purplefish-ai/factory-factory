@@ -107,7 +107,10 @@ function RightPanelStory({
                   return eventOrigin.agent;
                 },
                 'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
-                'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
+                'workspace.getInitStatus': () => ({
+                  status: 'READY',
+                  initOutput: 'Workspace setup complete.',
+                }),
                 'workspace.getGitStatus': () => ({ files: [] }),
                 'workspace.getDiffVsMain': () => ({
                   added: [],
@@ -290,6 +293,45 @@ export const RestoresStoredLayout: Story = {
     await expect(readStorageItem(`workspace-panel-tabs-${workspaceId}`)).toBe('[]');
     await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
   },
+};
+
+export const CompactLogsLight: Story = {
+  globals: { theme: 'light' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const tabs = canvas.getByRole('tablist', { name: 'Logs and terminals' });
+    const sources = canvas.getByRole('tablist', { name: 'Log source' });
+    const logs = within(tabs).getByRole('tab', { name: 'Logs' });
+    const terminal = within(tabs).getByRole('tab', { name: 'Terminal' });
+    const setup = within(sources).getByRole('tab', { name: 'Setup' });
+    const height = (tab: HTMLElement) => tab.parentElement?.getBoundingClientRect().height;
+
+    const expectThemedOutput = async (message: string) => {
+      const output = await canvas.findByText(message);
+      const viewport = output.parentElement;
+      if (!viewport) {
+        throw new Error('Expected a log viewport');
+      }
+      const theme = getComputedStyle(document.body);
+      await expect(getComputedStyle(viewport).backgroundColor).toBe(theme.backgroundColor);
+      await expect(getComputedStyle(output).color).toBe(theme.color);
+    };
+
+    await expectThemedOutput('Workspace setup complete.');
+    await expect(height(logs)).toBeCloseTo(height(terminal) ?? 0);
+    await expect(height(setup)).toBeCloseTo(height(terminal) ?? 0);
+
+    await userEvent.click(within(sources).getByRole('tab', { name: 'Dev' }));
+    await expectThemedOutput('Waiting for dev server output…');
+    await userEvent.click(within(sources).getByRole('tab', { name: 'Post-Run' }));
+    await expectThemedOutput('Waiting for post-run script output…');
+    await userEvent.click(setup);
+  },
+};
+
+export const CompactLogsDark: Story = {
+  ...CompactLogsLight,
+  globals: { theme: 'dark' },
 };
 
 export const LegacyIterationPreference: Story = {

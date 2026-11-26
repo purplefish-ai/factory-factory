@@ -209,8 +209,8 @@ export const RightPanel = memo(function RightPanel({
       {/* Unified tab bar with terminal tabs inline */}
       <div
         className={cn(
-          'flex items-center gap-0.5 p-1 bg-shell min-w-0 overflow-x-auto',
-          isMobile && 'min-h-9 [&_button]:min-h-9 [&_button]:min-w-9',
+          'flex items-center gap-0.5 px-1.5 py-0.5 bg-shell min-w-0 overflow-x-auto',
+          isMobile && 'min-h-9 p-1 [&_button]:min-h-9 [&_button]:min-w-9',
           !isLogsActive && 'border-b'
         )}
       >
@@ -221,6 +221,7 @@ export const RightPanel = memo(function RightPanel({
           leadingTabs={
             !isMobile && (
               <TabButton
+                size="sm"
                 label="Logs"
                 icon={<StatusDot tone={logsGroupStatus} size="xs" />}
                 isActive={isLogsActive}
@@ -234,14 +235,14 @@ export const RightPanel = memo(function RightPanel({
       {isLogsActive && (
         <div
           className={cn(
-            'flex items-center gap-2 px-2 py-1 bg-shell border-b min-w-0',
-            isMobile && '[&_button]:min-h-9 [&_button]:min-w-9'
+            'flex items-center gap-2 px-1.5 py-0.5 bg-shell border-b min-w-0',
+            isMobile && 'px-2 py-1 [&_button]:min-h-9 [&_button]:min-w-9'
           )}
         >
-          <SectionLabel className="whitespace-nowrap">Log source</SectionLabel>
+          <SectionLabel className="shrink-0 whitespace-nowrap pl-2">Log source</SectionLabel>
           <TabList
             aria-label="Log source"
-            className="gap-0.5 min-w-0 rounded-md border border-border/70 bg-muted/70 p-0.5"
+            className="gap-0.5 min-w-0 overflow-x-auto scrollbar-hide"
           >
             {LOG_SOURCES.map(({ tab, label }) => (
               <TabButton
@@ -251,7 +252,6 @@ export const RightPanel = memo(function RightPanel({
                 icon={<StatusDot tone={logStatuses[tab]} size="xs" />}
                 isActive={lastLogsTab === tab}
                 onSelect={() => setActiveBottomTab(tab)}
-                className="border-transparent"
               />
             ))}
           </TabList>

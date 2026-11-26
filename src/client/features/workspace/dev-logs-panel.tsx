@@ -19,7 +19,7 @@ export function DevLogsPanel({
       {/* Output - no header, connection status is shown in the tab bar */}
       <div
         ref={followOutputRef}
-        className="h-full overflow-y-auto overflow-x-auto scroll-smooth font-mono text-xs p-4 bg-black text-white"
+        className="h-full overflow-y-auto overflow-x-auto scroll-smooth font-mono text-xs p-4 bg-background text-foreground"
       >
         <pre className="whitespace-pre-wrap break-words">{output || emptyMessage}</pre>
       </div>
