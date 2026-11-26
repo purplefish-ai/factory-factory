@@ -83,7 +83,8 @@ describe('npm publish workflow', () => {
     expect(getStep(verifyJob, 'Setup Node.js').with?.['node-version-file']).toBe('.node-version');
     const consumer = getJob('consumer');
     expect(consumer.needs).toBe('verify');
-    expect(consumer.strategy?.matrix['node-version']).toEqual(['26.8.1', nodeVersion]);
+    const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
+    expect(consumer.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
     expect(getStep(consumer, 'Relaunch from the same npx cache').run).toBe(
       'bash scripts/check-packed-consumer.sh upgrade'
     );

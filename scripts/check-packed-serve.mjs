@@ -133,6 +133,16 @@ async function verifyServer() {
   throw new Error('Timeout waiting for packed database and UI');
 }
 
+function signalGroup(signal) {
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    if (error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
 try {
   await Promise.race([
     verifyServer(),
@@ -145,17 +155,11 @@ try {
   if (child.pid) {
     try {
       if (child.exitCode === null && child.signalCode === null) {
-        process.kill(-child.pid, 'SIGTERM');
+        signalGroup('SIGTERM');
       }
       await Promise.race([exited, delay(5000, null, { ref: false })]);
     } finally {
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch (error) {
-        if (error.code !== 'ESRCH') {
-          throw error;
-        }
-      }
+      signalGroup('SIGKILL');
     }
   }
 }
