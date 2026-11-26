@@ -304,6 +304,8 @@ export const CompactLogsLight: Story = {
     const logs = within(tabs).getByRole('tab', { name: 'Logs' });
     const terminal = within(tabs).getByRole('tab', { name: 'Terminal' });
     const setup = within(sources).getByRole('tab', { name: 'Setup' });
+    const dev = within(sources).getByRole('tab', { name: 'Dev' });
+    const postRun = within(sources).getByRole('tab', { name: 'Post-Run' });
     const height = (tab: HTMLElement) => tab.parentElement?.getBoundingClientRect().height;
 
     const expectThemedOutput = async (message: string) => {
@@ -318,12 +320,13 @@ export const CompactLogsLight: Story = {
     };
 
     await expectThemedOutput('Workspace setup complete.');
-    await expect(height(logs)).toBeCloseTo(height(terminal) ?? 0);
-    await expect(height(setup)).toBeCloseTo(height(terminal) ?? 0);
+    for (const tab of [logs, terminal, setup, dev, postRun]) {
+      await expect(height(tab)).toBeCloseTo(26);
+    }
 
-    await userEvent.click(within(sources).getByRole('tab', { name: 'Dev' }));
+    await userEvent.click(dev);
     await expectThemedOutput('Waiting for dev server output…');
-    await userEvent.click(within(sources).getByRole('tab', { name: 'Post-Run' }));
+    await userEvent.click(postRun);
     await expectThemedOutput('Waiting for post-run script output…');
     await userEvent.click(setup);
   },

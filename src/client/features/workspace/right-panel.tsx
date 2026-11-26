@@ -239,7 +239,9 @@ export const RightPanel = memo(function RightPanel({
             isMobile && 'px-2 py-1 [&_button]:min-h-9 [&_button]:min-w-9'
           )}
         >
-          <SectionLabel className="shrink-0 whitespace-nowrap pl-2">Log source</SectionLabel>
+          <SectionLabel className={cn('shrink-0 whitespace-nowrap', !isMobile && 'pl-2')}>
+            Log source
+          </SectionLabel>
           <TabList
             aria-label="Log source"
             className="gap-0.5 min-w-0 overflow-x-auto scrollbar-hide"
