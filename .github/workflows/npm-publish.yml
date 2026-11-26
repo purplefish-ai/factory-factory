@@ -140,7 +140,7 @@ jobs:
         if: matrix.node-version == '24.0.0'
         run: bash scripts/check-packed-consumer.sh upgrade
       - name: Recover a broken cached SQLite binding
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '24.0.0'
+        if: matrix.os != 'windows-latest' && matrix.node-version == '24.0.0'
         shell: bash
         run: |
           set -euo pipefail
