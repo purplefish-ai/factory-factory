@@ -72,7 +72,8 @@ export function runHistoryProjection(
     reservedWorkspaceId: row.reservedWorkspaceId,
     reservedSessionId: row.reservedSessionId,
     workspaceId: row.workspaceId,
-    // Only workspace-owner coordination can confirm LIVE or DELETED provenance.
+    // Agent management orchestration fills in provenance and status together
+    // after the workspace owner verifies the run's reserved origin.
     workspaceState: row.reservedWorkspaceId ? 'RESERVED' : 'UNRESERVED',
     workspaceStatus: null,
   });

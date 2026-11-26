@@ -53,7 +53,7 @@ fields, and `EventRunItem`.
   `event-agent-activation.test.tsx`, `event-agent-delete.test.tsx`,
   `event-run-recovery.test.tsx`.
 - A history whose first read failed shows an error, never an empty state. Event
-  runs link only to `LIVE` workspaces. Both kinds of runs label archiving and
+  runs link only when `workspaceState` is `LIVE`. Both kinds label archiving and
   archived workspaces in place of the workspace link.
   `event-run-history.test.tsx`, `event-evaluation-history.test.tsx`,
   `agent-ui.test.tsx`.
