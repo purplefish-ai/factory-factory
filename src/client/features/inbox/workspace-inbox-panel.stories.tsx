@@ -336,7 +336,15 @@ export const ReadMorePending: Story = {
     await expect(status.getBoundingClientRect().height).toBeLessThan(100);
   },
 };
-export const Empty: Story = { args: { scenario: 'empty' } };
+export const Empty: Story = {
+  args: { scenario: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('No messages yet')).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'Inbox' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
+  },
+};
 export const Loading: Story = { args: { scenario: 'loading' } };
 export const ListFailure: Story = { args: { scenario: 'list-error' } };
 export const ReadFailure: Story = {

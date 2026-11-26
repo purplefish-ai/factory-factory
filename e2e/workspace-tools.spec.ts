@@ -108,6 +108,15 @@ test('More tools render their fixtures and Logs reopens the last source', async 
   await expect(drawer.getByText('No child workspaces yet', { exact: true })).toBeVisible();
   await drawer.getByRole('button', { name: /more tools/i }).click();
   await page.getByRole('menuitemradio', { name: 'Logs', exact: true }).click();
+  const labelInset = await drawer.getByText('Log source', { exact: true }).evaluate((label) => {
+    const row = label.parentElement;
+    return row
+      ? label.getBoundingClientRect().left -
+          row.getBoundingClientRect().left +
+          Number.parseFloat(getComputedStyle(label).paddingLeft)
+      : 0;
+  });
+  expect(labelInset).toBe(8);
   const dev = drawer.getByRole('tab', { name: 'Dev', exact: true });
   await dev.click();
   await expect(drawer.locator('pre')).toContainText('Development server listening');

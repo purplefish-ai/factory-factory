@@ -39,7 +39,7 @@ export function TabList({ className, ...props }: TabListProps) {
 
 const SIZE_CLASSES = {
   default: { wrapper: 'text-sm', tab: 'gap-1.5 py-1 pl-2', close: 'mr-2' },
-  sm: { wrapper: 'text-xs', tab: 'gap-1 py-0.5 pl-2', close: 'mr-1' },
+  sm: { wrapper: 'text-xs', tab: 'gap-1 py-1 pl-2', close: 'mr-1' },
 } as const;
 
 interface TabButtonProps {
@@ -117,7 +117,8 @@ export function TabButton({
       className={cn(
         'group relative flex shrink-0 items-center rounded-md border font-medium whitespace-nowrap transition-all',
         sizeClasses.wrapper,
-        'has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-offset-2',
+        'has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring',
+        size === 'sm' ? 'ring-inset' : 'ring-offset-2',
         isActive
           ? 'bg-background text-foreground shadow-sm border-border'
           : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',

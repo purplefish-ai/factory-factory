@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockGetWorkspaceWithWorktree = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceWithWorktreeOrThrow = vi.hoisted(() => vi.fn());
 const mockGitStateInvalidate = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.fn();
 
 vi.mock('./workspace-helpers', () => ({
   getWorkspaceWithWorktree: (...args: unknown[]) => mockGetWorkspaceWithWorktree(...args),
@@ -19,20 +20,23 @@ vi.mock('@/backend/services/workspace-git-state.service', () => ({
 
 import { workspaceFilesRouter } from './files.trpc';
 
-function createCaller() {
-  return workspaceFilesRouter.createCaller({
-    appContext: {
-      services: {
-        createLogger: () => ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }),
-        workspaceGitStateService: { invalidate: mockGitStateInvalidate },
+function createCaller(signal?: AbortSignal) {
+  return workspaceFilesRouter.createCaller(
+    {
+      appContext: {
+        services: {
+          createLogger: () => ({
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: mockLoggerError,
+          }),
+          workspaceGitStateService: { invalidate: mockGitStateInvalidate },
+        },
       },
-    },
-  } as never);
+    } as never,
+    { signal }
+  );
 }
 
 describe('workspaceFilesRouter', () => {
@@ -101,6 +105,30 @@ describe('workspaceFilesRouter', () => {
     expect(file.content).toBe('hello world');
     expect(file.isBinary).toBe(false);
     expect(file.truncated).toBe(false);
+  });
+
+  it('passes fuzzy filename matching through to the workspace search', async () => {
+    mkdirSync(join(rootDir, 'src'));
+    writeFileSync(join(rootDir, 'src', 'Button.tsx'), 'export {}');
+    mockGetWorkspaceWithWorktree.mockResolvedValue({ worktreePath: rootDir });
+
+    const result = await createCaller().listAllFiles({
+      workspaceId: 'w1',
+      query: 'bttn',
+      match: 'fuzzy',
+    });
+    expect(result).toEqual({ files: [join('src', 'Button.tsx')], hasWorktree: true });
+  });
+
+  it('reports a cancelled search to the caller without logging it as an error', async () => {
+    mockGetWorkspaceWithWorktree.mockResolvedValue({ worktreePath: rootDir });
+    const reason = new Error('Cancelled search');
+    const caller = createCaller(AbortSignal.abort(reason));
+
+    await expect(
+      caller.listAllFiles({ workspaceId: 'w1', query: 'bttn', match: 'fuzzy' })
+    ).rejects.toMatchObject({ cause: reason });
+    expect(mockLoggerError).not.toHaveBeenCalled();
   });
 
   it('lists, reads, and deletes screenshots with path validation', async () => {

@@ -115,6 +115,7 @@ type Story = StoryObj<typeof meta>;
 export const TwoActiveOfEight: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('heading', { name: 'Subagents' })).not.toBeInTheDocument();
     await expect(await canvas.findByLabelText('Active subagents')).toHaveTextContent('2');
     await expect(canvas.getByRole('button', { name: 'Completed · 6' })).toBeVisible();
   },

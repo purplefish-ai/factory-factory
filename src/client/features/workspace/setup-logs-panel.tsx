@@ -53,7 +53,7 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
       )}
       <div
         ref={followOutputRef}
-        className="flex-1 overflow-y-auto overflow-x-auto scroll-smooth font-mono text-xs p-4 bg-black text-white"
+        className="flex-1 overflow-y-auto overflow-x-auto scroll-smooth font-mono text-xs p-4 bg-background text-foreground"
       >
         <pre className="whitespace-pre-wrap break-words">{output || emptyText}</pre>
       </div>

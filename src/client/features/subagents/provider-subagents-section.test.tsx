@@ -177,7 +177,9 @@ describe('ProviderSubagentsSection', () => {
       { sessionId: 'session-1', cursor: null, limit: 100 },
       expect.objectContaining({ enabled: true, refetchOnMount: 'always' })
     );
-    expect(container.textContent).toContain('Subagents');
+    expect(container.querySelector('section[aria-label="Subagents"]')).not.toBeNull();
+    expect(container.textContent).toContain('Loading subagents');
+    expect(container.querySelector('h2')).toBeNull();
   });
 
   it('invalidates the selected session before enabling its query on reconnect', async () => {

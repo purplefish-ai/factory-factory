@@ -106,8 +106,12 @@ function RightPanelStory({
                   eventAgentInput.parse(input);
                   return eventOrigin.agent;
                 },
-                'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
-                'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
+                'workspace.unreadMailCounts': () => ({ [workspaceId]: showUnread ? 3 : 0 }),
+                'workspace.listMail': () => ({ items: [], revision: 0, nextCursor: null }),
+                'workspace.getInitStatus': () => ({
+                  status: 'READY',
+                  initOutput: 'Workspace setup complete.',
+                }),
                 'workspace.getGitStatus': () => ({ files: [] }),
                 'workspace.getDiffVsMain': () => ({
                   added: [],
@@ -292,6 +296,48 @@ export const RestoresStoredLayout: Story = {
   },
 };
 
+export const CompactLogsLight: Story = {
+  globals: { theme: 'light' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const tabs = canvas.getByRole('tablist', { name: 'Logs and terminals' });
+    const sources = canvas.getByRole('tablist', { name: 'Log source' });
+    const logs = within(tabs).getByRole('tab', { name: 'Logs' });
+    const terminal = within(tabs).getByRole('tab', { name: 'Terminal' });
+    const setup = within(sources).getByRole('tab', { name: 'Setup' });
+    const dev = within(sources).getByRole('tab', { name: 'Dev' });
+    const postRun = within(sources).getByRole('tab', { name: 'Post-Run' });
+    const height = (tab: HTMLElement) => tab.parentElement?.getBoundingClientRect().height;
+
+    const expectThemedOutput = async (message: string) => {
+      const output = await canvas.findByText(message);
+      const viewport = output.parentElement;
+      if (!viewport) {
+        throw new Error('Expected a log viewport');
+      }
+      const theme = getComputedStyle(document.body);
+      await expect(getComputedStyle(viewport).backgroundColor).toBe(theme.backgroundColor);
+      await expect(getComputedStyle(output).color).toBe(theme.color);
+    };
+
+    await expectThemedOutput('Workspace setup complete.');
+    for (const tab of [logs, terminal, setup, dev, postRun]) {
+      await expect(height(tab)).toBeCloseTo(26);
+    }
+
+    await userEvent.click(dev);
+    await expectThemedOutput('Waiting for dev server output…');
+    await userEvent.click(postRun);
+    await expectThemedOutput('Waiting for post-run script output…');
+    await userEvent.click(setup);
+  },
+};
+
+export const CompactLogsDark: Story = {
+  ...CompactLogsLight,
+  globals: { theme: 'dark' },
+};
+
 export const LegacyIterationPreference: Story = {
   beforeEach: () => {
     writeStorageItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
@@ -407,9 +453,22 @@ export const OpenSubagentFromActivity: Story = {
 export const UnreadInbox: Story = {
   render: () => <RightPanelStory showUnread />,
   play: async ({ canvasElement }) => {
+    const inbox = within(canvasElement).getByRole('tab', { name: /Inbox/ });
     await expect(
-      await within(canvasElement).findByRole('img', { name: '3 unread inbox messages' })
+      await within(inbox).findByRole('img', { name: '3 unread inbox messages' })
     ).toBeVisible();
+  },
+};
+
+export const EmptyInbox: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('tab', { name: 'Inbox' }));
+    await expect(await canvas.findByText('No messages yet')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Inbox' })).toBeVisible();
+    await expect(
+      canvas.queryByRole('img', { name: '0 unread inbox messages' })
+    ).not.toBeInTheDocument();
   },
 };
 
