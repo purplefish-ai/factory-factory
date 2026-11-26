@@ -91,6 +91,9 @@ jobs:
 
       - name: Publish to npm (dry run)
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        # Feature branches can exercise the current tarball after its version ships.
+        env:
+          npm_config_force: ${{ github.ref != 'refs/heads/main' }}
         run: npm publish --dry-run ./factory-factory-*.tgz
 
       - name: Upload npm package
@@ -104,14 +107,17 @@ jobs:
   consumer:
     name: Packed CLI (${{ matrix.os }}, Node ${{ matrix.node-version }})
     needs: verify
+    defaults:
+      run:
+        shell: bash
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: ['26.8.1', '26.12.1']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ['24.0.0', '24.x', '26.8.1', '26.12.1']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -125,14 +131,30 @@ jobs:
       - name: Launch with bundled npm
         run: bash scripts/check-packed-consumer.sh cold
       - name: Switch the existing installation to the development runtime
-        if: matrix.node-version == '26.8.1'
+        if: matrix.node-version == '24.0.0'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: '.node-version'
           package-manager-cache: false
       - name: Relaunch from the same npx cache
-        if: matrix.node-version == '26.8.1'
+        if: matrix.node-version == '24.0.0'
         run: bash scripts/check-packed-consumer.sh upgrade
+      - name: Recover a broken cached SQLite binding
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '24.0.0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer="$RUNNER_TEMP/factory-factory-consumer"
+          archive=("$PWD"/npm-package/factory-factory-*.tgz)
+          node scripts/check-packed-recovery.mjs "$consumer/npm-cache" \
+            "$(cat "$consumer/installed-package.txt")" "${archive[0]}" "$consumer" "$consumer/data/test.db"
+          bash scripts/check-packed-consumer.sh cold
+
+      - name: Verify scoped Windows recovery
+        if: matrix.os == 'windows-latest' && matrix.node-version == '24.0.0'
+        run: |
+          node scripts/check-packed-windows-recovery.mjs
+          bash scripts/check-packed-consumer.sh cold
 
   stage:
     name: Stage package on npm

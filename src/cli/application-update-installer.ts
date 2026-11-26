@@ -12,6 +12,7 @@ import {
   rm,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { releaseVersionSchema } from '@/shared/application-updates';
@@ -165,11 +166,9 @@ export class ApplicationUpdateInstaller {
         [join(candidate, 'dist/src/cli/index.js'), '--version'],
         signal
       );
-      const nativeProbe =
-        "const {createRequire}=require('node:module');const r=createRequire(process.argv[1]);const DB=r('better-sqlite3');const db=new DB(':memory:');db.close();r('node-pty');";
       await this.run(
         process.execPath,
-        ['-e', nativeProbe, join(candidate, 'package.json')],
+        [fileURLToPath(new URL('./sqlite-runtime.mjs', import.meta.url)), candidate],
         signal
       );
       return {

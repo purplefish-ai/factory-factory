@@ -23,6 +23,9 @@ const workflowSchema = z.object({
       name: z.string().optional(),
       if: z.string().optional(),
       needs: z.union([z.string(), z.array(z.string())]).optional(),
+      strategy: z
+        .object({ matrix: z.object({ 'node-version': z.array(z.string()).optional() }).optional() })
+        .optional(),
       steps: z.array(stepSchema).optional(),
       outputs: z.record(z.string(), z.string()).optional(),
       container: z.object({ image: z.string() }).optional(),
@@ -42,21 +45,34 @@ function runGate(selected: string, work: string, selection = 'success') {
 }
 
 describe('conservative CI selection', () => {
-  it('tests, builds and exercises native modules on the separate user minimum', () => {
+  it('builds with the development pin and launches the same tarball on each supported floor', () => {
+    const build = ci.jobs.build;
+    const buildSetup = build?.steps?.find((step) => step.uses?.startsWith('actions/setup-node@'));
+    expect(buildSetup?.with?.['node-version-file']).toBe('.node-version');
+    expect(build?.steps?.find((step) => step.name === 'Pack consumer artifact')?.run).toContain(
+      'npm pack'
+    );
+    const uploaded = build?.steps?.find((step) =>
+      step.uses?.startsWith('actions/upload-artifact@')
+    );
+    expect(uploaded?.with?.path).toBe('factory-factory-*.tgz');
+
     const job = ci.jobs['minimum-node'];
-    expect(job?.needs).toBe('changes');
+    expect(job?.needs).toEqual(['changes', 'build']);
     expect(job?.if).toBe("needs.changes.outputs.app == 'true'");
+    const requirement = readFileSync('.node-minimum', 'utf8').trim();
+    expect(job?.strategy?.matrix?.['node-version']).toEqual(
+      requirement.split(' || ').map((floor) => floor.replace(/^\^|^>=/, ''))
+    );
     const setup = job?.steps?.find((step) => step.uses?.startsWith('actions/setup-node@'));
-    expect(setup?.with?.['node-version-file']).toBe('.node-minimum');
-    const commands = job?.steps
-      ?.map((step) => step.run)
-      .filter(Boolean)
-      .join('\n');
-    expect(commands).toContain('pnpm test');
-    expect(commands).toContain('pnpm build');
-    expect(commands).toContain('node dist/src/cli/bootstrap.mjs serve --help');
-    expect(commands).toContain('node dist/src/cli/bootstrap.mjs db:migrate');
-    expect(commands).toContain('node scripts/check-installed-native-runtime.mjs');
+    expect(setup?.with?.['node-version']).toBe('${{ matrix.node-version }}');
+    const downloaded = job?.steps?.find((step) =>
+      step.uses?.startsWith('actions/download-artifact@')
+    );
+    expect(downloaded?.with?.name).toBe(uploaded?.with?.name);
+    const smoke = job?.steps?.find((step) => step.name === 'Launch the packed CLI')?.run;
+    expect(downloaded?.with?.path).toBe('npm-package');
+    expect(smoke).toBe('bash scripts/check-packed-consumer.sh cold');
   });
 
   it('skips app work only for the explicit documentation allowlist', () => {

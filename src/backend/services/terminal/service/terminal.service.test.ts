@@ -73,6 +73,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 // ---------------------------------------------------------------------------
 // Import AFTER mocks
 // ---------------------------------------------------------------------------
+import { configService } from '@/backend/services/config.service';
 import { TerminalService } from './terminal.service';
 
 // ---------------------------------------------------------------------------
@@ -158,6 +159,18 @@ describe('TerminalService', () => {
     it('uses custom shell when provided', async () => {
       await service.createTerminal({ ...defaultOpts, shell: '/bin/zsh' });
       expect(mockPtySpawn).toHaveBeenCalledWith('/bin/zsh', [], expect.any(Object));
+    });
+
+    it('uses the configured platform default when SHELL is absent', async () => {
+      vi.stubEnv('SHELL', undefined);
+      const shell = vi.spyOn(configService, 'getShellPath').mockReturnValue('cmd.exe');
+      try {
+        await service.createTerminal(defaultOpts);
+        expect(mockPtySpawn).toHaveBeenCalledWith('cmd.exe', [], expect.any(Object));
+      } finally {
+        shell.mockRestore();
+        vi.unstubAllEnvs();
+      }
     });
 
     // `ff serve` and the desktop app launch the backend with NODE_ENV=production

@@ -8,16 +8,17 @@ provides guidelines and information for contributors.
 ### Prerequisites
 
 - Node.js 26.12.1 (pinned in `.node-version`)
-- pnpm
+- pnpm pinned in `package.json`
 - GitHub CLI (`gh`) - authenticated
 - Claude authentication via `pnpm exec tsx src/cli/index.ts claude auth login`
   (the runtime is included; a global Claude installation is not required)
 
-The CLI's minimum supported Node.js version is tracked separately in
-`.node-minimum` and `package.json` (`engines.node`). Keep those two values in
-sync. Updating the development pin must not raise the user minimum; raise it
-only for required runtime APIs, dependency compatibility, security fixes, or end
-of support. CI verifies the minimum runtime as well as the development pin.
+The published CLI reads its Node.js range from `.node-minimum`. Keep that range
+identical to `package.json` (`engines.node`). Use the development pin to install
+dependencies, run contributor checks and build the tarball. CI installs the
+tarball with the consumer's npm on each supported line. Update a runtime floor
+only for required APIs, dependency compatibility, security fixes, or end of
+support.
 
 ### Development Setup
 

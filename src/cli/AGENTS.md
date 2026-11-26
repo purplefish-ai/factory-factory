@@ -54,16 +54,21 @@ not own:
   `application-update-recovery.test.ts`.
 - Startup recovery refuses while the recorded updater or another server is
   alive, and restores the database snapshot before moving the previous package
-  back. `application-update-recovery.test.ts`.
+  back. It runs before the installed SQLite probe so a broken replacement can
+  still relaunch the previous package. `application-update-recovery.test.ts`,
+  `bootstrap.test.ts`.
 
 ## Map
 
-- `bootstrap.mjs`: the `ff` binary; it ensures a usable Node before starting
-  `index.ts` in a child process.
+- `bootstrap.mjs`: the `ff` binary; it ensures a usable Node before starting the
+  CLI in a child process and checks native modules in source checkouts.
 - `index.ts`: the commands. A production `serve` writes this server's running
   marker when the installation supports automatic updates, recovers an
-  interrupted update (relaunching the restored CLI when it rolled back), runs
-  migrations, then calls `runSupervisedServeSession`.
+  interrupted update (relaunching the restored CLI when it rolled back), then
+  probes both SQLite consumers in memory before migrations and
+  `runSupervisedServeSession`. The probe lives in `sqlite-runtime.mjs`;
+  `native-binding-recovery.mjs` prints targeted npm cache removal only for a
+  verified installation.
 - `supervised-serve-session.ts`: the production serve loop: IPC with the
   backend, journal writes, the database snapshot (through
   `src/backend/lib/sqlite-snapshot.ts`, which `db-backups/` also uses),

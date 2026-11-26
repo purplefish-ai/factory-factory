@@ -1,10 +1,25 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
+import { buildSync } from 'esbuild';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { probeSqliteDrivers, resolveSqliteDrivers } from './sqlite-runtime.mjs';
 
 // Publish the worker pid by rename: a reader of a plain write can see the
 // created but still empty file, and Number('') is 0, which names the test's own
@@ -12,14 +27,58 @@ import { z } from 'zod';
 const PUBLISH_WORKER_PID = `writeFileSync(new URL('./worker.pid.tmp', import.meta.url), String(process.pid));
 renameSync(new URL('./worker.pid.tmp', import.meta.url), new URL('./worker.pid', import.meta.url));`;
 const directories: string[] = [];
-function fixture(minimum: string) {
-  const root = mkdtempSync(join(tmpdir(), 'ff-bootstrap-'));
-  directories.push(root);
-  writeFileSync(join(root, 'package.json'), '{"type":"module"}');
-  writeFileSync(join(root, '.node-minimum'), minimum);
+function fixture(minimum: string, npxSpec?: string) {
+  const temp = mkdtempSync(join(realpathSync(tmpdir()), 'ff-bootstrap-'));
+  directories.push(temp);
+  vi.stubEnv('BASE_DIR', join(temp, 'data'));
+  let root = temp;
+  if (npxSpec) {
+    const key = createHash('sha512').update(npxSpec).digest('hex').slice(0, 16);
+    const entry = join(temp, 'cache with spaces', '_npx', key);
+    root = join(entry, 'node_modules', 'factory-factory');
+    mkdirSync(root, { recursive: true });
+    writeFileSync(
+      join(entry, 'package.json'),
+      JSON.stringify({
+        dependencies: { 'factory-factory': '^1.0.0' },
+        _npx: { packages: [npxSpec] },
+      })
+    );
+  }
+  const modules = join(root, 'node_modules');
+  mkdirSync(modules, { recursive: true });
+  symlinkSync(
+    dirname(createRequire(import.meta.url).resolve('zod/package.json')),
+    join(modules, 'zod'),
+    'junction'
+  );
+  const adapter = join(modules, '@prisma', 'adapter-better-sqlite3');
+  mkdirSync(adapter, { recursive: true });
+  writeFileSync(join(adapter, 'index.js'), '');
+  const driver = join(modules, 'better-sqlite3');
+  mkdirSync(driver);
+  writeFileSync(join(driver, 'package.json'), '{"name":"better-sqlite3","version":"13.0.3"}');
+  writeFileSync(
+    join(driver, 'index.js'),
+    `module.exports = class {
+    constructor(path) { if (path !== ':memory:') throw new Error('expected :memory:'); }
+    prepare(sql) { return { get() { return {value: 1}; } }; }
+    close() { require('node:fs').appendFileSync(require('node:path').join(__dirname, 'closed'), '1'); }
+  };`
+  );
+  writeFileSync(
+    join(root, 'package.json'),
+    '{"name":"factory-factory","version":"1.0.0","type":"module","engines":{"node":">=1.0.0"},"dependencies":{"@prisma/adapter-better-sqlite3":"7.10.1"}}'
+  );
+  writeFileSync(join(root, '.node-minimum'), `>=${minimum}`);
   // Updating the development pin must never raise the consumer requirement.
   writeFileSync(join(root, '.node-version'), '999.0.0');
-  for (const file of ['bootstrap.mjs', 'setup-prerequisites.mjs']) {
+  for (const file of [
+    'bootstrap.mjs',
+    'setup-prerequisites.mjs',
+    'sqlite-runtime.mjs',
+    'native-binding-recovery.mjs',
+  ]) {
     copyFileSync(new URL(file, import.meta.url), join(root, file));
   }
   writeFileSync(
@@ -36,6 +95,7 @@ function killAfterTest(pid: () => number | undefined) {
   startedProcesses.push(pid);
 }
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const pid of startedProcesses.splice(0)) {
     try {
       const target = pid();
@@ -61,9 +121,10 @@ it('reports unsupported Node without importing the application or prompting on p
     timeout: 15_000,
   });
   expect(result.status).toBe(1);
-  expect(result.stderr).toContain('requires Node.js 999.0.0');
+  expect(result.stderr).toContain('requires Node.js >=999.0.0');
   expect(result.stderr).not.toContain('APP WAS LOADED');
   expect(result.stdout).not.toContain('[y/N]');
+  expect(existsSync(join(root, 'node_modules/better-sqlite3/closed'))).toBe(false);
 }, 20_000);
 it('forwards arguments verbatim and preserves the application exit code', () => {
   const root = fixture('1.0.0');
@@ -75,6 +136,188 @@ it('forwards arguments verbatim and preserves the application exit code', () => 
   expect(result.status).toBe(7);
   expect(result.stdout.trim()).toBe('["serve","--database-path","path with spaces"]');
 });
+it('opens and closes a shared driver once before starting serve', () => {
+  const root = fixture('1.0.0');
+  probeSqliteDrivers(resolveSqliteDrivers(root));
+  expect(readFileSync(join(root, 'node_modules/better-sqlite3/closed'), 'utf8')).toBe('1');
+});
+
+function breakAdapterDriver(root: string) {
+  installServeEntry(root);
+  const driver = join(
+    root,
+    'node_modules/@prisma/adapter-better-sqlite3/node_modules/better-sqlite3'
+  );
+  mkdirSync(driver, { recursive: true });
+  writeFileSync(join(driver, 'package.json'), '{"name":"better-sqlite3","version":"12.6.0"}');
+  writeFileSync(
+    join(driver, 'index.js'),
+    `module.exports = class {
+    constructor() { throw Object.assign(new Error('wrong native ABI'), { code: 'ERR_DLOPEN_FAILED' }); }
+  }`
+  );
+}
+
+let installedEntry: Uint8Array | undefined;
+function installServeEntry(root: string) {
+  // Exercise the actual serve action with its package root and its SQLite fixture,
+  // without depending on a pre-existing dist build in the checkout.
+  installedEntry ??= buildSync({
+    entryPoints: [fileURLToPath(new URL('./index.ts', import.meta.url))],
+    bundle: true,
+    packages: 'external',
+    platform: 'node',
+    format: 'esm',
+    external: ['./sqlite-runtime.mjs'],
+    write: false,
+  }).outputFiles[0]!.contents;
+  const dist = join(root, 'dist/src');
+  mkdirSync(join(dist, 'cli'), { recursive: true });
+  mkdirSync(join(dist, 'backend'), { recursive: true });
+  mkdirSync(join(root, 'dist/client'), { recursive: true });
+  symlinkSync(
+    fileURLToPath(new URL('../../node_modules', import.meta.url)),
+    join(dist, 'cli/node_modules'),
+    'junction'
+  );
+  writeFileSync(join(dist, 'cli/index.js'), installedEntry);
+  copyFileSync(
+    new URL('./sqlite-runtime.mjs', import.meta.url),
+    join(dist, 'cli/sqlite-runtime.mjs')
+  );
+  writeFileSync(join(dist, 'backend/index.js'), '');
+  writeFileSync(join(root, 'dist/client/index.html'), '');
+  writeFileSync(join(root, 'index.js'), 'import "./dist/src/cli/index.js"');
+}
+
+it('restores and relaunches the previous package when the interrupted replacement has a broken binding', () => {
+  const root = fixture('1.0.0', 'factory-factory@latest');
+  breakAdapterDriver(root);
+  const stage = join(dirname(root), '.factory-factory-update-fixture');
+  const previous = join(stage, 'previous');
+  const databasePath = join(stage, 'data.db');
+  const databaseBackup = join(stage, 'database-backup');
+  mkdirSync(previous, { recursive: true });
+  writeFileSync(join(previous, 'package.json'), '{"name":"factory-factory","version":"0.9.0"}');
+  writeFileSync(join(previous, 'index.js'), 'console.log("restored CLI");');
+  writeFileSync(databasePath, 'replacement database');
+  writeFileSync(databaseBackup, 'previous database');
+  writeFileSync(
+    join(dirname(root), '.factory-factory-update-state.json'),
+    JSON.stringify({
+      packageRoot: root,
+      databasePath,
+      databaseBackup,
+      recoveryPath: previous,
+      pid: 2_147_483_647,
+      status: { phase: 'restarting', targetVersion: '1.0.0' },
+    })
+  );
+  const result = spawnSync(
+    process.execPath,
+    [join(root, 'bootstrap.mjs'), 'serve', '--database-path', databasePath],
+    { encoding: 'utf8', timeout: 15_000, env: { ...process.env, BASE_DIR: stage } }
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('restored CLI');
+  expect(readFileSync(databasePath, 'utf8')).toBe('previous database');
+});
+it('probes SQLite from the bundled adapter in a published build', () => {
+  const root = fixture('1.0.0');
+  writeFileSync(
+    join(root, 'package.json'),
+    '{"name":"factory-factory","version":"1.0.0","type":"module"}'
+  );
+  const bundle = join(root, 'dist/src/backend/lib');
+  mkdirSync(bundle, { recursive: true });
+  writeFileSync(join(bundle, 'sqlite-adapter.js'), '');
+  // The upstream development dependency is unreachable in a consumer installation.
+  rmSync(join(root, 'node_modules/@prisma/adapter-better-sqlite3'), { recursive: true });
+  probeSqliteDrivers(resolveSqliteDrivers(root));
+  expect(readFileSync(join(root, 'node_modules/better-sqlite3/closed'), 'utf8')).toBe('1');
+});
+it('identifies the adapter binding and prints scoped npx repair before opening user data', () => {
+  const root = fixture('1.0.0', 'factory-factory@latest');
+  breakAdapterDriver(root);
+  const entry = dirname(dirname(root));
+  const cache = dirname(dirname(entry));
+  const db = join(cache, 'user.db');
+  const result = spawnSync(
+    process.execPath,
+    [join(root, 'bootstrap.mjs'), 'serve', '--database-path', db],
+    {
+      env: { ...process.env, npm_config_cache: cache },
+      encoding: 'utf8',
+    }
+  );
+  expect(result.status).toBe(1);
+  expect(existsSync(db)).toBe(false);
+  expect(result.stderr).toContain('@prisma/adapter-better-sqlite3');
+  expect(result.stderr).toContain('wrong native ABI');
+  expect(result.stderr).toContain(process.versions.node);
+  expect(result.stderr).toContain(`npm cache npx rm ${basename(entry)} --cache `);
+  expect(result.stderr).toContain(cache);
+  expect(result.stderr).toContain('factory-factory@latest');
+  expect(result.stderr).toContain(db);
+});
+it('does not suggest removing a lookalike cache entry outside the configured cache', () => {
+  const root = fixture('1.0.0', 'factory-factory@latest');
+  breakAdapterDriver(root);
+  const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+    encoding: 'utf8',
+    env: { ...process.env, npm_config_cache: tmpdir() },
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('wrong native ABI');
+  expect(result.stderr).not.toContain('cache npx rm');
+});
+it('preserves unrelated entries when npm lacks targeted removal', () => {
+  const root = fixture('1.0.0', 'factory-factory@latest');
+  breakAdapterDriver(root);
+  const entry = dirname(dirname(root));
+  const cache = dirname(dirname(entry));
+  // Older npm did not record the original spec in the entry metadata.
+  writeFileSync(join(entry, 'package.json'), '{"dependencies":{"factory-factory":"^1.0.0"}}');
+  const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+    encoding: 'utf8',
+    env: { ...process.env, npm_config_cache: cache },
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('npm exec --cache');
+  expect(result.stderr).toContain('factory-factory@1.0.0');
+  expect(result.stderr).not.toContain('cache npx rm');
+});
+
+it.each([
+  {
+    dependencies: { 'factory-factory': '^1.0.0', shared: '1' },
+    _npx: { packages: ['factory-factory@latest'] },
+  },
+  { dependencies: { 'factory-factory': '^1.0.0' }, _npx: { packages: ['factory-factory@other'] } },
+])('does not evict a cache entry with shared or mismatched metadata', (manifest) => {
+  const root = fixture('1.0.0', 'factory-factory@latest');
+  breakAdapterDriver(root);
+  const entry = dirname(dirname(root));
+  const cache = dirname(dirname(entry));
+  writeFileSync(join(entry, 'package.json'), JSON.stringify(manifest));
+  const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+    encoding: 'utf8',
+    env: { ...process.env, npm_config_cache: cache },
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('wrong native ABI');
+  expect(result.stderr).not.toContain('cache npx rm');
+});
+it.each([['--help'], ['serve', '--help'], ['--version']])(
+  'skips the binding check for %s',
+  (...args) => {
+    const root = fixture('1.0.0');
+    breakAdapterDriver(root);
+    const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), ...args]);
+    expect(result.status).toBe(0);
+    expect(existsSync(join(root, 'node_modules/better-sqlite3/closed'))).toBe(false);
+  }
+);
 it('keeps the shipped version floor consistent with package engines', () => {
   const pkg = z
     .object({
@@ -84,7 +327,7 @@ it('keeps the shipped version floor consistent with package engines', () => {
     })
     .parse(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')));
   const minimum = readFileSync(new URL('../../.node-minimum', import.meta.url), 'utf8').trim();
-  expect(pkg.engines.node).toBe(`>=${minimum}`);
+  expect(pkg.engines.node).toBe(minimum);
   expect(pkg.files).toContain('.node-minimum');
   expect(pkg.bin.ff).toBe('./dist/src/cli/bootstrap.mjs');
   expect(pkg.bin['factory-factory']).toBe(pkg.bin.ff);

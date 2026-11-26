@@ -1,18 +1,21 @@
 // Run via npm exec in an isolated consumer directory, with the tarball on PATH.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
 import { delimiter, dirname, join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
+import { stopProcessGroup } from './sandbox/process-group.mjs';
 
 const [cachePath, phase = 'cold'] = process.argv.slice(2);
+const windows = process.platform === 'win32';
+const executable = windows ? 'factory-factory.cmd' : 'factory-factory';
 const cache = realpathSync(cachePath);
 const bin = (process.env.PATH ?? '').split(delimiter).find((dir) => {
   const keyDir = dirname(dirname(dir));
   return (
-    existsSync(join(dir, 'factory-factory')) &&
+    existsSync(join(dir, executable)) &&
     existsSync(keyDir) &&
     dirname(realpathSync(keyDir)) === join(cache, '_npx')
   );
@@ -37,15 +40,6 @@ if (phase === 'upgrade') {
 }
 writeFileSync('installed-package.txt', packageRoot);
 
-async function freePort() {
-  const socket = createServer();
-  socket.listen(0, '127.0.0.1');
-  await once(socket, 'listening');
-  const { port } = socket.address();
-  await new Promise((done) => socket.close(done));
-  return port;
-}
-
 const terminalMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('created') }),
   z.object({ type: z.literal('output'), data: z.string() }),
@@ -66,7 +60,8 @@ async function verifyTerminal(origin) {
           const message = terminalMessage.parse(JSON.parse(data.toString()));
           if (message.type === 'created') {
             // The expected line never appears in the echoed shell command.
-            socket.send(JSON.stringify({ type: 'input', data: "printf 'packed-%s\\n' ready\r" }));
+            const data = windows ? 'echo packed-^ready\r' : "printf 'packed-%s\\n' ready\r";
+            socket.send(JSON.stringify({ type: 'input', data }));
           } else if (message.type === 'output') {
             output = (output + message.data).slice(-8192);
             if (output.includes('packed-ready')) {
@@ -90,39 +85,66 @@ async function verifyTerminal(origin) {
 
 const consumerHome = resolve('home');
 mkdirSync(consumerHome, { recursive: true });
-const port = await freePort();
-const origin = `http://127.0.0.1:${port}`;
+const baseDir = resolve('data');
+const serveArgs = ['serve', '--no-open', '--host', '127.0.0.1'];
 const child = spawn(
-  join(bin, 'factory-factory'),
-  ['serve', '--no-open', '--host', '127.0.0.1', '--port', String(port)],
+  windows ? 'cmd.exe' : join(bin, executable),
+  windows ? ['/d', '/c', executable, ...serveArgs] : serveArgs,
   {
-    detached: true,
-    stdio: ['ignore', 'inherit', 'inherit'],
+    detached: !windows,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'inherit'],
     env: {
-      PATH: process.env.PATH,
+      PATH: [bin, process.env.PATH].join(delimiter),
       HOME: consumerHome,
-      TMPDIR: process.env.TMPDIR,
       npm_config_cache: cache,
       CI: 'true',
-      BASE_DIR: resolve('data'),
+      RUNNER_TRACKING_ID: process.env.RUNNER_TRACKING_ID,
+      BASE_DIR: baseDir,
+      FF_EMIT_BACKEND_PORT: '1',
       DATABASE_PATH: resolve('data', 'test.db'),
-      SHELL: '/bin/sh',
+      ...(windows
+        ? {
+            USERPROFILE: consumerHome,
+            APPDATA: join(consumerHome, 'AppData', 'Roaming'),
+            LOCALAPPDATA: join(consumerHome, 'AppData', 'Local'),
+            SystemRoot: process.env.SystemRoot,
+            ComSpec: process.env.ComSpec,
+            PATHEXT: process.env.PATHEXT,
+            TEMP: process.env.TEMP,
+            TMP: process.env.TMP,
+          }
+        : { SHELL: '/bin/sh', TMPDIR: process.env.TMPDIR }),
     },
   }
 );
+// The backend reports the port it actually bound, including after a collision.
+const lines = createInterface({ input: child.stdout });
+let origin;
+lines.on('line', (line) => {
+  console.log(line);
+  const match = /^BACKEND_PORT:(\d+)$/.exec(line);
+  if (match) {
+    origin = `http://127.0.0.1:${match[1]}`;
+  }
+});
 const exited = once(child, 'exit');
 async function verifyServer() {
   for (let attempt = 0; attempt < 90; attempt++) {
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error('Server exited during startup');
     }
+    if (!origin) {
+      await delay(500);
+      continue;
+    }
     const response = await fetch(`${origin}/health/database`, {
       signal: AbortSignal.timeout(1500),
     }).catch(() => undefined);
-    if (response?.ok) {
+    if (response?.status === 200) {
       z.object({ database: z.literal('connected') }).parse(await response.json());
       const page = await fetch(origin, { signal: AbortSignal.timeout(5000) });
-      if (!page.ok || !(await page.text()).includes('id="root"')) {
+      if (page.status !== 200 || !(await page.text()).includes('id="root"')) {
         throw new Error('Missing packed UI');
       }
       await verifyTerminal(origin);
@@ -133,40 +155,40 @@ async function verifyServer() {
   throw new Error('Timeout waiting for packed database and UI');
 }
 
-function signalGroup(signal) {
-  try {
-    process.kill(-child.pid, signal);
-  } catch (error) {
-    if (error.code !== 'ESRCH') {
-      throw error;
-    }
-  }
+const cancellation = new AbortController();
+const signals = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+const onCancel = (signal) =>
+  cancellation.abort(new Error(`Consumer check interrupted by ${signal}`));
+for (const signal of signals) {
+  process.on(signal, onCancel);
 }
-
-const cancelled = new Promise((_, reject) => {
-  for (const signal of ['SIGTERM', 'SIGINT']) {
-    process.once(signal, () => reject(new Error(`Consumer check interrupted by ${signal}`)));
-  }
-});
 
 try {
   await Promise.race([
-    cancelled,
+    once(cancellation.signal, 'abort').then(() => cancellation.signal.throwIfAborted()),
     verifyServer(),
     exited.then(([code, signal]) => {
       throw new Error(`serve exited: ${code ?? signal}`);
     }),
   ]);
-  console.log(`Packed UI, database and setup terminal passed on Node ${process.version}`);
 } finally {
-  if (child.pid) {
-    try {
-      if (child.exitCode === null && child.signalCode === null) {
-        signalGroup('SIGTERM');
+  try {
+    if (child.pid) {
+      if (windows) {
+        if (child.exitCode === null && child.signalCode === null) {
+          execFileSync('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], {
+            timeout: 10_000,
+          });
+        }
+      } else {
+        await stopProcessGroup(child.pid, { baseDir, graceMs: 5000 });
       }
-      await Promise.race([exited, delay(5000, null, { ref: false })]);
-    } finally {
-      signalGroup('SIGKILL');
+    }
+  } finally {
+    for (const signal of signals) {
+      process.off(signal, onCancel);
     }
   }
 }
+cancellation.signal.throwIfAborted();
+console.log(`Packed UI, database and setup terminal passed on Node ${process.version}`);

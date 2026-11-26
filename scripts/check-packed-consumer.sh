@@ -7,6 +7,12 @@ archive=("$root"/npm-package/factory-factory-*.tgz)
 consumer="$RUNNER_TEMP/factory-factory-consumer"
 mkdir -p "$consumer"
 cd "$consumer"
+# Keep the native npm package spec and cache path identical across Git Bash and Node versions.
+if [[ ${RUNNER_OS:-} == Windows ]]; then
+  root=$(cygpath -am "$root")
+  archive[0]=$(cygpath -am "${archive[0]}")
+  consumer=$(cygpath -am "$consumer")
+fi
 node --version
 npm --version
 npm exec --yes --cache "$consumer/npm-cache" --package "${archive[0]}" -- \

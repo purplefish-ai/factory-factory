@@ -1,4 +1,4 @@
-// The launcher imports this module on older Node, before it can load application dependencies.
+// Production serve and the update supervisor probe SQLite without opening user data.
 import { existsSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';

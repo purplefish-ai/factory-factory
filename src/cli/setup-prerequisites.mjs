@@ -9,20 +9,46 @@ import { createInterface } from 'node:readline';
  * run: (command: string, args: string[]) => Promise<boolean> }} SetupIO
  */
 
-/** @param {string} version @param {string} minimum */
-export function supportsNode(version, minimum) {
-  const actual = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  const required = /^(\d+)\.(\d+)\.(\d+)$/.exec(minimum);
-  if (!actual || !required) {
-    return false;
+// The package declares a stable minimum, optionally with an earlier LTS line.
+// Keep this grammar small so even unsupported Node can show setup instructions.
+/** @param {string} requirement */
+export function nodeFloors(requirement) {
+  const match = /^(?:\^(\d+\.\d+\.\d+) \|\| )?>=(\d+\.\d+\.\d+)$/.exec(requirement);
+  if (!match) {
+    throw new Error(
+      'The installation has an invalid Node.js requirement. Reinstall Factory Factory.'
+    );
   }
-  for (let i = 1; i <= 3; i++) {
-    const difference = Number(actual[i]) - Number(required[i]);
-    if (difference !== 0) {
-      return difference > 0;
+  return { lts: match[1], minimum: match[2] };
+}
+
+/** @param {string} version @param {string} floor */
+function atLeast(version, floor) {
+  const current = version.split('.').map(Number);
+  const required = floor.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (current[i] !== required[i]) {
+      return current[i] > required[i];
     }
   }
   return true;
+}
+
+/** @param {string} version @param {string} requirement */
+export function supportsNode(version, requirement) {
+  const { lts, minimum } = nodeFloors(requirement);
+  const release =
+    /^((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:\+[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)?$/.exec(
+      version
+    );
+  if (!release) {
+    return false;
+  }
+  const current = release[1];
+  return (
+    atLeast(current, minimum) ||
+    Boolean(lts && current.split('.')[0] === lts.split('.')[0] && atLeast(current, lts))
+  );
 }
 
 /** @param {string} command @param {string[]} args @param {boolean} visible */
@@ -157,20 +183,19 @@ async function installation(tool, io) {
   return undefined;
 }
 
-/** @param {string} version @param {string} minimum @param {SetupIO} io */
-export async function ensureNode(version, minimum, io = createSetupIO()) {
-  if (supportsNode(version, minimum)) {
+/** @param {string} version @param {string} requirement @param {SetupIO} io */
+export async function ensureNode(version, requirement, io = createSetupIO()) {
+  if (supportsNode(version, requirement)) {
     return true;
   }
-  io.print(
-    `Node.js ${version} is unsupported. Factory Factory requires Node.js ${minimum} or newer.`
-  );
+  const { minimum } = nodeFloors(requirement);
+  io.print(`Node.js ${version} is unsupported. Factory Factory requires Node.js ${requirement}.`);
   const fnm = await io.probe('fnm', ['--version']);
   const command = fnm ? ['fnm', 'install', minimum] : await installation('node', io);
   if (command) {
     await confirmFix(command, io);
   }
-  io.print(`Install or activate Node.js ${minimum} or newer: https://nodejs.org/en/download`);
+  io.print(`Install or activate a supported Node.js version: https://nodejs.org/en/download`);
   if (fnm) {
     io.print(`Activate it with: fnm use ${minimum}`);
   }

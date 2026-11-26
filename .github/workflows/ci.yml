@@ -119,44 +119,47 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Pack consumer artifact
+        run: npm pack --silent
+        env:
+          HUSKY: '0'
+
+      - name: Upload consumer artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-runtime-package
+          path: factory-factory-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   minimum-node:
-    name: Minimum Node runtime
-    needs: changes
+    name: Minimum Node runtime (${{ matrix.node-version }})
+    needs: [changes, build]
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['24.0.0', '26.8.1']
     permissions:
       contents: read
-    env:
-      DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.0: native pnpm 12 support
+      - name: Download consumer artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cli-runtime-package
+          path: npm-package
 
-      - name: Setup minimum Node.js
+      - name: Setup consumer Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: '.node-minimum'
-          cache: 'pnpm'
+          node-version: ${{ matrix.node-version }}
+          package-manager-cache: false
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm db:generate
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
-
-      - name: Smoke test minimum runtime
-        run: |
-          node dist/src/cli/bootstrap.mjs serve --help
-          node dist/src/cli/bootstrap.mjs db:migrate --database-path "$RUNNER_TEMP/minimum-node.db"
-          node scripts/check-installed-native-runtime.mjs "$PWD"
+      - name: Launch the packed CLI
+        run: bash scripts/check-packed-consumer.sh cold
 
   storybook:
     name: Storybook Build work

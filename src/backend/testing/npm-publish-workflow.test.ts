@@ -21,7 +21,9 @@ const workflowJobSchema = z.object({
   needs: z.union([z.string(), z.array(z.string())]).optional(),
   permissions: z.record(z.string(), z.string()),
   steps: z.array(workflowStepSchema),
-  strategy: z.object({ matrix: z.object({ 'node-version': z.array(z.string()) }) }).optional(),
+  strategy: z
+    .object({ matrix: z.object({ os: z.array(z.string()), 'node-version': z.array(z.string()) }) })
+    .optional(),
 });
 
 const workflowDispatchInputSchema = z.object({
@@ -83,8 +85,21 @@ describe('npm publish workflow', () => {
     expect(getStep(verifyJob, 'Setup Node.js').with?.['node-version-file']).toBe('.node-version');
     const consumer = getJob('consumer');
     expect(consumer.needs).toBe('verify');
+    expect(consumer.strategy?.matrix.os).toEqual([
+      'ubuntu-latest',
+      'macos-latest',
+      'windows-latest',
+    ]);
+    expect(getStep(consumer, 'Launch with bundled npm').run).toBe(
+      'bash scripts/check-packed-consumer.sh cold'
+    );
     const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
-    expect(consumer.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
+    expect(consumer.strategy?.matrix['node-version']).toEqual([
+      minimum.split(' || ')[0].slice(1),
+      '24.x',
+      minimum.split(' || ')[1].slice(2),
+      nodeVersion,
+    ]);
     expect(getStep(consumer, 'Relaunch from the same npx cache').run).toBe(
       'bash scripts/check-packed-consumer.sh upgrade'
     );
@@ -128,6 +143,9 @@ describe('npm publish workflow', () => {
       githubExpression(
         "github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'"
       )
+    );
+    expect(dryRunStep.env?.npm_config_force).toBe(
+      githubExpression("github.ref != 'refs/heads/main'")
     );
     expect(dryRunStep.run).toBe('npm publish --dry-run ./factory-factory-*.tgz');
   });
