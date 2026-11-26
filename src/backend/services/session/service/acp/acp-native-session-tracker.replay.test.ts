@@ -95,4 +95,42 @@ describe('sub-agent replay timestamps', () => {
       completedAt: '2026-10-30T12:00:02.000Z',
     });
   });
+
+  it('keeps historical completion times unknown when Claude refines a replayed model', () => {
+    const tracker = new AcpNativeSessionTracker();
+    const childId = 'root:replay-subagent:toolu_example';
+    tracker.beginHistoryReplay();
+    spawn(tracker, 'root', childId);
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'subagent_state_update',
+        subagentSessionId: childId,
+        state: 'completed',
+      })
+    );
+    tracker.onRawMessage(
+      update('root', {
+        sessionUpdate: 'session_info_update',
+        _meta: { jetbrains: { air: { loadReplayEnd: true } } },
+      })
+    );
+
+    tracker.onRawMessage(
+      update(childId, {
+        sessionUpdate: 'config_option_update',
+        configOptions: [{ id: 'model', category: 'model', type: 'select', currentValue: 'sonnet' }],
+      })
+    );
+
+    expect(tracker.list({ limit: 10 }).subagents).toMatchObject([
+      {
+        id: childId,
+        model: 'sonnet',
+        status: 'completed',
+        createdAt: null,
+        updatedAt: null,
+        completedAt: null,
+      },
+    ]);
+  });
 });

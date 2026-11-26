@@ -338,7 +338,11 @@ export class AcpNativeSessionTracker {
       }
       if (child.summary.model !== parsed.data.currentValue) {
         child.summary.model = parsed.data.currentValue;
-        child.summary.updatedAt = this.observationTimestamp();
+        // Claude can refine a replayed child's model after the replay marker.
+        // That metadata does not date the child's historical activity.
+        if (!child.replayed) {
+          child.summary.updatedAt = this.observationTimestamp();
+        }
         this.changed(child.summary.id, 'updated');
       }
       return;
