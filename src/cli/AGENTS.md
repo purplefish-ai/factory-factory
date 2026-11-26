@@ -33,8 +33,10 @@ not own:
   the backend receives manual guidance and no update journal is written.
   `application-update-installer.test.ts`, `supervised-serve-session.test.ts`.
 - Preparation installs the requested version into a stage beside the package and
-  checks its version, entrypoints and native modules without changing the
-  running package, and fails while another update holds the installation lock.
+  checks its version, entrypoints and PTY module. `sqlite-runtime.mjs` queries
+  an in-memory database from each distinct driver used by the app and its Prisma
+  adapter. The running package stays active throughout preparation. A second
+  update fails while the installation lock is held.
   `application-update-installer.test.ts`.
 - The supervisor installs once per request and only after the backend sent
   `update-ready`; it stops the backend only after preparation succeeds, and

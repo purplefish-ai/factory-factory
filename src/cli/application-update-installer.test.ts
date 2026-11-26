@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { chmod, mkdtemp, mkdir, writeFile, readFile, rm, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -141,15 +142,19 @@ it('refuses unsupported platforms and a different package root', async () => {
 });
 it.each([
   ['missing client entrypoint', /ENOENT.*dist\/client\/index\.html/],
-  ['failing native module probe', /Cannot find module better-sqlite3/],
+  ['missing staged adapter', /Cannot find module '.*sqlite-adapter\.js'/],
 ] as const)(
   'rejects a candidate with a %s and keeps the running package',
   async (fault, expectedError) => {
     const { installer, root, run } = await fixture();
     const install = run.getMockImplementation()!;
     run.mockImplementation(async (command, args) => {
-      if (fault === 'failing native module probe' && args[0] === '-e') {
-        throw new Error('Cannot find module better-sqlite3');
+      if (
+        fault === 'missing staged adapter' &&
+        command === process.execPath &&
+        !args.includes('--version')
+      ) {
+        execFileSync(command, args, { stdio: 'pipe' });
       }
       const output = await install(command, args);
       if (fault === 'missing client entrypoint' && args.includes('install')) {
