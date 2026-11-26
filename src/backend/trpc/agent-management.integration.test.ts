@@ -410,6 +410,13 @@ it('reads retained workspace origins through the public owner before linkage and
     origin: { runId, workspaceState: 'LIVE' },
     run: { id: runId },
   });
+  for (const status of ['ARCHIVING', 'ARCHIVED'] as const) {
+    await db.prisma.workspace.update({ where: { id: workspaceId }, data: { status } });
+    expect((await caller.runs(owner)).items[0]).toMatchObject({
+      workspaceState: 'LIVE',
+      workspaceStatus: status,
+    });
+  }
   const { captureWorkspaceRunResults } = await vi.importActual<
     typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
   >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');

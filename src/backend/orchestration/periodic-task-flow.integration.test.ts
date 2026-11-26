@@ -180,6 +180,28 @@ describe('due periodic tasks through shared dispatch', () => {
     expect(initializeWorktree).toHaveBeenCalledTimes(2);
   });
 
+  it('reads current workspace status for scheduled run history', async () => {
+    const task = await createTask();
+    const workspace = await db.prisma.workspace.create({
+      data: { projectId: task.projectId, name: 'Scheduled workspace', status: 'READY' },
+    });
+    const linked = await db.prisma.periodicTaskExecution.create({
+      data: { periodicTaskId: task.id, status: 'COMPLETED', workspaceId: workspace.id },
+    });
+    const unlinked = await db.prisma.periodicTaskExecution.create({
+      data: { periodicTaskId: task.id, status: 'FAILED' },
+    });
+    for (const status of ['READY', 'ARCHIVING', 'ARCHIVED'] as const) {
+      await db.prisma.workspace.update({ where: { id: workspace.id }, data: { status } });
+      expect(await service.listExecutions(task.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: linked.id, workspace: { status } }),
+          expect.objectContaining({ id: unlinked.id, workspace: null }),
+        ])
+      );
+    }
+  });
+
   it('retains failed admission and its advanced schedule when a project archives before workspace insertion', async () => {
     const task = await createTask();
     const creation = new WorkspaceCreationService({ logger });

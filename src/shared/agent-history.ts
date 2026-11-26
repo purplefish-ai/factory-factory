@@ -7,6 +7,7 @@ import {
   agentLaunchPhaseSchema,
   agentRunResultSchema,
 } from './agent-runtime';
+import { WorkspaceStatus } from './core';
 import { eventLaunchPreparationSchema } from './event-agent-preparation';
 import {
   agentActivationGenerationSchema,
@@ -60,6 +61,7 @@ export const agentRunHistorySchema = z.strictObject({
   reservedSessionId: id.nullable(),
   workspaceId: id.nullable(),
   workspaceState: z.enum(['UNRESERVED', 'RESERVED', 'LIVE', 'DELETED']),
+  workspaceStatus: z.enum(WorkspaceStatus).nullable(),
 });
 export const agentEvaluationHistorySchema = z.strictObject({
   id,

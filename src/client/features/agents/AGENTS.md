@@ -52,9 +52,11 @@ fields, and `EventRunItem`.
   Reset source, Delete and Inspect are disabled. `event-agents-page.test.tsx`,
   `event-agent-activation.test.tsx`, `event-agent-delete.test.tsx`,
   `event-run-recovery.test.tsx`.
-- A history whose first read failed shows an error, never an empty state, and
-  only a `LIVE` run links to its workspace. `event-run-history.test.tsx`,
-  `event-evaluation-history.test.tsx`.
+- A history whose first read failed shows an error, never an empty state. Event
+  runs link only when `workspaceState` is `LIVE`. Both kinds label archiving and
+  archived workspaces in place of the workspace link.
+  `event-run-history.test.tsx`, `event-evaluation-history.test.tsx`,
+  `agent-ui.test.tsx`.
 
 ## Map
 

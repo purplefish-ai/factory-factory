@@ -95,6 +95,24 @@ afterEach(() => {
 });
 
 describe('EventRunHistory', () => {
+  it('labels an archived workspace while keeping its run outcome and pull request', async () => {
+    pages.first = {
+      items: [eventRunFixture({ workspaceStatus: 'ARCHIVED' })],
+      nextCursor: null,
+    };
+    render();
+
+    await waitForCheck(() =>
+      expect(runArticle('run-pr').textContent).toContain('Workspace archived')
+    );
+    const archived = runArticle('run-pr');
+    expect(archived.textContent).toContain('PR created');
+    expect(archived.querySelector('a[href*="/workspaces/"]')).toBeNull();
+    expect(
+      archived.querySelector('a[href="https://github.com/example/repo/pull/42"]')
+    ).not.toBeNull();
+  });
+
   it('shows each run with its status, a readable reason, its workspace and its PR links', async () => {
     pages.first?.items.push(
       eventRunFixture({

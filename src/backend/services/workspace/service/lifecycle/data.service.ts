@@ -46,7 +46,12 @@ class WorkspaceDataService {
     return this.acceptedBranches.subscribe(listener);
   }
 
-  readEventOrigin(input: { projectId: string; workspaceId: string }) {
+  async readEventOrigin(input: { projectId: string; workspaceId: string }) {
+    const result = await this.readEventOriginWithWorkspaceStatus(input);
+    return result?.origin ?? null;
+  }
+
+  readEventOriginWithWorkspaceStatus(input: { projectId: string; workspaceId: string }) {
     const parsed = z
       .strictObject({
         projectId: z.string().min(1).max(256),

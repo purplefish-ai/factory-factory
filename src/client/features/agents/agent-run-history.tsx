@@ -1,13 +1,12 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
-import { Link } from 'react-router';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
-import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RunHistoryCard, RunHistoryWorkspace } from './run-history-card';
 import type { AgentRun } from './types';
 
 export interface AgentRunHistoryProps {
@@ -73,34 +72,35 @@ export function AgentRunHistory({ runs, projectSlug, error }: AgentRunHistoryPro
         />
       )}
       {runs && runs.length > 0 && (
-        <div className="divide-y rounded-lg border">
+        <div className="grid gap-3">
           {runs.map((run) => (
-            <article key={run.id} className="min-w-0 space-y-2 p-4 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={run.status === 'FAILED' ? 'destructive' : 'secondary'}>
-                  {STATUS_LABELS[run.status]}
-                </Badge>
-                <time
-                  dateTime={toDateTimeIso(run.startedAt)}
-                  title={formatDateTime(run.startedAt, { precision: 'second' })}
-                  className="text-muted-foreground"
-                >
-                  {formatDateTime(run.startedAt)}
-                </time>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                {run.workspaceId ? (
-                  <Link
-                    to={`${getProjectSectionPath(projectSlug, 'workspaces')}/${encodeURIComponent(run.workspaceId)}`}
-                    className="font-medium text-primary underline underline-offset-4"
+            <RunHistoryCard
+              key={run.id}
+              runId={run.id}
+              workspaceStatus={run.workspace?.status ?? null}
+              header={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={run.status === 'FAILED' ? 'destructive' : 'secondary'}>
+                    {STATUS_LABELS[run.status]}
+                  </Badge>
+                  <time
+                    dateTime={toDateTimeIso(run.startedAt)}
+                    title={formatDateTime(run.startedAt, { precision: 'second' })}
+                    className="text-muted-foreground"
                   >
-                    Open workspace <span className="sr-only">for run {run.id}</span>
-                  </Link>
-                ) : (
-                  <span className="text-muted-foreground">
-                    {MISSING_WORKSPACE_LABELS[run.status]}
-                  </span>
-                )}
+                    {formatDateTime(run.startedAt)}
+                  </time>
+                </div>
+              }
+            >
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <RunHistoryWorkspace
+                  runId={run.id}
+                  projectSlug={projectSlug}
+                  workspaceId={run.workspaceId}
+                  workspaceStatus={run.workspace?.status ?? null}
+                  missingLabel={MISSING_WORKSPACE_LABELS[run.status]}
+                />
                 {run.prUrl && (
                   <a
                     href={run.prUrl}
@@ -119,7 +119,7 @@ export function AgentRunHistory({ runs, projectSlug, error }: AgentRunHistoryPro
                   {run.errorMessage}
                 </p>
               )}
-            </article>
+            </RunHistoryCard>
           ))}
         </div>
       )}

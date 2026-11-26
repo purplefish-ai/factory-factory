@@ -26,6 +26,7 @@ function run(overrides: Partial<AgentRun>): AgentRun {
     id: 'run',
     periodicTaskId: 'agent',
     workspaceId: null,
+    workspace: null,
     status: 'RUNNING',
     prUrl: null,
     prNumber: null,
@@ -62,27 +63,34 @@ describe('AgentRunHistory', () => {
     expect(container.querySelector('time')?.hasAttribute('datetime')).toBe(false);
   });
 
-  it('links every non-null workspace ID using the owning project, including archived workspaces', () => {
-    renderHistory([
-      run({
-        workspaceId: 'archived-workspace',
-        status: 'PR_CREATED',
-        prUrl: 'https://github.com/example/repo/pull/4',
-        prNumber: 4,
-      }),
-    ]);
-    expect(
-      container.querySelector('a[href="/projects/owner-project/workspaces/archived-workspace"]')
-        ?.textContent
-    ).toContain('Open workspace');
-    expect(
-      container.querySelector('a[href="https://github.com/example/repo/pull/4"]')?.textContent
-    ).toContain('#4');
-    expect(container.querySelector('a[target="_blank"]')?.textContent).toContain(
-      '(opens in new tab)'
-    );
-    expect(container.textContent).toContain('Up to 50 recent runs');
-  });
+  it.each([
+    ['ARCHIVED', 'Workspace archived'],
+    ['ARCHIVING', 'Workspace archiving'],
+  ] as const)(
+    'shows %s workspaces without a workspace link and keeps their PR links',
+    (status, label) => {
+      renderHistory([
+        run({
+          workspaceId: 'archived-workspace',
+          workspace: { status },
+          status: 'PR_CREATED',
+          prUrl: 'https://github.com/example/repo/pull/4',
+          prNumber: 4,
+        }),
+      ]);
+      expect(container.textContent).toContain(label);
+      expect(
+        container.querySelector('a[href="/projects/owner-project/workspaces/archived-workspace"]')
+      ).toBeNull();
+      expect(
+        container.querySelector('a[href="https://github.com/example/repo/pull/4"]')?.textContent
+      ).toContain('#4');
+      expect(container.querySelector('a[target="_blank"]')?.textContent).toContain(
+        '(opens in new tab)'
+      );
+      expect(container.textContent).toContain('Up to 50 recent runs');
+    }
+  );
   it('distinguishes a running workspace not yet created from an unavailable terminal workspace', () => {
     renderHistory([
       run({ id: 'running' }),

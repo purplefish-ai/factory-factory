@@ -46,7 +46,7 @@ type Services = AgentSourceServices &
     projectManagementService: { findById(id: string): Promise<AgentSourceProject | null> };
     agentManagementService: AgentManagementService;
     agentRuntime?: Pick<ReturnType<typeof createAgentRuntime>, 'recovery' | 'activation'>;
-    workspaceDataService: Pick<typeof workspaceDataService, 'readEventOrigin'>;
+    workspaceDataService: Pick<typeof workspaceDataService, 'readEventOriginWithWorkspaceStatus'>;
   };
 async function activeProject(projectId: string, services: Services) {
   const project = await services.projectManagementService.findById(projectId);
@@ -355,33 +355,40 @@ export function createAgentManagement(getServices: () => Services) {
         if (!run.reservedWorkspaceId) {
           continue;
         }
-        const origin = await services.workspaceDataService.readEventOrigin({
-          projectId: input.projectId,
-          workspaceId: run.reservedWorkspaceId,
-        });
+        const workspaceOrigin =
+          await services.workspaceDataService.readEventOriginWithWorkspaceStatus({
+            projectId: input.projectId,
+            workspaceId: run.reservedWorkspaceId,
+          });
+        const origin = workspaceOrigin?.origin;
         if ((!origin && run.workspaceId) || (origin && origin.runId !== run.id)) {
           throw new ApplicationError('NOT_FOUND', 'Event origin does not match the run.');
         }
-        if (origin) {
-          run.workspaceState = origin.workspaceState;
+        if (workspaceOrigin) {
+          run.workspaceState = workspaceOrigin.origin.workspaceState;
+          run.workspaceStatus = workspaceOrigin.workspaceStatus;
         }
       }
       return agentRunPageSchema.parse(page);
     },
     async workspaceOrigin(input: { projectId: string; workspaceId: string }) {
       const services = getServices();
-      const origin = await services.workspaceDataService.readEventOrigin(input);
-      const run = origin
-        ? await services.agentManagementService.originRun({
-            projectId: origin.projectId,
-            workspaceId: origin.workspaceId,
-            runId: origin.runId,
-          })
-        : null;
-      if (run && origin) {
-        run.workspaceState = origin.workspaceState;
+      const workspaceOrigin =
+        await services.workspaceDataService.readEventOriginWithWorkspaceStatus(input);
+      if (!workspaceOrigin) {
+        return null;
       }
-      return agentWorkspaceOriginSchema.parse(origin ? { origin, run } : null);
+      const { workspaceStatus, origin } = workspaceOrigin;
+      const run = await services.agentManagementService.originRun({
+        projectId: origin.projectId,
+        workspaceId: origin.workspaceId,
+        runId: origin.runId,
+      });
+      if (run) {
+        run.workspaceState = origin.workspaceState;
+        run.workspaceStatus = workspaceStatus;
+      }
+      return agentWorkspaceOriginSchema.parse({ origin, run });
     },
   };
 }

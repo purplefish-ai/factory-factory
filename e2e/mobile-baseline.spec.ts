@@ -173,11 +173,14 @@ for (const viewport of mobileViewports) {
     await page.keyboard.press('Enter');
     await expect(review).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { name: 'Review recent changes' })).toBeVisible();
-    const workspaceLink = page.getByRole('link', { name: /Open workspace/ });
-    await workspaceLink.scrollIntoViewIfNeeded();
-    await expect(workspaceLink).toHaveAttribute(
+    const runHistory = page.getByRole('region', { name: 'Run history' });
+    const archivedWorkspace = runHistory.getByText('Workspace archived');
+    await archivedWorkspace.scrollIntoViewIfNeeded();
+    await expect(archivedWorkspace).toBeVisible();
+    await expect(runHistory.getByRole('link', { name: /Open workspace/ })).toHaveCount(0);
+    await expect(runHistory.getByRole('link', { name: /PR #42/ })).toHaveAttribute(
       'href',
-      '/projects/factory-factory/workspaces/archived-run'
+      'https://github.com/example/repo/pull/42'
     );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
@@ -187,9 +190,6 @@ for (const viewport of mobileViewports) {
       .scrollIntoViewIfNeeded();
     await review.blur();
     await expect(page).toHaveScreenshot(`agents-detail-${viewport.name}.png`);
-    await workspaceLink.focus();
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/archived-run$/);
     await page.goto('/__mobile-baseline?surface=agents');
     await page.getByRole('button', { name: 'Create automation', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Scheduled automation', exact: true }).click();
