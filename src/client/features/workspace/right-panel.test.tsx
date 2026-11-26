@@ -126,13 +126,11 @@ vi.mock('@/client/features/inbox', () => ({
 vi.mock('./combined-changes-panel', () => ({
   CombinedChangesPanel: () => createElement('div', { 'data-testid': 'changes-panel' }),
 }));
-vi.mock('./dev-logs-panel', () => ({ DevLogsPanel: () => null }));
 vi.mock('./file-browser-panel', () => ({ FileBrowserPanel: () => null }));
 vi.mock('./periodic-task-panel', () => ({
   PeriodicTaskPanel: () => createElement('div', { 'data-testid': 'periodic-task-panel' }),
 }));
 vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
-vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
   // Stands in for xterm: replays the snapshot, then writes chunks to the DOM.
@@ -263,6 +261,24 @@ describe('RightPanel Agents tab', () => {
     );
     expect(mocks.selectTerminal).toHaveBeenLastCalledWith('second');
     expect(mocks.createTerminal).not.toHaveBeenCalled();
+  });
+
+  it('remembers the selected log source when switching back from the terminal', async () => {
+    render();
+    await act(() => mocks.terminalOptions?.onTerminalList?.([{ id: 'first', createdAt: '' }]));
+    const tab = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+        (button) => button.textContent === label
+      )!;
+
+    act(() => tab('Logs').click());
+    act(() => tab('Post-Run').click());
+    expect(container.textContent).toContain('Waiting for post-run script output…');
+    await act(async () => tab('Terminal 1').click());
+    expect(container.querySelector('[aria-label="Log source"]')).toBeNull();
+    act(() => tab('Logs').click());
+    expect(tab('Post-Run').getAttribute('aria-selected')).toBe('true');
+    expect(container.textContent).toContain('Waiting for post-run script output…');
   });
 
   it('writes terminal chunks without re-rendering the right panel, even while hidden', async () => {
