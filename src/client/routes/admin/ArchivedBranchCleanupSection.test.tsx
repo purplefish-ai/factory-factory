@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   removeMutate: vi.fn(),
   refetch: vi.fn(() => Promise.resolve()),
   invalidate: vi.fn(() => Promise.resolve()),
+  invalidateRefs: vi.fn(() => Promise.resolve()),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   mutationOptions: null as MutationOptions | null,
@@ -46,9 +47,24 @@ vi.mock('sonner', () => ({ toast: { success: mocks.toastSuccess, error: mocks.to
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      admin: { listArchivedBranchCandidates: { invalidate: mocks.invalidate } },
+      admin: {
+        listArchivedBranchCandidates: { invalidate: mocks.invalidate },
+        listArchivedRefCandidates: { invalidate: mocks.invalidateRefs },
+      },
     }),
     admin: {
+      // The snapshot list has its own tests (ArchivedRefCleanup.test.tsx).
+      listArchivedRefCandidates: {
+        useQuery: () => ({
+          data: [],
+          error: null,
+          isFetching: false,
+          refetch: vi.fn(),
+        }),
+      },
+      removeArchivedRefs: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
       listArchivedBranchCandidates: {
         useQuery: () => ({
           ...mocks.query,
@@ -197,7 +213,18 @@ describe('ArchivedBranchCleanupSection', () => {
       'Deleted 2 branches. Skipped 1 that changed or no longer qualify.'
     );
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
+    // Each deleted branch leaves a pin that the snapshot list shows.
+    expect(mocks.invalidateRefs).toHaveBeenCalledTimes(1);
     expect(findButton('Delete')).toBeUndefined();
+  });
+
+  it('shows the branch and snapshot lists in one section', () => {
+    const container = render();
+
+    expect(container.textContent).toContain('Branch and snapshot cleanup');
+    expect(container.textContent).toContain('Branches');
+    expect(container.textContent).toContain('Archive snapshots');
+    expect(container.textContent).toContain('No archive snapshots to delete.');
   });
 
   it('reports failures from the cleanup result', () => {

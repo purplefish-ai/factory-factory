@@ -38,6 +38,8 @@ function CleanupStory({ mode }: { mode: Mode }) {
   const [handlers] = useState(() => {
     let groups = mode === 'empty' ? [] : sampleGroups();
     return {
+      // The snapshot list's own states are in ArchivedRefCleanup.stories.tsx.
+      'admin.listArchivedRefCandidates': () => (mode === 'loading' ? STORY_TRPC_PENDING : []),
       'admin.listArchivedBranchCandidates': () => {
         if (mode === 'loading') {
           return STORY_TRPC_PENDING;

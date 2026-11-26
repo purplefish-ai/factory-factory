@@ -136,6 +136,7 @@ import { settingsHealthService, userSettingsService } from './services/settings'
 import { terminalService, terminalSessionService } from './services/terminal';
 import {
   archivedBranchCleanupService,
+  archivedRefCleanupService,
   computePendingRequestType,
   getWorkspaceInitPolicy,
   gitCloneService,
@@ -259,6 +260,7 @@ export type ApplicationServices = BridgeServices & {
   worktreeLifecycleService: typeof worktreeLifecycleService;
   orphanedWorktreeService: typeof orphanedWorktreeService;
   archivedBranchCleanupService: typeof archivedBranchCleanupService;
+  archivedRefCleanupService: typeof archivedRefCleanupService;
   worktreeTrashReclaimer: typeof worktreeTrashReclaimer;
   computePendingRequestType: typeof computePendingRequestType;
   triggerAdversarialReview: typeof triggerAdversarialReview;
@@ -542,6 +544,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     worktreeLifecycleService,
     orphanedWorktreeService,
     archivedBranchCleanupService,
+    archivedRefCleanupService,
     worktreeTrashReclaimer,
     archiveWorkspace,
     cleanupWorkspaceRuntimeResources,

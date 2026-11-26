@@ -9,7 +9,7 @@ import { APP_PRIVATE_REF_PREFIX, assertAppPrivateRef } from './git-ops.service';
  * of treating an unanswered question as "safe to delete".
  */
 
-const COMMIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+export const COMMIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const HEADS_PREFIX = 'refs/heads/';
 /** Pins live under `refs/factory-factory/deleted-branches/<encoded name>/<sha>`. */
 export const DELETED_BRANCH_PIN_PREFIX = `${APP_PRIVATE_REF_PREFIX}deleted-branches/`;
@@ -22,7 +22,7 @@ export interface LocalBranch {
   sha: string;
 }
 
-async function git(repoPath: string, args: string[], maxBuffer?: number): Promise<string> {
+export async function git(repoPath: string, args: string[], maxBuffer?: number): Promise<string> {
   const result = await execCommand('git', ['-C', repoPath, ...args], {
     ...(maxBuffer && { maxBuffer }),
   });
@@ -183,7 +183,7 @@ export type BranchDeletionOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string };
 
-async function readRefSha(repoPath: string, ref: string): Promise<string | null> {
+export async function readRefSha(repoPath: string, ref: string): Promise<string | null> {
   const result = await execCommand('git', [
     '-C',
     repoPath,

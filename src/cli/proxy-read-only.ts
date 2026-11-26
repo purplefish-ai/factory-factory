@@ -41,8 +41,10 @@ export const PUBLIC_BLOCKED_PROCEDURES: ReadonlySet<string> = new Set([
   // Probe or read arbitrary host paths.
   'project.validateRepoPath',
   'project.checkFactoryConfig',
-  // Runs Git in every project repository and lists local branch names.
+  // Run Git in every project repository and list local branch names, refs
+  // and workspace names.
   'admin.listArchivedBranchCandidates',
+  'admin.listArchivedRefCandidates',
   // Whole-machine load and the processes behind it, which reflect activity
   // outside this instance.
   'admin.getHostMetrics',
