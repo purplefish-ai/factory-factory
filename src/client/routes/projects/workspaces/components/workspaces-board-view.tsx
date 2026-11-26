@@ -68,7 +68,7 @@ export function WorkspacesBoardView({
         <OpenNewWorkspaceFormRequest onOpened={onNewWorkspaceFormOpened} />
       ) : null}
       <KanbanImageDropZone projectId={projectId}>
-        <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
+        <div className="flex flex-col h-full px-3 pb-3 md:p-6 gap-3 md:gap-4">
           <div className="flex-1 min-h-0">
             <KanbanBoard />
           </div>
