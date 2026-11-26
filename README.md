@@ -318,6 +318,10 @@ WebSockets work, and it cannot use Factory Factory's API as you.
 - Under `ff tailscale`, the Run button no longer starts a public cloudflared
   tunnel.
 
+Chat links to files under the host's `/tmp` directory also open in the workspace
+file viewer. The viewer reads the file when opened, so the link works while the
+file is still present on the host.
+
 Press Ctrl+C to stop both the owned server and its Tailscale exposure. Existing
 Serve/Funnel listeners are preserved; if HTTPS port 443 is occupied, use
 `ff tailscale --https-port 8443` (or `pnpm tailscale --https-port 8443`).
