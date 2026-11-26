@@ -94,10 +94,11 @@ describe('npm publish workflow', () => {
       'bash scripts/check-packed-consumer.sh cold'
     );
     const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
+    const [ltsFloor, currentFloor] = minimum.match(/\d+\.\d+\.\d+/g) ?? [];
     expect(consumer.strategy?.matrix['node-version']).toEqual([
-      minimum.split(' || ')[0].slice(1),
+      ltsFloor,
       '24.x',
-      minimum.split(' || ')[1].slice(2),
+      currentFloor,
       nodeVersion,
     ]);
     expect(getStep(consumer, 'Relaunch from the same npx cache').run).toBe(
