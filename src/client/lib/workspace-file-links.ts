@@ -105,7 +105,10 @@ export function resolveWorkspaceFileLink(
   if (!href) {
     return null;
   }
-  const temporaryPath = resolveTempFileLink(href);
+  const usesWindowsPathSemantics = /^[A-Za-z]:[\\/]/.test(worktreePath ?? '');
+  const windowsHost = usesWindowsPathSemantics || worktreePath?.startsWith('\\\\');
+  // The path belongs to the host, which can differ from the browser's platform.
+  const temporaryPath = windowsHost ? null : resolveTempFileLink(href);
   if (!worktreePath) {
     return temporaryPath;
   }
@@ -115,7 +118,6 @@ export function resolveWorkspaceFileLink(
     return temporaryPath;
   }
 
-  const usesWindowsPathSemantics = /^[A-Za-z]:[\\/]/.test(worktreePath);
   const filePath = normalizePathForComparison(stripLineSuffix(pathname), usesWindowsPathSemantics);
   const workspaceRoot = normalizePathForComparison(worktreePath, usesWindowsPathSemantics);
   const comparableFilePath = usesWindowsPathSemantics ? filePath.toLowerCase() : filePath;

@@ -96,6 +96,13 @@ describe('resolveWorkspaceFileLink', () => {
     expect(resolveWorkspaceFileLink('/tmp/build.log', null, ORIGIN)).toBe('/tmp/build.log');
   });
 
+  it.each([String.raw`C:\repo`, String.raw`\\server\repo`])(
+    'leaves temporary links external for a Windows worktree %s',
+    (worktree) => {
+      expect(resolveWorkspaceFileLink('/tmp/build.log', worktree, ORIGIN)).toBeNull();
+    }
+  );
+
   it.each([
     '/tmp/../etc/hosts',
     '/tmp/%2e%2e%2fetc/hosts',
