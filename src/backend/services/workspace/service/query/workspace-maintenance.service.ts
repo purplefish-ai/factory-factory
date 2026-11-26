@@ -7,10 +7,6 @@ class WorkspaceMaintenanceService {
     return workspaceAccessor.findNeedingWorktree();
   }
 
-  findStaleArchiving() {
-    return workspaceAccessor.findStaleArchivingWithProject();
-  }
-
   findNeedingPRSync(staleThresholdMinutes?: number) {
     return workspacePrAccessor.findNeedingSync(staleThresholdMinutes);
   }

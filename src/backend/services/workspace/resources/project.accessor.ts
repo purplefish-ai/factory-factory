@@ -134,6 +134,16 @@ class ProjectAccessor {
     return projects.map((project) => project.worktreeBasePath);
   }
 
+  /** Every project's repository and worktree base, archived projects included. */
+  listWorktreeLocations(): Promise<
+    Array<{ id: string; repoPath: string; worktreeBasePath: string }>
+  > {
+    return prisma.project.findMany({
+      select: { id: true, repoPath: true, worktreeBasePath: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   archive(id: string): Promise<Project> {
     return prisma.project.update({
       where: { id },

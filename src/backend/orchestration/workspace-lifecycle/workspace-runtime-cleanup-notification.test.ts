@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   workspaceActivityService,
-  workspaceMaintenanceService,
+  workspaceArchiveLeaseService,
+  workspaceDataService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
@@ -10,7 +11,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
-  recoverStaleArchivingWorkspaces,
+  resumeStaleArchives,
   withArchiveExcluded,
 } from './workspace-archive.orchestrator';
 
@@ -43,6 +44,11 @@ beforeEach(() => {
   vi.spyOn(workspaceStateMachine, 'transition').mockResolvedValue(
     unsafeCoerce({ status: 'READY' })
   );
+  vi.spyOn(workspaceArchiveLeaseService, 'claim').mockImplementation(async () => new Date());
+  vi.spyOn(workspaceArchiveLeaseService, 'hold').mockImplementation((_id, stamp) => ({
+    stamp,
+    release: async () => stamp,
+  }));
 });
 afterEach(() => {
   workspaceActivityService.clearWorkspace(workspaceId);
@@ -126,11 +132,13 @@ it.each([
     try {
       const workspace = unsafeCoerce<Parameters<typeof archiveWorkspace>[0]>({
         id: workspaceId,
-        status: 'READY',
+        status: recovery ? 'ARCHIVING' : 'READY',
+        updatedAt: new Date(0),
       });
-      vi.spyOn(workspaceMaintenanceService, 'findStaleArchiving').mockResolvedValue([workspace]);
+      vi.spyOn(workspaceArchiveLeaseService, 'findStaleIds').mockResolvedValue([workspaceId]);
+      vi.spyOn(workspaceDataService, 'findByIdWithProject').mockResolvedValue(workspace);
       const archive = recovery
-        ? recoverStaleArchivingWorkspaces(services)
+        ? resumeStaleArchives(services, { limit: 10, signal: new AbortController().signal })
         : archiveWorkspace(workspace, {}, services);
       if (rollback) {
         if (recovery) {

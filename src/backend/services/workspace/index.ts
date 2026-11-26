@@ -8,6 +8,7 @@ export type {
 // --- Workspace lifecycle ---
 export type { AcceptedWorkspaceBranch } from './service/lifecycle/accepted-branch';
 export { workspaceActivityService } from './service/lifecycle/activity.service';
+export { workspaceArchiveLeaseService } from './service/lifecycle/archive-lease.service';
 export { archivedWorkspaceBlobRetentionService } from './service/lifecycle/archived-workspace-blob-retention.service';
 export { WorkspaceCreationService } from './service/lifecycle/creation.service';
 export { workspaceDataService } from './service/lifecycle/data.service';
@@ -85,6 +86,10 @@ export {
   type ArchivedRefTier,
   archivedRefCleanupService,
 } from './service/worktree/archived-ref-cleanup.service';
+export {
+  type ArchivedWorktreeRegistrationCleanupResult,
+  archivedWorktreeRegistrationService,
+} from './service/worktree/archived-worktree-registration.service';
 export { gitCloneService, parseGithubUrl } from './service/worktree/git-clone.service';
 export { APP_PRIVATE_REF_PREFIX, gitOpsService } from './service/worktree/git-ops.service';
 export {

@@ -7,8 +7,8 @@ import type { SessionStopReason } from '@/backend/services/session';
 import {
   archivedWorkspaceBlobRetentionService,
   workspaceActivityService,
+  workspaceArchiveLeaseService,
   workspaceDataService,
-  workspaceMaintenanceService,
   WorkspaceStateMachineError,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -34,11 +34,18 @@ type ArchiveSourceStatus = Awaited<
 const pendingArchives = new Map<string, PendingArchive>();
 /** Workspaces a delete is cleaning up; archives of them are refused meanwhile. */
 const archiveExclusions = new Map<string, number>();
-// Only a failed status write proves that this process abandoned an ARCHIVING row.
-const interruptedArchives = new Map<
-  string,
-  { source: ArchiveSourceStatus; removalStarted: boolean }
->();
+/**
+ * An ARCHIVING row this process abandoned because its status write failed.
+ * `source` is null for a row taken over from elsewhere; `stamp` is the
+ * `updatedAt` its lease last wrote, so the record lapses once anyone else
+ * writes the row.
+ */
+interface InterruptedArchive {
+  source: ArchiveSourceStatus | null;
+  removalStarted: boolean;
+  stamp: Date;
+}
+const interruptedArchives = new Map<string, InterruptedArchive>();
 
 interface ArchiveWorkspaceOptions {
   removeGitIndexLock?: boolean;
@@ -78,6 +85,8 @@ export type WorkspaceRuntimeCleanupDependencies = {
 export interface ArchiveRecoveryResult {
   archived: string[];
   failed: Array<{ id: string; error: string }>;
+  /** Owned by an archive or a delete in this process, or no longer stale or claimable. */
+  skipped: string[];
 }
 
 type LeftoverProcessWorktree = {
@@ -384,98 +393,148 @@ async function performArchive(
     interruptedArchives.delete(requestedWorkspace.id);
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${requestedWorkspace.id}`);
   }
-  const resumeSource = getArchiveResumeSource(workspace);
-  if (workspace.status === 'ARCHIVED' || (workspace.status === 'ARCHIVING' && !resumeSource)) {
-    return workspace;
-  }
-
-  if (!(resumeSource || workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING'))) {
-    throw new ApplicationError(
-      'INVALID_INPUT',
-      `Cannot archive workspace from status: ${workspace.status}`
-    );
+  let resume: ArchiveResume | null = null;
+  if (workspace.status === 'ARCHIVING') {
+    resume = await claimArchivingRow(workspace);
+    if (!resume) {
+      return workspace;
+    }
+  } else {
+    interruptedArchives.delete(workspace.id);
+    if (workspace.status === 'ARCHIVED') {
+      return workspace;
+    }
+    if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
+      throw new ApplicationError(
+        'INVALID_INPUT',
+        `Cannot archive workspace from status: ${workspace.status}`
+      );
+    }
   }
 
   return await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
-    let statusBeforeArchive: ArchiveSourceStatus;
+    let statusBeforeArchive: ArchiveSourceStatus | null;
     let target = workspace;
-    try {
-      if (resumeSource) {
-        statusBeforeArchive = resumeSource;
-      } else {
+    let stamp: Date;
+    if (resume) {
+      statusBeforeArchive = resume.source;
+      stamp = resume.stamp;
+    } else {
+      try {
         const started = await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
         statusBeforeArchive = started.previousStatus;
+        stamp = started.workspace.updatedAt;
         // The caller's row may predate another attempt that marked this one incomplete.
         target = {
           ...workspace,
           status: started.previousStatus,
           initErrorMessage: started.workspace.initErrorMessage,
         };
+      } catch (error) {
+        return await resolveArchiveTransitionConflict(
+          workspace.id,
+          error,
+          options,
+          services,
+          retryTransition
+        );
       }
-    } catch (error) {
-      return await resolveArchiveTransitionConflict(
-        workspace.id,
-        error,
-        options,
-        services,
-        retryTransition
-      );
     }
 
-    const progress: ArchiveProgress = {
-      removalStarted: interruptedArchives.get(workspace.id)?.removalStarted === true,
-    };
+    const lease = workspaceArchiveLeaseService.hold(workspace.id, stamp);
+    const progress: ArchiveProgress = { removalStarted: resume?.removalStarted === true };
+    let archived: ArchiveWorkspaceResult;
     try {
-      const archived = await completeArchive(target, options, services, progress);
-      interruptedArchives.delete(workspace.id);
-      return archived;
+      archived = await completeArchive(target, options, services, progress);
     } catch (error) {
-      await settleFailedArchive(workspace.id, statusBeforeArchive, progress, error);
+      const finalStamp = await lease.release();
+      await settleFailedArchive(workspace.id, statusBeforeArchive, progress, error, finalStamp);
       throw error;
     }
+    await lease.release();
+    interruptedArchives.delete(workspace.id);
+    return archived;
   });
+}
+
+/** Failure handling for this attempt, and the lease the attempt holds. */
+interface ArchiveResume {
+  /** The status to roll back to, or null for a row taken over from elsewhere. */
+  source: ArchiveSourceStatus | null;
+  removalStarted: boolean;
+  stamp: Date;
+}
+
+/**
+ * Claim an ARCHIVING row that no archive in this process is running (the
+ * caller holds its pending entry). This process's own interrupted attempt
+ * resumes at once while nobody else has written the row; any other row only
+ * once its lease is stale, since another process may still be archiving it.
+ * The claim is a compare-and-swap on `updatedAt`, so at most one claimer wins.
+ */
+async function claimArchivingRow(workspace: WorkspaceWithProject): Promise<ArchiveResume | null> {
+  const interrupted = interruptedArchives.get(workspace.id);
+  const own = interrupted?.stamp.getTime() === workspace.updatedAt.getTime() ? interrupted : null;
+  if (interrupted && !own) {
+    interruptedArchives.delete(workspace.id);
+  }
+  if (!(own || workspaceArchiveLeaseService.isStale(workspace.updatedAt))) {
+    return null;
+  }
+  const stamp = await workspaceArchiveLeaseService.claim(workspace.id, workspace.updatedAt);
+  if (!stamp) {
+    return null;
+  }
+  if (!own) {
+    logger.warn('Taking over an interrupted archive', {
+      workspaceId: workspace.id,
+      leaseWrittenAt: workspace.updatedAt.toISOString(),
+    });
+  }
+  return { source: own?.source ?? null, removalStarted: own?.removalStarted === true, stamp };
 }
 
 /**
  * Before removal starts, roll back to the previous status. After it, move
  * forward to FAILED with the archive-incomplete marker, since the worktree may
- * be partly gone and must not be presented as ready or set up again.
+ * be partly gone and must not be presented as ready or set up again. A row
+ * taken over from elsewhere has no known previous status, so it goes to FAILED.
  */
 async function settleFailedArchive(
   workspaceId: string,
-  statusBeforeArchive: ArchiveSourceStatus,
+  statusBeforeArchive: ArchiveSourceStatus | null,
   progress: ArchiveProgress,
-  error: unknown
+  error: unknown,
+  stamp: Date
 ): Promise<void> {
+  const message = toError(error).message;
   try {
     if (progress.removalStarted) {
       await workspaceStateMachine.transition(workspaceId, 'FAILED', {
-        errorMessage: formatArchiveIncompleteMessage(toError(error).message),
+        errorMessage: formatArchiveIncompleteMessage(
+          statusBeforeArchive ? message : `recovery after restart failed: ${message}`
+        ),
       });
-    } else {
+    } else if (statusBeforeArchive) {
       await workspaceStateMachine.transition(workspaceId, statusBeforeArchive);
+    } else {
+      await workspaceStateMachine.transition(workspaceId, 'FAILED', {
+        errorMessage: `Archive recovery failed after restart: ${message}`,
+      });
     }
     interruptedArchives.delete(workspaceId);
   } catch (settleError) {
     interruptedArchives.set(workspaceId, {
       source: statusBeforeArchive,
       removalStarted: progress.removalStarted,
+      stamp,
     });
     logger.error('Failed to settle workspace status after archive failure', {
       workspaceId,
-      settleTo: progress.removalStarted ? 'FAILED' : statusBeforeArchive,
+      settleTo: progress.removalStarted || !statusBeforeArchive ? 'FAILED' : statusBeforeArchive,
       error: toError(settleError).message,
     });
   }
-}
-
-function getArchiveResumeSource(workspace: WorkspaceWithProject): ArchiveSourceStatus | undefined {
-  if (workspace.status !== 'ARCHIVING') {
-    interruptedArchives.delete(workspace.id);
-    return undefined;
-  }
-  // Age alone cannot establish that another process has stopped cleanup.
-  return interruptedArchives.get(workspace.id)?.source;
 }
 
 async function resolveArchiveTransitionConflict(
@@ -502,58 +561,43 @@ async function resolveArchiveTransitionConflict(
 }
 
 /**
- * Resume ARCHIVING workspaces left behind by process termination.
- * Normal archive rollback cannot run when the process exits mid-request, so
- * startup recovery either completes the archive or moves the workspace to
- * FAILED where users can see it and retry.
+ * Resume up to `limit` stale ARCHIVING workspaces, oldest first, through
+ * `archiveWorkspace`: each is claimed before it is taken over and goes forward
+ * (see `claimArchivingRow`). Rows this process is archiving or deleting are
+ * skipped; their owner settles them. Stops between rows once `signal` aborts.
  */
-export async function recoverStaleArchivingWorkspaces(
+export async function resumeStaleArchives(
   services: ArchiveWorkspaceDependencies,
-  options: ArchiveWorkspaceOptions = {}
+  options: { limit: number; signal: AbortSignal }
 ): Promise<ArchiveRecoveryResult> {
-  const staleWorkspaces = await workspaceMaintenanceService.findStaleArchiving();
-  const result: ArchiveRecoveryResult = { archived: [], failed: [] };
-
-  if (staleWorkspaces.length === 0) {
-    return result;
+  const result: ArchiveRecoveryResult = { archived: [], failed: [], skipped: [] };
+  for (const id of await workspaceArchiveLeaseService.findStaleIds(options.limit)) {
+    if (options.signal.aborted) {
+      break;
+    }
+    let workspace: WorkspaceWithProject | null;
+    try {
+      workspace = await workspaceDataService.findByIdWithProject(id);
+    } catch (error) {
+      result.failed.push({ id, error: toError(error).message });
+      continue;
+    }
+    // Checked after the read, with no await before `archiveWorkspace` registers
+    // the attempt: a stop, an archive or a delete may have begun meanwhile, and
+    // the row's owner may have settled it (only ARCHIVING rows are resumed).
+    if (options.signal.aborted) {
+      break;
+    }
+    if (workspace?.status !== 'ARCHIVING' || pendingArchives.has(id) || archiveExclusions.has(id)) {
+      result.skipped.push(id);
+      continue;
+    }
+    try {
+      const outcome = await archiveWorkspace(workspace, {}, services);
+      (outcome.status === 'ARCHIVED' ? result.archived : result.skipped).push(id);
+    } catch (error) {
+      result.failed.push({ id, error: toError(error).message });
+    }
   }
-
-  logger.warn('Recovering stale archiving workspaces on startup', {
-    count: staleWorkspaces.length,
-    workspaceIds: staleWorkspaces.map((workspace) => workspace.id),
-  });
-
-  for (const workspace of staleWorkspaces) {
-    await workspaceActivityService.withNotificationsSuppressed(workspace.id, async () => {
-      const progress: ArchiveProgress = { removalStarted: false };
-      try {
-        await completeArchive(workspace, options, services, progress);
-        result.archived.push(workspace.id);
-        logger.info('Recovered stale archiving workspace', { workspaceId: workspace.id });
-      } catch (error) {
-        const errorMessage = toError(error).message;
-        result.failed.push({ id: workspace.id, error: errorMessage });
-        logger.error('Failed to recover stale archiving workspace', {
-          workspaceId: workspace.id,
-          removalStarted: progress.removalStarted,
-          error: errorMessage,
-        });
-
-        try {
-          await workspaceStateMachine.transition(workspace.id, 'FAILED', {
-            errorMessage: progress.removalStarted
-              ? formatArchiveIncompleteMessage(`recovery after restart failed: ${errorMessage}`)
-              : `Archive recovery failed after restart: ${errorMessage}`,
-          });
-        } catch (transitionError) {
-          logger.error('Failed to mark stale archiving workspace as failed', {
-            workspaceId: workspace.id,
-            error: toError(transitionError).message,
-          });
-        }
-      }
-    });
-  }
-
   return result;
 }

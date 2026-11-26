@@ -118,7 +118,14 @@ vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestra
   withAutoStubs('workspace-archive.orchestrator', {
     archiveWorkspace: vi.fn(),
     cleanupWorkspaceRuntimeResources: vi.fn(),
-    recoverStaleArchivingWorkspaces: vi.fn(),
+  })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-archive-recovery.orchestrator', () =>
+  withAutoStubs('workspace-archive-recovery.orchestrator', {
+    WorkspaceArchiveRecovery: class {
+      start = vi.fn();
+      stop = vi.fn(async () => undefined);
+    },
   })
 );
 vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator', () =>
@@ -388,7 +395,7 @@ import {
   type EventCollectorOrchestrator,
 } from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
-import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
+import { WorkspaceArchiveRecovery } from '@/backend/orchestration/workspace-lifecycle/workspace-archive-recovery.orchestrator';
 import { enqueueWorkspaceInitializationTask } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import { recoverWorkspaceMail } from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
 import { slackConnectionService } from '@/backend/services/agent-definition';
@@ -566,7 +573,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       // and the first graph's `start()` would drive the second graph's service.
       jobRunner: new JobRunner(),
     }),
-    recoverStaleArchivingWorkspaces,
+    archiveRecovery: new WorkspaceArchiveRecovery({ archive: services }),
   } satisfies ApplicationLifecycle;
 
   return { services, lifecycle, config: graphSystemConfig };

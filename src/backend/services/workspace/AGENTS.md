@@ -10,8 +10,7 @@ This capsule owns the Prisma models `src/backend/services/registry.ts` assigns
 to `workspace`, creation validation and persistence for every creation source,
 workspace status and the run-script row, worktree creation and removal,
 generated names and conversation-summary rows, the accepted-branch gateway, and
-the in-memory snapshot store with its private name and branch freshness. It does
-not own:
+the in-memory snapshot store and its name and branch freshness. It does not own:
 
 - Launch, initialization, retry, rename serialization and the metadata inference
   queue: `src/backend/orchestration/workspace-lifecycle/`.
@@ -35,10 +34,8 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
   so a manual rename made during inference wins.
   `workspace-metadata.accessor.integration.test.ts`.
 - Only the first accepted metadata sets the title and branch suggestions; later
-  results replace only the summaries.
-  `workspace-metadata.accessor.integration.test.ts`.
-- A metadata write is rejected when another request has since been reserved or
-  the workspace is archiving or archived.
+  results replace only the summaries. A metadata write is rejected when another
+  request has since been reserved or the workspace is archiving or archived.
   `workspace-metadata.accessor.integration.test.ts`.
 - Every creation source inserts the workspace and its side-table rows only into
   an active project, in one guarded insert.
@@ -61,9 +58,8 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
   case-insensitively on host, owner and repository, so a casing variant reuses
   the existing association.
   `workspace-pr-collection.accessor.integration.test.ts`.
-- A newly initialized worktree's columns and its cached run-script commands
-  commit in one transaction.
-  `workspace-initialized-worktree.integration.test.ts`.
+- An initialized worktree's columns and its cached run-script commands commit in
+  one transaction. `workspace-initialized-worktree.integration.test.ts`.
 - Startup recovery resets only STARTING and STOPPING run-script rows; RUNNING
   rows keep their pid. `workspace-run-script.accessor.test.ts`.
 - An accepted branch reaches subscribers only after the branch update and the PR
@@ -88,6 +84,9 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
 - Branch cleanup pins tips; ref cleanup spares unarchived workspaces and unique
   work under 30 days; both CAS. `archived-branch-cleanup.integration.test.ts`,
   `archived-ref-cleanup.integration.test.ts`.
+- Leftover cleanup drops an unlocked canonical `<base>/workspace-<id>`
+  registration of the project's ARCHIVED workspace, path gone, by deleting only
+  Git's admin dir. `archived-worktree-registration.integration.test.ts`.
 
 ## Map
 
@@ -99,8 +98,8 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
 - `service/lifecycle/`: `creation.service.ts` (sources),
   `state-machine.service.ts` (status transitions), `data.service.ts` (reads and
   narrow writes; accepted branches go through `accepted-branch.ts`),
-  `workspace-run-script.service.ts`,
-  `archived-workspace-blob-retention.service.ts`.
+  `workspace-run-script.service.ts`, `archive-lease.service.ts` (the ARCHIVING
+  lease), `archived-workspace-blob-retention.service.ts`.
 - [`service/snapshot/`](service/snapshot/AGENTS.md): the snapshot store, with
   branch and PR projection freshness.
 - `service/state/`: pure derivations (flow state, init policy, request type).
@@ -108,9 +107,10 @@ Orchestration wires the bridges declared in `service/bridges.ts`.
   `project-management.service.ts` creates, updates and archives projects and
   runs the `FF_PROJECT_ROOT` location check.
 - `service/worktree/`: `git-ops.service.ts`, `worktree-lifecycle.service.ts`,
-  clone, orphaned-worktree, archived branch and ref cleanup, the trash
-  (`worktree-trash*.ts`); `project-root.ts` (`FF_PROJECT_ROOT` membership, real
-  path); `project-repository-inspector.ts` (`origin`, default branch, readable).
+  clone, orphaned-worktree, archived branch, ref and registration cleanup, the
+  trash (`worktree-trash*.ts`); `project-root.ts` (`FF_PROJECT_ROOT` membership,
+  real path); `project-repository-inspector.ts` (`origin`, default branch,
+  readable).
 
 ## Decisions
 

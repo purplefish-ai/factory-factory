@@ -14,10 +14,10 @@ import {
 } from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
 import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import { WorkspaceArchiveRecovery } from '@/backend/orchestration/workspace-lifecycle/workspace-archive-recovery.orchestrator';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
-  recoverStaleArchivingWorkspaces,
   withArchiveExcluded,
 } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
 import {
@@ -300,7 +300,7 @@ export type ApplicationLifecycle = {
   wireDomainBridges: typeof configureDomainBridges;
   eventCollector: EventCollectorOrchestrator;
   snapshotReconciliation: SnapshotReconciliationService;
-  recoverStaleArchivingWorkspaces: typeof recoverStaleArchivingWorkspaces;
+  archiveRecovery: Pick<WorkspaceArchiveRecovery, 'start' | 'stop'>;
 };
 
 export type ApplicationDependencies = {
@@ -659,7 +659,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         workspaceMaintenanceService: services.workspaceMaintenanceService,
         workspaceSnapshotStore: services.workspaceSnapshotStore,
       }),
-      recoverStaleArchivingWorkspaces,
+      archiveRecovery: new WorkspaceArchiveRecovery({ archive: services }),
     },
   };
 }

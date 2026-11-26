@@ -138,3 +138,17 @@ it('reads PR discovery candidates without blob columns', async () => {
   expect(candidate).not.toHaveProperty('initOutput');
   expect(JSON.stringify(candidate).length).toBeLessThan(SMALL);
 });
+
+it('returns stale archiving candidates as identifiers only', async () => {
+  await db.prisma.workspace.create({
+    data: { id: 'archiving', projectId: 'p', name: 'Archiving', status: 'ARCHIVING', ...blobs },
+  });
+  await db.prisma.workspace.update({
+    where: { id: 'archiving' },
+    data: { updatedAt: new Date(Date.now() - 60 * 60_000) },
+  });
+
+  await expect(workspaceAccessor.findStaleArchivingIds(new Date(), 10)).resolves.toEqual([
+    'archiving',
+  ]);
+});

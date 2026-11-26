@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCreate = vi.fn();
 const mockFindMany = vi.fn();
@@ -376,53 +376,20 @@ describe('workspaceAccessor', () => {
     });
   });
 
-  describe('findStaleArchivingWithProject', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
+  describe('findStaleArchivingIds', () => {
+    it('queries the oldest ARCHIVING workspaces last written at or before the cutoff', async () => {
+      const cutoff = new Date('2024-01-15T11:58:00Z');
+      mockFindMany.mockResolvedValue([{ id: 'ws-archiving' }]);
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+      const result = await workspaceAccessor.findStaleArchivingIds(cutoff, 10);
 
-    it('queries ARCHIVING workspaces older than the stale threshold with project data', async () => {
-      const now = new Date('2024-01-15T12:00:00Z');
-      vi.setSystemTime(now);
-      const staleWorkspace = {
-        id: 'ws-archiving',
-        status: 'ARCHIVING',
-        updatedAt: new Date('2024-01-15T11:40:00Z'),
-        project: { id: 'proj-1' },
-      };
-      mockFindMany.mockResolvedValue([staleWorkspace]);
-
-      const result = await workspaceAccessor.findStaleArchivingWithProject();
-
-      expect(result).toEqual([expect.objectContaining(staleWorkspace)]);
+      expect(result).toEqual(['ws-archiving']);
       expect(mockFindMany).toHaveBeenCalledWith({
-        where: {
-          status: 'ARCHIVING',
-          updatedAt: { lt: expect.any(Date) },
-        },
-        include: {
-          project: true,
-          prMonitoring: { select: { enabled: true } },
-          prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
-          prDiscovery: true,
-        },
+        where: { status: 'ARCHIVING', updatedAt: { lte: cutoff } },
+        select: { id: true },
         orderBy: { updatedAt: 'asc' },
+        take: 10,
       });
-
-      const callArgs = mockFindMany.mock.calls[0]![0];
-      expect(callArgs.where.updatedAt.lt.getTime()).toBe(now.getTime() - 10 * 60 * 1000);
-    });
-
-    it('returns an empty array when no stale ARCHIVING workspaces exist', async () => {
-      mockFindMany.mockResolvedValue([]);
-
-      const result = await workspaceAccessor.findStaleArchivingWithProject();
-
-      expect(result).toEqual([]);
     });
   });
 });

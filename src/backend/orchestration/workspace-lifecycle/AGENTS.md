@@ -3,9 +3,8 @@
 Coordination across capsules from a workspace's launch to its archive:
 interactive launch, initialization and its retries, accepted renames, generated
 names and conversation summaries, child workspaces, archive and recovery. The
-[services guide](../../services/AGENTS.md) covers the capsules this code
-coordinates. Bare file names below are in this directory; paths that start with
-`src/` are from the repository root.
+[services guide](../../services/AGENTS.md) covers the capsules coordinated here.
+Bare file names are in this directory; `src/` paths are from the repo root.
 
 ## Owns, and does not own
 
@@ -22,8 +21,7 @@ session. It does not own:
   (`generateWorkspaceMetadata`): `src/backend/services/session/`.
 - The metadata prompt and its input bounds:
   `src/backend/prompts/workspace-metadata.ts`.
-- Snapshot events and periodic snapshot reconciliation:
-  `src/backend/orchestration/snapshots/`.
+- Snapshot events and reconciliation: `src/backend/orchestration/snapshots/`.
 
 ## Public surface
 
@@ -55,10 +53,11 @@ collector is given `fireLifecycleNotification` (typed from
   result superseded by newer conversation activity is never accepted.
   `workspace-metadata.orchestrator.test.ts`.
 - Archive requests for one workspace in one process share the in-flight
-  archive's result, so cleanup runs once.
-  `workspace-archive-concurrency.test.ts`.
-- An archiving workspace with no failed local archive is acknowledged without
-  taking over its cleanup. `workspace-archive-concurrency.test.ts`.
+  archive's result, so cleanup runs once. Taking over an ARCHIVING row (a
+  request, or the `archive-recovery` job) needs a compare-and-swap claim on its
+  `updatedAt` lease, which a live archive renews every 15 s: this process's
+  interrupted attempt at once, other rows once two minutes stale; otherwise the
+  request is acknowledged. `workspace-archive-concurrency.test.ts`.
 - Delete runs inside `withArchiveExcluded`: it starts after this process's
   in-flight archive of the workspace settles, and archives requested meanwhile
   are refused, so the two never clean up together.
@@ -71,16 +70,16 @@ collector is given `fireLifecycleNotification` (typed from
   workspace's own branch only (otherwise aside, moving no branch, HEAD or
   index), and points `refs/factory-factory/archive/<id>` at it.
   `src/backend/services/workspace/service/worktree/archive-snapshot.integration.test.ts`.
-- Archive rolls back to the previous status only before worktree removal starts.
-  Once removal may have started, in this attempt or an earlier one (the "Archive
-  incomplete:" marker, or an interrupted ARCHIVING row whose ref exists), a
-  failure moves it to FAILED with the marker, never READY; nothing snapshots it
-  again and setup retry refuses it. `workspace-archive-concurrency.test.ts`,
+- Archive rolls back to the previous status only before worktree removal starts
+  (a taken-over row has none, so it fails). Once removal may have started, in
+  this attempt or an earlier one (the "Archive incomplete:" marker, or an
+  interrupted ARCHIVING row whose ref exists), a failure moves it to FAILED with
+  the marker, never READY; nothing snapshots it again and setup retry refuses
+  it. `workspace-archive-concurrency.test.ts`,
   `workspace-retry-authority.integration.test.ts`.
 - Startup marks stale PROVISIONING workspaces FAILED unless their init script is
-  still running, and initializes leftover NEW workspaces one at a time, holding
-  periodic reconciliation until that pass settles.
-  `reconciliation.service.test.ts`.
+  still running, and initializes leftover NEW workspaces one at a time; periodic
+  reconciliation waits for that pass. `reconciliation.service.test.ts`.
 - A setup retry of an event workspace is refused before any session, script or
   run linkage unless its initial delivery finished and no initial work is
   active, and also when its owner facts are missing.
@@ -96,8 +95,7 @@ collector is given `fireLifecycleNotification` (typed from
   session; `workspace-init-cleanup.ts` handles failures.
 - `workspace-retry-authority.ts`: whether and how a failed or warned workspace
   may retry setup.
-- `workspace-rename.orchestrator.ts`: accepted renames and their snapshot
-  publication.
+- `workspace-rename.orchestrator.ts`: accepted renames and their publication.
 - `workspace-metadata.orchestrator.ts`: the process-local metadata queue, a
   `jobRunner` job, enabled by `WORKSPACE_METADATA_ENABLED`.
 - `workspace-follow-up.orchestrator.ts`: human follow-ups dismiss completed PRs.
@@ -106,8 +104,9 @@ collector is given `fireLifecycleNotification` (typed from
   `workspace-notification-persistence.orchestrator.ts`: child workspaces and
   notifications between parent and child.
 - `workspace-archive.orchestrator.ts`, `workspace-deletion.orchestrator.ts`:
-  archive, stale-archive recovery and deletion capture; the sweep itself is
-  `src/backend/lib/worktree-process-sweep.ts`.
+  archive, its takeover and deletion capture (the sweep itself is
+  `src/backend/lib/worktree-process-sweep.ts`);
+  `workspace-archive-recovery.orchestrator.ts`, the `archive-recovery` job.
 - `reconciliation.service.ts`: startup and periodic recovery of workspaces that
   still need a worktree and of orphaned terminal sessions, and the archived-blob
   retention job.
@@ -118,3 +117,4 @@ collector is given `fireLifecycleNotification` (typed from
 - [Slow startup recovery runs after readiness](../../../../docs/decisions/2026-11-13-slow-startup-recovery-runs-after-readiness.md)
 - [The leftover process sweep matches location only](../../../../docs/decisions/2026-11-13-leftover-process-sweep-matches-location-only.md)
 - [Archive moves forward after its snapshot](../../../../docs/decisions/2026-11-25-archive-moves-forward-after-its-snapshot.md)
+- [Interrupted archives are taken over by lease](../../../../docs/decisions/2026-11-25-interrupted-archives-are-taken-over-by-lease.md)
