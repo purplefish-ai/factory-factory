@@ -35,12 +35,13 @@ has a different fix.
       through the running server with a loopback Origin, send an echo command
       and assert its output. Use a bounded timeout, retain stderr and stop the
       process tree on every exit.
-- [ ] Exercise a cold Node 26 launch first. Then install the same tarball under
-      24 and relaunch under 26 using the same absolute package spec, working
-      directory and cache. Record whether the first attempt failed during
-      installation or reached our Node gate. Verify the same npx entry was
-      reused on the second attempt. Record the ordinary upgrade outcome
-      separately from a deliberately damaged test fixture.
+- [ ] Exercise a cold Node 26 launch in its own cache. With a separate empty
+      cache, install the same tarball under 24 and relaunch under 26 using the
+      same absolute package spec, working directory and cache. Record whether
+      the first attempt failed during installation or reached our Node gate.
+      Verify the same npx entry was reused on the second attempt. Record the
+      ordinary upgrade outcome separately from a deliberately damaged test
+      fixture.
 
 ## 2. Ship one SQLite driver
 
