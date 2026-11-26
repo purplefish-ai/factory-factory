@@ -69,6 +69,27 @@ for (const width of [375, 820]) {
       ).toBeLessThanOrEqual(1);
     });
 
+    test('tab close icons are centered in their touch targets', async ({ page }) => {
+      await page.goto('/__mobile-baseline?surface=hover-actions');
+      for (const name of ['Close File', 'Close Inactive']) {
+        const button = page.getByRole('button', { name, exact: true });
+        await expect(button).toBeVisible();
+        const offset = await button.evaluate((element) => {
+          const glyph = element.querySelector('svg')?.getBoundingClientRect();
+          if (!glyph) {
+            throw new Error('Close icon is missing');
+          }
+          const target = element.getBoundingClientRect();
+          return {
+            x: glyph.x + glyph.width / 2 - (target.x + target.width / 2),
+            y: glyph.y + glyph.height / 2 - (target.y + target.height / 2),
+          };
+        });
+        expect(offset.x, name).toBeCloseTo(0);
+        expect(offset.y, name).toBeCloseTo(0);
+      }
+    });
+
     test('kanban controls stay compact without shrinking touch targets', async ({ page }) => {
       await page.goto('/__mobile-baseline?surface=hover-actions');
       const rename = page.getByRole('button', { name: 'Rename workspace', exact: true });
