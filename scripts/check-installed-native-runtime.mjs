@@ -53,12 +53,17 @@ const terminal = pty.spawn(shell, args, {
 });
 let output = '';
 const timeout = setTimeout(() => {
-  console.error('Installed PTY timed out before returning shell output and exit status');
-  try {
-    terminal.kill();
-  } finally {
-    process.exit(1);
-  }
+  process.exitCode = 1;
+  process.stderr.write(
+    'Installed PTY timed out before returning shell output and exit status\n',
+    () => {
+      try {
+        terminal.kill();
+      } finally {
+        process.exit(1);
+      }
+    }
+  );
 }, 10_000);
 terminal.onData((data) => {
   output += data;
@@ -66,13 +71,15 @@ terminal.onData((data) => {
 terminal.onExit(({ exitCode }) => {
   clearTimeout(timeout);
   if (exitCode !== 0 || !output.includes('native-pty-ready')) {
-    console.error('Installed PTY failed to spawn and return output');
-    process.exit(1);
+    process.stderr.write('Installed PTY failed to spawn and return output\n', () =>
+      process.exit(1)
+    );
+    return;
   }
-  console.log('Installed PTY returned the expected output and exit status.');
-  // node-pty's Windows ConPTY worker can outlive a normally exited shell.
-  // This dedicated smoke process has now observed both pieces of evidence.
-  if (windows) {
-    process.exit(0);
-  }
+  process.stdout.write('Installed PTY returned the expected output and exit status.\n', () => {
+    // node-pty's Windows ConPTY worker can outlive a normally exited shell.
+    if (windows) {
+      process.exit(process.exitCode ?? 0);
+    }
+  });
 });
