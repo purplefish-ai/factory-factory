@@ -1,7 +1,5 @@
-import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useCallback, useEffect, useMemo } from 'react';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
 import { SubagentList, type SubagentListState } from './subagent-list';
 import { getNextSubagentPageParam, getSubagentListError } from './subagent-pagination';
 import { isActiveSubagent } from './subagent-status';
@@ -120,15 +118,11 @@ export function ProviderSubagentsSection({
 
   return (
     <section aria-label="Subagents">
-      <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-2">
-        <RobotIcon className="h-3.5 w-3.5 text-muted-foreground" />
-        <h2 className="text-xs font-medium">Subagents</h2>
-        {state.kind === 'ready' && !state.hasMore && !state.error && state.subagents.length > 0 && (
-          <Badge role="status" aria-label="Active subagents" variant="secondary" size="count">
-            {state.subagents.filter(isActiveSubagent).length}
-          </Badge>
-        )}
-      </div>
+      {state.kind === 'ready' && !state.hasMore && !state.error && state.subagents.length > 0 && (
+        <span role="status" aria-label="Active subagents" className="sr-only">
+          {state.subagents.filter(isActiveSubagent).length}
+        </span>
+      )}
       <SubagentList
         key={sessionId}
         sessionId={sessionId}

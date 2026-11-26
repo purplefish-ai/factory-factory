@@ -106,7 +106,8 @@ function RightPanelStory({
                   eventAgentInput.parse(input);
                   return eventOrigin.agent;
                 },
-                'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
+                'workspace.unreadMailCounts': () => ({ [workspaceId]: showUnread ? 3 : 0 }),
+                'workspace.listMail': () => ({ items: [], revision: 0, nextCursor: null }),
                 'workspace.getInitStatus': () => ({
                   status: 'READY',
                   initOutput: 'Workspace setup complete.',
@@ -452,9 +453,22 @@ export const OpenSubagentFromActivity: Story = {
 export const UnreadInbox: Story = {
   render: () => <RightPanelStory showUnread />,
   play: async ({ canvasElement }) => {
+    const inbox = within(canvasElement).getByRole('tab', { name: /Inbox/ });
     await expect(
-      await within(canvasElement).findByRole('img', { name: '3 unread inbox messages' })
+      await within(inbox).findByRole('img', { name: '3 unread inbox messages' })
     ).toBeVisible();
+  },
+};
+
+export const EmptyInbox: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('tab', { name: 'Inbox' }));
+    await expect(await canvas.findByText('No messages yet')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Inbox' })).toBeVisible();
+    await expect(
+      canvas.queryByRole('img', { name: '0 unread inbox messages' })
+    ).not.toBeInTheDocument();
   },
 };
 

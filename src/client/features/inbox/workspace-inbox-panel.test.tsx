@@ -199,7 +199,8 @@ describe('WorkspaceInboxPanel', () => {
   it('lists bounded summaries without reading or acknowledging bodies', async () => {
     render();
     await waitForText('Review ready');
-    expect(container.textContent).toContain('1 unread');
+    expect(container.textContent).toContain('Unread');
+    expect(container.querySelector('section[aria-label="Workspace inbox"] > header')).toBeNull();
     expect(container.textContent).toContain('Reviewer');
     expect(container.textContent).toContain('Completion');
     expect(container.textContent).not.toContain('Full report body');
@@ -392,7 +393,7 @@ describe('WorkspaceInboxPanel', () => {
       });
       render();
       await waitForText('Review ready');
-      expect(container.textContent).toContain('0 unread');
+      expect(container.textContent).not.toContain('Unread');
       const title = [...container.querySelectorAll('span')].find(
         (item) => item.textContent === 'Review ready'
       );
@@ -556,5 +557,7 @@ describe('WorkspaceInboxPanel', () => {
     respond = () => ({ items: [], revision: 0, nextCursor: null });
     await click('Retry');
     await waitForText('No messages yet');
+    expect(container.textContent).not.toContain('0 unread');
+    expect(container.textContent).not.toContain('Refresh');
   });
 });

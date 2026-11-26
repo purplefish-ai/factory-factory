@@ -166,16 +166,17 @@ async function validateScreenshotPath(
 }
 
 export const workspaceFilesRouter = router({
-  // List all files recursively (for autocomplete)
+  // Recursively search for autocomplete or the Files tab.
   listAllFiles: publicProcedure
     .input(
       z.object({
         workspaceId: z.string(),
         query: z.string().optional(),
         limit: z.number().min(1).max(100).default(50),
+        match: z.literal('fuzzy').optional(),
       })
     )
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx, input, signal }) => {
       const logger = getLogger(ctx);
       const result = await getWorkspaceWithWorktree(
         ctx.appContext.services.workspaceDataService,
@@ -193,6 +194,8 @@ export const workspaceFilesRouter = router({
         const files = await searchFilesRecursive(worktreePath, {
           query: input.query,
           limit: input.limit,
+          match: input.match,
+          signal,
         });
 
         logger.info('listAllFiles returning files', {
@@ -203,9 +206,11 @@ export const workspaceFilesRouter = router({
 
         return { files, hasWorktree: true };
       } catch (error) {
-        logger.error('listAllFiles error', toError(error), {
-          workspaceId: input.workspaceId,
-        });
+        if (!signal?.aborted) {
+          logger.error('listAllFiles error', toError(error), {
+            workspaceId: input.workspaceId,
+          });
+        }
         throw error;
       }
     }),

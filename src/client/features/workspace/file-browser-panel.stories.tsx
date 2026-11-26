@@ -9,7 +9,18 @@ import { Button } from '@/components/ui/button';
 import { FileBrowserPanel } from './file-browser-panel';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
-function FreshFileListings() {
+function storyFiles(endpoint: string, input: { path?: string; query?: string }, filename: string) {
+  if (endpoint === 'workspace.listAllFiles') {
+    return { files: input.query === 'bfr' ? ['src/before.ts', 'tests/before.ts'] : [] };
+  }
+  return {
+    entries: input.path
+      ? [{ name: filename, type: 'file', path: `src/${filename}` }]
+      : [{ name: 'src', type: 'directory', path: 'src' }],
+  };
+}
+
+function FreshFileListings({ hasWorktree = true }: { hasWorktree?: boolean }) {
   const changed = useRef(false);
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
@@ -18,16 +29,13 @@ function FreshFileListings() {
         () =>
           ({ op }) =>
             observable((observer) => {
-              const input = op.input as { path?: string };
+              const input = op.input as { path?: string; query?: string };
               const filename = changed.current ? 'after.ts' : 'before.ts';
               observer.next({
                 result: {
-                  data: {
-                    hasWorktree: true,
-                    entries: input.path
-                      ? [{ name: filename, type: 'file', path: `src/${filename}` }]
-                      : [{ name: 'src', type: 'directory', path: 'src' }],
-                  },
+                  data: hasWorktree
+                    ? { hasWorktree, ...storyFiles(op.path, input, filename) }
+                    : { hasWorktree, entries: [], files: [] },
                 },
               });
               observer.complete();
@@ -70,5 +78,41 @@ export const RefreshFreshCache: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Simulate file change' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Refresh file tree' }));
     await expect(await canvas.findByText('after.ts')).toBeVisible();
+  },
+};
+
+export const MatchingFiles: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: 'src' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Search files' }), 'bfr');
+    const results = within(await canvas.findByRole('list', { name: 'File search results' }));
+    await expect(results.getByRole('button', { name: 'before.ts src' })).toBeVisible();
+    await expect(results.getByRole('button', { name: 'before.ts tests' })).toBeVisible();
+  },
+};
+
+export const NoMatchingFiles: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Search files' }), 'missing');
+    await expect(await canvas.findByText('No matching files')).toBeVisible();
+  },
+};
+
+export const NoWorkspaceDirectory: Story = {
+  args: { hasWorktree: false },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText("This workspace doesn't have a directory yet.")
+    ).toBeVisible();
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Search files' }), 'bfr');
+    await expect(
+      await canvas.findByText("This workspace doesn't have a directory yet.")
+    ).toBeVisible();
   },
 };
