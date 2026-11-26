@@ -4,7 +4,6 @@ import { QueryErrorState, QueryRefreshError } from '@/client/components/query-er
 import { ArchiveGitLockDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
@@ -84,7 +83,6 @@ function KanbanBoardContent() {
     retryGitLockedArchives,
     isBulkArchiving,
     isArchiving,
-    requestInlineForm,
     showInlineForm,
     inlineFormRequest,
     quickChatWorkspaceId,
@@ -369,19 +367,6 @@ function KanbanBoardContent() {
           className="rounded-md border"
         />
       ) : null}
-      {workspaces?.length === 0 && !showInlineForm && !isArchiving && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
-          <div>
-            <p className="font-medium">Create your first workspace</p>
-            <p className="text-sm text-muted-foreground">
-              Start from an issue in Todo or describe a new task.
-            </p>
-          </div>
-          <Button size="sm" onClick={requestInlineForm}>
-            New workspace
-          </Button>
-        </div>
-      )}
       <BoardViewControls search={search} onSearchChange={setSearch} />
       {search &&
         Object.values(workspacesByColumn).every((rows) => rows.length === 0) &&

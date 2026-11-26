@@ -354,14 +354,16 @@ describe('KanbanBoard', () => {
     }
   );
 
-  it('keeps first-workspace guidance hidden during optimistic archive removal', async () => {
+  it.each([true, false])('shows one board creation button when empty (mobile=%s)', (mobile) => {
+    mocks.isMobile = mobile;
     mocks.workspaces = [];
-    mocks.isArchiving = true;
-    await act(() => root.render(createElement(BoardWithHeader)));
-    expect(container.textContent).not.toContain('Create your first workspace');
-    mocks.isArchiving = false;
-    await act(() => root.render(createElement(BoardWithHeader)));
-    expect(container.textContent).toContain('Create your first workspace');
+    act(() => root.render(createElement(BoardWithHeader)));
+    const creationButtons = [...container.querySelectorAll('button')].filter(
+      (button) => button.textContent === 'New workspace'
+    );
+    expect(creationButtons).toHaveLength(1);
+    click('New workspace');
+    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
   });
 
   it('shows the created task at the top of Working on mobile', () => {
@@ -508,7 +510,6 @@ describe('KanbanBoard', () => {
     const alert = container.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain("Couldn't load workspaces");
     expect(alert?.textContent).toContain('Database is locked');
-    expect(container.textContent).not.toContain('Create your first workspace');
     act(() => alert?.querySelector('button')?.click());
     expect(mocks.refetch).toHaveBeenCalledOnce();
   });

@@ -150,8 +150,8 @@ export const FirstWorkspace: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText('Create your first workspace')).toBeVisible();
     await expect(await canvas.findByText('Support keyboard shortcuts on the board')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'New workspace' })).toBeVisible();
   },
 };
 
