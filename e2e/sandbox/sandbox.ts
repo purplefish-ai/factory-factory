@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { sandboxPaths } from '../../scripts/sandbox/paths.mjs';
 
 // What every spec here shares: the one sandbox the global setup started, and the controls of its
-// scripted Codex provider. A prompt chooses a scenario with `ff-scenario:<name>` (see the top of
+// scripted providers (Codex, and the fake Claude CLI that claude.spec.ts drives). A prompt chooses a scenario with `ff-scenario:<name>` (see the top of
 // src/backend/testing/fixtures/fake-codex-app-server.mjs); one without it gets `echo`, the
 // sandbox's default, which repeats the prompt back.
 
@@ -94,17 +94,31 @@ export async function openBoard(page: Page, sandbox: Sandbox) {
 }
 
 /**
- * Launches a Codex workspace from the board with `prompt`, opens it and waits for the agent's echo
- * of the prompt. `cardName` matches the workspace's name, made from the prompt's first words: begin
- * the prompt with a word no other spec uses, before any scenario token.
+ * Launches a workspace from the board with `prompt`, opens it and waits for the agent's echo of the
+ * prompt. `cardName` matches the workspace's name, made from the prompt's first words: begin the
+ * prompt with a word no other spec uses, before any scenario token. The provider is Codex, the
+ * sandbox's default, unless `provider` picks Claude (the fake Claude CLI under the real adapter).
  */
-export async function launchWorkspace(page: Page, prompt: string, cardName: RegExp) {
+export async function launchWorkspace(
+  page: Page,
+  prompt: string,
+  cardName: RegExp,
+  { provider = 'Codex' }: { provider?: 'Codex' | 'Claude' } = {}
+) {
   const main = page.getByRole('main');
   await main.getByRole('button', { name: 'New workspace' }).first().click();
   await page.getByRole('textbox', { name: 'What should the agent work on?' }).fill(prompt);
-  await expect(
-    page.getByRole('button', { name: /^New conversation provider and model: Codex\b/ })
-  ).toBeVisible({ timeout: 30_000 });
+  const picker = (name: string) =>
+    page.getByRole('button', {
+      name: new RegExp(`^New conversation provider and model: ${name}\\b`),
+    });
+  await expect(picker('Codex')).toBeVisible({ timeout: 30_000 });
+  if (provider === 'Claude') {
+    // The provider's row selects its default model.
+    await picker('Codex').click();
+    await page.getByRole('menuitem', { name: /^Claude\b/ }).click();
+    await expect(picker('Claude')).toBeVisible({ timeout: 30_000 });
+  }
   await page.getByRole('button', { name: 'Launch', exact: true }).click();
   // Only the real card's link leads to a workspace id rather than `optimistic-…`.
   const workspace = main
@@ -115,6 +129,21 @@ export async function launchWorkspace(page: Page, prompt: string, cardName: RegE
   const conversation = page.getByRole('log', { name: 'Conversation' });
   await expect(reply(conversation, prompt)).toBeVisible({ timeout: 120_000 });
   return conversation;
+}
+
+/** One line of the fake Claude CLI's call log: an invocation's arguments or a control request. */
+const claudeCallSchema = z.object({
+  pid: z.number(),
+  argv: z.array(z.string()).optional(),
+  control: z.string().optional(),
+});
+
+/** Every Claude CLI invocation and control request in this sandbox, all of them the fake's. */
+export function claudeCalls(sandbox: Sandbox) {
+  return readFileSync(sandboxPaths(sandbox.baseDir).claudeLog, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => claudeCallSchema.parse(JSON.parse(line)));
 }
 
 /** The fake Codex's rollout file that mentions `word`, and the Codex thread id in its name. */

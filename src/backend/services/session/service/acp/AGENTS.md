@@ -74,6 +74,11 @@ here directly.
   lists models from the app server, and the probe rejects permission and
   elicitation requests. `claude-model-catalog-loader.test.ts`,
   `codex-model-catalog-loader.test.ts`, `session-launch-options-probe.test.ts`.
+- With `CLAUDE_CODE_EXECUTABLE` set, every Claude process runs that CLI: the
+  adapter reads it for its sessions and its `--cli` passthrough, and the direct
+  SDK queries (plan usage here, disposable inference in `../inference/`) pass it
+  as `pathToClaudeCodeExecutable`. `claude-plan-usage-loader.test.ts`,
+  `../metadata/workspace-metadata-generator.test.ts`.
 - A catalog loader or the probe reports its child drained only on the child's
   `close` (its pipes closed), the probe also only after its ACP connection
   closes, whatever happened to the caller.

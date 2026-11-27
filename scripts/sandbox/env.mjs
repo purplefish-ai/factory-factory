@@ -86,6 +86,10 @@ export function buildServerEnv({
     CODEX_HOME: paths.codexHome,
     CODEX_PATH: paths.codex,
     CLAUDE_CONFIG_DIR: paths.claudeConfigDir,
+    // Every Claude launch (adapter sessions, its `--cli` passthrough, the SDK's direct queries)
+    // runs the fake, never the bundled CLI; the fake logs each one.
+    CLAUDE_CODE_EXECUTABLE: paths.claude,
+    FF_SANDBOX_CLAUDE_LOG: paths.claudeLog,
     // Claude Code's documented switches for non-essential traffic and telemetry.
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     DISABLE_TELEMETRY: '1',

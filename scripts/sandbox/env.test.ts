@@ -1,7 +1,8 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { getBundledClaudeCommand } from '@/backend/lib/claude-cli-command';
 import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
 import { createSeedRepository, prepareSandbox } from './prepare.mjs';
@@ -23,6 +24,7 @@ describe('server environment', () => {
         FF_NPM_REGISTRY_URL: 'http://127.0.0.1:4873',
         HTTPS_PROXY: 'http://corp-proxy.example:8080',
         GIT_SSH_COMMAND: 'ssh -i /home/me/.ssh/id_ed25519',
+        CLAUDE_CODE_EXECUTABLE: '/home/me/.local/bin/claude',
         ...PLANTED_CREDENTIALS,
       },
       baseDir: '/tmp/ff-sandbox/sb-1',
@@ -42,6 +44,8 @@ describe('server environment', () => {
       CODEX_HOME: '/tmp/ff-sandbox/sb-1/codex-home',
       CODEX_PATH: '/tmp/ff-sandbox/sb-1/bin/codex',
       CLAUDE_CONFIG_DIR: '/tmp/ff-sandbox/sb-1/claude-config',
+      CLAUDE_CODE_EXECUTABLE: '/tmp/ff-sandbox/sb-1/bin/claude',
+      FF_SANDBOX_CLAUDE_LOG: '/tmp/ff-sandbox/sb-1/claude-calls.log',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
       DISABLE_TELEMETRY: '1',
       DISABLE_ERROR_REPORTING: '1',
@@ -82,6 +86,30 @@ describe('server environment', () => {
       buildServerEnv({ parentEnv: {}, baseDir: '/t', scenario: 'echo', egressPort: 0 })
     ).toThrow('egress recorder port');
   });
+});
+
+describe('Claude in the sandbox environment', () => {
+  it('runs the fake Claude CLI for the bundled command, never the real one, and logs it', () => {
+    const paths = prepareSandbox(temporary.create('ffsb-'));
+    const env = buildServerEnv({
+      parentEnv: { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR },
+      baseDir: paths.baseDir,
+      scenario: 'echo',
+      egressPort: 9,
+    });
+    // Checked first, so that without the fake nothing below starts the real CLI.
+    expect(env.CLAUDE_CODE_EXECUTABLE).toBe(paths.claude);
+    // What the application's health check runs: the adapter, which starts CLAUDE_CODE_EXECUTABLE.
+    const command = getBundledClaudeCommand(['--version']);
+    const version = execFileSync(command.command, command.args, {
+      env,
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    expect(version).toBe('2.1.312 (Claude Code)\n');
+    const calls = readFileSync(paths.claudeLog, 'utf8').trim().split('\n');
+    expect(calls.map((line) => JSON.parse(line).argv)).toEqual([['--version']]);
+  }, 60_000);
 });
 
 type GitResult = { code: number; stderr: string };
