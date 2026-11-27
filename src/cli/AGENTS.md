@@ -9,11 +9,11 @@ repository root.
 ## Owns, and does not own
 
 This directory owns the commands registered in `index.ts` (`serve`,
-`db:migrate`, `db:studio`, `build`, `proxy`, `tailscale`, and the bundled
-`claude` and `codex` CLIs). For a production `ff serve` it also owns installing
-an application update, the update status while the backend is stopped or
-replaced, recovering an interrupted update, and restarting the backend. It does
-not own:
+`db:migrate`, `db:studio`, `backup`, `build`, `proxy`, `tailscale`, and the
+bundled `claude` and `codex` CLIs). For a production `ff serve` it also owns
+installing an application update, the update status while the backend is stopped
+or replaced, recovering an interrupted update, and restarting the backend. It
+does not own:
 
 - When an update may start, and the admission gate that drains agent work first:
   the backend, described in the
@@ -92,5 +92,11 @@ not own:
   recovery.
 - `application-update-shutdown.ts`: stops the backend with SIGTERM and escalates
   to SIGKILL after two minutes.
+- `backup.ts`, `backup-manifest.ts`: `ff backup` writes one backup directory (an
+  online SQLite snapshot through `src/backend/lib/sqlite-snapshot.ts`, the key,
+  `codex-accounts/` and a Zod-validated manifest) beside `db-backups/`, never
+  pruned, built under a `.partial` name and renamed so an interrupted backup is
+  never mistaken for a complete one. A restore reads one only through
+  `readBackup`. `backup.test.ts`.
 - `proxy-mode.ts`, `tailscale.ts`, `studio.ts`, `build-command.ts`, `claude.ts`
   and `codex.ts` register the other commands.
