@@ -22,11 +22,12 @@ temporary directory with its own npm cache, then exercise CLI startup, database
 migration, SQLite queries, a real PTY spawn and one workspace: a project on a
 temporary repository, a workspace whose first prompt the scripted fake Codex
 app-server answers, and its Git worktree. The fake is copied from the checkout;
-the package does not ship it. Pull requests run this on Ubuntu for each
-supported Node floor and on macOS for the oldest; the release workflow runs it
-on Ubuntu, macOS and Windows for four Node versions. Windows skips the workspace
-turn, because it cannot start a Node script as the Codex executable. Repository
-dependency maintenance continues to use the pinned pnpm version.
+the package does not ship it. Pull requests that change the application run this
+on Ubuntu for each supported Node floor and on macOS for the oldest; the release
+workflow runs it on Ubuntu, macOS and Windows for four Node versions. Windows
+skips the workspace turn, because it cannot start a Node script as the Codex
+executable. Repository dependency maintenance continues to use the pinned pnpm
+version.
 
 ## Production artifacts
 

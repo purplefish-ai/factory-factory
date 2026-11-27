@@ -211,8 +211,10 @@ describe('driveWorkspace', () => {
         },
       },
     ]);
-    // It waited out provisioning before opening the chat.
-    expect(server.calls.filter((call) => call.path === 'workspace.get')).toHaveLength(3);
+    // It waited out provisioning of the workspace it created before opening the chat.
+    expect(
+      server.calls.filter((call) => call.path === 'workspace.get').map((call) => call.input)
+    ).toEqual([{ id: 'w1' }, { id: 'w1' }, { id: 'w1' }]);
     const [socket] = server.sockets;
     // No `ffTransport` opt-in: the check works with and without the transport hello.
     expect(new URL(socket?.url ?? '').searchParams.get('sessionId')).toBe('s1');

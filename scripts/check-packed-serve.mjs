@@ -119,7 +119,14 @@ async function verifyWorkspace(origin) {
     z,
     fetch,
     openSocket: (url) => new WebSocket(url, { origin }),
-    git: (args) => execFileSync('git', args, { cwd: projectRepo, env: gitEnv, encoding: 'utf8' }),
+    // Synchronous, so the step's signal cannot stop it: bound it here.
+    git: (args) =>
+      execFileSync('git', args, {
+        cwd: projectRepo,
+        env: gitEnv,
+        encoding: 'utf8',
+        timeout: 15_000,
+      }),
     realpath: realpathSync,
     log: (line) => console.log(line),
   });
