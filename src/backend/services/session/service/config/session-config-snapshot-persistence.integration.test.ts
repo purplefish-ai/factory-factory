@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
@@ -8,6 +7,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type { PrismaClient } from '@prisma-gen/client';
 import { SessionConfigSnapshotPersistence } from './session-config-snapshot-persistence';
 

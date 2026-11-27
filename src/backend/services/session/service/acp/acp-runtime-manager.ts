@@ -1,8 +1,8 @@
-import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type {
   ProviderSource,
   RuntimeStopEvidence,
 } from '@/shared/acp-protocol/runtime-observation';
+import type { ContentBlock, SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type { SessionStopTarget } from '@/shared/acp-protocol/subagents';
 import type {
   SubagentBrowseCapability,

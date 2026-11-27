@@ -1,10 +1,10 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import {
   type AcceptedConfigCommit,
   SessionConfigCommitAuthority,

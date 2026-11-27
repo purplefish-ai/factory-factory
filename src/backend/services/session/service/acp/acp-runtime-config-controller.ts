@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { isNativeModeConfigOption } from './acp-config-option-identification';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { requireSessionConfigOptions } from './acp-session-config-options';

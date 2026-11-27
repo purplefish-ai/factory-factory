@@ -1,4 +1,3 @@
-import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import pLimit, { type LimitFunction } from 'p-limit';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { createLogger } from '@/backend/services/logger.service';
@@ -25,6 +24,7 @@ import type { SessionPromptTurnCompletionService } from '@/backend/services/sess
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { ContentBlock } from '@/shared/acp-protocol/sdk-types';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { turnLimitMs, turnLimitMessage } from '@/shared/turn-limit';

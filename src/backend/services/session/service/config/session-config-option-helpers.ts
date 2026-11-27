@@ -1,11 +1,11 @@
-import type {
-  SessionConfigOption,
-  SessionConfigSelectOption,
-} from '@agentclientprotocol/sdk/unstable';
 import {
   isNativeModeConfigOption,
   isReasoningConfigOption,
 } from '@/backend/services/session/service/acp/acp-config-option-identification';
+import type {
+  SessionConfigOption,
+  SessionConfigSelectOption,
+} from '@/shared/acp-protocol/sdk-types';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 export type SessionProvider = 'CLAUDE' | 'CODEX';

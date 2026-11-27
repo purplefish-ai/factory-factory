@@ -1,21 +1,20 @@
-import {
-  client,
-  type CancelNotification,
-  type CompleteElicitationNotification,
-  type CreateElicitationRequest,
-  type CreateElicitationResponse,
-  type InitializeRequest,
-  type LoadSessionRequest,
-  methods,
-  type NewSessionRequest,
-  type PromptRequest,
-  type RequestPermissionRequest,
-  type RequestPermissionResponse,
-  type SessionNotification,
-  type SetSessionConfigOptionRequest,
-  type SetSessionModeRequest,
-  type Stream,
-} from '@agentclientprotocol/sdk/unstable';
+import type {
+  CancelNotification,
+  CompleteElicitationNotification,
+  CreateElicitationRequest,
+  CreateElicitationResponse,
+  InitializeRequest,
+  LoadSessionRequest,
+  NewSessionRequest,
+  PromptRequest,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionNotification,
+  SetSessionConfigOptionRequest,
+  SetSessionModeRequest,
+  Stream,
+} from '@/shared/acp-protocol/sdk-types';
+import { client, methods } from './acp-sdk-values';
 
 export type AcpClientCallbacks = {
   sessionUpdate(params: SessionNotification): Promise<void>;

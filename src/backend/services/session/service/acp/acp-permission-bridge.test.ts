@@ -1,8 +1,8 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
-} from '@agentclientprotocol/sdk/unstable';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+} from '@/shared/acp-protocol/sdk-types';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 
 function createMockParams(overrides?: Partial<RequestPermissionRequest>): RequestPermissionRequest {

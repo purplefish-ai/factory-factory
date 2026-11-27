@@ -1,8 +1,8 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { pendingSessionLaunchSettingsPatch } from '@/backend/services/session/service/data/session-launch-settings';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import type { AcceptedConfigCommit } from './session-config-commit-authority';

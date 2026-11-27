@@ -1,8 +1,8 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStartupIntent } from '@/backend/services/session/service/data/session-startup-intent';
 import { SessionStartupIntentChangedError } from '@/backend/services/session/service/data/session-startup-intent';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type { SessionLaunchSettings } from '@/shared/session-launch';
 import type { Prisma } from '@prisma-gen/client';
 import type { StoredAcpConfigSnapshot } from './acp-config-snapshot';

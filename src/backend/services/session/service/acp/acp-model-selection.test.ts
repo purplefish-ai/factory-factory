@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { applyAcpStartupModel, resolveAcpModelSelection } from './acp-model-selection';
 import { defaultConfigOptions } from './acp-runtime-manager.test-helpers';

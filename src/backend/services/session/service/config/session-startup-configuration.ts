@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -9,6 +8,7 @@ import {
 } from '@/backend/services/session/service/acp/acp-model-selection';
 import { readSessionLaunchSettings } from '@/backend/services/session/service/data/session-launch-settings';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';

@@ -1,11 +1,11 @@
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   SessionConfigOption,
   SessionConfigSelect,
   SessionConfigSelectGroup,
   SessionConfigSelectOption,
   SessionModeState,
-} from '@agentclientprotocol/sdk/unstable';
-import { createLogger } from '@/backend/services/logger.service';
+} from '@/shared/acp-protocol/sdk-types';
 import { formatClaudeModelOptionName } from './claude-model-options';
 
 const logger = createLogger('acp-session-config-options');

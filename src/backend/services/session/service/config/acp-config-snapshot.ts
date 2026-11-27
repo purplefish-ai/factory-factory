@@ -1,8 +1,8 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { normalizeSessionConfigOptions } from '@/backend/services/session/service/acp/acp-session-config-options';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 
 const extensionMetadataSchema = z.record(z.string(), z.unknown()).nullish();
 const selectValueSchema = z.object({

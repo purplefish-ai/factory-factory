@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import { createLogger } from '@/backend/services/logger.service';
@@ -18,6 +17,7 @@ import type { SessionDomainService } from '@/backend/services/session/service/st
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { AgentMessage, CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { AcpMessageStream } from './acp-message-stream';
 import { AcpProviderNotices } from './acp-provider-notices';
 import { isReplayExemptSessionUpdate, isTranscriptReplayEvent } from './acp-replay-policy';

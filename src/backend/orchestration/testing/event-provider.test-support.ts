@@ -1,13 +1,13 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { expect, vi } from 'vitest';
+import type { AcpClientOptions, AcpProcessHandle } from '@/backend/services/session';
 import type {
   PromptRequest,
   PromptResponse,
   SessionConfigOption,
-} from '@agentclientprotocol/sdk/unstable';
-import { expect, vi } from 'vitest';
-import type { AcpClientOptions, AcpProcessHandle } from '@/backend/services/session';
+} from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { deferred, waitForEventFixture, waitForLaunchEvent } from './event-delivery.test-support';
 

@@ -1,6 +1,6 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {

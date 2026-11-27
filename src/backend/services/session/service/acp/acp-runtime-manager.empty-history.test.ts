@@ -1,5 +1,5 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import type { AcpClientHandler } from './acp-client-handler';
 import {
   createManagerTestHarness,

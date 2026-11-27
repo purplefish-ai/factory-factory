@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import {
   SUBAGENTS_CAPABILITY_META_KEY,
   type SubagentBrowseCapability,

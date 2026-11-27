@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { vi } from 'vitest';
 import type {
   AgentSessionRecord,
@@ -10,6 +9,7 @@ import type { AcpSessionCreationOutcome } from '@/backend/services/session/servi
 import { configOptions } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 

@@ -1,7 +1,3 @@
-import type {
-  SessionConfigOption,
-  SetSessionConfigOptionRequest,
-} from '@agentclientprotocol/sdk/unstable';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
@@ -11,6 +7,10 @@ import { SessionDispatchService } from '@/backend/services/session/service/dispa
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import type {
+  SessionConfigOption,
+  SetSessionConfigOptionRequest,
+} from '@/shared/acp-protocol/sdk-types';
 import type { ChatProvider } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 

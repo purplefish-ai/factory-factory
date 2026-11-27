@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { resolveClaudeModelAlias } from '@/shared/acp-protocol/model-selection';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type { AcpConnection } from './acp-connection';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { formatClaudeModelOptionName } from './claude-model-options';

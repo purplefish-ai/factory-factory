@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   CompleteElicitationNotification,
   CreateElicitationRequest,
@@ -6,8 +7,7 @@ import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionNotification,
-} from '@agentclientprotocol/sdk/unstable';
-import { createLogger } from '@/backend/services/logger.service';
+} from '@/shared/acp-protocol/sdk-types';
 import {
   SUBAGENTS_CHANGED_METHOD,
   subagentsChangedParamsSchema,

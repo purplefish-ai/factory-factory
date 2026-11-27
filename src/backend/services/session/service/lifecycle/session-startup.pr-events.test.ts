@@ -1,6 +1,6 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { workspaceNotificationService } from '@/backend/services/workspace';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createLifecycleHarness, type LifecycleHarness } from './session-lifecycle.test-helpers';
 import {

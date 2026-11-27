@@ -1,4 +1,3 @@
-import type { ElicitationContentValue } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import {
   type AskUserQuestion,
@@ -6,6 +5,7 @@ import {
   getStringAnswerError,
   isSecretQuestion,
 } from '@/shared/acp-protocol/question-input';
+import type { ElicitationContentValue } from '@/shared/acp-protocol/sdk-types';
 const optionSchema = z.object({
   const: z.string(),
   title: z.string(),

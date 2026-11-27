@@ -86,6 +86,13 @@ here directly.
 - `acp-connection.ts`: registers the client handlers with the SDK and wraps each
   request to the agent, for runtimes and probes alike. It uses the SDK's
   `/unstable` entrypoint, which keeps elicitation and native subagents.
+- `acp-sdk-values.ts` and `src/shared/acp-protocol/sdk-types.ts`: the only files
+  that import the SDK, the first for runtime values and the second for types (no
+  runtime, so the browser can load it). Re-export a name there, by name, when
+  code needs it. `sdk-entrypoints-have-two-import-sites` in
+  `.dependency-cruiser.cjs` (`pnpm deps:check`) rejects any other import, tests
+  included. Tests that mock the SDK package still reach the code through
+  `acp-sdk-values.ts`.
 - `acp-runtime-spawn.ts`: the adapter command (the package entrypoint run with
   the host Node), working directory validation, deadlines and catalog process
   termination.

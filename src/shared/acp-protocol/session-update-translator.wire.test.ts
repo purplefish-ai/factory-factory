@@ -1,5 +1,5 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { expect, it } from 'vitest';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { parseChatServerMessage } from './protocol/chat-server-message-schema';
 import { AcpEventTranslator } from './session-update-translator';
 

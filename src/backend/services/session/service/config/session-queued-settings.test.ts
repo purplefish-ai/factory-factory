@@ -1,10 +1,10 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createDeferred,
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionQueuedSettings } from '@/backend/services/session/service/config/session-queued-settings';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 
 const identities = [
   { id: 'thought_level' },

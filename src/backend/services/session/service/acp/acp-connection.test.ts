@@ -1,8 +1,9 @@
-import { agent, methods, PROTOCOL_VERSION, type Stream } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
+import type { Stream } from '@/shared/acp-protocol/sdk-types';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection } from './acp-connection';
 import { AcpPermissionBridge } from './acp-permission-bridge';
+import { agent, methods, PROTOCOL_VERSION } from './acp-sdk-values';
 import { TASK_STATUS_CHANGED_METHOD } from './acp-task-status-protocol';
 
 function createStreams(): [Stream, Stream] {

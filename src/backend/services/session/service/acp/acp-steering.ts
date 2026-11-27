@@ -1,6 +1,6 @@
-import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
+import type { ContentBlock } from '@/shared/acp-protocol/sdk-types';
 import type { AcpProcessHandle } from './acp-process-handle';
 import { withTimeout } from './acp-runtime-spawn';
 

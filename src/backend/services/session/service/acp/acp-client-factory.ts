@@ -1,12 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
-import {
-  type LoadSessionResponse,
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionConfigOption,
-} from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import type { LoadSessionResponse, SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpConnection, type AcpConnection } from './acp-connection';
 import { isAcpHistoryReplayEnd } from './acp-history-replay';
@@ -35,6 +30,7 @@ import {
   validateAcpWorkingDir,
   withTimeout,
 } from './acp-runtime-spawn';
+import { ndJsonStream, PROTOCOL_VERSION } from './acp-sdk-values';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { toAcpSessionId } from './acp-session-identity';
 import { supportsAcpSteering } from './acp-steering';

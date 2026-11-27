@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { CLAUDE_AUTO_FALLBACK, resolveLaunchAccessMode } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
