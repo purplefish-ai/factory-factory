@@ -123,9 +123,45 @@ createServer((_request, response) => response.end('Sandbox run script\\n')).list
 });
 `;
 
+/** The file a spec writes, holding a gate name, to hold the next workspace's setup at that gate. */
+export const HOLD_SETUP_FILE = 'hold-setup';
+
+/**
+ * The setup script: finishes at once, unless a spec asked to hold the next setup. The first setup
+ * to start then takes the request and waits at the gate it names until the spec releases it, as
+ * the fake Codex's gated turns do; every later setup finishes at once again.
+ */
+const SEED_SETUP = `import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+
+const gateDir = process.env.FF_SANDBOX_GATE_DIR;
+let gate = null;
+if (gateDir) {
+  const taken = join(gateDir, \`${HOLD_SETUP_FILE}.\${process.pid}\`);
+  try {
+    renameSync(join(gateDir, '${HOLD_SETUP_FILE}'), taken);
+    gate = readFileSync(taken, 'utf8').trim();
+    rmSync(taken);
+  } catch {
+    // No request: finish at once.
+  }
+}
+// The application can stop reading while this waits (a server killed during setup).
+process.stdout.on('error', () => undefined);
+if (gate) {
+  process.stdout.write(\`Sandbox setup waiting at gate \${gate}\\n\`);
+  while (!existsSync(join(gateDir, gate))) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  rmSync(join(gateDir, gate), { force: true });
+}
+process.stdout.write('Sandbox setup finished\\n');
+`;
+
 /**
  * The seed repository: a README, and a setup script and a run script that finish or start at
- * once, so that a workspace goes through provisioning and has something to run.
+ * once, so that a workspace goes through provisioning and has something to run. A spec can hold
+ * one setup at a gate (`HOLD_SETUP_FILE`).
  */
 export function createSeedRepository(paths, env) {
   mkdirSync(paths.repoPath);
@@ -134,7 +170,7 @@ export function createSeedRepository(paths, env) {
     'factory-factory.json': `${JSON.stringify(
       {
         scripts: {
-          setup: 'echo "Sandbox setup finished"',
+          setup: 'node sandbox-setup.mjs',
           run: 'node sandbox-server.mjs {port}',
         },
       },
@@ -142,6 +178,7 @@ export function createSeedRepository(paths, env) {
       2
     )}\n`,
     'sandbox-server.mjs': SEED_SERVER,
+    'sandbox-setup.mjs': SEED_SETUP,
   };
   for (const [name, content] of Object.entries(files)) {
     writeFileSync(join(paths.repoPath, name), content);
