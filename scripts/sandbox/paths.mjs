@@ -44,6 +44,8 @@ export function sandboxPaths(baseDir) {
     gh: join(binDir, 'gh'),
     ssh: join(binDir, 'ssh'),
     codex: join(binDir, 'codex'),
+    // The fake Claude CLI (CLAUDE_CODE_EXECUTABLE): every Claude launch, through the adapter or the SDK.
+    claude: join(binDir, 'claude'),
     home: join(baseDir, 'home'),
     worktreeBaseDir: join(baseDir, 'worktrees'),
     codexHome: join(baseDir, 'codex-home'),
@@ -62,6 +64,8 @@ export function sandboxPaths(baseDir) {
     databasePath: join(baseDir, 'data.db'),
     ghLog: join(baseDir, 'gh-calls.log'),
     sshLog: join(baseDir, 'ssh-calls.log'),
+    // One JSON line per fake Claude CLI invocation and control request (FF_SANDBOX_CLAUDE_LOG).
+    claudeLog: join(baseDir, 'claude-calls.log'),
     egressLog: join(baseDir, 'egress-calls.log'),
     serverOutput: join(baseDir, 'server-output.log'),
     portFile: join(baseDir, '.factory-factory-port'),

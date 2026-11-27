@@ -6,13 +6,15 @@ export const USAGE = `Usage: pnpm dev:sandbox [--scenario <name>] [--keep] [--ow
 
 Starts the real app (serve --dev) in a new directory under <os tmpdir>/ff-sandbox/
 with its own HOME, database, worktrees, Codex home and Claude configuration.
-Codex is the fake app-server. No credential reaches the server, update checks
-and Slack intake are off, and projects must live inside the sandbox. Seeds one
+Codex is the fake app-server; Claude is the released ACP adapter on the fake
+Claude CLI (CLAUDE_CODE_EXECUTABLE), which logs every Claude launch in
+claude-calls.log. No credential reaches the server, update checks and Slack
+intake are off, and projects must live inside the sandbox. Seeds one
 project on a fresh Git repository with Codex as the default provider, then
 prints one line: SANDBOX_READY <path to sandbox.json>.
 
 Outbound traffic: the application's built-in fetch and http/https requests, git
-over HTTP(S) and the Claude runtime are refused and recorded (method, host and
+over HTTP(S) and Claude's API base URL are refused and recorded (method, host and
 port in egress-calls.log); git over SSH and gh are refused by shims (their calls
 in ssh-calls.log and gh-calls.log); WebSocket clients and clients that bring
 their own agent are not proxied, and the sandbox relies on them having no
@@ -36,8 +38,10 @@ it started and deletes the sandbox directory. If ps cannot run when it stops
 process group it started itself if that server is still running, keeps the
 directory, says so and exits non-zero; run --clean once ps works.
 
-  --scenario <name>    Passed to the fake Codex app-server as FF_SANDBOX_SCENARIO
-                       (default: echo). The fake rejects unknown names.
+  --scenario <name>    Passed to the fake Codex app-server and the fake Claude
+                       CLI as FF_SANDBOX_SCENARIO (default: echo). The Codex
+                       fake rejects unknown names; the Claude fake fails the
+                       turns of a scenario it does not have.
   --keep               Keep the sandbox directory after stopping.
   --owner-pid <pid>    Stop when this process exits (for example, the agent or
                        test run that started the sandbox).

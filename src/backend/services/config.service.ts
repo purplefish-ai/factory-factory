@@ -398,6 +398,16 @@ function loadSandboxCrashPointDir(): string | null {
   return env.FF_SANDBOX_SCENARIO ? (env.FF_SANDBOX_CRASH_POINT_DIR ?? null) : null;
 }
 
+/**
+ * `CLAUDE_CODE_EXECUTABLE` for the application's direct Claude Agent SDK queries, honoured only
+ * in the dev sandbox (`FF_SANDBOX_SCENARIO` set), whose fake CLI speaks this SDK. The SDK and its
+ * bundled CLI are a version-locked pair, so outside the sandbox a user's own CLI never replaces it.
+ */
+function loadSandboxClaudeCodeExecutable(): string | null {
+  const env = ConfigEnvSchema.parse(process.env);
+  return env.FF_SANDBOX_SCENARIO ? env.CLAUDE_CODE_EXECUTABLE || null : null;
+}
+
 /** Event-agent limits are separate from the public application configuration shape. */
 function loadAgentRuntimeLimits() {
   const env = ConfigEnvSchema.parse(process.env);
@@ -444,6 +454,7 @@ class ConfigService {
   private releaseCheck = loadReleaseCheckConfig();
   private projectRoot = loadProjectRoot();
   private sandboxCrashPointDir = loadSandboxCrashPointDir();
+  private sandboxClaudeCodeExecutable = loadSandboxClaudeCodeExecutable();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -749,6 +760,14 @@ class ConfigService {
   }
 
   /**
+   * The fake Claude CLI the dev sandbox names in CLAUDE_CODE_EXECUTABLE, for the direct SDK
+   * queries; null outside the sandbox, where they keep the SDK's bundled CLI.
+   */
+  getSandboxClaudeCodeExecutable(): string | null {
+    return this.sandboxClaudeCodeExecutable;
+  }
+
+  /**
    * Get frontend static path (if configured)
    */
   getFrontendStaticPath(): string | undefined {
@@ -787,6 +806,7 @@ class ConfigService {
     this.releaseCheck = loadReleaseCheckConfig();
     this.projectRoot = loadProjectRoot();
     this.sandboxCrashPointDir = loadSandboxCrashPointDir();
+    this.sandboxClaudeCodeExecutable = loadSandboxClaudeCodeExecutable();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }

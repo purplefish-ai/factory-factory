@@ -3,11 +3,16 @@ import { tmpdir } from 'node:os';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { terminateCatalogProcess, withTimeout } from './acp-runtime-spawn';
-import { spawnClaudeCodeProcess } from './claude-code-process';
+import { claudeCodeExecutableOption, spawnClaudeCodeProcess } from './claude-code-process';
 import { normalizeClaudePlanUsage, type PlanUsageReading } from './provider-usage-normalizer';
 
-/** Read the native /usage control API without submitting an inference turn. */
-export async function fetchClaudePlanUsage(): Promise<PlanUsageReading> {
+/**
+ * Read the native /usage control API without submitting an inference turn. `claudeCodeExecutable`
+ * is CLAUDE_CODE_EXECUTABLE: the CLI to run instead of the bundled one.
+ */
+export async function fetchClaudePlanUsage(
+  options: { claudeCodeExecutable?: string } = {}
+): Promise<PlanUsageReading> {
   const abortController = new AbortController();
   let finishInput!: () => void;
   const inputFinished = new Promise<void>((resolve) => {
@@ -38,6 +43,7 @@ export async function fetchClaudePlanUsage(): Promise<PlanUsageReading> {
         child = providerProcess;
         return providerProcess;
       },
+      ...claudeCodeExecutableOption(options.claudeCodeExecutable),
     },
   });
   try {

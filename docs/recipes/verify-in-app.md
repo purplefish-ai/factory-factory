@@ -28,16 +28,15 @@ this and begin the "Driven in the sandbox" section with `Does not apply:`.
 
 3. Drive the change with a browser tool, starting at `frontendUrl`: the seeded
    project's board. The first load compiles the client and can take two minutes;
-   banners saying Claude sign-in is required and the GitHub CLI is missing are
-   expected. To create a workspace: "New workspace", type a prompt, keep the
-   Codex provider, "Launch". `generateWorkspaceNameFromPrompt`
-   (`src/shared/workspace-words.ts`) names the card: the prompt's first six
-   words that are not filler like "the" and "from", lower-cased and hyphenated
-   ("Hello from the recipe trial" becomes `hello-recipe-trial`). Find the card
-   by its `/workspaces/<id>` link, in Working while the agent starts and in
-   Waiting after its reply, not by your prompt's text. The scripted agent
-   (scenario `echo`) repeats every message back. More selectors: the specs in
-   `e2e/sandbox/`. With no browser tool, use a Playwright script.
+   a banner saying the GitHub CLI is missing is expected. To create a workspace:
+   "New workspace", type a prompt, keep Codex or pick Claude (both scripted),
+   "Launch". The card is named from the prompt's first six non-filler words,
+   hyphenated (`src/shared/workspace-words.ts`); a Claude workspace is renamed
+   `<first word> title` about 10 s after its first reply. Find the card by its
+   `/workspaces/<id>` link, not by your prompt's text. The scripted agent
+   (scenario `echo`) repeats every message back. While the fake Claude CLI is
+   installed, an event run's stop is reported unconfirmed. More selectors: the
+   specs in `e2e/sandbox/`. With no browser tool, use a Playwright script.
 
 4. Screenshot the page that shows your change (the board, a workspace, a
    dialog), and save it and notes on what you did and saw in `.context/verify/`

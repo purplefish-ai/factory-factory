@@ -23,7 +23,13 @@ import { z } from 'zod';
 const repoRoot = resolve(import.meta.dirname, '..', '..');
 // Uploaded by CI when the run fails; emptied at the start of each run.
 const evidenceDir = join(repoRoot, 'test-results', 'sandbox-logs');
-const evidenceFiles = ['server-output.log', 'logs/server.log', 'egress-calls.log', 'gh-calls.log'];
+const evidenceFiles = [
+  'server-output.log',
+  'logs/server.log',
+  'egress-calls.log',
+  'gh-calls.log',
+  'claude-calls.log',
+];
 // The launcher writes here directly, not through a pipe to this runner: if the runner dies,
 // the launcher can still log while it stops the sandbox.
 const launcherLog = join(evidenceDir, 'launcher.log');

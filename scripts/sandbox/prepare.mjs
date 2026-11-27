@@ -1,4 +1,4 @@
-// Fills a new sandbox directory: shims, the fake Codex, Git identity and the seed repository.
+// Fills a new sandbox directory: shims, the fake Codex and Claude, Git identity and the seed repository.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,6 +13,7 @@ const FAKE_CODEX = join(
   'fixtures',
   'fake-codex-app-server.mjs'
 );
+const FAKE_CLAUDE = join(REPO_ROOT, 'src', 'backend', 'testing', 'fixtures', 'fake-claude-cli.mjs');
 const GH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'gh-shim.mjs');
 const SSH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'ssh-shim.mjs');
 
@@ -45,8 +46,10 @@ export function prepareSandbox(baseDir) {
   installExecutable(GH_SHIM, paths.gh);
   installExecutable(SSH_SHIM, paths.ssh);
   installExecutable(FAKE_CODEX, paths.codex);
+  installExecutable(FAKE_CLAUDE, paths.claude);
   writeFileSync(paths.ghLog, '');
   writeFileSync(paths.sshLog, '');
+  writeFileSync(paths.claudeLog, '');
   writeFileSync(paths.dotenv, '');
   // `ff serve` runs in the sandbox, so its port file and .env lookup stay out
   // of the checkout. bootstrap.mjs loads tsx and its path aliases from the

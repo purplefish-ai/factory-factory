@@ -11,7 +11,10 @@ import {
   getMetadataCredentialsStore,
 } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
-import { spawnClaudeCodeProcess } from '@/backend/services/session/service/acp/claude-code-process';
+import {
+  claudeCodeExecutableOption,
+  spawnClaudeCodeProcess,
+} from '@/backend/services/session/service/acp/claude-code-process';
 
 export interface DisposableInferenceRequest<T> {
   /** Names the call in error messages and its temporary directory. */
@@ -141,6 +144,7 @@ async function runClaude<T>(
         CLAUDE_CODE_SAFE_MODE: '1',
       },
       spawnClaudeCodeProcess,
+      ...claudeCodeExecutableOption(configService.getSandboxClaudeCodeExecutable() ?? undefined),
     },
   });
   const rateLimit: RateLimitObservation = { limited: false };
