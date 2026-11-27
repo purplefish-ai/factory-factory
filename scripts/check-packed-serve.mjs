@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
+import { verifySetupTerminal } from './packed-setup-terminal.mjs';
 import { stopProcessGroup } from './sandbox/process-group.mjs';
 
 const [cachePath, phase = 'cold'] = process.argv.slice(2);
@@ -40,49 +41,10 @@ if (phase === 'upgrade') {
 }
 writeFileSync('installed-package.txt', packageRoot);
 
-const terminalMessage = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('created') }),
-  z.object({ type: z.literal('output'), data: z.string() }),
-  z.object({ type: z.literal('error'), message: z.string() }),
-  z.object({ type: z.literal('exit'), exitCode: z.number() }),
-]);
-
 async function verifyTerminal(origin) {
   const socket = new WebSocket(`${origin.replace('http:', 'ws:')}/setup-terminal`, { origin });
   try {
-    await new Promise((done, fail) => {
-      let output = '';
-      socket.on('open', () => socket.send(JSON.stringify({ type: 'create' })));
-      socket.on('error', fail);
-      socket.on('close', () => fail(new Error('Setup terminal disconnected')));
-      socket.on('message', (data) => {
-        try {
-          const message = terminalMessage.parse(JSON.parse(data.toString()));
-          if (message.type === 'created') {
-            // The expected line never appears in the echoed shell command.
-            const data = windows
-              ? 'echo packed-^ready & exit 0\r'
-              : "printf 'packed-%s\\n' ready; exit 0\r";
-            socket.send(JSON.stringify({ type: 'input', data }));
-          } else if (message.type === 'output') {
-            output = (output + message.data).slice(-8192);
-          } else if (
-            message.type === 'exit' &&
-            message.exitCode === 0 &&
-            output.includes('packed-ready')
-          ) {
-            done();
-          } else {
-            fail(new Error(`Setup terminal: ${JSON.stringify(message)}`));
-          }
-        } catch (error) {
-          fail(error);
-        }
-      });
-      const timer = setTimeout(() => fail(new Error('Setup terminal timed out')), 15_000);
-      timer.unref();
-      socket.once('close', () => clearTimeout(timer));
-    });
+    await verifySetupTerminal(socket, { z, windows });
   } finally {
     socket.terminate();
   }
