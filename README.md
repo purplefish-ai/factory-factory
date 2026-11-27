@@ -255,9 +255,12 @@ startup stops before applying any migration and says why, because an older
 version cannot open a migrated database. Set
 `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1` to warn and migrate without a backup;
 every launch and `ff db:migrate` honours it. The in-app update takes its own
-snapshot and sets it for its `db:migrate`. When the backup succeeds, a failed
-migration's error names it; to restore it, stop Factory Factory, copy the backup
-over the database file and delete its `-wal` and `-shm` files.
+snapshot and sets it for its `db:migrate`; if that `db:migrate` could not write
+its copy into `db-backups/`, the update logs why and keeps its snapshot as
+`.factory-factory-database-backup-<UTC time>.db` beside the installed package
+(the log names the path). When the backup succeeds, a failed migration's error
+names it; to restore it, stop Factory Factory, copy the backup over the database
+file and delete its `-wal` and `-shm` files.
 
 To take a complete backup yourself, run `ff backup`. It is safe while Factory
 Factory is running: it takes a SQLite online backup, so the server is neither
@@ -267,12 +270,19 @@ database (choose another with `--output <path>`, which must not exist), holding
 `database.db`, `encryption.key` and `codex-accounts/` when they exist under the
 data directory (`BASE_DIR`, default `~/factory-factory`), and a `manifest.json`
 recording the format, application version and the database and data directory it
-came from. The command prints both paths. Manual backups are never pruned.
-Symbolic links under `codex-accounts/` are not followed or copied; the command
-lists each one it skips, so read its output when you verify a backup. **The
-backup contains credentials** (the encryption key that protects stored secrets
-and the Codex account sign-ins): it is readable only by you, so keep it that way
-and store it somewhere you trust. The database and the data directory are chosen
+came from. The command prints both paths. Manual backups are never pruned. The
+backup is written under a `.partial` name and renamed when complete, so a
+directory still ending in `.partial` was left by an interrupted run: it is not a
+usable backup, the next run reports it, and you can delete it. Symbolic links
+under `codex-accounts/` are not followed or copied; the command lists each one
+it skips, so read its output when you verify a backup. If `encryption.key` or
+`codex-accounts/` itself is a symbolic link, the backup fails rather than follow
+it; replace the link with the real file or directory first. The key and accounts
+are copied just after the database snapshot, so account sign-ins can be slightly
+newer than the database if they change while the backup runs. **The backup
+contains credentials** (the encryption key that protects stored secrets and the
+Codex account sign-ins): it is readable only by you, so keep it that way and
+store it somewhere you trust. The database and the data directory are chosen
 separately (`DATABASE_PATH` or `--database-path`, and `BASE_DIR`); the command
 warns when the database is outside the data directory, because the key must
 belong to the same installation as the database.

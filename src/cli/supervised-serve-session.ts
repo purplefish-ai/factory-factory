@@ -1,11 +1,15 @@
 import { execFile, type ChildProcess, type Serializable } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
-import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { constants, mkdirSync, rmSync } from 'node:fs';
+import { chmod, copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { promisify } from 'node:util';
+import { stripVTControlCharacters } from 'node:util';
+import chalk from 'chalk';
 import { z } from 'zod';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
-import { ALLOW_MIGRATION_WITHOUT_BACKUP_ENV } from '@/backend/migrate-with-backup';
+import {
+  ALLOW_MIGRATION_WITHOUT_BACKUP_ENV,
+  reportsMigrationWithoutBackup,
+} from '@/backend/migrate-with-backup';
 import {
   applicationUpdateStatusSchema,
   updateSupervisorMessageSchema,
@@ -19,7 +23,6 @@ import { stopBackendForUpdate } from './application-update-shutdown';
 import { ApplicationUpdateSupervisor } from './application-update-supervisor';
 import { runServeSession } from './serve-session';
 
-const exec = promisify(execFile);
 const savedStateSchema = z.object({ status: applicationUpdateStatusSchema });
 type ServeOptions = Parameters<typeof runServeSession>[0];
 
@@ -42,6 +45,61 @@ async function readPreviousStatus(
     /* First launch has no journal. */
   }
   return { phase: 'idle' };
+}
+
+/**
+ * Run the new package's `db:migrate` and return what it wrote to standard
+ * error. A failure is logged and carries that output, which names the cause,
+ * rather than the command line Node puts first.
+ */
+function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      args,
+      { env, timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
+      (error, _stdout, stderr) => {
+        const output = stripVTControlCharacters(String(stderr)).trim();
+        if (!error) {
+          resolve(output);
+          return;
+        }
+        const reason = output || error.message;
+        console.error(chalk.red(`  [update] db:migrate failed: ${reason}`));
+        reject(new Error(`The database migration failed: ${reason}`, { cause: error }));
+      }
+    );
+  });
+}
+
+/**
+ * The update's `db:migrate` could not write its lasting copy into `db-backups/`,
+ * so copy the supervisor's snapshot out of the update stage, which is deleted,
+ * and say where it is. Never throws: the new backend is already running.
+ */
+async function keepSnapshotOfMigrationWithoutBackup(
+  snapshot: string,
+  projectRoot: string,
+  migrationOutput: string
+): Promise<void> {
+  const kept = join(
+    dirname(projectRoot),
+    `.factory-factory-database-backup-${new Date().toISOString().replace(/[-:.]/g, '')}.db`
+  );
+  let outcome: string;
+  try {
+    await copyFile(snapshot, kept, constants.COPYFILE_EXCL);
+    await chmod(kept, 0o600);
+    outcome = `The database as it was before the update is kept at ${kept}.`;
+  } catch (error) {
+    outcome = `Could not keep the snapshot from before the update at ${kept}: ${String(error)}`;
+  }
+  console.error(
+    chalk.red(
+      '  [update] The update migrated the database without a lasting backup:\n' +
+        `  ${migrationOutput}\n  ${outcome}`
+    )
+  );
 }
 
 /** Keeps the CLI alive while its production backend is gracefully replaced. */
@@ -79,6 +137,8 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
   let expectedExit = false;
   let gracefulExit: Promise<void> | undefined;
   let snapshotExists = false;
+  /** The `db:migrate` warning when it migrated without its own backup. */
+  let migrationWithoutBackup: string | undefined;
   const publish = (message: Serializable) => {
     if (backend?.connected) {
       backend.send(message, () => {
@@ -133,21 +193,22 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       };
     },
     migrate: async () => {
-      await exec(
-        process.execPath,
+      migrationWithoutBackup = undefined;
+      const output = await runMigrationChild(
         [
           join(options.projectRoot, 'dist/src/cli/index.js'),
           'db:migrate',
           '--database-path',
           options.databasePath,
         ],
-        {
-          // The supervisor's own snapshot, taken just before, is this update's backup.
-          env: { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' },
-          timeout: 120_000,
-          maxBuffer: 4 * 1024 * 1024,
-        }
+        // The supervisor's own snapshot, taken just before, is this update's backup.
+        { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' }
       );
+      if (reportsMigrationWithoutBackup(output)) {
+        migrationWithoutBackup = output;
+      } else if (output) {
+        console.warn(chalk.yellow(`  [update] db:migrate: ${output}`));
+      }
     },
   });
   if (automaticUpdate) {
@@ -240,6 +301,22 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         onReady: async () => {
           await backendStarted;
           clearTimeout(readyTimeout);
+          const withoutBackup = migrationWithoutBackup;
+          migrationWithoutBackup = undefined;
+          // Only for a completed update (a failed one restored the database from the
+          // snapshot), and before backendReady deletes the stage holding it.
+          if (
+            withoutBackup !== undefined &&
+            supervisor.status.phase === 'restarting' &&
+            snapshotExists &&
+            backupPath
+          ) {
+            await keepSnapshotOfMigrationWithoutBackup(
+              backupPath,
+              options.projectRoot,
+              withoutBackup
+            );
+          }
           await supervisor.backendReady();
           if (snapshotExists && backupPath) {
             await rm(backupPath, { force: true });

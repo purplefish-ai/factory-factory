@@ -19,10 +19,11 @@ does not own:
   the backend, described in the
   [application update guide](../backend/services/application-update/AGENTS.md).
 - Which release is advertised: `src/backend/services/application-update/`.
-- Running migrations, and the bounded `db-backups/` copy taken before pending
-  migrations by `serve`, `db:migrate`, `proxy` and `tailscale` (a failed copy
-  stops the migration unless `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`):
-  `src/backend/migrate-with-backup.ts`.
+- Running migrations, and the bounded `<database>-pre-migration-*.db` copies in
+  `db-backups/` taken before pending migrations by `serve`, `db:migrate`,
+  `proxy` and `tailscale` (a failed copy stops the migration unless
+  `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`): `src/backend/migrate-with-backup.ts`.
+  The `backup-*` directories `ff backup` writes beside them are owned here.
 - The IPC messages and update status schema:
   `src/shared/application-updates.ts`.
 
@@ -46,8 +47,15 @@ does not own:
   `supervised-serve-session.test.ts`.
 - The update's `db:migrate` runs with `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`
   because the supervisor's own snapshot is its backup; that snapshot failing
-  still ends the update before the package moves.
-  `supervised-serve-session.test.ts`.
+  still ends the update before the package moves. A failed `db:migrate` is
+  logged and its standard error, not the command line, becomes the failed
+  update's message. When its output carries the warning that
+  `reportsMigrationWithoutBackup` recognises (no `db-backups/` copy was made),
+  the supervisor logs it and copies its snapshot out of the update stage to
+  `.factory-factory-database-backup-<UTC time>.db` beside the package before the
+  stage is deleted. The supervisor is the previously installed version, so that
+  warning text is a contract between versions.
+  `supervised-serve-session.test.ts`, `src/backend/migrate-with-backup.test.ts`.
 - The previous package and the database snapshot are kept until the replacement
   sends `update-backend-ready`; a failed migration or a failed replacement start
   restores both and restarts the previous package.
@@ -64,6 +72,13 @@ does not own:
   back. It runs before the installed SQLite probe so a broken replacement can
   still relaunch the previous package. `application-update-recovery.test.ts`,
   `bootstrap.test.ts`.
+- `ff backup` builds `<name>.partial` (claimed with `mkdir`, so two runs never
+  share one), writes the manifest last and renames it to `<name>` only when
+  complete; a failed run removes it. `readBackup` refuses a `.partial` directory
+  and one without a manifest, and the next default run reports leftover
+  `.partial` directories in `db-backups/`. The destination is never inside
+  `codex-accounts/`, compared by real path. Manual backups are never pruned.
+  `backup.test.ts`.
 
 ## Map
 
@@ -97,9 +112,7 @@ does not own:
   `src/backend/lib/sqlite-snapshot.ts`, the key, `codex-accounts/` and a
   Zod-validated manifest that records the source database and data directory,
   which `DATABASE_PATH` and `BASE_DIR` choose separately), by default in
-  `db-backups/` beside the database and never pruned. The directory is claimed
-  atomically, the manifest is written last and a failed backup removes its
-  directory, so a directory without a manifest is never a complete backup. A
-  restore reads one only through `readBackup`. `backup.test.ts`.
+  `db-backups/` beside the database and never pruned. A restore reads one only
+  through `readBackup`. `backup.test.ts`.
 - `proxy-mode.ts`, `tailscale.ts`, `studio.ts`, `build-command.ts`, `claude.ts`
   and `codex.ts` register the other commands.

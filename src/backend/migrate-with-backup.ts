@@ -25,15 +25,31 @@ export const ALLOW_MIGRATION_WITHOUT_BACKUP_ENV = 'FF_ALLOW_MIGRATION_WITHOUT_BA
 
 /** The backup before pending migrations failed, so no migration was applied. */
 export class MigrationBackupError extends Error {
-  constructor(reason: string) {
+  /** The directory the backup could not be written to. */
+  readonly backupDirectory: string;
+
+  constructor(reason: string, backupDirectory: string) {
     super(
-      `Could not back up the database before migrating: ${reason}. No migration was applied ` +
-        'and the database is unchanged. Fix the cause (for example free disk space or make ' +
-        'the db-backups directory beside the database writable) and start again, or set ' +
+      `Could not back up the database to ${backupDirectory} before migrating: ${reason}. ` +
+        'No migration was applied and the database is unchanged. Fix the cause (for example ' +
+        'free disk space or make that directory writable) and start again, or set ' +
         `${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1 to migrate without a backup.`
     );
     this.name = 'MigrationBackupError';
+    this.backupDirectory = backupDirectory;
   }
+}
+
+/**
+ * Starts the warning printed when migrations run without a backup. The in-app
+ * update's supervisor, from the previously installed version, looks for it in
+ * the output of the new version's `db:migrate`, so keep it unchanged.
+ */
+const MIGRATION_WITHOUT_BACKUP_WARNING = '[migrate] Warning: migrating without a backup';
+
+/** Whether `db:migrate` output says migrations ran without a backup. */
+export function reportsMigrationWithoutBackup(output: string): boolean {
+  return output.includes(MIGRATION_WITHOUT_BACKUP_WARNING);
 }
 
 function errorMessage(error: unknown): string {
@@ -175,11 +191,12 @@ export async function runMigrationsWithBackup(options: MigrateWithBackupOptions)
       );
     } catch (error) {
       if (!configService.getAllowMigrationWithoutBackup()) {
-        throw new MigrationBackupError(errorMessage(error));
+        throw new MigrationBackupError(errorMessage(error), backupDirectory);
       }
       warn(
-        `[migrate] Warning: could not back up the database before migrating: ${errorMessage(error)}. ` +
-          `Continuing without a backup because ${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1.`
+        `${MIGRATION_WITHOUT_BACKUP_WARNING}: could not back up the database to ` +
+          `${backupDirectory}: ${errorMessage(error)}. Continuing because ` +
+          `${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1.`
       );
     }
   }

@@ -1,9 +1,10 @@
 import { ChildProcess, execFile, type Serializable } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { updateSupervisorMessageSchema } from '@/shared/application-updates';
 import { createTestEventLog } from '@/test-utils/test-event-log';
 import type { PreparedApplicationUpdate } from './application-update-installer';
 import { runServeSession } from './serve-session';
@@ -16,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn<(version: string, signal: AbortSignal) => Promise<PreparedApplicationUpdate>>(),
   persist: vi.fn<(...args: unknown[]) => Promise<void>>(),
   migrate: vi.fn<() => Promise<void>>(),
+  /** What the `db:migrate` child writes to standard error, whether it succeeds or fails. */
+  migrateStderr: '',
 }));
 vi.mock('node:child_process', async (original) => ({
   ...(await original<typeof import('node:child_process')>()),
@@ -143,6 +146,7 @@ beforeEach(async () => {
   mocks.otherServers = false;
   mocks.persist.mockResolvedValue();
   mocks.migrate.mockResolvedValue();
+  mocks.migrateStderr = '';
   onReady.mockResolvedValue();
   prepared = {
     packageRoot,
@@ -165,8 +169,8 @@ beforeEach(async () => {
     const callback = args.at(-1);
     if (typeof callback === 'function') {
       void mocks.migrate().then(
-        () => callback(null, '', ''),
-        (error: unknown) => callback(error)
+        () => callback(null, '', mocks.migrateStderr),
+        (error: unknown) => callback(error, '', mocks.migrateStderr)
       );
     }
     return new ChildProcess();
@@ -331,6 +335,109 @@ describe('production serve update integration', () => {
     await ready(recovered);
     expect(onReady).toHaveBeenCalledOnce();
     expect(prepared.rollback).toHaveBeenCalledOnce();
+  });
+
+  it('keeps its database snapshot, and logs why, when the migration ran without a lasting backup', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.migrateStderr =
+      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
+      '/data/db-backups: EACCES: permission denied. Continuing because ' +
+      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
+    mocks.migrate.mockImplementation(() => {
+      const database = new Database(databasePath);
+      database.exec("UPDATE test_data SET value = 'migrated'");
+      database.close();
+      return Promise.resolve();
+    });
+    await requestUpdate();
+    const replacement = await backend(1);
+    await ready(replacement);
+
+    expect(prepared.dispose).toHaveBeenCalledOnce();
+    const kept = (await readdir(directory)).filter((name) =>
+      name.startsWith('.factory-factory-database-backup-')
+    );
+    expect(kept).toHaveLength(1);
+    const keptPath = join(directory, kept[0] ?? '');
+    const snapshot = new Database(keptPath, { readonly: true });
+    try {
+      expect(snapshot.prepare('SELECT value FROM test_data').pluck().get()).toBe('before update');
+    } finally {
+      snapshot.close();
+    }
+    expect((await stat(keptPath)).mode & 0o777).toBe(0o600);
+    expect(databaseValue()).toBe('migrated');
+    const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('EACCES: permission denied');
+    expect(logged).toContain(keptPath);
+  });
+
+  it('keeps no extra snapshot when the replacement fails and the update is rolled back', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.migrateStderr =
+      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
+      '/data/db-backups: EACCES: permission denied. Continuing because ' +
+      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
+    await requestUpdate();
+    exit((await backend(1)).child, 1);
+    const recovered = await backend(2);
+    await ready(recovered);
+
+    expect(prepared.rollback).toHaveBeenCalledOnce();
+    expect(databaseValue()).toBe('before update');
+    expect(
+      (await readdir(directory)).filter((name) =>
+        name.startsWith('.factory-factory-database-backup-')
+      )
+    ).toEqual([]);
+    const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).not.toContain('without a lasting backup');
+  });
+
+  it('removes its snapshot after an update whose migration made its own backup', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await requestUpdate();
+    const replacement = await backend(1);
+    await ready(replacement);
+
+    expect((await readdir(directory)).filter((name) => name.includes('database-backup'))).toEqual(
+      []
+    );
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("puts the db:migrate child's error output first in the failed update and in the log", async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const reason =
+      'Could not back up the database to /data/db-backups before migrating: ENOSPC: no ' +
+      'space left on device. No migration was applied and the database is unchanged.';
+    mocks.migrateStderr = `${reason}\n`;
+    // How Node's execFile reports a nonzero exit: the whole command line comes first.
+    const command = [
+      process.execPath,
+      join(packageRoot, 'dist/src/cli/index.js'),
+      'db:migrate',
+      '--database-path',
+      databasePath,
+    ].join(' ');
+    mocks.migrate.mockRejectedValue(new Error(`Command failed: ${command}\n${reason}\n`));
+    await requestUpdate();
+    const recovered = await backend(1);
+    expect(databaseValue()).toBe('before update');
+    recovered.child.emit('message', { type: 'update-hello' });
+
+    const statuses = recovered.messages.map((message) =>
+      updateSupervisorMessageSchema.parse(message)
+    );
+    const failed = statuses.find(
+      (message) => message.type === 'update-status' && message.status.phase === 'failed'
+    );
+    const failure = failed?.type === 'update-status' ? (failed.status.error ?? '') : '';
+    // The update banner shows the first 240 characters.
+    expect(failure.slice(0, 240)).toContain('ENOSPC: no space left on device');
+    expect(failure).not.toContain('Command failed');
+    const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain(reason);
   });
 
   it('restores and restarts the previous installation after replacement boot fails', async () => {

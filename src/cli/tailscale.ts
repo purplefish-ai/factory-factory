@@ -7,7 +7,7 @@ import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { stopChild, watchChild } from './child-lifecycle';
 import { resolveDatabasePath } from './database-path';
 import { forwardDiagnosticOutput } from './diagnostic-output';
-import { resolveUnknownMigrationPolicy } from './migration-policy';
+import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { discoverTailscale, parsePort } from './tailscale-client';
@@ -37,12 +37,17 @@ export async function runTailscaleSession(params: {
     signal.throwIfAborted();
     const databasePath = resolveDatabasePath({ databasePath: options.databasePath });
     ensureDataDir(databasePath);
-    await runMigrationsWithBackup({
-      databasePath,
-      migrationsPath: join(projectRoot, 'prisma', 'migrations'),
-      log: console.log,
-      unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
-    });
+    try {
+      await runMigrationsWithBackup({
+        databasePath,
+        migrationsPath: join(projectRoot, 'prisma', 'migrations'),
+        log: console.log,
+        unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
+      });
+    } catch (error) {
+      // Worded like every other command's migration failure.
+      throw new Error(describeMigrationFailure(error), { cause: error });
+    }
     const requestedPort = await findAvailablePort(options.backendPort, { maxAttempts: 50, signal });
     signal.throwIfAborted();
     const backend = await startFactoryFactoryServer({
@@ -127,7 +132,8 @@ export function registerTailscaleCommand(program: Command, projectRoot: string):
       try {
         await runTailscaleSession({ projectRoot, options, signal: controller.signal });
       } catch (error) {
-        console.error(chalk.red(`Tailscale session failed: ${String(error)}`));
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(chalk.red(`Tailscale session failed: ${message}`));
         process.exitCode = 1;
       } finally {
         process.off('SIGINT', onSignal);

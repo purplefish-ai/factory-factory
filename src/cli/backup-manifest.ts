@@ -1,6 +1,6 @@
 import type { Stats } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 
 /** Names inside a backup directory. `ff restore` reads the same layout. */
@@ -8,6 +8,11 @@ export const BACKUP_MANIFEST_FILE = 'manifest.json';
 export const BACKUP_DATABASE_FILE = 'database.db';
 export const BACKUP_ENCRYPTION_KEY_FILE = 'encryption.key';
 export const BACKUP_CODEX_ACCOUNTS_DIRECTORY = 'codex-accounts';
+/**
+ * `ff backup` builds `<name>.partial` and renames it to `<name>` once complete,
+ * so a directory with this suffix was left by an interrupted run.
+ */
+export const BACKUP_PARTIAL_SUFFIX = '.partial';
 
 /** Bump when the layout or the manifest changes in a way an older reader cannot restore. */
 export const BACKUP_FORMAT_VERSION = 1;
@@ -49,7 +54,7 @@ export interface ValidatedBackup {
   codexAccountsPath?: string;
 }
 
-function isNotFound(error: unknown): boolean {
+export function isNotFound(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }
 
@@ -113,11 +118,18 @@ function parseManifest(text: string, directory: string): BackupManifest {
 
 /**
  * Read and validate a backup directory made by `ff backup`. Throws a readable
- * error for a missing manifest, a format this version does not understand, or
- * a file the manifest lists but the directory lacks. A restore opens a backup
- * only through this function.
+ * error for an unfinished (`.partial`) backup, a missing manifest, a format
+ * this version does not understand, or a file the manifest lists but the
+ * directory lacks. A restore opens a backup only through this function.
  */
 export async function readBackup(directory: string): Promise<ValidatedBackup> {
+  // Checked first: an interrupted run may have written the manifest before its rename.
+  if (basename(resolve(directory)).endsWith(BACKUP_PARTIAL_SUFFIX)) {
+    throw new Error(
+      `${directory} is an unfinished backup: ff backup was interrupted before it finished ` +
+        `(its name still ends in ${BACKUP_PARTIAL_SUFFIX}), so it cannot be restored.`
+    );
+  }
   const manifest = parseManifest(await readManifestText(directory), directory);
   const databasePath = join(directory, BACKUP_DATABASE_FILE);
   await requireEntry(databasePath, 'file', BACKUP_DATABASE_FILE);

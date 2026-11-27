@@ -48,10 +48,11 @@ describe('describeMigrationFailure', () => {
 
   it('shows a failed backup as it is, naming the variable that proceeds without one', () => {
     const text = describeMigrationFailure(
-      new MigrationBackupError('ENOSPC: no space left on device')
+      new MigrationBackupError('ENOSPC: no space left on device', '/data/db-backups')
     );
 
     expect(text).toContain('ENOSPC: no space left on device');
+    expect(text).toContain('/data/db-backups');
     expect(text).toContain('FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1');
     expect(text).not.toMatch(/^Migration failed/);
   });

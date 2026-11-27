@@ -1,10 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import {
   chmod,
   mkdir,
   mkdtemp,
   readdir,
   realpath,
+  rename,
   rm,
   stat,
   symlink,
@@ -171,6 +172,126 @@ describe('ff backup', () => {
     expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
   });
 
+  it('refuses a destination that reaches the Codex accounts through a link or a dotted name', async () => {
+    await mkdir(join(baseDir, 'codex-accounts'));
+    if (IS_POSIX) {
+      const link = join(root, 'accounts-link');
+      await symlink(join(baseDir, 'codex-accounts'), link);
+      await expect(
+        createBackup({
+          databasePath,
+          baseDir,
+          applicationVersion: '1.2.3',
+          destination: join(link, 'backup'),
+        })
+      ).rejects.toThrow('inside the Codex accounts');
+    }
+    // `..backup` is a child of codex-accounts, not a way out of it.
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'codex-accounts', '..backup'),
+      })
+    ).rejects.toThrow('inside the Codex accounts');
+    expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
+  });
+
+  it('builds the backup under a .partial name and renames it only when complete', async () => {
+    const destination = join(root, 'out');
+    // What the destination's parent holds at each event-loop turn while the backup runs.
+    const observed: string[][] = [];
+    let watching = true;
+    const watch = () => {
+      if (watching) {
+        observed.push(readdirSync(root).sort());
+        setImmediate(watch);
+      }
+    };
+    setImmediate(watch);
+
+    let result: Awaited<ReturnType<typeof createBackup>>;
+    try {
+      result = await createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination,
+      });
+    } finally {
+      watching = false;
+    }
+
+    expect(observed).toContainEqual(['base', 'out.partial']);
+    expect(observed.some((names) => names.includes('out') && names.includes('out.partial'))).toBe(
+      false
+    );
+    expect(result.directory).toBe(destination);
+    expect((await readdir(root)).sort()).toEqual(['base', 'out']);
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(root, 'chosen.partial'),
+      })
+    ).rejects.toThrow('.partial');
+  });
+
+  it('reports a backup an interrupted run left behind and never reads it as a backup', async () => {
+    // Interrupted after the manifest was written but before the rename: it looks complete.
+    const { directory } = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'complete'),
+    });
+    await mkdir(join(baseDir, 'db-backups'));
+    const leftover = join(baseDir, 'db-backups', 'backup-20261127T090000000Z.partial');
+    await rename(directory, leftover);
+
+    await expect(readBackup(leftover)).rejects.toThrow('unfinished backup');
+
+    const result = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+    expect(result.leftovers).toEqual([leftover]);
+    expect((await readdir(join(baseDir, 'db-backups'))).sort()).toEqual([
+      'backup-20261127T090000000Z.partial',
+      'backup-20261127T101500123Z',
+    ]);
+
+    // A rerun to a chosen path that was interrupted says so instead of "already exists".
+    await mkdir(join(root, 'again.partial'));
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(root, 'again'),
+      })
+    ).rejects.toThrow('interrupted');
+  });
+
+  it('says what happened and what to run when the default name is taken', async () => {
+    await mkdir(join(baseDir, 'db-backups', 'backup-20261127T101500123Z'), { recursive: true });
+
+    const failure = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+
+    await expect(failure).rejects.toThrow('already exists');
+    await expect(failure).rejects.toThrow('Run `ff backup` again');
+    await expect(failure).rejects.not.toThrow('choose a path that does not exist');
+  });
+
   it('does not prune earlier manual backups', async () => {
     for (let index = 0; index < 5; index += 1) {
       await createBackup({
@@ -313,6 +434,37 @@ describe('ff backup', () => {
 
     it('does not warn when the database is inside the data directory', async () => {
       expect(await describeMismatchedSources({ databasePath, baseDir })).toBeUndefined();
+      // A directory whose name starts with two dots is still inside.
+      expect(
+        await describeMismatchedSources({
+          databasePath: join(baseDir, '..data', 'data.db'),
+          baseDir,
+        })
+      ).toBeUndefined();
+    });
+
+    it('falls back to the paths as given when a real path cannot be read', async () => {
+      // A path through a file fails with ENOTDIR, not "not found".
+      expect(
+        await describeMismatchedSources({ databasePath: join(databasePath, 'nested.db'), baseDir })
+      ).toBeUndefined();
+    });
+
+    it('reports a backup an interrupted run left in db-backups', async () => {
+      vi.stubEnv('BASE_DIR', baseDir);
+      vi.stubEnv('DATABASE_PATH', '');
+      const leftover = join(baseDir, 'db-backups', 'backup-20261127T090000000Z.partial');
+      await mkdir(leftover, { recursive: true });
+      vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const program = new Command().exitOverride();
+      registerBackupCommand(program, '9.9.9');
+
+      await program.parseAsync(['backup'], { from: 'user' });
+
+      const warnings = warn.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(warnings).toContain(leftover);
+      expect(warnings).toContain('interrupted');
     });
 
     it('warns when a link inside the data directory leads to a database elsewhere', async () => {

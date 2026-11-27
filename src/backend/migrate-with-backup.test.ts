@@ -18,6 +18,7 @@ import {
   getPreMigrationBackupDirectory,
   type MigrateWithBackupOptions,
   MigrationBackupError,
+  reportsMigrationWithoutBackup,
   runMigrationsWithBackup,
 } from './migrate-with-backup';
 import { configService } from './services/config.service';
@@ -261,6 +262,9 @@ describe('runMigrationsWithBackup', () => {
       await expect(failure).rejects.toBeInstanceOf(MigrationBackupError);
       await expect(failure).rejects.toThrow(/ENOTDIR|EEXIST|not a directory/i);
       await expect(failure).rejects.toThrow('FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1');
+      // The directory it could not write, whatever the underlying reason says.
+      await expect(failure).rejects.toMatchObject({ backupDirectory: blocked });
+      await expect(failure).rejects.toThrow(`Could not back up the database to ${blocked}`);
       expect(tablesIn(databasePath)).not.toContain('posts');
       expect(appliedMigrations()).toEqual(['001_users']);
     });
@@ -275,6 +279,21 @@ describe('runMigrationsWithBackup', () => {
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('could not back up the database');
       expect(warnings[0]).toContain('FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
+      expect(warnings[0]).toContain(blocked);
+      // The in-app update reads this warning from its db:migrate child's output.
+      expect(reportsMigrationWithoutBackup(`noise\n${warnings[0]}\nmore noise`)).toBe(true);
+      expect(reportsMigrationWithoutBackup(logs.join('\n'))).toBe(false);
+    });
+
+    it('reports a database it cannot inspect as a migration failure, not a backup failure', async () => {
+      // Not a SQLite file: inspecting it fails before any backup is attempted.
+      writeFileSync(databasePath, 'this is not a database');
+
+      const failure = migrate({ backupDirectory: join(tempDir, 'ok-backups') });
+
+      await expect(failure).rejects.toThrow(/not a database/i);
+      await expect(failure).rejects.not.toBeInstanceOf(MigrationBackupError);
+      expect(existsSync(join(tempDir, 'ok-backups'))).toBe(false);
     });
 
     it('still starts a database with nothing to migrate', async () => {
