@@ -1,6 +1,6 @@
 import { execFile, type ChildProcess, type Serializable } from 'node:child_process';
-import { constants, mkdirSync, rmSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdirSync, rmSync } from 'node:fs';
+import { copyFile, link, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import chalk from 'chalk';
@@ -8,7 +8,9 @@ import { z } from 'zod';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
 import {
   ALLOW_MIGRATION_WITHOUT_BACKUP_ENV,
-  reportsMigrationWithoutBackup,
+  getPreMigrationBackupDirectory,
+  listPreMigrationBackups,
+  preMigrationBackupName,
 } from '@/backend/migrate-with-backup';
 import {
   applicationUpdateStatusSchema,
@@ -48,8 +50,22 @@ async function readPreviousStatus(
 }
 
 /**
+ * A failed child's output with its last line, the failure itself, first: an
+ * earlier warning would otherwise fill the start of the message the update
+ * banner shows.
+ */
+function describeChildFailure(output: string, fallback: string): string {
+  const lines = output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const last = lines.pop();
+  return last ? [last, ...lines].join('\n') : fallback;
+}
+
+/**
  * Run the new package's `db:migrate` and return what it wrote to standard
- * error. A failure is logged and carries that output, which names the cause,
+ * error. A failure is logged in full and carries that output, failure first,
  * rather than the command line Node puts first.
  */
 function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<string> {
@@ -64,7 +80,7 @@ function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<stri
           resolve(output);
           return;
         }
-        const reason = output || error.message;
+        const reason = describeChildFailure(output, error.message);
         console.error(chalk.red(`  [update] db:migrate failed: ${reason}`));
         reject(new Error(`The database migration failed: ${reason}`, { cause: error }));
       }
@@ -72,46 +88,78 @@ function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<stri
   });
 }
 
-/**
- * The update's `db:migrate` could not write its lasting copy into `db-backups/`,
- * so copy the supervisor's snapshot out of the update stage, which is deleted,
- * and say where it is. Never throws: the new backend is already running.
- */
-async function keepSnapshotOfMigrationWithoutBackup(
-  snapshot: string,
-  projectRoot: string,
-  migrationOutput: string
-): Promise<void> {
-  const stem = join(
-    dirname(projectRoot),
-    `.factory-factory-database-backup-${new Date().toISOString().replace(/[-:.]/g, '')}`
-  );
-  let kept = `${stem}.db`;
-  let outcome: string;
-  try {
-    // Never overwrite an earlier kept snapshot; a name clash takes the next suffix.
-    for (let suffix = 1; ; suffix += 1) {
-      try {
-        await copyFile(snapshot, kept, constants.COPYFILE_EXCL);
-        break;
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) {
-          throw error;
-        }
-        kept = `${stem}-${suffix}.db`;
+function isAlreadyExists(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/** Hard-link `source` into `directory` under the first unused name; a link never replaces a file. */
+async function linkUnderUnusedName(
+  source: string,
+  directory: string,
+  name: (attempt: number) => string
+): Promise<string> {
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const target = join(directory, name(attempt));
+    try {
+      await link(source, target);
+      return target;
+    } catch (error) {
+      if (!isAlreadyExists(error)) {
+        throw error;
       }
     }
-    await chmod(kept, 0o600);
-    outcome = `The database as it was before the update is kept at ${kept}.`;
-  } catch (error) {
-    outcome = `Could not keep the snapshot from before the update at ${kept}: ${String(error)}`;
   }
+  throw new Error(`No unused name in ${directory}`);
+}
+
+/**
+ * The update's `db:migrate` left no new backup in `db-backups/`, so the
+ * supervisor's snapshot is the only copy of the database from before the
+ * update. Keep it with a hard link, which needs no disk space (a full disk is
+ * the likeliest reason that backup failed) and is instant: into `db-backups/`
+ * under the pre-migration name retention counts, else beside the package. When
+ * no link can be made, the snapshot stays in the stage. Never throws: the new
+ * backend is already running. Returns the snapshot when the stage must keep it.
+ */
+async function keepPreUpdateSnapshot(
+  snapshot: string,
+  databasePath: string,
+  projectRoot: string
+): Promise<string | undefined> {
+  const now = Date.now();
+  const backupDirectory = getPreMigrationBackupDirectory(databasePath);
+  const failures: string[] = [];
+  let kept: string | undefined;
+  try {
+    await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+    kept = await linkUnderUnusedName(snapshot, backupDirectory, (attempt) =>
+      preMigrationBackupName(databasePath, new Date(now + attempt))
+    );
+  } catch (error) {
+    failures.push(`${backupDirectory} (${String(error)})`);
+  }
+  if (!kept) {
+    const stamp = new Date(now).toISOString().replace(/[-:.]/g, '');
+    try {
+      kept = await linkUnderUnusedName(
+        snapshot,
+        dirname(projectRoot),
+        (attempt) => `.factory-factory-database-backup-${stamp}${attempt ? `-${attempt}` : ''}.db`
+      );
+    } catch (error) {
+      failures.push(`${dirname(projectRoot)} (${String(error)})`);
+    }
+  }
+  const linkFailures =
+    failures.length > 0 ? ` Could not link it into ${failures.join(' or ')}.` : '';
   console.error(
     chalk.red(
-      '  [update] The update migrated the database without a lasting backup:\n' +
-        `  ${migrationOutput}\n  ${outcome}`
+      `  [update] The database migration made no lasting backup: no new pre-migration ` +
+        `backup appeared in ${backupDirectory}. The database as it was before the update ` +
+        `is kept at ${kept ?? snapshot}.${linkFailures}`
     )
   );
+  return kept ? undefined : snapshot;
 }
 
 /** Keeps the CLI alive while its production backend is gracefully replaced. */
@@ -149,8 +197,10 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
   let expectedExit = false;
   let gracefulExit: Promise<void> | undefined;
   let snapshotExists = false;
-  /** The `db:migrate` warning when it migrated without its own backup. */
-  let migrationWithoutBackup: string | undefined;
+  /** Set unless the update's `db:migrate` was seen to leave a new backup in `db-backups/`. */
+  let snapshotIsOnlyBackup = false;
+  /** A snapshot no link could keep, which the stage's disposal leaves in place. */
+  let snapshotLeftInStage: string | undefined;
   const publish = (message: Serializable) => {
     if (backend?.connected) {
       backend.send(message, () => {
@@ -160,7 +210,10 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
   };
   const supervisor = new ApplicationUpdateSupervisor({
     automaticUpdate,
-    prepare: (version, signal) => installer.prepare(version, signal),
+    prepare: async (version, signal) => {
+      const prepared = await installer.prepare(version, signal);
+      return { ...prepared, dispose: () => prepared.dispose({ keep: snapshotLeftInStage }) };
+    },
     publish: (status) => publish({ type: 'update-status', status }),
     persist: async (status) => {
       // Unsupported source/desktop launches do not write beside their package.
@@ -205,7 +258,9 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       };
     },
     migrate: async () => {
-      migrationWithoutBackup = undefined;
+      // Fails safe: only a new backup file seen on disk lets the snapshot go.
+      snapshotIsOnlyBackup = true;
+      const before = await listPreMigrationBackups(options.databasePath).catch(() => undefined);
       const output = await runMigrationChild(
         [
           join(options.projectRoot, 'dist/src/cli/index.js'),
@@ -216,11 +271,12 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         // The supervisor's own snapshot, taken just before, is this update's backup.
         { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' }
       );
-      if (reportsMigrationWithoutBackup(output)) {
-        migrationWithoutBackup = output;
-      } else if (output) {
+      if (output) {
         console.warn(chalk.yellow(`  [update] db:migrate: ${output}`));
       }
+      const after = await listPreMigrationBackups(options.databasePath).catch(() => []);
+      const childMadeBackup = !!before && after.some((name) => !before.includes(name));
+      snapshotIsOnlyBackup = !childMadeBackup;
     },
   });
   if (automaticUpdate) {
@@ -313,27 +369,28 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         onReady: async () => {
           await backendStarted;
           clearTimeout(readyTimeout);
-          const withoutBackup = migrationWithoutBackup;
-          migrationWithoutBackup = undefined;
+          const keepSnapshot = snapshotIsOnlyBackup;
+          snapshotIsOnlyBackup = false;
           // Only for a completed update (a failed one restored the database from the
           // snapshot), and before backendReady deletes the stage holding it.
           if (
-            withoutBackup !== undefined &&
+            keepSnapshot &&
             supervisor.status.phase === 'restarting' &&
             snapshotExists &&
             backupPath
           ) {
-            await keepSnapshotOfMigrationWithoutBackup(
+            snapshotLeftInStage = await keepPreUpdateSnapshot(
               backupPath,
-              options.projectRoot,
-              withoutBackup
+              options.databasePath,
+              options.projectRoot
             );
           }
           await supervisor.backendReady();
-          if (snapshotExists && backupPath) {
+          if (snapshotExists && backupPath && !snapshotLeftInStage) {
             await rm(backupPath, { force: true });
-            snapshotExists = false;
           }
+          snapshotExists = false;
+          snapshotLeftInStage = undefined;
           if (firstReady) {
             firstReady = false;
             await options.onReady();

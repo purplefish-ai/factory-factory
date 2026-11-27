@@ -172,6 +172,30 @@ function describeExistingDestination(directory: string, isDefault: boolean): str
 }
 
 /**
+ * A kill between claiming the final name and the rename leaves an empty
+ * `<directory>` beside its `.partial`.
+ */
+async function isInterruptedRename(directory: string, building: string): Promise<boolean> {
+  try {
+    return (await readdir(directory)).length === 0 && !!(await lstatIfExists(building));
+  } catch {
+    return false;
+  }
+}
+
+function describeInterruptedRename(directory: string, building: string): string {
+  return (
+    `${directory} is an empty directory a backup left when it was interrupted while ` +
+    `finishing. If ${building} contains ${BACKUP_MANIFEST_FILE}, that backup is complete: ` +
+    `remove the empty ${directory} and rename ${building} to it. Otherwise delete both and ` +
+    'run `ff backup` again.'
+  );
+}
+
+/** The backup is complete but still under its `.partial` name, which must not be deleted. */
+class UnrenamedBackupError extends Error {}
+
+/**
  * Claim `<directory>.partial`, where the backup is built, failing if it or the
  * final directory already exists: `mkdir` is the atomic claim, so two backups
  * never share a directory. The default parent is made owner-only even when it
@@ -188,6 +212,9 @@ async function reserveDirectory(
     await chmod(parent, 0o700);
   }
   if (await lstatIfExists(directory)) {
+    if (await isInterruptedRename(directory, building)) {
+      throw new Error(describeInterruptedRename(directory, building));
+    }
     throw new Error(describeExistingDestination(directory, isDefault));
   }
   try {
@@ -216,34 +243,71 @@ async function finishBackup(building: string, directory: string, isDefault: bool
     try {
       await mkdir(directory, { mode: 0o700 });
     } catch (error) {
-      if (isAlreadyExists(error)) {
-        throw new Error(describeExistingDestination(directory, isDefault));
-      }
-      throw error;
+      throw isAlreadyExists(error)
+        ? new Error(describeExistingDestination(directory, isDefault))
+        : error;
     }
   }
   try {
     await rename(building, directory);
   } catch (error) {
-    if (claim) {
-      // Only our claim, and only while it is still empty.
-      await rmdir(directory).catch(() => undefined);
-    } else if (await lstatIfExists(directory).catch(() => null)) {
-      throw new Error(describeExistingDestination(directory, isDefault), { cause: error });
-    }
-    throw error;
+    throw claim
+      ? await explainClaimedRenameFailure(error, building, directory)
+      : await explainRenameFailure(error, directory, isDefault);
   }
+}
+
+/** POSIX: the rename onto our claimed directory failed. */
+async function explainClaimedRenameFailure(
+  error: unknown,
+  building: string,
+  directory: string
+): Promise<unknown> {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined;
+  if (code === 'ENOTEMPTY' || code === 'EEXIST') {
+    // Someone wrote into the claim: the finished backup stays where it is.
+    return new UnrenamedBackupError(
+      `The backup is complete in ${building}, but another process wrote into ${directory} ` +
+        `before it could be renamed there. Rename ${building} to a new path without ` +
+        `${BACKUP_PARTIAL_SUFFIX} to use it.`,
+      { cause: error }
+    );
+  }
+  // Only our claim, and only while it is still empty.
+  await rmdir(directory).catch(() => undefined);
+  return error;
+}
+
+/** Windows: `rename` refuses an existing directory, which is the usual cause. */
+async function explainRenameFailure(
+  error: unknown,
+  directory: string,
+  isDefault: boolean
+): Promise<unknown> {
+  return (await lstatIfExists(directory).catch(() => null))
+    ? new Error(describeExistingDestination(directory, isDefault), { cause: error })
+    : error;
 }
 
 const DEFAULT_PARTIAL_NAME = /^backup-\d{8}T\d{9}Z\.partial$/;
 
-/** Unfinished default backups other than this run's, left by an interrupted (or a running) backup. */
+/**
+ * Unfinished default backups other than this run's, left by an interrupted (or
+ * a running) backup, and the empty final directories an interrupted rename left.
+ */
 async function findLeftoverBackups(parent: string, building: string): Promise<string[]> {
-  return (await readdir(parent))
+  const partials = (await readdir(parent))
     .filter((name) => DEFAULT_PARTIAL_NAME.test(name))
     .map((name) => join(parent, name))
-    .filter((path) => path !== building)
-    .sort();
+    .filter((path) => path !== building);
+  const emptyClaims: string[] = [];
+  for (const partial of partials) {
+    const claimed = partial.slice(0, -BACKUP_PARTIAL_SUFFIX.length);
+    if (await isInterruptedRename(claimed, partial)) {
+      emptyClaims.push(claimed);
+    }
+  }
+  return [...partials, ...emptyClaims].sort();
 }
 
 /**
@@ -308,8 +372,11 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
   // Compared by real path, so a link cannot place the backup inside what it copies.
   const accounts = await realPathAllowingMissing(join(baseDir, 'codex-accounts'));
   const realDirectory = await realPathAllowingMissing(directory);
-  // Equal counts too: a backup created as an absent codex-accounts/ would become the account source.
-  if (realDirectory === accounts || isInside(realDirectory, accounts)) {
+  // Equal counts too: a backup created as an absent codex-accounts/ would become the account
+  // source. Case is ignored, because on a case-insensitive disk Codex-Accounts is the same.
+  const lowerAccounts = accounts.toLowerCase();
+  const lowerDirectory = realDirectory.toLowerCase();
+  if (lowerDirectory === lowerAccounts || isInside(lowerDirectory, lowerAccounts)) {
     throw new Error(`${directory} is inside the Codex accounts directory it would copy.`);
   }
 
@@ -338,9 +405,26 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
     await finishBackup(building, directory, isDefault);
     return { directory, manifest, skipped, leftovers };
   } catch (error) {
-    await rm(building, { recursive: true, force: true });
+    if (!(error instanceof UnrenamedBackupError)) {
+      await rm(building, { recursive: true, force: true });
+    }
     throw error;
   }
+}
+
+function describeLeftover(path: string): string {
+  if (!path.endsWith(BACKUP_PARTIAL_SUFFIX)) {
+    return (
+      `Found ${path}, an empty directory a backup left when it was interrupted while ` +
+      'finishing; delete it.'
+    );
+  }
+  return (
+    `Found ${path}, left by a backup that was interrupted (or is still running). It is not ` +
+    `usable under that name. If it contains ${BACKUP_MANIFEST_FILE}, the backup finished but ` +
+    `was not renamed: rename it without ${BACKUP_PARTIAL_SUFFIX}. Otherwise delete it once ` +
+    'no backup is running.'
+  );
 }
 
 export const BACKUP_CREDENTIALS_WARNING =
@@ -387,12 +471,7 @@ export function registerBackupCommand(program: Command, applicationVersion: stri
           console.warn(chalk.yellow(`  Skipped (not a regular file or directory): ${entry}`));
         }
         for (const leftover of result.leftovers) {
-          console.warn(
-            chalk.yellow(
-              `  Found ${leftover}, left by a backup that was interrupted (or is still ` +
-                'running). It is not a usable backup; delete it once no backup is running.'
-            )
-          );
+          console.warn(chalk.yellow(`  ${describeLeftover(leftover)}`));
         }
         console.log(chalk.yellow(BACKUP_CREDENTIALS_WARNING));
       } catch (error) {

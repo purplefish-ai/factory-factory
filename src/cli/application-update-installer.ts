@@ -204,8 +204,18 @@ export class ApplicationUpdateInstaller {
             throw error;
           }
         },
-        async dispose() {
-          await rm(stage, { recursive: true, force: true });
+        /** Remove the stage and release the lock; `keep` names one file in the stage to leave. */
+        async dispose(options: { keep?: string } = {}) {
+          const { keep } = options;
+          if (keep && dirname(keep) === stage) {
+            await Promise.all(
+              (await readdir(stage))
+                .filter((name) => join(stage, name) !== keep)
+                .map((name) => rm(join(stage, name), { recursive: true, force: true }))
+            );
+          } else {
+            await rm(stage, { recursive: true, force: true });
+          }
           await rm(lock, { recursive: true, force: true });
         },
         recoveryPath: backup,

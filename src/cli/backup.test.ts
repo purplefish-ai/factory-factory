@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -18,6 +18,21 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBackup, describeMismatchedSources, registerBackupCommand } from './backup';
 import { readBackup } from './backup-manifest';
+
+/** Runs just before each `rename`, so a test can make another process act in that window. */
+const renameHook = vi.hoisted(() => ({
+  before: undefined as ((from: string, to: string) => void) | undefined,
+}));
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    rename: (from: string, to: string) => {
+      renameHook.before?.(from, to);
+      return actual.rename(from, to);
+    },
+  };
+});
 
 const FIXED_NOW = new Date('2026-11-27T10:15:00.123Z');
 const IS_POSIX = process.platform !== 'win32';
@@ -45,6 +60,7 @@ describe('ff backup', () => {
   });
 
   afterEach(async () => {
+    renameHook.before = undefined;
     writer.close();
     await rm(root, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -237,6 +253,80 @@ describe('ff backup', () => {
     // Theirs is left as it was: still there, still empty, not replaced by the backup.
     expect(await readdir(destination)).toEqual([]);
     expect(existsSync(`${destination}.partial`)).toBe(false);
+  });
+
+  it('refuses a destination that is the absent accounts directory in another case', async () => {
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'Codex-Accounts'),
+      })
+    ).rejects.toThrow('Codex accounts');
+    expect(await readdir(baseDir)).not.toContain('Codex-Accounts');
+  });
+
+  it('keeps a finished backup, and says where, when another process writes into its final name', async () => {
+    if (!IS_POSIX) {
+      return;
+    }
+    const destination = join(root, 'out');
+    renameHook.before = (_from, to) => {
+      if (to === destination) {
+        writeFileSync(join(destination, 'theirs'), 'written by someone else');
+      }
+    };
+
+    const failure = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination,
+    });
+
+    await expect(failure).rejects.toThrow(`The backup is complete in ${destination}.partial`);
+    expect((await readdir(`${destination}.partial`)).sort()).toEqual([
+      'database.db',
+      'manifest.json',
+    ]);
+    expect(await readdir(destination)).toEqual(['theirs']);
+  });
+
+  it('explains an empty final directory an interrupted rename left beside a finished backup', async () => {
+    const { directory } = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'complete'),
+    });
+    // Killed after claiming the final name and before the rename.
+    await rename(directory, join(root, 'out.partial'));
+    await mkdir(join(root, 'out'));
+
+    const retry = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'out'),
+    });
+    await expect(retry).rejects.toThrow('interrupted while finishing');
+    await expect(retry).rejects.toThrow(`rename ${join(root, 'out.partial')}`);
+
+    // In db-backups, the next default run lists both.
+    const backups = join(baseDir, 'db-backups');
+    await mkdir(join(backups, 'backup-20261127T090000000Z'), { recursive: true });
+    await rename(join(root, 'out.partial'), join(backups, 'backup-20261127T090000000Z.partial'));
+    const result = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+    expect(result.leftovers).toEqual([
+      join(backups, 'backup-20261127T090000000Z'),
+      join(backups, 'backup-20261127T090000000Z.partial'),
+    ]);
   });
 
   it('builds the backup under a .partial name and renames it only when complete', async () => {

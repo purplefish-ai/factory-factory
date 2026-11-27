@@ -73,16 +73,18 @@ describe('snapshotSqliteDatabase', () => {
       output += chunk;
     });
     const exited = once(child, 'exit');
-    // The writer is committing before the snapshot starts.
-    while (!output.includes('writing') && child.exitCode === null) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    expect(output).toContain('writing');
-
     const destination = join(directory, 'snapshot.db');
     let timer: NodeJS.Timeout | undefined;
-    const snapshotting = snapshotSqliteDatabase(databasePath, destination);
+    let snapshotting: Promise<void> | undefined;
     try {
+      // The writer is committing before the snapshot starts; bounded so `finally` always runs.
+      const deadline = Date.now() + SNAPSHOT_BOUND_MS;
+      while (!output.includes('writing') && child.exitCode === null && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(output).toContain('writing');
+
+      snapshotting = snapshotSqliteDatabase(databasePath, destination);
       const outcome = await Promise.race([
         snapshotting.then(() => 'finished'),
         new Promise<string>((resolve) => {
@@ -95,7 +97,7 @@ describe('snapshotSqliteDatabase', () => {
       await exited;
       clearTimeout(timer);
       // Let a copy that did not finish settle before the directory is removed.
-      await snapshotting.catch(() => undefined);
+      await snapshotting?.catch(() => undefined);
     }
 
     expect(Number(/commits (\d+)/.exec(output)?.[1])).toBeGreaterThan(1);

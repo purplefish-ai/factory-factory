@@ -1,5 +1,5 @@
 import { ChildProcess, execFile, type Serializable } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -90,6 +90,31 @@ function start(dev = false) {
     signal: controller.signal,
     onReady,
   });
+}
+
+function valueIn(path: string) {
+  const database = new Database(path, { readonly: true });
+  try {
+    return database.prepare('SELECT value FROM test_data').pluck().get();
+  } finally {
+    database.close();
+  }
+}
+
+async function preMigrationBackups() {
+  const names = await readdir(join(directory, 'db-backups')).catch(() => []);
+  return names.filter((name) => name.startsWith('data.db-pre-migration-')).sort();
+}
+
+function failedUpdateError(running: RunningBackend): string {
+  running.child.emit('message', { type: 'update-hello' });
+  for (const raw of running.messages) {
+    const message = updateSupervisorMessageSchema.parse(raw);
+    if (message.type === 'update-status' && message.status.phase === 'failed') {
+      return message.status.error ?? '';
+    }
+  }
+  return '';
 }
 
 async function backend(index = 0) {
@@ -337,12 +362,9 @@ describe('production serve update integration', () => {
     expect(prepared.rollback).toHaveBeenCalledOnce();
   });
 
-  it('keeps its database snapshot, and logs why, when the migration ran without a lasting backup', async () => {
+  it('keeps its snapshot as a hard link in db-backups when the migration left no new backup there', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    mocks.migrateStderr =
-      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
-      '/data/db-backups: EACCES: permission denied. Continuing because ' +
-      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
+    // The child prints nothing and makes no backup: only the file system decides.
     mocks.migrate.mockImplementation(() => {
       const database = new Database(databasePath);
       database.exec("UPDATE test_data SET value = 'migrated'");
@@ -350,37 +372,95 @@ describe('production serve update integration', () => {
       return Promise.resolve();
     });
     await requestUpdate();
-    const replacement = await backend(1);
-    await ready(replacement);
+    await ready(await backend(1));
 
-    expect(prepared.dispose).toHaveBeenCalledOnce();
+    const kept = await preMigrationBackups();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatch(/^data\.db-pre-migration-\d{8}T\d{9}Z\.db$/);
+    const keptPath = join(directory, 'db-backups', kept[0] ?? '');
+    expect(valueIn(keptPath)).toBe('before update');
+    expect((await stat(keptPath)).mode & 0o777).toBe(0o600);
+    expect(databaseValue()).toBe('migrated');
+    expect(await readdir(directory)).not.toContain('database-backup');
+    const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('made no lasting backup');
+    expect(logged).toContain(keptPath);
+  });
+
+  it('lets its snapshot go when the migration left a new backup in db-backups', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const childBackup = 'data.db-pre-migration-20300101T000000000Z.db';
+    mocks.migrate.mockImplementation(async () => {
+      await mkdir(join(directory, 'db-backups'), { recursive: true });
+      await writeFile(join(directory, 'db-backups', childBackup), 'the child backup');
+    });
+    await requestUpdate();
+    await ready(await backend(1));
+
+    expect(await preMigrationBackups()).toEqual([childBackup]);
+    expect(await readdir(directory)).not.toContain('database-backup');
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('links its snapshot beside the package when db-backups cannot be used', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await writeFile(join(directory, 'db-backups'), 'a file where the directory should be');
+    await requestUpdate();
+    await ready(await backend(1));
+
     const kept = (await readdir(directory)).filter((name) =>
       name.startsWith('.factory-factory-database-backup-')
     );
     expect(kept).toHaveLength(1);
     const keptPath = join(directory, kept[0] ?? '');
-    const snapshot = new Database(keptPath, { readonly: true });
-    try {
-      expect(snapshot.prepare('SELECT value FROM test_data').pluck().get()).toBe('before update');
-    } finally {
-      snapshot.close();
-    }
-    expect((await stat(keptPath)).mode & 0o777).toBe(0o600);
-    expect(databaseValue()).toBe('migrated');
+    expect(valueIn(keptPath)).toBe('before update');
     const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
-    expect(logged).toContain('EACCES: permission denied');
     expect(logged).toContain(keptPath);
+    expect(logged).toContain(join(directory, 'db-backups'));
   });
 
-  it('never overwrites an earlier kept snapshot with the same name', async () => {
+  // Root ignores directory permissions, so the unwritable case needs an ordinary user.
+  it.skipIf(process.getuid?.() === 0)(
+    'leaves its snapshot in the stage when no link can be made',
+    async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const stage = join(directory, 'stage');
+      await mkdir(stage);
+      // Disposes like the installer: everything in the stage except what it is told to keep.
+      const dispose = vi.fn(async (options: { keep?: string } = {}) => {
+        for (const name of await readdir(stage)) {
+          if (join(stage, name) !== options.keep) {
+            await rm(join(stage, name), { recursive: true, force: true });
+          }
+        }
+      });
+      prepared = { ...prepared, recoveryPath: join(stage, 'previous'), dispose };
+      await writeFile(join(directory, 'db-backups'), 'a file where the directory should be');
+      await requestUpdate();
+      const replacement = await backend(1);
+      // Neither db-backups nor the package's directory accepts a link now.
+      await chmod(directory, 0o555);
+      try {
+        await ready(replacement);
+      } finally {
+        await chmod(directory, 0o755);
+      }
+
+      const snapshot = join(stage, 'database-backup');
+      expect(dispose).toHaveBeenCalledWith({ keep: snapshot });
+      expect(valueIn(snapshot)).toBe('before update');
+      const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(logged).toContain('made no lasting backup');
+      expect(logged).toContain(`kept at ${snapshot}`);
+    }
+  );
+
+  it('never replaces an earlier backup that has the name its snapshot would take', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-27T10:15:00.123Z') });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const earlier = join(directory, '.factory-factory-database-backup-20261127T101500123Z.db');
-    await writeFile(earlier, 'earlier snapshot');
-    mocks.migrateStderr =
-      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
-      '/data/db-backups: EACCES: permission denied. Continuing because ' +
-      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
+    await mkdir(join(directory, 'db-backups'));
+    const earlier = join(directory, 'db-backups', 'data.db-pre-migration-20261127T101500123Z.db');
+    await writeFile(earlier, 'earlier backup');
     try {
       await requestUpdate();
       await ready(await backend(1));
@@ -388,18 +468,15 @@ describe('production serve update integration', () => {
       vi.useRealTimers();
     }
 
-    expect(await readFile(earlier, 'utf8')).toBe('earlier snapshot');
-    expect(await readdir(directory)).toContain(
-      '.factory-factory-database-backup-20261127T101500123Z-1.db'
-    );
+    expect(await readFile(earlier, 'utf8')).toBe('earlier backup');
+    expect(await preMigrationBackups()).toEqual([
+      'data.db-pre-migration-20261127T101500123Z.db',
+      'data.db-pre-migration-20261127T101500124Z.db',
+    ]);
   });
 
   it('keeps no extra snapshot when the replacement fails and the update is rolled back', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    mocks.migrateStderr =
-      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
-      '/data/db-backups: EACCES: permission denied. Continuing because ' +
-      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
     await requestUpdate();
     exit((await backend(1)).child, 1);
     const recovered = await backend(2);
@@ -407,33 +484,26 @@ describe('production serve update integration', () => {
 
     expect(prepared.rollback).toHaveBeenCalledOnce();
     expect(databaseValue()).toBe('before update');
+    expect(await preMigrationBackups()).toEqual([]);
     expect(
       (await readdir(directory)).filter((name) =>
         name.startsWith('.factory-factory-database-backup-')
       )
     ).toEqual([]);
     const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
-    expect(logged).not.toContain('without a lasting backup');
+    expect(logged).not.toContain('made no lasting backup');
   });
 
-  it('removes its snapshot after an update whose migration made its own backup', async () => {
+  it("puts the last line of the db:migrate child's error output first in the failed update", async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await requestUpdate();
-    const replacement = await backend(1);
-    await ready(replacement);
-
-    expect((await readdir(directory)).filter((name) => name.includes('database-backup'))).toEqual(
-      []
-    );
-    expect(error).not.toHaveBeenCalled();
-  });
-
-  it("puts the db:migrate child's error output first in the failed update and in the log", async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // The override's warning comes first and alone would fill the banner.
+    const warning =
+      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
+      '/data/db-backups: ENOSPC: no space left on device. Continuing because ' +
+      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.';
     const reason =
-      'Could not back up the database to /data/db-backups before migrating: ENOSPC: no ' +
-      'space left on device. No migration was applied and the database is unchanged.';
-    mocks.migrateStderr = `${reason}\n`;
+      'Migration failed: Failed to apply migration 002_posts: near "TABL": syntax error';
+    mocks.migrateStderr = `${warning}\n${reason}\n`;
     // How Node's execFile reports a nonzero exit: the whole command line comes first.
     const command = [
       process.execPath,
@@ -442,24 +512,39 @@ describe('production serve update integration', () => {
       '--database-path',
       databasePath,
     ].join(' ');
-    mocks.migrate.mockRejectedValue(new Error(`Command failed: ${command}\n${reason}\n`));
+    mocks.migrate.mockRejectedValue(
+      new Error(`Command failed: ${command}\n${warning}\n${reason}\n`)
+    );
     await requestUpdate();
     const recovered = await backend(1);
     expect(databaseValue()).toBe('before update');
-    recovered.child.emit('message', { type: 'update-hello' });
 
-    const statuses = recovered.messages.map((message) =>
-      updateSupervisorMessageSchema.parse(message)
-    );
-    const failed = statuses.find(
-      (message) => message.type === 'update-status' && message.status.phase === 'failed'
-    );
-    const failure = failed?.type === 'update-status' ? (failed.status.error ?? '') : '';
+    const failure = failedUpdateError(recovered);
     // The update banner shows the first 240 characters.
-    expect(failure.slice(0, 240)).toContain('ENOSPC: no space left on device');
+    expect(failure.slice(0, 240)).toContain('near "TABL": syntax error');
+    expect(failure).toContain('ENOSPC');
     expect(failure).not.toContain('Command failed');
     const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
     expect(logged).toContain(reason);
+    expect(logged).toContain(warning);
+  });
+
+  it('stores a bounded failure message however long the child output, and logs all of it', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const noise = `${'progress line\n'.repeat(80_000)}`;
+    mocks.migrateStderr = `${noise}Migration failed: boom\n`;
+    mocks.migrate.mockRejectedValue(new Error('Command failed'));
+    await requestUpdate();
+    const recovered = await backend(1);
+
+    const failure = failedUpdateError(recovered);
+    expect(failure.length).toBeLessThanOrEqual(4096 + 'Could not update Factory Factory. '.length);
+    expect(failure).toContain('Migration failed: boom');
+    // The journal is refused above 64 KiB, so what is persisted stays far below it.
+    const persisted = mocks.persist.mock.calls.map((call) => JSON.stringify(call[0]));
+    expect(Math.max(...persisted.map((text) => text.length))).toBeLessThan(16 * 1024);
+    const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged.length).toBeGreaterThan(noise.length);
   });
 
   it('restores and restarts the previous installation after replacement boot fails', async () => {

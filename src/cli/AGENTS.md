@@ -48,15 +48,15 @@ does not own:
 - The update's `db:migrate` runs with `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`
   because the supervisor's own snapshot is its backup; that snapshot failing
   still ends the update before the package moves. A failed `db:migrate` is
-  logged and its standard error becomes the failed update's message (Node's
-  error, which starts with the command line, only when it wrote nothing there).
-  When its output carries the warning that `reportsMigrationWithoutBackup`
-  recognises (no `db-backups/` copy was made), the supervisor logs it and copies
-  its snapshot out of the update stage to
-  `.factory-factory-database-backup-<UTC time>.db` beside the package before the
-  stage is deleted. The supervisor is the previously installed version, so that
-  warning text is a contract between versions.
-  `supervised-serve-session.test.ts`, `src/backend/migrate-with-backup.test.ts`.
+  logged in full; the failed update's message puts its last standard error line
+  first and is capped at 4 KiB, because the journal is persisted.
+- The snapshot is deleted after a completed update only if a new
+  `<database>-pre-migration-*.db` appeared in `db-backups/` while `db:migrate`
+  ran; the child's wording decides nothing. Otherwise it is hard-linked (no
+  space, never replaces) into `db-backups/` under that pre-migration name, else
+  beside the package as `.factory-factory-database-backup-<UTC time>.db`, else
+  left in the stage (`dispose({ keep })`); the error-level log says where.
+  `supervised-serve-session.test.ts`, `application-update-installer.test.ts`.
 - The previous package and the database snapshot are kept until the replacement
   sends `update-backend-ready`; a failed migration or a failed replacement start
   restores both and restarts the previous package.

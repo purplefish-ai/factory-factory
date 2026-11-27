@@ -40,17 +40,7 @@ export class MigrationBackupError extends Error {
   }
 }
 
-/**
- * Starts the warning printed when migrations run without a backup. The in-app
- * update's supervisor, from the previously installed version, looks for it in
- * the output of the new version's `db:migrate`, so keep it unchanged.
- */
 const MIGRATION_WITHOUT_BACKUP_WARNING = '[migrate] Warning: migrating without a backup';
-
-/** Whether `db:migrate` output says migrations ran without a backup. */
-export function reportsMigrationWithoutBackup(output: string): boolean {
-  return output.includes(MIGRATION_WITHOUT_BACKUP_WARNING);
-}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -70,6 +60,34 @@ const BACKUP_SUFFIX = /^\d{8}T\d{9}Z\.db$/;
 const PARTIAL_SUFFIX = /^\d{8}T\d{9}Z\.db\.partial$/;
 /** A partial copy this old was left by an interrupted process, not one still writing. */
 const STALE_PARTIAL_MS = 60 * 60 * 1000;
+
+/**
+ * The name a pre-migration backup of this database taken at `date` gets, which
+ * retention counts among the backups it keeps.
+ */
+export function preMigrationBackupName(databasePath: string, date: Date): string {
+  return `${backupPrefix(databasePath)}${backupTimestamp(date)}.db`;
+}
+
+/** The finished pre-migration backups of this database in `directory`; none when it is missing. */
+export async function listPreMigrationBackups(
+  databasePath: string,
+  directory = getPreMigrationBackupDirectory(databasePath)
+): Promise<string[]> {
+  const prefix = backupPrefix(databasePath);
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+  return names
+    .filter((name) => name.startsWith(prefix) && BACKUP_SUFFIX.test(name.slice(prefix.length)))
+    .sort();
+}
 
 function retainedCount(requested: number | undefined): number {
   return requested !== undefined && Number.isFinite(requested)

@@ -1,5 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { chmod, mkdtemp, mkdir, writeFile, readFile, rm, rename, symlink } from 'node:fs/promises';
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readdir,
+  writeFile,
+  readFile,
+  rm,
+  rename,
+  symlink,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -105,6 +115,18 @@ it('stages a pinned release without changing the running installation', async ()
   await prepared.rollback();
   expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version).toBe('0.5.3');
   await prepared.dispose();
+});
+it('can leave one file of its stage behind when it disposes, and still releases the lock', async () => {
+  const { installer, root } = await fixture();
+  const prepared = await installer.prepare('0.5.4', new AbortController().signal);
+  const kept = join(dirname(prepared.recoveryPath), 'database-backup');
+  await writeFile(kept, 'snapshot');
+
+  await prepared.dispose({ keep: kept });
+
+  expect(await readFile(kept, 'utf8')).toBe('snapshot');
+  expect(await readdir(dirname(kept))).toEqual(['database-backup']);
+  expect(await readdir(dirname(root))).not.toContain('.factory-factory-update-lock');
 });
 it('rejects versions and mismatched candidates before activation', async () => {
   const { installer, root } = await fixture();
