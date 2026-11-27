@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { sendMessage } from './conversation';
 import { launchWorkspace, openBoard, readSandbox, reply } from './sandbox';
 
 // One user path through the real application in the sandbox: open it, find the seeded project,
@@ -17,8 +18,7 @@ test('a user creates a workspace and gets the scripted agent reply', async ({ pa
   );
 
   const message = 'Second message from the sandbox smoke test';
-  await page.getByRole('textbox', { name: 'Message' }).fill(message);
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await sendMessage(page, message);
   await expect(reply(conversation, message)).toBeVisible({ timeout: 120_000 });
   // The user's message and the agent's echo of it: a reply that never came would leave one.
   await expect(conversation.getByText(message, { exact: true })).toHaveCount(2);

@@ -10,6 +10,7 @@ import {
   waitForBackendExit,
 } from '../support/backend-process';
 import { expectChatReloaded, expectNoReload, markPage, trackSockets } from '../support/no-reload';
+import { sendMessage } from './conversation';
 import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // Crash points end the server where server code declares them (src/backend/services/
@@ -38,8 +39,7 @@ test('an armed crash point ends the server once, where it is declared', async ({
 
   armCrashPoint('after-message-queued');
   const message = 'Crashlark message accepted before the crash';
-  await page.getByRole('textbox', { name: 'Message' }).fill(message);
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await sendMessage(page, message);
   expect(await waitForBackendExit()).toEqual({ code: null, signal: 'SIGKILL' });
   expect(readServerOutput()).toContain('crash point after-message-queued reached');
   expect(isCrashPointArmed('after-message-queued')).toBe(false);
@@ -69,8 +69,7 @@ test('a message accepted before a crash is delivered after the restart', async (
 
   armCrashPoint('after-message-queued');
   const message = 'Crashwren message accepted before the crash';
-  await page.getByRole('textbox', { name: 'Message' }).fill(message);
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await sendMessage(page, message);
   expect(await waitForBackendExit()).toEqual({ code: null, signal: 'SIGKILL' });
   // The page shows it queued, with a button to cancel it.
   await expect(conversation.getByRole('button', { name: 'Cancel queued message' })).toBeVisible();
