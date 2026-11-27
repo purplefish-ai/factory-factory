@@ -89,6 +89,24 @@ describeRuleFixtures('no-service-singleton', {
       'exported-let',
       "import { FooService } from './foo.service';\nexport let fooService = new FooService();"
     ),
+    backend(
+      'exported-var',
+      "import { FooService } from './foo.service';\nexport var fooService = new FooService();"
+    ),
+    // A member of a namespace import from a repository module.
+    backend(
+      'namespace',
+      "import * as services from './services';\nexport const fooService = new services.FooService();"
+    ),
+    // A wrapped default export of an instance.
+    backend(
+      'default-wrapped',
+      "import { FooService } from './foo.service';\nconst fooService = new FooService();\nexport default fooService as FooService;"
+    ),
+    backend(
+      'default-parenthesized',
+      "import { FooService } from './foo.service';\nconst fooService = new FooService();\nexport default (fooService);"
+    ),
     // One report per instance, even when it is exported twice.
     backend(
       'exported-twice',
@@ -111,6 +129,11 @@ describeRuleFixtures('no-service-singleton', {
     backend(
       'error-class',
       "import { NotFoundError } from './errors';\nclass LocalError extends Error {}\nexport const notFound = new NotFoundError();\nexport const local = new LocalError();"
+    ),
+    // A namespace import from a package is a library object, as is a member Error class.
+    backend(
+      'package-namespace',
+      "import * as library from 'some-library';\nimport * as errors from './errors';\nexport const client = new library.Client();\nexport const failure = new errors.NotFoundError();"
     ),
     // The pattern the message asks for: the class, and a factory.
     backend(

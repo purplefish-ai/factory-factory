@@ -10,13 +10,14 @@
 // Enabled for src/backend, outside tests and test support.
 //
 // What the rule matches, in files that are not excepted:
-// - `export const x = new X(...)`, with or without a type annotation, `as` or
-//   `satisfies`;
+// - `export const x = new X(...)` (also `let` and `var`), with or without a
+//   type annotation, `as` or `satisfies`;
 // - `const x = new X(...); export { x }` or `export { x as y }`, and
 //   `export default x`;
 // - `export default new X(...)`;
-// where X is a class declared in the same file or imported from a repository
-// module (a relative path or `@/...`). Built-ins (`Map`, `Set`, `WeakMap`,
+// where X is a class declared in the same file, imported from a repository
+// module (a relative path or `@/...`), or a member of a namespace imported from
+// one (`new services.FooService()`). Built-ins (`Map`, `Set`, `WeakMap`,
 // `Date`, `URL`, `RegExp`, `AbortController`, `AsyncLocalStorage`), classes from
 // packages and from `@prisma-gen/` (`PrismaClient`) and error classes (a name
 // ending in `Error`) are not the target.
@@ -26,36 +27,25 @@
 // class-instance accessor has the same cost. An accessor written as an object of
 // functions is not a `new`, and is not matched.
 //
+// Exceptions are per file: a new instance in an excepted file still passes. The
+// list can shrink and no file can join it.
+//
 // What it does not match: a singleton made by a call (`export const x =
 // createX()`, `Object.freeze({ ... })`), a `let x; x = new X()` assigned after
 // its declaration, and a non-exported module-level instance. They exist today
 // (`serverInstanceService`, `sessionDomainService`, `acpRuntimeManager` and
 // others) and are the same problem under another spelling; this rule only keeps
 // the `new` form from spreading.
+import { unwrapExpression } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
 import { isTestSupportFile } from '../lib/test-support.mjs';
 import exceptions from './no-service-singleton.exceptions.json' with { type: 'json' };
-
-const WRAPPERS = new Set([
-  'TSAsExpression',
-  'TSSatisfiesExpression',
-  'TSNonNullExpression',
-  'ParenthesizedExpression',
-]);
 
 const MESSAGE =
   'Do not construct a service at module level. Export the class (and a createXService(dependencies) factory when it needs wiring) and construct the instance in the composition root: src/backend/app-context.ts or the subsystem module it calls. See createRunScriptService.';
 
 function isRepositorySource(source) {
   return source.startsWith('.') || source.startsWith('@/');
-}
-
-function unwrap(node) {
-  let current = node;
-  while (current && WRAPPERS.has(current.type)) {
-    current = current.expression;
-  }
-  return current;
 }
 
 /** The statement's own declaration: the `export` is looked through. */
@@ -82,13 +72,17 @@ export default {
       Program(program) {
         // The classes this file can name, so a `new` is judged by what it builds.
         const classes = new Set();
+        const namespaces = new Set();
         for (const statement of program.body) {
           if (statement.type === 'ImportDeclaration') {
             if (statement.importKind !== 'type' && isRepositorySource(statement.source.value)) {
               for (const specifier of statement.specifiers) {
-                if (specifier.importKind !== 'type') {
-                  classes.add(specifier.local.name);
+                if (specifier.importKind === 'type') {
+                  continue;
                 }
+                (specifier.type === 'ImportNamespaceSpecifier' ? namespaces : classes).add(
+                  specifier.local.name
+                );
               }
             }
           } else {
@@ -98,14 +92,21 @@ export default {
             }
           }
         }
-        const isRepositoryInstance = (init) => {
-          const expression = unwrap(init);
+        const isRepositoryClass = (callee) => {
+          if (callee.type === 'Identifier') {
+            return classes.has(callee.name) && !callee.name.endsWith('Error');
+          }
           return (
-            expression?.type === 'NewExpression' &&
-            expression.callee.type === 'Identifier' &&
-            classes.has(expression.callee.name) &&
-            !expression.callee.name.endsWith('Error')
+            callee.type === 'MemberExpression' &&
+            !callee.computed &&
+            callee.object.type === 'Identifier' &&
+            namespaces.has(callee.object.name) &&
+            !callee.property.name.endsWith('Error')
           );
+        };
+        const isRepositoryInstance = (init) => {
+          const expression = unwrapExpression(init);
+          return expression?.type === 'NewExpression' && isRepositoryClass(expression.callee);
         };
 
         // Module-level `const x = new X()`, exported where it is declared or by name.
@@ -113,7 +114,7 @@ export default {
         const exportedWhereDeclared = [];
         for (const statement of program.body) {
           const declaration = declarationOf(statement);
-          if (declaration?.type !== 'VariableDeclaration' || declaration.kind === 'var') {
+          if (declaration?.type !== 'VariableDeclaration') {
             continue;
           }
           for (const declarator of declaration.declarations) {
@@ -134,10 +135,11 @@ export default {
         };
         for (const statement of program.body) {
           if (statement.type === 'ExportDefaultDeclaration') {
-            if (isRepositoryInstance(statement.declaration)) {
-              flag(statement.declaration);
-            } else if (statement.declaration?.type === 'Identifier') {
-              flag(instances.get(statement.declaration.name));
+            const exported = unwrapExpression(statement.declaration);
+            if (isRepositoryInstance(exported)) {
+              flag(exported);
+            } else if (exported?.type === 'Identifier') {
+              flag(instances.get(exported.name));
             }
           } else if (
             statement.type === 'ExportNamedDeclaration' &&

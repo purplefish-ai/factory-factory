@@ -33,3 +33,20 @@ export function staticKeyName(key, computed) {
   }
   return undefined;
 }
+
+const EXPRESSION_WRAPPERS = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+  'ParenthesizedExpression',
+]);
+
+/** The expression inside parentheses and TypeScript `as`, `satisfies`, `!` and `<T>` wrappers. */
+export function unwrapExpression(node) {
+  let current = node;
+  while (current && EXPRESSION_WRAPPERS.has(current.type)) {
+    current = current.expression;
+  }
+  return current;
+}

@@ -5,7 +5,8 @@
 // site. Enabled for src/, outside tests, stories and test support.
 //
 // What the rule matches: `===`, `!==`, `==` and `!=` with either operand a
-// string literal (or an expression-free template) 'CLAUDE' or 'CODEX', and
+// string literal (or an expression-free template) 'CLAUDE' or 'CODEX', also inside
+// parentheses or a TypeScript `as`, `satisfies` or `!`, and
 // `case 'CLAUDE':` or `case 'CODEX':` in a `switch`. The literals as values (an
 // argument, an object property, a type union, a Zod enum, a Prisma enum member)
 // are not branching and are allowed.
@@ -16,6 +17,7 @@
 // files that compare today are listed in the exceptions file, and a new
 // comparison inside one of them still passes. The list shrinks when a file
 // stops comparing, and no file can join it.
+import { unwrapExpression } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
 import { isTestSupportFile } from '../lib/test-support.mjs';
 import exceptions from './no-provider-literal-branch.exceptions.json' with { type: 'json' };
@@ -27,7 +29,8 @@ const PROVIDER_MODULE = 'src/backend/services/session/service/providers/';
 const MESSAGE =
   "Do not branch on 'CLAUDE' or 'CODEX'. Put provider-specific behaviour behind the provider module (src/backend/services/session/service/providers/), or pass the capability as data.";
 
-function isProviderLiteral(node) {
+function isProviderLiteral(operand) {
+  const node = unwrapExpression(operand);
   if (node?.type === 'Literal') {
     return typeof node.value === 'string' && PROVIDERS.has(node.value);
   }

@@ -54,6 +54,15 @@ describeRuleFixtures('no-provider-literal-branch', {
       'src/backend/routers/switch-case.ts',
       "export function label(provider: string) {\n  switch (provider) {\n    case 'CLAUDE':\n      return 'Claude';\n    default:\n      return 'other';\n  }\n}"
     ),
+    // A cast, `satisfies` or non-null assertion does not hide the literal.
+    at(
+      'src/backend/routers/cast.ts',
+      "export const isClaude = (provider: string) => provider === ('CLAUDE' as SessionProvider);"
+    ),
+    at(
+      'src/backend/routers/satisfies.ts',
+      "export const isCodex = (provider: string) => 'CODEX' satisfies string === provider;"
+    ),
     // Client and shared code are covered too.
     at(
       'src/client/features/example/label.ts',
