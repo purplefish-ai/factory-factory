@@ -97,6 +97,17 @@ describe('fetchClaudePlanUsage', () => {
     expect(mocks.terminate).toHaveBeenCalledWith(child);
   });
 
+  it('runs the Claude CLI named by CLAUDE_CODE_EXECUTABLE, and the bundled one without it', async () => {
+    await fetchClaudePlanUsage({ claudeCodeExecutable: '/sandbox/bin/claude' });
+    expect(mocks.query.mock.calls.at(-1)?.[0].options).toMatchObject({
+      pathToClaudeCodeExecutable: '/sandbox/bin/claude',
+    });
+    await fetchClaudePlanUsage();
+    expect(mocks.query.mock.calls.at(-1)?.[0].options).not.toHaveProperty(
+      'pathToClaudeCodeExecutable'
+    );
+  });
+
   it('bounds a stalled native quota read and closes it', async () => {
     vi.useFakeTimers();
     mocks.usage.mockReturnValue(

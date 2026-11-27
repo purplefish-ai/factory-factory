@@ -105,6 +105,7 @@ export const ConfigEnvSchema = z.object({
   CODEX_HOME: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CODEX_SESSIONS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_CONFIG_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  CLAUDE_CODE_EXECUTABLE: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_RATE_LIMIT_PER_MINUTE: PositiveIntEnvSchema.catch(60),
   CLAUDE_RATE_LIMIT_PER_HOUR: PositiveIntEnvSchema.catch(1000),
   RATE_LIMIT_QUEUE_SIZE: PositiveIntEnvSchema.catch(100),

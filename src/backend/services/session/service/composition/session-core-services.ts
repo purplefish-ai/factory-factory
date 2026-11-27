@@ -1,4 +1,5 @@
 import { codexAccountService } from '@/backend/services/codex-accounts';
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleEventAccessor } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import {
@@ -102,7 +103,8 @@ export const claudeModelCatalogService = new ClaudeModelCatalogService({
 });
 
 export const providerUsageService = new ProviderUsageService({
-  fetchUsage: () => fetchClaudePlanUsage(),
+  fetchUsage: () =>
+    fetchClaudePlanUsage({ claudeCodeExecutable: configService.getClaudeCodeExecutable() }),
   accounts: codexAccountService,
 });
 

@@ -125,6 +125,8 @@ interface SystemConfig {
   debugLogDir: string;
   acpTraceLogsPath: string;
   claudeConfigDir: string;
+  /** The Claude CLI every Claude launch runs instead of the bundled one, when set. */
+  claudeCodeExecutable?: string;
   codexHome: string;
   codexSessionsDir: string;
   wsLogsPath: string;
@@ -297,6 +299,7 @@ function loadSystemConfig(): SystemConfig {
     debugLogDir,
     acpTraceLogsPath: env.ACP_TRACE_LOGS_PATH ?? join(debugLogDir, 'acp-events'),
     claudeConfigDir: env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),
+    claudeCodeExecutable: env.CLAUDE_CODE_EXECUTABLE || undefined,
     codexHome: env.CODEX_HOME ?? join(homedir(), '.codex'),
     codexSessionsDir:
       env.CODEX_SESSIONS_DIR ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions'),
@@ -746,6 +749,14 @@ class ConfigService {
   /** Get the Claude config directory path. */
   getClaudeConfigDir(): string {
     return this.config.claudeConfigDir;
+  }
+
+  /**
+   * The Claude CLI named by CLAUDE_CODE_EXECUTABLE, which the ACP adapter also honours; undefined
+   * means the SDK's bundled CLI.
+   */
+  getClaudeCodeExecutable(): string | undefined {
+    return this.config.claudeCodeExecutable;
   }
 
   /**
