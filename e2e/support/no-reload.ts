@@ -21,6 +21,14 @@ export async function expectNoReload(page: Page, marker: string) {
   ).toBe(marker);
 }
 
+/** The opposite check, for a spec that reloads on purpose: the marker set before is gone. */
+export async function expectReloaded(page: Page, marker: string) {
+  expect(
+    await page.evaluate((key) => Reflect.get(window, key), MARKER),
+    'the page did not reload: the marker set before the event is still there'
+  ).not.toBe(marker);
+}
+
 /** One WebSocket the page opened: its URL path, the frames it has received, and whether it closed. */
 export type TrackedSocket = { path: string; frames: number; closed: boolean };
 
@@ -50,4 +58,19 @@ export function trackSockets(page: Page) {
     openedAfter: (path: string, skip: number) =>
       sockets.filter((socket) => socket.path === path).slice(skip),
   };
+}
+
+/**
+ * Resolves once the chat has loaded the session over a new connection (after a server restart or a
+ * page reload): a /chat socket opened after the first `before` is still open and has received
+ * frames. Until then the page shows what it held before, so its transcript proves nothing.
+ */
+export async function expectChatReloaded(sockets: ReturnType<typeof trackSockets>, before: number) {
+  await expect
+    .poll(
+      () =>
+        sockets.openedAfter('/chat', before).some((socket) => !socket.closed && socket.frames > 0),
+      { timeout: 60_000 }
+    )
+    .toBe(true);
 }
