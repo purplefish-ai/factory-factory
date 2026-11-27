@@ -439,6 +439,26 @@ describe('a stream-json session', () => {
     });
   });
 
+  it('cuts a structured string at its maximum length without ending in a separator', async () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        branch: { type: 'string', pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 48 },
+        title: { type: 'string', maxLength: 48 },
+      },
+    };
+    const session = startSession(sandboxEnv().env, [
+      ...streamArgs,
+      `--json-schema=${JSON.stringify(schema)}`,
+    ]);
+    await session.control('initialize', { hooks: {} });
+    // A first word of 47 letters: "<word>-branch" cut at 48 characters ends in its hyphen, and
+    // "<word> title" in its space.
+    const word = 'a'.repeat(47);
+    const result = await session.prompt(JSON.stringify({ objective: `${word} says hello` }));
+    expect(result).toMatchObject({ structured_output: { branch: word, title: word } });
+  });
+
   it('exits once its input ends', async () => {
     const session = startSession(sandboxEnv().env);
     await session.control('initialize', { hooks: {} });

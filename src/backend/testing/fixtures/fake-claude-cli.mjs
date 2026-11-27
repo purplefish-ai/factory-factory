@@ -340,7 +340,9 @@ function sampleFor(schema, subject, key = 'value') {
       const text = schema.pattern
         ? `${subject.toLowerCase().replace(/[^a-z0-9]/g, '') || 'sandbox'}-${words.replace(/\s+/g, '-')}`
         : `${subject} ${words}`;
-      return text.slice(0, schema.maxLength ?? text.length);
+      // A cut can end at a separator ("<47 letters>-branch" cut at 48 ends in a hyphen), which the
+      // branch pattern rejects: the application would then keep the workspace's name.
+      return text.slice(0, schema.maxLength ?? text.length).replace(/[-\s]+$/, '');
     }
     default:
       return null;

@@ -145,10 +145,11 @@ export function listUpstreamRecordingDirectories(): { tool: string; version: str
   return readdirSync(UPSTREAM_RECORDINGS_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .filter((tool) => {
-      if (tool.name in PROVIDERS) {
+      // Own properties only: `in` also accepts inherited names such as `constructor`.
+      if (Object.hasOwn(PROVIDERS, tool.name)) {
         return true;
       }
-      if (tool.name in NOT_AGENT_SESSIONS) {
+      if (Object.hasOwn(NOT_AGENT_SESSIONS, tool.name)) {
         return false;
       }
       throw new Error(

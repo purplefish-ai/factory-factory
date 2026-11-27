@@ -124,7 +124,6 @@ function processEnvironment(pid: number): string {
   }
 }
 
-/** Runs the application's managed Claude runtime once, non-interactively. */
 /** The application's managed Claude command (the adapter's `--cli` passthrough) in `env`. */
 function runClaude(env: NodeJS.ProcessEnv, cwd: string, args: string[]): Promise<string> {
   const { command, args: commandArgs } = getBundledClaudeCommand(args);

@@ -27,7 +27,11 @@ test('the page notices a silent server and recovers on the same sockets', async 
   const marker = await markPage(page);
   await killBackend('SIGSTOP');
   try {
-    await expect(banner).toBeVisible({ timeout: 10_000 });
+    // The page pings every 4 s and calls a ping unanswered after 4 s more (websocket-liveness.ts):
+    // the banner shows 8 s after the stall at the latest on an idle machine, later when the page's
+    // timers are delayed. The page gives the socket up 30 s after the ping, and this wait must end
+    // before that, since the banner then turns to "reconnecting" and the socket is lost.
+    await expect(banner).toBeVisible({ timeout: 25_000 });
     await expect(banner).toHaveAttribute('data-state', 'unresponsive');
   } finally {
     await killBackend('SIGCONT');

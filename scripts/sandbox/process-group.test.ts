@@ -332,7 +332,8 @@ describe('stopping what a killed backend left behind', () => {
       listProcesses: () => listings.shift() ?? listings.at(-1) ?? [],
       processesWithEnvironment: (_entry: string) => [30],
     };
-    await expect(stopProcessesWithEnvironment(entry, { system: reused })).resolves.toEqual([30]);
+    // The report names only what was signalled: the reused pid was listed and never signalled.
+    await expect(stopProcessesWithEnvironment(entry, { system: reused })).resolves.toEqual([]);
     expect(events).toEqual([]);
   });
 });

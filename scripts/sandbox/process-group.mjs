@@ -216,7 +216,8 @@ export function isOwnGroup(processes, pgid, { leaderStartedAt, baseDir }, system
  * still ties them to the sandbox. Each is tracked by pid and start time from
  * the listing that found it, and the table is read again before each signal;
  * only those still matching are signalled or waited for.
- * Resolves with the pids it stopped; rejects if any survives SIGKILL.
+ * Resolves with the pids it signalled (not those that exited, or whose pid was
+ * reused, before their turn); rejects if any survives SIGKILL.
  *
  * @param {string} entry
  * @param {{ system?: ProcessSystem, exclude?: number[], graceMs?: number, killGraceMs?: number, pollMs?: number }} [options]
@@ -241,7 +242,6 @@ export async function stopProcessesWithEnvironment(
       const found = findProcess(listed, pid);
       if (found && !exclude.includes(pid) && !tracked.has(pid)) {
         tracked.set(pid, found.startedAt);
-        stopped.add(pid);
       }
     }
   };
@@ -268,6 +268,7 @@ export async function stopProcessesWithEnvironment(
     scan();
     for (const pid of remaining()) {
       system.signal(pid, signal);
+      stopped.add(pid);
     }
     if (await waitForExit(signal === 'SIGTERM' ? graceMs : killGraceMs)) {
       return [...stopped];
