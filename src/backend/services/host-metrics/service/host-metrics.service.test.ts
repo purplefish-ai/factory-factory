@@ -101,6 +101,7 @@ describe('readMemoryPercent', () => {
     macVmStat.replace('16384', '0'),
     macVmStat.replace('250000.', 'n/a'),
     macVmStat.replace(/^Anonymous pages:.*$/m, ''),
+    macVmStat.replace(/^Pages purgeable:.*$/m, 'Pages purgeable: 3000000.'),
   ])('falls back to free memory on macOS when vm_stat output is invalid (%#)', async (stdout) => {
     mockFreeMemory(40, 100);
 

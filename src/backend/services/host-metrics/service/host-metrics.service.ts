@@ -109,7 +109,8 @@ function parseMacUsedMemoryBytes(stdout: string): number | null {
   }
   // Anonymous pages exclude the file cache. Deduct purgeable pages and use
   // the compressor's physical size to account for RAM occupied by compressed data.
-  return (anonymous - purgeable + wired + compressed) * pageSize;
+  const usedBytes = (anonymous - purgeable + wired + compressed) * pageSize;
+  return usedBytes >= 0 && Number.isSafeInteger(usedBytes) ? usedBytes : null;
 }
 
 function freeMemoryPercent(): number {
