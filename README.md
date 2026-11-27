@@ -274,13 +274,16 @@ writes one new directory, by default `db-backups/backup-<UTC time>/` beside the
 database (choose another with `--output <path>`, which must not exist), holding
 `database.db`, `encryption.key` and `codex-accounts/` when they exist under the
 data directory (`BASE_DIR`, default `~/factory-factory`), and a `manifest.json`
-naming the format and application version. Manual backups are never pruned.
+recording the format, application version and the database and data directory it
+came from. The command prints both paths. Manual backups are never pruned.
 Symbolic links under `codex-accounts/` are not followed or copied; the command
 lists each one it skips, so read its output when you verify a backup. **The
 backup contains credentials** (the encryption key that protects stored secrets
 and the Codex account sign-ins): it is readable only by you, so keep it that way
-and store it somewhere you trust. Use `--database-path` for a database outside
-the data directory.
+and store it somewhere you trust. The database and the data directory are chosen
+separately (`DATABASE_PATH` or `--database-path`, and `BASE_DIR`); the command
+warns when the database is outside the data directory, because the key must
+belong to the same installation as the database.
 
 Startup warns, without failing, when an applied migration's file has changed
 since it was applied, or when a migration that disabled foreign keys left rows

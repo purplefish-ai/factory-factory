@@ -17,8 +17,10 @@ export const BackupManifestSchema = z
     formatVersion: z.literal(BACKUP_FORMAT_VERSION),
     applicationVersion: z.string().min(1),
     createdAt: z.iso.datetime(),
-    /** File name of the database when it was backed up; informational. */
-    sourceDatabaseFile: z.string().min(1),
+    /** Absolute path of the database that was backed up; informational. */
+    sourceDatabasePath: z.string().min(1),
+    /** Absolute data directory the key and accounts came from; informational. */
+    sourceDataDirectory: z.string().min(1),
     contents: z
       .object({
         /** Always present: `database.db`, a consistent SQLite snapshot. */

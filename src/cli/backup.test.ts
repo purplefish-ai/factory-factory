@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBackup, registerBackupCommand } from './backup';
+import { createBackup, describeMismatchedSources, registerBackupCommand } from './backup';
 import { readBackup } from './backup-manifest';
 
 const FIXED_NOW = new Date('2026-11-27T10:15:00.123Z');
@@ -72,7 +72,8 @@ describe('ff backup', () => {
     expect(backup.manifest).toMatchObject({
       formatVersion: 1,
       applicationVersion: '1.2.3',
-      sourceDatabaseFile: 'data.db',
+      sourceDatabasePath: databasePath,
+      sourceDataDirectory: baseDir,
       contents: { database: true, encryptionKey: false, codexAccounts: false },
     });
     // The writer is still usable afterwards.
@@ -259,6 +260,43 @@ describe('ff backup', () => {
       const output = log.mock.calls.map((call) => String(call[0])).join('\n');
       expect(output).toContain('contains credentials');
       expect(output).toContain(join(root, 'cli-out'));
+      expect(output).toContain(`data directory (encryption key, Codex accounts): ${baseDir}`);
+      expect(output).toContain(databasePath);
+      expect(backup.manifest.sourceDataDirectory).toBe(baseDir);
+      expect(backup.manifest.sourceDatabasePath).toBe(databasePath);
+    });
+
+    it('warns, without refusing, when the database is outside the data directory', async () => {
+      const otherDatabase = join(root, 'other-install', 'data.db');
+      await mkdir(join(root, 'other-install'));
+      writer.close();
+      const other = new Database(otherDatabase);
+      other.exec('CREATE TABLE t (a)');
+      other.close();
+      writer = new Database(databasePath);
+      vi.stubEnv('BASE_DIR', baseDir);
+      const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const program = new Command().exitOverride();
+      registerBackupCommand(program, '9.9.9');
+
+      await program.parseAsync(
+        ['backup', '--database-path', otherDatabase, '--output', join(root, 'cli-out')],
+        { from: 'user' }
+      );
+
+      const warning = String(warn.mock.calls[0]?.[0]);
+      expect(warning).toContain(otherDatabase);
+      expect(warning).toContain(baseDir);
+      expect(warning).toContain('is not inside the data directory');
+      const backup = await readBackup(join(root, 'cli-out'));
+      expect(backup.manifest.sourceDatabasePath).toBe(otherDatabase);
+      expect(backup.manifest.sourceDataDirectory).toBe(baseDir);
+      expect(log).toHaveBeenCalled();
+    });
+
+    it('does not warn when the database is inside the data directory', () => {
+      expect(describeMismatchedSources({ databasePath, baseDir })).toBeUndefined();
     });
 
     it('reports a failure and sets a nonzero exit code', async () => {

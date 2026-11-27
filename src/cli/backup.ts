@@ -1,6 +1,6 @@
 import type { Stats } from 'node:fs';
 import { chmod, copyFile, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
@@ -146,6 +146,28 @@ async function reserveDirectory(directory: string, restrictParent: boolean): Pro
 }
 
 /**
+ * A warning when the database is not inside the data directory, where the key
+ * and accounts come from. `DATABASE_PATH` and `BASE_DIR` are independent, so
+ * this can pair one install's database with another's key, which leaves the
+ * database's stored secrets undecryptable after a restore.
+ */
+export function describeMismatchedSources(options: {
+  databasePath: string;
+  baseDir: string;
+}): string | undefined {
+  const databasePath = resolve(options.databasePath);
+  const baseDir = resolve(options.baseDir);
+  if (isInside(databasePath, baseDir)) {
+    return undefined;
+  }
+  return (
+    `The database ${databasePath} is not inside the data directory ${baseDir}, ` +
+    'which supplies the encryption key and Codex accounts. Check that they belong ' +
+    'to the same installation; set BASE_DIR to change the data directory.'
+  );
+}
+
+/**
  * Write one self-contained backup directory: a consistent SQLite snapshot,
  * `encryption.key` and `codex-accounts/` when they exist, and a manifest. The
  * snapshot uses SQLite's online backup API, so a running backend is neither
@@ -176,7 +198,8 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
       formatVersion: BACKUP_FORMAT_VERSION,
       applicationVersion: options.applicationVersion,
       createdAt: now.toISOString(),
-      sourceDatabaseFile: basename(databasePath),
+      sourceDatabasePath: databasePath,
+      sourceDataDirectory: baseDir,
       contents: {
         database: true,
         encryptionKey: await copyEncryptionKey(baseDir, directory),
@@ -214,10 +237,16 @@ export function registerBackupCommand(program: Command, applicationVersion: stri
     .action(async (options: { databasePath?: string; output?: string }) => {
       try {
         const databasePath = resolveDatabasePath({ databasePath: options.databasePath });
-        console.log(chalk.blue(`Backing up ${databasePath}...`));
+        const baseDir = resolve(getBaseDir());
+        console.log(chalk.blue(`Backing up ${databasePath}`));
+        console.log(chalk.gray(`  data directory (encryption key, Codex accounts): ${baseDir}`));
+        const mismatch = describeMismatchedSources({ databasePath, baseDir });
+        if (mismatch) {
+          console.warn(chalk.yellow(`  Warning: ${mismatch}`));
+        }
         const result = await createBackup({
           databasePath,
-          baseDir: getBaseDir(),
+          baseDir,
           applicationVersion,
           destination: options.output,
         });

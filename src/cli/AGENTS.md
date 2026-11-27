@@ -93,11 +93,13 @@ does not own:
 - `application-update-shutdown.ts`: stops the backend with SIGTERM and escalates
   to SIGKILL after two minutes.
 - `backup.ts`, `backup-manifest.ts`: `ff backup` writes one backup directory (an
-  online SQLite snapshot through `src/backend/lib/sqlite-snapshot.ts`, the key,
-  `codex-accounts/` and a Zod-validated manifest), by default in `db-backups/`
-  beside the database and never pruned. The directory is claimed atomically, the
-  manifest is written last and a failed backup removes its directory, so a
-  directory without a manifest is never a complete backup. A restore reads one
-  only through `readBackup`. `backup.test.ts`.
+  online SQLite snapshot in one step through
+  `src/backend/lib/sqlite-snapshot.ts`, the key, `codex-accounts/` and a
+  Zod-validated manifest that records the source database and data directory,
+  which `DATABASE_PATH` and `BASE_DIR` choose separately), by default in
+  `db-backups/` beside the database and never pruned. The directory is claimed
+  atomically, the manifest is written last and a failed backup removes its
+  directory, so a directory without a manifest is never a complete backup. A
+  restore reads one only through `readBackup`. `backup.test.ts`.
 - `proxy-mode.ts`, `tailscale.ts`, `studio.ts`, `build-command.ts`, `claude.ts`
   and `codex.ts` register the other commands.
