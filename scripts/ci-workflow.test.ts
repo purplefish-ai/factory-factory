@@ -16,7 +16,10 @@ const stepSchema = z.object({
   run: z.string().optional(),
 });
 const workflowSchema = z.object({
-  concurrency: z.object({ group: z.string(), 'cancel-in-progress': z.boolean() }),
+  concurrency: z.object({
+    group: z.string(),
+    'cancel-in-progress': z.union([z.boolean(), z.string()]),
+  }),
   jobs: z.record(
     z.string(),
     z.object({
@@ -307,17 +310,19 @@ it('pins the prebuilt Playwright image to the locked package version and a diges
   expect(storyTests?.steps?.some((step) => step.run?.includes('install --with-deps'))).toBe(false);
 });
 
-it('scopes supersession to each workflow and PR, keeping queues and schedules independent', () => {
+it('supersedes only pull request revisions: pushes to main, queues and schedules each run to a verdict', () => {
   const codeql = workflowSchema.parse(parse(readFileSync('.github/workflows/codeql.yml', 'utf8')));
   for (const workflow of [ci, codeql]) {
-    expect(workflow.concurrency['cancel-in-progress']).toBe(true);
-    expect(workflow.concurrency.group).toContain('github.workflow');
-    expect(workflow.concurrency.group).toContain("github.event_name == 'pull_request'");
-    expect(workflow.concurrency.group).toContain(
-      "format('pr-{0}', github.event.pull_request.number)"
+    // A pull request shares one group per workflow and number, so a newer revision replaces
+    // the older one. Any other event falls through to its own run id: a later push to main
+    // neither cancels nor replaces the run for an earlier commit, and merge_group runs stay
+    // independent. Grouping on the ref would drop a pending run even without cancellation.
+    expect(workflow.concurrency.group).toBe(
+      "${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}"
     );
-    expect(workflow.concurrency.group).toContain("github.ref == 'refs/heads/main'");
-    expect(workflow.concurrency.group).toContain('|| github.run_id');
+    expect(workflow.concurrency['cancel-in-progress']).toBe(
+      "${{ github.event_name == 'pull_request' }}"
+    );
   }
 });
 
