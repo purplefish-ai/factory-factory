@@ -13,7 +13,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareRawDirectory, spawnTool, stopChild } from './environment.mjs';
+import {
+  createPrivateDirectory,
+  prepareRawDirectory,
+  spawnTool,
+  stopChild,
+} from './environment.mjs';
 
 const environmentModule = new URL('./environment.mjs', import.meta.url).href;
 const directories: string[] = [];
@@ -146,6 +151,22 @@ describe('prepareRawDirectory', () => {
     chmodSync(raw, 0o755);
     expect(() => prepareRawDirectory(raw, temporaryDirectory())).toThrow(/chmod 700/);
     expect(statSync(raw).mode & 0o777).toBe(0o755);
+  });
+
+  it('stops when something appears at the path before it is created', () => {
+    const raced = join(temporaryDirectory(), 'raw');
+    mkdirSync(raced, { mode: 0o755 });
+    expect(() => createPrivateDirectory(raced)).toThrow(/appeared while it was being created/);
+    expect(statSync(raced).mode & 0o777).toBe(0o755);
+    const link = join(temporaryDirectory(), 'link');
+    symlinkSync(temporaryDirectory(), link);
+    expect(() => createPrivateDirectory(link)).toThrow(/appeared while it was being created/);
+  });
+
+  it('creates missing parents as well as the directory', () => {
+    const raw = join(temporaryDirectory(), 'a', 'b', 'raw');
+    expect(prepareRawDirectory(raw, temporaryDirectory())).toBe(raw);
+    expect(statSync(raw).mode & 0o777).toBe(0o700);
   });
 
   it('refuses a directory inside the checkout, also through a symlink', () => {

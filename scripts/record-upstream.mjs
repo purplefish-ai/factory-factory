@@ -49,9 +49,8 @@
 //   backups under ~/.claude/backups/ and may rewrite a built-in plugin record
 //   under ~/.claude/plugins/store/, as any Claude run does.
 // - The Bash tool snapshots the user's shell setup. The Claude run sets an
-//   empty ZDOTDIR and SHELL to /bin/zsh (or /bin/sh where there is no zsh)
-//   so the snapshot holds no aliases or
-//   functions of yours. This isolation is unverified until the next
+//   empty ZDOTDIR and SHELL=/bin/zsh so the snapshot holds no aliases or
+//   functions of yours; without /bin/zsh it refuses to record Claude. This isolation is unverified until the next
 //   recording: read the snapshot the run lists before trusting it.
 //
 // Cost: Claude makes three short turns (one interrupted), Codex two, on the

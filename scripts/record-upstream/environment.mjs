@@ -4,6 +4,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -177,6 +178,38 @@ function isInside(child, parent) {
   return path === '' || !(path.startsWith('..') || isAbsolute(path));
 }
 
+function assertPrivate(stats) {
+  if (stats.uid !== process.getuid?.()) {
+    throw new Error('--keep-raw directory belongs to another user; name a new directory');
+  }
+  if ((stats.mode & 0o077) !== 0) {
+    throw new Error(
+      '--keep-raw directory is readable by others; run chmod 700 on it or name a new directory'
+    );
+  }
+}
+
+/**
+ * Creates `directory` itself (not its parents) 0700. If anything appeared at
+ * that path since it was checked, mkdir fails with EEXIST and the run stops;
+ * what was created must be a real directory, ours, with no group or other bits.
+ */
+export function createPrivateDirectory(directory) {
+  try {
+    mkdirSync(directory, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      throw new Error('--keep-raw directory appeared while it was being created; try again');
+    }
+    throw error;
+  }
+  const stats = lstatSync(directory);
+  if (!stats.isDirectory()) {
+    throw new Error('--keep-raw must name a directory');
+  }
+  assertPrivate(stats);
+}
+
 /**
  * Prepares the `--keep-raw` directory. Raw captures hold account details, so
  * the directory must be outside `checkout`, and either not exist yet (it is
@@ -197,7 +230,8 @@ export function prepareRawDirectory(directory, checkout) {
     throw new Error('--keep-raw must name a directory outside this repository');
   }
   if (!existsSync(directory)) {
-    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(resolve(directory)), { recursive: true, mode: 0o700 });
+    createPrivateDirectory(directory);
   } else {
     if (!statSync(directory).isDirectory()) {
       throw new Error('--keep-raw must name a directory');
@@ -207,11 +241,7 @@ export function prepareRawDirectory(directory, checkout) {
         '--keep-raw needs an empty directory; delete the old captures or name a new directory'
       );
     }
-    if ((statSync(directory).mode & 0o077) !== 0) {
-      throw new Error(
-        '--keep-raw directory is readable by others; run chmod 700 on it or name a new directory'
-      );
-    }
+    assertPrivate(statSync(directory));
   }
   // A symlink can still lead into the checkout.
   const real = realpathSync(directory);

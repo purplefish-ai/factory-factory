@@ -96,7 +96,32 @@ function listOrEmpty(directory) {
   return existsSync(directory) ? readdirSync(directory) : [];
 }
 
-function printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snapshotsBefore }) {
+/**
+ * The shell for the Bash tool. With an empty ZDOTDIR, zsh reads no startup
+ * files of the owner's; with any other shell the CLI may read ~/.bashrc, so
+ * the recorder refuses rather than lose the isolation silently.
+ */
+export function isolatedShell(exists = existsSync) {
+  if (!exists('/bin/zsh')) {
+    throw new Error(
+      'Recording Claude needs /bin/zsh: the recorder isolates the Bash tool from your shell setup with an empty ZDOTDIR'
+    );
+  }
+  return '/bin/zsh';
+}
+
+function printLeftovers({
+  claudeHome,
+  projectDir,
+  sessionId,
+  snapshotsDir,
+  snapshotsBefore,
+  launched,
+}) {
+  if (!launched) {
+    console.log('claude: the adapter was not started; nothing was written under ~/.claude');
+    return;
+  }
   const leftovers = [];
   if (existsSync(projectDir)) {
     leftovers.push(`${projectDir}/ (${readdirSync(projectDir).join(', ')})`);
@@ -114,7 +139,7 @@ function printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snaps
     console.log(`claude: left outside the temp directory: ${path}`);
   }
   console.log(
-    `claude: ${join(homedir(), '.claude.json')} and its backups under ${join(claudeHome, 'backups')} were rewritten, as on any Claude run`
+    `claude: ${join(homedir(), '.claude.json')} and its backups under ${join(claudeHome, 'backups')} may have been rewritten, as on any Claude run`
   );
   console.log(
     `claude: ${join(claudeHome, 'plugins', 'store')} may have had a built-in plugin record rewritten`
@@ -128,6 +153,7 @@ function printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snaps
  * the run fails.
  */
 export async function recordClaude({ versions, repository, tmp, rawDir }) {
+  const shell = isolatedShell();
   const claudeHome = join(homedir(), '.claude');
   const snapshotsDir = join(claudeHome, 'shell-snapshots');
   const snapshotsBefore = new Set(listOrEmpty(snapshotsDir));
@@ -135,9 +161,8 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
   const stdioLog = join(rawDir, 'cli-stdio.raw.jsonl');
   writeFileSync(wrapper, stdioWrapperSource(claudeCliPath(versions.fromAdapter), stdioLog));
   chmodSync(wrapper, 0o700);
-  // An empty ZDOTDIR and an explicit SHELL (zsh, or sh where there is none)
-  // keep the owner's shell setup (aliases, functions, options) out of the
-  // Bash tool's shell snapshot.
+  // An empty ZDOTDIR and SHELL=/bin/zsh keep the owner's shell setup
+  // (aliases, functions, options) out of the Bash tool's shell snapshot.
   // Unverified until the next recording; the run lists any snapshot it made.
   const zdotdir = join(tmp, 'zdotdir');
   mkdirSync(zdotdir);
@@ -148,7 +173,7 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
     user: process.env.USER ?? 'user',
     extra: {
       CLAUDE_CODE_EXECUTABLE: wrapper,
-      SHELL: existsSync('/bin/zsh') ? '/bin/zsh' : '/bin/sh',
+      SHELL: shell,
       ZDOTDIR: zdotdir,
       // Keep the account's claude.ai connectors out of the synthetic session.
       ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
@@ -156,12 +181,14 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
   });
   const projectDir = join(claudeHome, 'projects', repository.replace(/[^A-Za-z0-9]/g, '-'));
   let sessionId;
+  let launched = false;
   try {
     const session = startAcpSession({
       entrypoint: versions.adapterEntrypoint,
       env,
       cwd: repository,
     });
+    launched = true;
     try {
       await session.initialize();
       const created = await session.newSession({
@@ -203,6 +230,13 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
     chmodSync(join(rawDir, 'history.raw.jsonl'), 0o600);
   } finally {
     // Also after a failure: whatever the CLI wrote under ~/.claude is the owner's to remove.
-    printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snapshotsBefore });
+    printLeftovers({
+      claudeHome,
+      projectDir,
+      sessionId,
+      snapshotsDir,
+      snapshotsBefore,
+      launched,
+    });
   }
 }
