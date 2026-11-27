@@ -65,6 +65,12 @@ only lines that contain its marker.
   full questions and submitted text match exactly once on each side.
   `codex-session-history-loader.messages.test.ts`,
   `session-question-response-history.integration.test.ts`.
+- Each provider's loader reads every recording of a real session of that
+  provider (`src/backend/testing/fixtures/upstream/`), and the transcript
+  reloaded from its history file equals the one built from its live ACP stream,
+  apart from the differences listed in the test with their reasons.
+  `upstream-recordings.test.ts`, and `scripts/record-upstream/fidelity.test.ts`
+  from the repository root.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.

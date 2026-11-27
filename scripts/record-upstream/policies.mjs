@@ -16,13 +16,18 @@
 // - `maps`: objects whose keys are data rather than field names (model usage
 //   keyed by model). Their keys survive when they look like plain names; their
 //   children are matched as `<path>.*`.
+// - `words`: `{ paths, allowed }` entries; a string at one of `paths` survives
+//   only when it is one of the `allowed` words (an enum), else "<string>".
 //
 // Paths join object keys with `.` and skip array levels; `*` matches one key.
 // Each stream's `common` rules apply to every kind of that stream, opaque ones
 // included; otherwise an opaque record keeps only its top-level discriminators.
+// A kind whose nested discriminators a parser needs (a role, a block type) is
+// therefore listed. ./fidelity.test.ts scrubs the committed recordings again
+// and fails when a value they kept, or one a parser reads, would be lost.
 
-function rules({ keep = [], ids = [], text = [], numbers = [], maps = [] } = {}) {
-  return { keep, ids, text, numbers, maps };
+function rules({ keep = [], ids = [], text = [], numbers = [], maps = [], words = [] } = {}) {
+  return { keep, ids, text, numbers, maps, words };
 }
 
 const OPPOSITE = {
@@ -55,6 +60,24 @@ const TOKENS = [
   'cache_creation.ephemeral_1h_input_tokens',
 ];
 const under = (prefix, names) => names.map((name) => `${prefix}.${name}`);
+// Each JSON Schema `type` in a tool's input schema, through nested properties
+// and array items, down to SCHEMA_DEPTH keys below the schema (the recorded
+// tools nest eight). Only the JSON Schema type words survive: a `default`,
+// `const` or `examples` object in a user's MCP tool schema can carry its own
+// `type` key with free text. Paths are patterns, which cannot recurse, so a
+// deeper `type` becomes "<string>".
+const SCHEMA_DEPTH = 16;
+const JSON_SCHEMA_TYPES = ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'];
+const schemaTypes = (root) => ({
+  paths: Array.from(
+    { length: SCHEMA_DEPTH + 1 },
+    (_, depth) => `${root}${'.*'.repeat(depth)}.type`
+  ),
+  allowed: JSON_SCHEMA_TYPES,
+});
+// How the CLI asked the API to show thinking (`display` in the SDK's thinking
+// configuration, `thinkingDisplay` in history).
+const thinkingDisplay = (paths) => ({ paths, allowed: ['summarized', 'omitted', 'highlights'] });
 const ACP_USAGE = [
   'inputTokens',
   'outputTokens',
@@ -280,6 +303,10 @@ const claudeStdio = {
   },
   kinds: {
     'control_request:set_model': rules({ keep: ['request.model'] }),
+    'control_response:initialize': rules({ keep: ['response.response.feedback_mode.kind'] }),
+    'control_response:get_context_usage': rules({
+      keep: ['response.response.categories.kind'],
+    }),
     'control_response:set_model': rules({
       keep: ['response.response.model'],
     }),
@@ -390,6 +417,23 @@ const claudeHistory = {
     'queue-operation': rules({ keep: ['operation'] }),
     'last-prompt': rules({ text: ['lastPrompt'] }),
     'ai-title': rules({ keep: ['aiTitle'] }),
+    // What the CLI sent the API: roles, block, cache and tool schema types, no text.
+    'api-request': rules({
+      keep: [
+        'cacheControl.value.type',
+        'params.thinking.type',
+        'params.context_management.edits.type',
+      ],
+      words: [thinkingDisplay(['params.thinking.display'])],
+    }),
+    'api-request-blob': rules({ keep: ['message.role', 'message.content.type'] }),
+    'api-request-shape': rules({
+      keep: ['shape.system.type', 'shape.tools.type'],
+      words: [schemaTypes('shape.tools.input_schema')],
+    }),
+    'attachment:prompt_snapshot': rules({
+      words: [schemaTypes('attachment.tools.schema.input_schema')],
+    }),
     user: rules({
       keep: [
         ...HISTORY_ENVELOPE,
@@ -421,6 +465,7 @@ const claudeHistory = {
       text: [...MESSAGE_TEXT, ...under('wireToolInputs.*', ['command', 'description'])],
       numbers: ['apiBlockIndex', ...under('message.usage', STDIO_USAGE)],
       maps: ['wireToolInputs'],
+      words: [thinkingDisplay(['thinkingDisplay'])],
     }),
   },
 };
@@ -448,15 +493,16 @@ const THREAD_SETTINGS = [
 ];
 const ITEM_KEEP = ['type', 'phase', 'source', 'status', 'content.type', 'parsed_cmd.type'];
 const ITEM_TEXT = ['content.text', 'aggregated_output', 'command', 'parsed_cmd.cmd', 'cwd'];
-const MESSAGE_ITEM = rules({
-  keep: [
-    ...under('payload', ['role', 'phase', 'status', 'content.type']),
-    'payload.internal_chat_message_metadata_passthrough.content_item_metadata.provenance.type',
-    'metadata.retained_source.id.role',
-    'metadata.mcp_attribution.status',
-  ],
-  text: ['payload.content.text'],
-});
+const MESSAGE_METADATA = 'payload.internal_chat_message_metadata_passthrough';
+// A message's structure: the history loader reads its role, block types and
+// content item kinds (`user.text`) to tell typed prompts from injected context.
+const MESSAGE_STRUCTURE = [
+  ...under('payload', ['role', 'phase', 'status', 'content.type']),
+  ...under(MESSAGE_METADATA, ['content_item_kinds', 'content_item_metadata.provenance.type']),
+  'metadata.retained_source.id.role',
+  'metadata.mcp_attribution.status',
+];
+const MESSAGE_ITEM = rules({ keep: MESSAGE_STRUCTURE, text: ['payload.content.text'] });
 
 const codexRollout = {
   common: rules({ keep: ['type', 'payload.type'], numbers: ['ordinal'] }),
@@ -520,6 +566,16 @@ const codexRollout = {
     }),
     'response_item:message:user': MESSAGE_ITEM,
     'response_item:message:assistant': MESSAGE_ITEM,
+    // Developer instructions keep their structure; their text is the tool's own.
+    'response_item:message:developer': rules({ keep: MESSAGE_STRUCTURE }),
+    'response_item:additional_tools': rules({
+      keep: [
+        'payload.role',
+        'metadata.mcp_attribution.status',
+        ...under('payload.tools', ['type', 'tools.type', 'tools.format.type']),
+      ],
+      words: [schemaTypes('payload.tools.tools.parameters')],
+    }),
     'response_item:reasoning': rules({
       keep: ['payload.summary.type'],
       text: ['payload.summary.text'],

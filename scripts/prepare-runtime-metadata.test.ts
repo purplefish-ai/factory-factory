@@ -164,6 +164,7 @@ it('packs runtime metadata while restoring the checkout and excluding recovery f
   for (const script of [
     'check-production-artifact.mjs',
     'prepare-runtime-metadata.mjs',
+    'runtime-manifest-path.mjs',
     'restore-runtime-metadata.mjs',
   ]) {
     if (existsSync(resolve('scripts', script))) {

@@ -19,7 +19,7 @@
     "@/*": ["src/*"],
     "@prisma-gen/*": ["prisma/generated/*"]
   },
-  "ignoreDependencies": ["@prisma/client"],
+  "ignoreDependencies": ["@prisma/client", "@openai/codex"],
   "vitest": {
     "entry": [
       "src/**/*.test.{ts,tsx}",
