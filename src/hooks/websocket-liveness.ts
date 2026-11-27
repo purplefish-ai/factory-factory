@@ -3,11 +3,20 @@
  *
  * A half-open connection (laptop sleep, a network change, a stopped server)
  * reads as open until TCP gives up, which can take minutes. The client sends
- * a ping every `LIVENESS_PING_INTERVAL_MS` and declares the connection dead
- * when nothing at all arrives within `LIVENESS_REPLY_TIMEOUT_MS` of a ping.
- * Any inbound frame counts as a reply, so a busy connection whose pong waits
- * behind a large replay is not mistaken for a dead one. A stalled server is
- * detected within interval + timeout, eight seconds at worst.
+ * a ping every `LIVENESS_PING_INTERVAL_MS`; any inbound frame counts as the
+ * reply, so a pong waiting behind a large replay or a deflate job is not
+ * mistaken for silence. Two thresholds, measured from an unanswered ping:
+ *
+ * - `LIVENESS_REPLY_TIMEOUT_MS` only changes what the user sees: the
+ *   connection is reported unresponsive, so a stalled server shows in the
+ *   banner within interval + timeout, eight seconds at worst. The socket stays
+ *   open; a late reply clears the report with no reconnect and no replay.
+ * - `LIVENESS_ABANDON_AFTER_MS` abandons the socket. A server that is merely
+ *   slow (a busy event loop on an overloaded machine) is the common case, and
+ *   tearing down every channel would add replays and baselines to its load.
+ *   The server's own protocol heartbeat (30 s, `server.ts`) tolerates a silent
+ *   browser for at least that long, so the client gives a silent server the
+ *   same 30 s before it treats the connection as dead.
  *
  * Hidden tabs: browsers throttle background timers to once a second or once a
  * minute and may freeze them, so a deadline measured there says more about
@@ -19,6 +28,7 @@
 
 export const LIVENESS_PING_INTERVAL_MS = 4000;
 export const LIVENESS_REPLY_TIMEOUT_MS = 4000;
+export const LIVENESS_ABANDON_AFTER_MS = 30_000;
 /** A timer this late ran in a suspended or throttled page; its verdict is not trusted. */
 export const LATE_TIMER_TOLERANCE_MS = 1000;
 
@@ -50,21 +60,24 @@ export function setTrustedTimeout(callback: () => void, delayMs: number): () => 
 export interface ConnectionLivenessOptions {
   /** Sends one ping frame; returns false when the socket cannot send. */
   sendPing: (id: number) => boolean;
-  /** Called once when a ping went unanswered. */
+  /** A ping went unanswered for `LIVENESS_REPLY_TIMEOUT_MS`; the socket stays open. */
+  onUnresponsive: () => void;
+  /** A frame arrived after `onUnresponsive`. */
+  onResponsive: () => void;
+  /** Called once when a ping went unanswered for `LIVENESS_ABANDON_AFTER_MS`. */
   onDead: () => void;
 }
 
 export class ConnectionLiveness {
-  private readonly sendPing: (id: number) => boolean;
-  private readonly onDead: () => void;
+  private readonly options: ConnectionLivenessOptions;
   private running = false;
   private nextPingId = 0;
   private cancelTimer: (() => void) | null = null;
   private awaitingReply = false;
+  private unresponsive = false;
 
   constructor(options: ConnectionLivenessOptions) {
-    this.sendPing = options.sendPing;
-    this.onDead = options.onDead;
+    this.options = options;
   }
 
   /** Starts pinging; call once the server has said it answers pings. */
@@ -79,19 +92,31 @@ export class ConnectionLiveness {
   stop(): void {
     this.running = false;
     this.awaitingReply = false;
+    this.unresponsive = false;
     this.clearTimer();
+  }
+
+  /** Whether a ping is overdue: the connection is open but silent. */
+  isUnresponsive(): boolean {
+    return this.unresponsive;
   }
 
   /** Any inbound frame proves the connection is alive. */
   frameReceived(): void {
-    if (!(this.running && this.awaitingReply)) {
+    if (!this.running) {
       return;
     }
-    this.awaitingReply = false;
-    this.scheduleNextPing();
+    if (this.unresponsive) {
+      this.unresponsive = false;
+      this.options.onResponsive();
+    }
+    if (this.awaitingReply) {
+      this.awaitingReply = false;
+      this.scheduleNextPing();
+    }
   }
 
-  /** Pings now, for example when the tab is shown again or the network changed. */
+  /** Pings now, for example when the network changed. */
   checkNow(): void {
     if (!this.running) {
       return;
@@ -119,6 +144,7 @@ export class ConnectionLiveness {
     }
   }
 
+  // An unresponsive report stands while hidden; the ping on return settles it.
   private pause(): void {
     this.awaitingReply = false;
     this.clearTimer();
@@ -139,6 +165,10 @@ export class ConnectionLiveness {
     this.cancelTimer = () => clearTimeout(handle);
   }
 
+  private stillWaiting(): boolean {
+    return this.running && this.awaitingReply && !isDocumentHidden();
+  }
+
   private ping(): void {
     this.clearTimer();
     if (!this.running || isDocumentHidden()) {
@@ -146,18 +176,28 @@ export class ConnectionLiveness {
     }
     const id = this.nextPingId;
     this.nextPingId += 1;
-    if (!this.sendPing(id)) {
+    if (!this.options.sendPing(id)) {
       // The socket is closing; its close event takes over.
       return;
     }
     this.awaitingReply = true;
     this.cancelTimer = setTrustedTimeout(() => {
       this.cancelTimer = null;
-      if (!(this.running && this.awaitingReply) || isDocumentHidden()) {
+      if (!this.stillWaiting()) {
         return;
       }
-      this.stop();
-      this.onDead();
+      if (!this.unresponsive) {
+        this.unresponsive = true;
+        this.options.onUnresponsive();
+      }
+      this.cancelTimer = setTrustedTimeout(() => {
+        this.cancelTimer = null;
+        if (!this.stillWaiting()) {
+          return;
+        }
+        this.stop();
+        this.options.onDead();
+      }, LIVENESS_ABANDON_AFTER_MS - LIVENESS_REPLY_TIMEOUT_MS);
     }, LIVENESS_REPLY_TIMEOUT_MS);
   }
 }

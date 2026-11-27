@@ -28,6 +28,18 @@ export const Reconnecting: Story = {
 
 export const ReconnectingDark: Story = { ...Reconnecting, globals: { theme: 'dark' } };
 
+export const NotResponding: Story = {
+  args: { state: 'unresponsive' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const banner = canvas.getByTestId('connection-banner-reconnecting');
+    await expect(banner).toHaveTextContent(
+      "Factory Factory isn't responding. Waiting for a reply…"
+    );
+    await expect(banner).toHaveAttribute('data-state', 'unresponsive');
+  },
+};
+
 export const ReloadToUpdate: Story = {
   args: { state: 'outdated' },
   play: async ({ canvasElement, args }) => {

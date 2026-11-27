@@ -200,6 +200,13 @@ opts in, and a client pings only after a hello, so neither side sends a peer
 from the previous release a frame it does not know. Channel schemas never see
 them.
 
+A missed reply only changes what the user sees; the socket is abandoned after a
+much longer silence (`websocket-liveness.ts` says how long and why). A slow
+server is the common case on a loaded machine, and dropping every channel at
+once would add replays, baselines and restarted setup shells to its load. For
+the same reason the backoff restarts from its shortest delay only after a
+connection has stayed open and answering, not when it opens.
+
 `ConnectionBanner` in the shell never reloads by itself; the user may be typing.
 A channel joins it with `announceConnectionLoss` only when every page depends on
 it; channels with their own disconnect UI, such as the terminals, do not.

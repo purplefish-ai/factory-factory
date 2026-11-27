@@ -6,20 +6,24 @@ import { createContext, useContext, useSyncExternalStore } from 'react';
  * Every WebSocket transport under the provider reports the server version from
  * its hello. Transports created with `announceConnectionLoss` (the channels
  * every page depends on: `/snapshots`, and `/chat` while a chat is open) also
- * report whether they are reconnecting, so one banner speaks for all of them.
+ * report their state, so one banner speaks for all of them.
  */
 
 /**
  * - `connecting`: the first attempt for the current URL, not yet open.
- * - `connected`: open.
- * - `reconnecting`: an attempt failed or an open connection was lost; the
- *   transport keeps retrying.
+ * - `connected`: open and answering.
+ * - `unresponsive`: open, but a ping has gone unanswered; the socket is kept
+ *   in case the server is only slow (`ConnectionLiveness`).
+ * - `reconnecting`: an attempt failed or an open connection was lost or
+ *   abandoned; the transport keeps retrying.
  */
-export type ChannelConnectionState = 'connecting' | 'connected' | 'reconnecting';
+export type ChannelConnectionState = 'connecting' | 'connected' | 'unresponsive' | 'reconnecting';
+
+/** The worst state among announced channels; `reconnecting` outranks `unresponsive`. */
+export type AppConnectionState = 'ok' | 'unresponsive' | 'reconnecting';
 
 export interface ConnectionHealth {
-  /** At least one announced channel is reconnecting. */
-  reconnecting: boolean;
+  connection: AppConnectionState;
   /**
    * The version the server last reported in a hello; null until one arrives.
    * An older server sends none, so the last reported version is kept.
@@ -27,7 +31,20 @@ export interface ConnectionHealth {
   serverVersion: string | null;
 }
 
-const INITIAL_HEALTH: ConnectionHealth = { reconnecting: false, serverVersion: null };
+const INITIAL_HEALTH: ConnectionHealth = { connection: 'ok', serverVersion: null };
+
+function worstState(states: Iterable<ChannelConnectionState>): AppConnectionState {
+  let worst: AppConnectionState = 'ok';
+  for (const state of states) {
+    if (state === 'reconnecting') {
+      return 'reconnecting';
+    }
+    if (state === 'unresponsive') {
+      worst = 'unresponsive';
+    }
+  }
+  return worst;
+}
 
 export class ConnectionHealthStore {
   private readonly channels = new Map<string, ChannelConnectionState>();
@@ -59,12 +76,12 @@ export class ConnectionHealthStore {
   }
 
   private publish(): void {
-    const reconnecting = [...this.channels.values()].includes('reconnecting');
+    const connection = worstState(this.channels.values());
     const { health, serverVersion } = this;
-    if (health.reconnecting === reconnecting && health.serverVersion === serverVersion) {
+    if (health.connection === connection && health.serverVersion === serverVersion) {
       return;
     }
-    this.health = { reconnecting, serverVersion };
+    this.health = { connection, serverVersion };
     for (const listener of this.listeners) {
       listener();
     }

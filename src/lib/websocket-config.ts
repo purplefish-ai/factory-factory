@@ -22,9 +22,20 @@ export const RECONNECT_MAX_DELAY_MS = 10_000;
 /**
  * How long one attempt may stay opening before it is abandoned and retried. A
  * stopped server's kernel still accepts connections, so without this an
- * attempt could hang with the browser's own, much longer, timeout.
+ * attempt could hang with the browser's own, much longer, timeout. It matches
+ * the 30 s the transport gives an open connection that stopped answering
+ * (`LIVENESS_ABANDON_AFTER_MS`): an overloaded server that is slow to finish
+ * an upgrade is not handed a fresh one every few seconds. Closing an abandoned
+ * attempt is all the client can do; a server that completes the upgrade later
+ * sees the client's close at once.
  */
-export const CONNECT_TIMEOUT_MS = 10_000;
+export const CONNECT_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a connection must stay open, and answering when the server pings,
+ * before the backoff starts again from its shortest delay.
+ */
+export const STABLE_CONNECTION_MS = 10_000;
 
 /**
  * Calculate reconnection delay with exponential backoff and jitter.

@@ -90,13 +90,34 @@ describe('ConnectionBanner', () => {
 
     await act(async () => lastSocket().drop());
     const banner = app.container.querySelector('[data-testid="connection-banner-reconnecting"]');
-    expect(banner?.textContent).toContain('Reconnecting…');
+    expect(banner?.textContent).toBe('Connection lost. Reconnecting…');
+    expect(banner?.getAttribute('data-state')).toBe('reconnecting');
     expect(banner?.getAttribute('role')).toBe('status');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
       lastSocket().open();
     });
+    expect(app.container.textContent).toBe('');
+    await app.unmount();
+  });
+
+  it('says the server is not responding while its socket is open but silent', async () => {
+    const app = await renderApp('1.0.0', vi.fn());
+    await act(() => {
+      lastSocket().open();
+      lastSocket().receive({ ffTransport: 'hello', version: '1.0.0' });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+    const banner = app.container.querySelector('[data-testid="connection-banner-reconnecting"]');
+    expect(banner?.textContent).toBe("Factory Factory isn't responding. Waiting for a reply…");
+    expect(banner?.getAttribute('data-state')).toBe('unresponsive');
+    expect(banner?.getAttribute('role')).toBe('status');
+
+    // The late reply clears it on the same socket.
+    await act(() => lastSocket().answerPing());
     expect(app.container.textContent).toBe('');
     await app.unmount();
   });

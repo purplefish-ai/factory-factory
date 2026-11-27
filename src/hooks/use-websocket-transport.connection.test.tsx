@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CONNECT_TIMEOUT_MS, STABLE_CONNECTION_MS } from '@/lib/websocket-config';
 import {
   FakeWebSocket,
   installFakeWebSocket,
@@ -12,6 +13,11 @@ import {
 } from './fake-websocket.test-helpers';
 import { useWebSocketTransport } from './use-websocket-transport';
 import { ConnectionHealthContext, ConnectionHealthStore } from './websocket-connection-health';
+import {
+  LIVENESS_ABANDON_AFTER_MS,
+  LIVENESS_PING_INTERVAL_MS,
+  LIVENESS_REPLY_TIMEOUT_MS,
+} from './websocket-liveness';
 
 const HELLO = { ffTransport: 'hello', version: '1.0.0' };
 
@@ -19,11 +25,13 @@ interface HarnessProps {
   url: string | null;
   announceConnectionLoss: boolean;
   onMessage: (data: unknown) => void;
+  onConnected: () => void;
+  onDisconnected: () => void;
   connectedRef: { current: boolean };
 }
 
-function Harness({ url, announceConnectionLoss, onMessage, connectedRef }: HarnessProps) {
-  const { connected } = useWebSocketTransport({ url, announceConnectionLoss, onMessage });
+function Harness({ connectedRef, ...options }: HarnessProps) {
+  const { connected } = useWebSocketTransport(options);
   connectedRef.current = connected;
   return null;
 }
@@ -34,6 +42,8 @@ function mount(options: { url?: string; announceConnectionLoss?: boolean } = {})
   const root = createRoot(container);
   const connectedRef = { current: false };
   const onMessage = vi.fn();
+  const onConnected = vi.fn();
+  const onDisconnected = vi.fn();
   const render = (url: string | null, announceConnectionLoss = options.announceConnectionLoss) =>
     flushSync(() =>
       root.render(
@@ -44,6 +54,8 @@ function mount(options: { url?: string; announceConnectionLoss?: boolean } = {})
             url,
             announceConnectionLoss: announceConnectionLoss ?? true,
             onMessage,
+            onConnected,
+            onDisconnected,
             connectedRef,
           })
         )
@@ -54,6 +66,8 @@ function mount(options: { url?: string; announceConnectionLoss?: boolean } = {})
     store,
     connectedRef,
     onMessage,
+    onConnected,
+    onDisconnected,
     render,
     unmount: () => flushSync(() => root.unmount()),
   };
@@ -91,7 +105,7 @@ describe('useWebSocketTransport connection health', () => {
     const view = mount();
     openWithHello();
     flushSync(() => lastSocket().drop());
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
 
     // Far past the old ten-attempt budget: every failure schedules another
     // attempt, never more than 10 s (plus jitter, zero here) later.
@@ -100,17 +114,17 @@ describe('useWebSocketTransport connection health', () => {
       await vi.advanceTimersByTimeAsync(10_000);
       expect(lastSocket()).not.toBe(failed);
       flushSync(() => lastSocket().drop());
-      expect(view.store.getSnapshot().reconnecting).toBe(true);
+      expect(view.store.getSnapshot().connection).toBe('reconnecting');
     }
 
     await vi.advanceTimersByTimeAsync(10_000);
     openWithHello();
     expect(view.connectedRef.current).toBe(true);
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
     view.unmount();
   });
 
-  it('reconnects when a ping goes unanswered, and treats any frame as an answer', async () => {
+  it('reports a silent connection at once and abandons it only after a long silence', async () => {
     const view = mount();
     const socket = openWithHello();
 
@@ -125,14 +139,24 @@ describe('useWebSocketTransport connection health', () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(socket.readyState).toBe(FakeWebSocket.OPEN);
 
-    // The server stops answering: the socket is dropped one reply timeout
-    // after the unanswered ping, eight seconds after the last frame at most.
+    // The server stops answering. One reply timeout after the unanswered ping,
+    // eight seconds after the last frame at most, the banner says so; the
+    // socket stays open in case the server is only slow.
     expect(socket.pings()).toEqual([0, 1, 2]);
-    await vi.advanceTimersByTimeAsync(3999);
+    await vi.advanceTimersByTimeAsync(LIVENESS_REPLY_TIMEOUT_MS - 1);
+    expect(view.store.getSnapshot().connection).toBe('ok');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(view.store.getSnapshot().connection).toBe('unresponsive');
     expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+
+    // After the long silence the socket is abandoned and replaced.
+    await vi.advanceTimersByTimeAsync(LIVENESS_ABANDON_AFTER_MS - LIVENESS_REPLY_TIMEOUT_MS - 1);
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+    expect(view.onDisconnected).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.onDisconnected).toHaveBeenCalledOnce();
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(lastSocket()).not.toBe(socket);
@@ -141,13 +165,65 @@ describe('useWebSocketTransport connection health', () => {
     view.unmount();
   });
 
+  it('keeps the socket and replays nothing when a reply comes 6 s late', async () => {
+    const view = mount();
+    const socket = openWithHello();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(socket.pings()).toEqual([0]);
+
+    // The server stalls for 6 s, then answers: the banner shows the silence
+    // and clears with the reply, and nothing reconnects or replays.
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(view.store.getSnapshot().connection).toBe('unresponsive');
+    socket.answerPing();
+    expect(view.store.getSnapshot().connection).toBe('ok');
+    await vi.advanceTimersByTimeAsync(LIVENESS_ABANDON_AFTER_MS);
+
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+    expect(FakeWebSocket.created).toEqual([socket]);
+    expect(view.onConnected).toHaveBeenCalledOnce();
+    expect(view.onDisconnected).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it('does not reset the backoff for an open that is followed by silence', async () => {
+    const view = mount();
+    const silentFor = async () => {
+      await vi.advanceTimersByTimeAsync(LIVENESS_PING_INTERVAL_MS + LIVENESS_ABANDON_AFTER_MS);
+    };
+    // A server that accepts every upgrade and then stalls: each retry waits
+    // longer (1 s, 2 s, 4 s), rather than 1 s every time.
+    for (const delay of [1000, 2000, 4000]) {
+      const socket = openWithHello();
+      await silentFor();
+      expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(lastSocket()).toBe(socket);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(lastSocket()).not.toBe(socket);
+    }
+
+    // A connection that stays open and answering resets it.
+    const healthy = openWithHello();
+    for (let elapsed = 0; elapsed <= STABLE_CONNECTION_MS; elapsed += LIVENESS_PING_INTERVAL_MS) {
+      await vi.advanceTimersByTimeAsync(LIVENESS_PING_INTERVAL_MS);
+      healthy.answerPing();
+    }
+    flushSync(() => healthy.drop());
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(lastSocket()).not.toBe(healthy);
+    view.unmount();
+  });
+
   it('abandons and retries an attempt that never opens', async () => {
     const view = mount();
     const hanging = lastSocket();
 
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1);
+    expect(hanging.readyState).toBe(FakeWebSocket.CONNECTING);
+    await vi.advanceTimersByTimeAsync(1);
     expect(hanging.readyState).toBe(FakeWebSocket.CLOSED);
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
     await vi.advanceTimersByTimeAsync(1000);
     expect(lastSocket()).not.toBe(hanging);
     view.unmount();
@@ -164,7 +240,7 @@ describe('useWebSocketTransport connection health', () => {
     expect(socket.readyState).toBe(FakeWebSocket.OPEN);
     expect(FakeWebSocket.created).toHaveLength(1);
     expect(view.connectedRef.current).toBe(true);
-    expect(view.store.getSnapshot()).toEqual({ reconnecting: false, serverVersion: null });
+    expect(view.store.getSnapshot()).toEqual({ connection: 'ok', serverVersion: null });
     view.unmount();
   });
 
@@ -185,7 +261,7 @@ describe('useWebSocketTransport connection health', () => {
     expect(socket.pings()).toEqual([]);
     expect(socket.readyState).toBe(FakeWebSocket.OPEN);
     expect(FakeWebSocket.created).toHaveLength(1);
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
 
     setDocumentVisibility('visible');
     expect(socket.pings()).toEqual([0]);
@@ -203,9 +279,11 @@ describe('useWebSocketTransport connection health', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     setDocumentVisibility('visible');
-    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(LIVENESS_REPLY_TIMEOUT_MS);
+    expect(view.store.getSnapshot().connection).toBe('unresponsive');
+    await vi.advanceTimersByTimeAsync(LIVENESS_ABANDON_AFTER_MS - LIVENESS_REPLY_TIMEOUT_MS);
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
     view.unmount();
   });
 
@@ -223,7 +301,7 @@ describe('useWebSocketTransport connection health', () => {
     socket.answerPing();
     await vi.advanceTimersByTimeAsync(4000);
     expect(socket.readyState).toBe(FakeWebSocket.OPEN);
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
     view.unmount();
   });
 
@@ -232,13 +310,13 @@ describe('useWebSocketTransport connection health', () => {
     openWithHello();
     view.render('/chat?sessionId=s2');
     await vi.advanceTimersByTimeAsync(0);
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
     view.unmount();
 
     const terminal = mount({ url: '/terminal?workspaceId=w1', announceConnectionLoss: false });
     openWithHello();
     flushSync(() => lastSocket().drop());
-    expect(terminal.store.getSnapshot().reconnecting).toBe(false);
+    expect(terminal.store.getSnapshot().connection).toBe('ok');
     terminal.unmount();
   });
 
@@ -247,12 +325,12 @@ describe('useWebSocketTransport connection health', () => {
     const view = mount({ url, announceConnectionLoss: false });
     openWithHello();
     flushSync(() => lastSocket().drop());
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
 
     view.render(url, true);
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
     view.render(url, false);
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
     view.unmount();
   });
 
@@ -260,8 +338,8 @@ describe('useWebSocketTransport connection health', () => {
     const view = mount();
     openWithHello();
     flushSync(() => lastSocket().drop());
-    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    expect(view.store.getSnapshot().connection).toBe('reconnecting');
     view.unmount();
-    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    expect(view.store.getSnapshot().connection).toBe('ok');
   });
 });

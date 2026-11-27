@@ -1,5 +1,9 @@
 import { useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
-import { CONNECT_TIMEOUT_MS, getReconnectDelay } from '@/lib/websocket-config';
+import {
+  CONNECT_TIMEOUT_MS,
+  getReconnectDelay,
+  STABLE_CONNECTION_MS,
+} from '@/lib/websocket-config';
 import {
   createTransportPing,
   isTransportFrame,
@@ -202,8 +206,9 @@ export function useWebSocketTransport(
   // Message queue for messages sent while disconnected
   const messageQueueRef = useRef<unknown[]>([]);
   const previousUrlRef = useRef<string | null>(null);
-  // Per-socket timers: the open timeout while connecting, the liveness pings once open.
-  const cancelConnectTimeoutRef = useRef<(() => void) | null>(null);
+  // Per-socket timers: the open timeout while connecting, then the stability
+  // timer that resets the backoff; the liveness pings once the server says hello.
+  const cancelSocketTimerRef = useRef<(() => void) | null>(null);
   const livenessRef = useRef<ConnectionLiveness | null>(null);
   // The state last reported to the health store; null while no connection is wanted.
   const connectionStateRef = useRef<ChannelConnectionState | null>(null);
@@ -249,13 +254,13 @@ export function useWebSocketTransport(
   );
 
   const stopSocketTimers = useCallback(() => {
-    cancelConnectTimeoutRef.current?.();
-    cancelConnectTimeoutRef.current = null;
+    cancelSocketTimerRef.current?.();
+    cancelSocketTimerRef.current = null;
     livenessRef.current?.stop();
     livenessRef.current = null;
   }, []);
 
-  // The current socket is gone (closed, timed out or unresponsive): fence it
+  // The current socket is gone (closed, timed out or abandoned as dead): fence it
   // off, report the loss and, unless the close was ours, retry. Retries never
   // stop; the backoff delay is capped.
   const loseSocket = useCallback(
@@ -326,16 +331,33 @@ export function useWebSocketTransport(
 
   const handleOpen = useCallback(
     (ws: WebSocket) => {
-      cancelConnectTimeoutRef.current?.();
-      cancelConnectTimeoutRef.current = null;
+      cancelSocketTimerRef.current?.();
       setConnected(true);
-      reconnectAttemptsRef.current = 0;
       reportState('connected');
-      livenessRef.current = new ConnectionLiveness({
+      const liveness = new ConnectionLiveness({
         sendPing: (id) =>
           ws.readyState === WebSocket.OPEN && trySendMessage(ws, createTransportPing(id)),
+        onUnresponsive: () => reportState('unresponsive'),
+        onResponsive: () => reportState('connected'),
         onDead: () => abandonSocket(ws),
       });
+      livenessRef.current = liveness;
+      // An open alone proves little: a server can accept the upgrade and then
+      // stall. The backoff resets only once the connection has stayed open
+      // and answering, so a server that keeps doing that is not retried at
+      // the shortest delay every time.
+      const awaitStability = () => {
+        const handle = setTimeout(() => {
+          if (liveness.isUnresponsive()) {
+            awaitStability();
+            return;
+          }
+          reconnectAttemptsRef.current = 0;
+          cancelSocketTimerRef.current = null;
+        }, STABLE_CONNECTION_MS);
+        cancelSocketTimerRef.current = () => clearTimeout(handle);
+      };
+      awaitStability();
 
       if (queuePolicy !== 'replay') {
         messageQueueRef.current = [];
@@ -385,7 +407,7 @@ export function useWebSocketTransport(
     wsRef.current = ws;
     // An attempt can hang while opening, for example when a stopped server's
     // kernel still accepts the connection; give up on it and try again.
-    cancelConnectTimeoutRef.current = setTrustedTimeout(() => {
+    cancelSocketTimerRef.current = setTrustedTimeout(() => {
       if (ws.readyState === WebSocket.CONNECTING) {
         abandonSocket(ws);
       }
