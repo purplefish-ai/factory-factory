@@ -36,7 +36,9 @@ Martin reads before any code is written.
 ## Baseline (2026-11-27, commit `08a2654b4`)
 
 Each row is counted by the command or query in the last column; there is no new
-script.
+script. "Test and script lines" is the sum, by `git ls-files` and `wc -l`, of
+test, story and test-support files under `src/` (383,890), every script under
+`scripts/` (25,828) and every file under `e2e/` (3,278).
 
 | Measure                                                  | Baseline                | Target                                                          | Counted by                       |
 | -------------------------------------------------------- | ----------------------- | --------------------------------------------------------------- | -------------------------------- |
@@ -50,7 +52,7 @@ script.
 | Accepted human prompts lost on restart                   | All queued              | None lost silently                                              | Task 3.4's scenarios             |
 | npm versions with a tag and GitHub Release               | 0 of 21 since `v0.4.6`  | Every one from now                                              | `gh release list`                |
 | Production lines under `src/`                            | 216,239                 | Reported; expected to rise by 3,000 to 4,000 (see D1)           | `pnpm metrics:agents`            |
-| Test lines under `src/` plus `scripts/` and `e2e/`       | About 375,000           | Reported; no higher at the gate than at wave 0 plus the harness | `git ls-files` and `wc -l`       |
+| Test and script lines (see below)                        | About 413,000           | Reported; no higher at the gate than at wave 0 plus the harness | `git ls-files` and `wc -l`       |
 | Patch releases per week                                  | About 4 (15 in 27 days) | Reported                                                        | `npm view factory-factory time`  |
 | Files with a module-level service singleton              | About 110 singletons    | No new file                                                     | Task 6.1's exceptions file       |
 | Files comparing against a provider literal, non-test     | 62 files, 126 sites     | No new file                                                     | Task 6.2's exceptions file       |
@@ -164,7 +166,7 @@ and exit with no drain. The same job passed one commit earlier.
 ### Task 0.2: Every commit on `main` gets a verdict
 
 **Files:** `.github/workflows/ci.yml`, `.github/workflows/codeql.yml`,
-`scripts/ci-workflow.test.ts` (it pins `cancel-in-progress: true`).
+`scripts/ci-workflow.test.ts` (it pinned `cancel-in-progress: true`).
 
 - [ ] Runs for pushes to `main` are not cancelled by later pushes.
 
@@ -359,8 +361,17 @@ and tokens are scrubbed; the repository is public.
 **2.9a**, at the start of wave 1: the recorder and the raw recordings. Tasks 2.1
 and 2.4 take their line shapes from them.
 
+- [ ] The recorded sessions are synthetic: scripted prompts written for the
+      purpose, run in a throwaway repository created for the recording, never in
+      a real project. A pattern scrub cannot make a real transcript safe to
+      publish.
+- [ ] The recorder writes only an allowlist of fields per record type and
+      replaces every other value with a placeholder of the same type.
 - [ ] A test fails if a recording contains a home directory path, an account
-      name or a token pattern.
+      name, an email address or a token pattern.
+- [ ] Pushing a branch publishes it. The recordings are read in full by the
+      orchestrator in the implementer's worktree before the first push, and
+      again whenever they are re-recorded.
 
 **2.9b**, beside the lane:
 
@@ -446,8 +457,10 @@ back to deleting in place
       must hide a marked row: the board and list reads, and the job queries
       (`findAllNonArchivedWithSessionsAndProject`, `findNeedingWorktree`). There
       is no single query owner; workspace reads are spread over 19 files.
-- [ ] The marker is cleared, and the caller told, only when the directory is
-      still intact. Otherwise it stays and removal is retried.
+- [ ] When removal succeeds, the row is deleted. When it fails with the
+      directory still intact, the marker is cleared and the caller told. When it
+      fails part-way, the marker stays and removal is retried until it succeeds
+      and the row is deleted.
 - [ ] Archive recovery skips a marked row; an archiving row's `updatedAt` is its
       lease.
 - [ ] A marked row found at startup is finished. Task 2.5's crash point after

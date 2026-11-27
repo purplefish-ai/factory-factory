@@ -15,8 +15,9 @@ The inside of the codebase is disciplined: 3 `as unknown as` casts and 3 uses of
 reaches past a capsule barrel. The weaknesses are at the edges, where the
 application meets something it does not control: a restart, a second process, a
 real `gh`, a real agent CLI, a user's machine, a flaky network. At each edge the
-real thing is either faked in the checks or not handled. Production source grew
-from 134,000 to 225,000 lines in twelve weeks, so the gaps grew with it.
+real thing is either faked in the checks or not handled. Production source under
+`src/` and `electron/` together grew from 134,000 to 225,000 lines in twelve
+weeks, so the gaps grew with it.
 
 The plan follows from that: fix the edges and remove what will not be kept,
 during a short freeze. Redesigns of the inside are not started on the review's
