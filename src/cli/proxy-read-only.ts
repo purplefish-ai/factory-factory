@@ -154,7 +154,7 @@ function toUpstreamPath(rawUrl: string | undefined): string {
 /**
  * The proxy behind `ff proxy --public`. Without a password it is the only
  * thing between the internet and the backend, and backend procedures that
- * Docker and other deployments call remotely without an `Origin` (including
+ * Remote deployments call without an `Origin` (including
  * starting agent sessions) would otherwise accept tunnel requests. So it
  * forwards only bodiless GET and HEAD requests and refuses every WebSocket
  * upgrade, whatever headers the client sends.

@@ -1,11 +1,10 @@
 # Dependency security
 
 Use the pnpm version pinned in `package.json#packageManager`. CI installs that
-version through `pnpm/action-setup`; Docker installs the same version with
-pinned release checksums. Local commands reject a different pnpm version through
-`.pnpmfile.mjs`, including lock-only installs and commands that skip lifecycle
-scripts. Custom user-agent values are rejected. Install the pinned version
-before updating the lockfile.
+version through `pnpm/action-setup`. Local commands reject a different pnpm
+version through `.pnpmfile.mjs`, including lock-only installs and commands that
+skip lifecycle scripts. Custom user-agent values are rejected. Install the
+pinned version before updating the lockfile.
 
 ## Dependency intake
 
@@ -116,11 +115,11 @@ dashboard severity/blocking policy has not been independently verified. Review
 that policy separately before claiming specific alert types block merging.
 
 For each reviewed finding, record its package/version, alert type and severity,
-direct or transitive path, and whether it ships in npm, Docker, or desktop
-artifacts. Assign an owner and classify it as remediation, investigated expected
-behavior, or unresolved. For an exception, preserve the reviewed evidence,
-bounded scope, expiry, and recheck condition. Do not interpret a capability flag
-alone as confirmed malware, or suppress it for every dependency. The dependency
+direct or transitive path, and whether it ships in npm or desktop artifacts.
+Assign an owner and classify it as remediation, investigated expected behavior,
+or unresolved. For an exception, preserve the reviewed evidence, bounded scope,
+expiry, and recheck condition. Do not interpret a capability flag alone as
+confirmed malware, or suppress it for every dependency. The dependency
 maintainers own the unresolved items below; the baseline remains incomplete
 until the remaining concrete findings have dispositions.
 
@@ -214,10 +213,7 @@ The November 5, 2026 hardening work is split into independently reviewed PRs:
    Compare registry integrity with the tested tarball and verify provenance's
    source/workflow. Verify trusted-publisher stage-only permissions, maintainer
    access, and the npm-publish environment's branch restrictions externally.
-4. Pin and verify Docker's external executables and image inputs, then ship a
-   tested production dependency tree. Preserve the cloud workspace tools and
-   native modules customers need.
-5. Configure signed desktop release artifacts and macOS notarization with
+4. Configure signed desktop release artifacts and macOS notarization with
    verification. Signing credentials and account configuration must be
    provisioned separately; workflow changes alone do not prove a signed or
    notarized release, so that acceptance remains unverified until exercised.
@@ -239,8 +235,7 @@ independently enforces the manifest's exact version, so disabling pnpm's
 automatic downloader does not permit a different package manager during ordinary
 commands. This catches accidental version mismatches; intentional configuration
 overrides can bypass repository tooling. In particular, `--ignore-pnpmfile`
-bypasses the hook and should not be used for repository maintenance. The Docker
-dependency stage copies the hook before installing.
+bypasses the hook and should not be used for repository maintenance.
 
 After lockfile changes, confirm it contains one project document. After merging,
 check GitHub's dependency graph or SBOM for application packages such as React,

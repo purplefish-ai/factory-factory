@@ -130,7 +130,7 @@ async function listenOnLoopback(
 
 /**
  * Starts `httpServer` listening on `port`. An explicit `host` is bound as
- * given (for example `0.0.0.0` in Docker). Without one the server binds
+ * given (for example `0.0.0.0`). Without one the server binds
  * loopback only, on both `127.0.0.1` and `::1`, rather than Node's default of
  * every interface. Returns a function that closes any companion listener; the
  * caller still closes `httpServer` itself.

@@ -66,9 +66,5 @@ release/
 # Native module cache for Electron/Node switching
 .native-cache/
 
-# Docker tunnel URL output
-tunnel-info/
-tunnel-url/
-
 # Port file for postRun script discovery
 .factory-factory-port

@@ -214,16 +214,17 @@ your environment is a valid loopback origin (the default). Otherwise, including
 for a malformed or empty entry, its mutations and WebSockets are refused.
 
 The server listens on loopback only unless you pass another address with
-`ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
-While it listens on loopback and every allowed origin is a loopback one (the
-default, and every local launch mode), its own page is always an allowed origin:
-an `http:` loopback origin (`localhost`, `127.x.x.x` or `[::1]`) on the port the
-server actually bound. When the requested port is taken and the server falls
-back to the next free one (for example a second desktop instance while
-`ff serve` holds 3001), the app on that port keeps working without listing it in
-`CORS_ALLOWED_ORIGINS`. Loopback pages on other, unconfigured ports are still
-rejected. A server bound beyond loopback, or configured with a public origin
-(`ff tailscale`, a reverse proxy), allows only the configured origins.
+`ff serve --host` (for example `--host 0.0.0.0` on a remote machine you reach
+over a private network). While it listens on loopback and every allowed origin
+is a loopback one (the default, and every local launch mode), its own page is
+always an allowed origin: an `http:` loopback origin (`localhost`, `127.x.x.x`
+or `[::1]`) on the port the server actually bound. When the requested port is
+taken and the server falls back to the next free one (for example a second
+desktop instance while `ff serve` holds 3001), the app on that port keeps
+working without listing it in `CORS_ALLOWED_ORIGINS`. Loopback pages on other,
+unconfigured ports are still rejected. A server bound beyond loopback, or
+configured with a public origin (`ff tailscale`, a reverse proxy), allows only
+the configured origins.
 
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
@@ -244,13 +245,13 @@ because Prisma Studio cannot preserve their location; use a local drive path.
 
 ### Database upgrades
 
-Every launch (`ff serve`, `ff proxy`, `ff tailscale`, the desktop app and the
-Docker image) applies pending database migrations before starting. An older
-version refuses to start on a database a newer version has migrated, naming the
-migrations it does not know; upgrade Factory Factory and start it again. The
-`ff` commands accept `FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a
-warning, at the risk of errors from the mismatched schema. Development mode
-(`ff serve --dev`) always warns and continues instead of refusing.
+Every launch (`ff serve`, `ff proxy`, `ff tailscale`, and the desktop app)
+applies pending database migrations before starting. An older version refuses to
+start on a database a newer version has migrated, naming the migrations it does
+not know; upgrade Factory Factory and start it again. The `ff` commands accept
+`FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a warning, at the risk of
+errors from the mismatched schema. Development mode (`ff serve --dev`) always
+warns and continues instead of refusing.
 
 Before applying pending migrations to an existing database, every launch (and
 `ff db:migrate`) takes a SQLite online backup into `db-backups/` beside the
@@ -360,6 +361,13 @@ proxy, also set `VITE_WEB_APP_BASE_PATH` to the absolute deployment prefix (e.g.
 `/machine/example/api/port/3000/`). Installation links then remain stable when
 opening a deep route. By default, installation links use `/`, or the absolute
 prefix configured through `VITE_BASE_PATH`.
+
+### Docker
+
+A Docker image is no longer provided. Earlier images published to the GitHub
+container registry are not updated. To run Factory Factory on a remote machine,
+install the CLI there and reach it through `ff tailscale`, `ff proxy` or your
+own reverse proxy.
 
 ### Hosting behind your own reverse proxy
 
