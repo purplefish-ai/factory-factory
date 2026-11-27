@@ -44,6 +44,19 @@
 // - The permission request: `display_name` `Bash`, `decision_reason` `This command requires
 //   approval` (the adapter shows it as "Reason: …" in acp.jsonl), an `addRules` suggestion.
 // - Token counts and costs are small made-up numbers; ids are random.
+// - rate_limit_event: status `allowed`, a 7-day window resetting in 3 days, utilization 0.
+// - tool_result_meta: `permission_decision {decision: allow, source: user}` when run (scrubbed in
+//   the recording); `non_execution_kind: user-rejected` when refused (not recorded).
+// - Structured output: every string starts with the prompt's first word (its `objective` for the
+//   workspace metadata input), so a renamed workspace keeps its distinguishing word.
+//
+// Still different from the recording: no `request_id` on `assistant`, no `origin` on replays and
+// results, no `caller` on tool_use blocks, no `prompt_id` or `effort` in hook input; a tool's
+// `input_json_delta` arrives in one chunk; structured output is a text block, where the real CLI
+// answers through a tool; no echo of the SDK's control responses; no `PostToolUseFailure` hook
+// on a refusal. Plan usage (`get_usage`) and workspace metadata (`--json-schema`) come from the
+// application's own SDK (0.3.328), which was never recorded: the `get_usage` shape is the one the
+// application's provider-usage-normalizer.ts reads.
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, lstatSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -291,8 +304,12 @@ const usage = (input, output) => ({
   service_tier: 'standard',
 });
 
-/** A schema-shaped value: the application's disposable inference asks for one. */
-function sampleFor(schema, key = 'value') {
+/**
+ * A schema-shaped value: the application's disposable inference asks for one. Strings start with
+ * `subject`, the first word of the conversation, so a workspace keeps its distinguishing word
+ * when its metadata renames it ("Clauderobin says hello" becomes `Clauderobin title`).
+ */
+function sampleFor(schema, subject, key = 'value') {
   if (!schema || typeof schema !== 'object') {
     return null;
   }
@@ -300,14 +317,14 @@ function sampleFor(schema, key = 'value') {
     return schema.enum[0];
   }
   if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-    return sampleFor(schema.anyOf[0], key);
+    return sampleFor(schema.anyOf[0], subject, key);
   }
   switch (schema.type) {
     case 'object':
       return Object.fromEntries(
         Object.entries(schema.properties ?? {}).map(([name, value]) => [
           name,
-          sampleFor(value, name),
+          sampleFor(value, subject, name),
         ])
       );
     case 'array':
@@ -319,7 +336,9 @@ function sampleFor(schema, key = 'value') {
       return schema.minimum ?? 0;
     case 'string': {
       const words = key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
-      const text = schema.pattern ? `sandbox-${words.replace(/\s+/g, '-')}` : `Sandbox ${words}`;
+      const text = schema.pattern
+        ? `${subject.toLowerCase()}-${words.replace(/\s+/g, '-')}`
+        : `${subject} ${words}`;
       return text.slice(0, schema.maxLength ?? text.length);
     }
     default:
@@ -327,7 +346,40 @@ function sampleFor(schema, key = 'value') {
   }
 }
 
+/** The first word of the prompt, or of its `objective` when it is the metadata input (JSON). */
+function subjectOf(text) {
+  let source = text;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.objective === 'string') {
+      source = parsed.objective;
+    }
+  } catch {
+    // Not JSON: the prompt itself.
+  }
+  return /[A-Za-z][A-Za-z0-9]*/.exec(source)?.[0] ?? 'Sandbox';
+}
+
 let currentTurn = null;
+
+/** The per-turn rate limit report; the recording scrubs its values. */
+const rateLimitEvent = () => ({
+  type: 'rate_limit_event',
+  rate_limit_info: {
+    status: 'allowed',
+    resetsAt: Math.floor(Date.now() / 1000) + 3 * 86_400,
+    rateLimitType: 'seven_day',
+    overageStatus: 'allowed',
+    isUsingOverage: false,
+    unifiedWindows: {
+      seven_day: {
+        utilization: 0,
+        resetsAt: Math.floor(Date.now() / 1000) + 3 * 86_400,
+        status: 'allowed',
+      },
+    },
+  },
+});
 
 /** Streams one assistant message of `blocks` with the recorded stream_event sequence. */
 async function streamMessage(turn, blocks, stopReason) {
@@ -343,9 +395,16 @@ async function streamMessage(turn, blocks, stopReason) {
     stop_sequence: null,
     usage: usage(12, outputTokens),
   });
-  const stream = (event) =>
-    emit({ type: 'stream_event', event, parent_tool_use_id: null, api_message_id: messageId });
-  stream({ type: 'message_start', message: shape([]) });
+  const answers = { user_message_uuid: turn.userUuid, user_message_uuids: [turn.userUuid] };
+  const stream = (event, extra = {}) =>
+    emit({
+      type: 'stream_event',
+      event,
+      parent_tool_use_id: null,
+      api_message_id: messageId,
+      ...extra,
+    });
+  stream({ type: 'message_start', message: shape([]) }, answers);
   const sent = [];
   for (const [index, block] of blocks.entries()) {
     if (block.type === 'text') {
@@ -375,12 +434,18 @@ async function streamMessage(turn, blocks, stopReason) {
       });
       sent.push({ ...toolUse, input: block.input });
     }
+    if (!turn.rateLimitSent) {
+      // Once per turn, during its first streamed message, as recorded.
+      turn.rateLimitSent = true;
+      emit(rateLimitEvent());
+    }
   }
   emit({
     type: 'assistant',
     message: shape(sent),
     parent_tool_use_id: null,
     timestamp: new Date().toISOString(),
+    ...answers,
     ...(turn.interrupted ? { aborted: true } : {}),
   });
   turn.afterAssistant?.();
@@ -439,24 +504,35 @@ function createTurn(message, text) {
     denials: [],
     failure: null,
     structuredOutput: undefined,
+    // The turn's first `status: requesting` precedes the replayed prompt; each later model call
+    // (after a tool result) announces its own.
+    requested: false,
+    rateLimitSent: false,
     cancel: () => undefined,
+    requesting() {
+      if (!turn.requested) {
+        emit({
+          type: 'system',
+          subtype: 'status',
+          status: 'requesting',
+          user_message_uuids: [turn.userUuid],
+        });
+      }
+      turn.requested = false;
+    },
     async reply(replyText) {
       if (turn.interrupted) {
         return;
       }
       turn.numTurns += 1;
-      emit({
-        type: 'system',
-        subtype: 'status',
-        status: 'requesting',
-        user_message_uuids: [turn.userUuid],
-      });
+      turn.requesting();
       const [block] = await streamMessage(turn, [{ type: 'text', text: replyText }], 'end_turn');
       turn.replies.push(block.text);
     },
     /** One Bash call: hooks, the permission request, then its result. True when it ran. */
     async bash(input, output) {
       turn.numTurns += 1;
+      turn.requesting();
       const toolUseId = `toolu_fake_${randomUUID().replaceAll('-', '')}`;
       let preHooks;
       turn.afterAssistant = () => {
@@ -539,6 +615,12 @@ function createTurn(message, text) {
         parent_tool_use_id: null,
         timestamp: new Date().toISOString(),
         ...(allowed ? { tool_use_result: toolResponse } : {}),
+        // How the decision was made, or why the tool did not run (the adapter reads the kind).
+        tool_result_meta: [
+          allowed
+            ? { id: toolUseId, permission_decision: { decision: 'allow', source: 'user' } }
+            : { id: toolUseId, non_execution_kind: 'user-rejected' },
+        ],
       });
       return allowed;
     },
@@ -572,6 +654,7 @@ function resultMessage(turn) {
       },
     },
     permission_denials: turn.denials,
+    user_message_uuid: turn.userUuid,
     user_message_uuids: [turn.userUuid],
   };
   if (turn.interrupted) {
@@ -609,6 +692,9 @@ async function playTurn(message) {
   lifecycle('queued');
   lifecycle('started');
   emit(systemInit([turn.userUuid]));
+  turn.requested = false;
+  turn.requesting();
+  turn.requested = true;
   if (session.replayUserMessages) {
     send({
       ...message,
@@ -619,7 +705,7 @@ async function playTurn(message) {
     });
   }
   if (session.jsonSchema) {
-    turn.structuredOutput = sampleFor(session.jsonSchema);
+    turn.structuredOutput = sampleFor(session.jsonSchema, subjectOf(text));
     await turn.reply(JSON.stringify(turn.structuredOutput));
   } else {
     const scenario = chooseScenario(text);

@@ -109,13 +109,13 @@ function startSession(env: Record<string, string>, args = streamArgs) {
       );
       return reply.response as { subtype: string; response?: Record<string, unknown> };
     },
-    prompt(text: string) {
+    prompt(text: string, uuid = `user-${messages.length}`) {
       write({
         type: 'user',
         message: { role: 'user', content: [{ type: 'text', text }] },
         session_id: sessionId,
         parent_tool_use_id: null,
-        uuid: `user-${messages.length}`,
+        uuid,
       });
       return this.next((message) => message.type === 'result');
     },
@@ -258,7 +258,8 @@ describe('a stream-json session', () => {
   it('echoes a prompt with the recorded message sequence', async () => {
     const session = startSession(sandboxEnv({ FF_SANDBOX_SCENARIO: 'echo' }).env);
     await session.control('initialize', { hooks });
-    const result = await session.prompt('Hello sandbox');
+    const userUuid = 'user-echo';
+    const result = await session.prompt('Hello sandbox', userUuid);
     expect(result).toMatchObject({ subtype: 'success', is_error: false, result: 'Hello sandbox' });
     // The turn's last messages follow its result.
     await session.next(
@@ -275,13 +276,15 @@ describe('a stream-json session', () => {
       'command_lifecycle',
       'command_lifecycle',
       'system init',
-      'user',
+      // As recorded: the request starts, then the prompt is replayed.
       'system status',
+      'user',
       'stream_event message_start',
       'stream_event content_block_start',
       // "Hello " and "sandbox": a reply streams in up to three chunks, split at spaces.
       'stream_event content_block_delta',
       'stream_event content_block_delta',
+      'rate_limit_event',
       'assistant',
       'stream_event content_block_stop',
       'stream_event message_delta',
@@ -294,6 +297,13 @@ describe('a stream-json session', () => {
       isReplay: true,
       session_id: sessionId,
     });
+    // The adapter matches the reply to its prompt by these.
+    const answers = { user_message_uuid: userUuid, user_message_uuids: [userUuid] };
+    expect(session.messages.find((message) => message.type === 'assistant')).toMatchObject(answers);
+    expect(session.messages.find((message) => message.type === 'stream_event')).toMatchObject(
+      answers
+    );
+    expect(result).toMatchObject(answers);
   });
 
   it('asks before Bash, calls the hooks, and runs it when allowed', async () => {
@@ -336,6 +346,14 @@ describe('a stream-json session', () => {
       message.type === 'control_request' ? [message.request?.subtype] : []
     );
     expect(subtypes).toEqual(['hook_callback', 'can_use_tool']);
+    // A refusal, as the CLI reports one: the adapter reads the kind.
+    const refusal = session.messages.find(
+      (message) => message.type === 'user' && 'tool_result_meta' in message
+    );
+    expect(refusal).toMatchObject({
+      tool_result_meta: [expect.objectContaining({ non_execution_kind: 'user-rejected' })],
+      message: { content: [expect.objectContaining({ is_error: true })] },
+    });
     expect(textOf(session.messages)).toEqual(['You declined the command, so I did not run it.']);
   });
 
@@ -365,7 +383,7 @@ describe('a stream-json session', () => {
     expect(await sandboxed.prompt('Hello')).toMatchObject(failure('gated-stream'));
   });
 
-  it('answers a JSON schema session with structured output', async () => {
+  it('answers a JSON schema session with structured output keeping the first word', async () => {
     const schema = {
       type: 'object',
       properties: {
@@ -379,12 +397,14 @@ describe('a stream-json session', () => {
       `--json-schema=${JSON.stringify(schema)}`,
     ]);
     await session.control('initialize', { hooks: {} });
-    expect(await session.prompt('ff-scenario:permission-request')).toMatchObject({
+    // The workspace metadata input: its objective is the conversation's first prompt.
+    const input = JSON.stringify({ objective: 'Clauderobin says hello', messages: [] });
+    expect(await session.prompt(input)).toMatchObject({
       subtype: 'success',
       structured_output: {
-        title: 'Sandbox title',
-        branch: 'sandbox-branch',
-        sidebarSummary: 'Sandbox sidebar summary',
+        title: 'Clauderobin title',
+        branch: 'clauderobin-branch',
+        sidebarSummary: 'Clauderobin sidebar summary',
       },
     });
   });

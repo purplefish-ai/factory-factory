@@ -14,6 +14,9 @@ test('a user runs a Claude session: a reply, then a command the user approves', 
   const conversation = await launchWorkspace(page, 'Clauderobin says hello', /clauderobin/i, {
     provider: 'Claude',
   });
+  // The plain turn: the prompt once as the user's message and once as the echo; the prompt the
+  // CLI replays to the SDK is not shown a third time.
+  await expect(conversation.getByText('Clauderobin says hello', { exact: true })).toHaveCount(2);
 
   await sendMessage(page, 'Clauderobin ff-scenario:permission-request');
   const request = page.getByRole('alertdialog');
@@ -37,24 +40,16 @@ test('a user runs a Claude session: a reply, then a command the user approves', 
   await expect(usage).toContainText(/5-hour window\s*12% used/);
   await page.keyboard.press('Escape');
 
-  // Every Claude launch of the sandbox reached the fake: the launch options and model discovery,
-  // the health check, the adapter's sign-in probe, the session, the plan usage read for the chat's
-  // usage control and the workspace metadata (structured output) after the first turn. The
-  // metadata job runs every 10 s (SERVICE_INTERVAL_MS.workspaceMetadata), so wait one period more.
-  await expect
-    .poll(
-      () => {
-        const calls = claudeCalls(sandbox);
-        const argvs = calls.flatMap((call) => (call.argv ? [call.argv.join(' ')] : []));
-        return {
-          version: argvs.includes('--version'),
-          signIn: argvs.includes('auth status --json'),
-          sessions: argvs.some((argv) => argv.includes('--input-format stream-json')),
-          metadata: argvs.some((argv) => argv.includes('--json-schema')),
-          planUsage: calls.some((call) => call.control === 'get_usage'),
-        };
-      },
-      { timeout: 15_000 }
-    )
-    .toEqual({ version: true, signIn: true, sessions: true, metadata: true, planUsage: true });
+  // Every Claude launch so far reached the fake: the launch options and model discovery, the
+  // health check, the adapter's sign-in probe, the session and the plan usage read above. The
+  // workspace metadata launch (`--json-schema`) comes from a 10 s job and is covered by the
+  // fake's and the metadata generator's unit tests instead.
+  const calls = claudeCalls(sandbox);
+  const argvs = calls.flatMap((call) => (call.argv ? [call.argv.join(' ')] : []));
+  expect({
+    version: argvs.includes('--version'),
+    signIn: argvs.includes('auth status --json'),
+    sessions: argvs.some((argv) => argv.includes('--input-format stream-json')),
+    planUsage: calls.some((call) => call.control === 'get_usage'),
+  }).toEqual({ version: true, signIn: true, sessions: true, planUsage: true });
 });

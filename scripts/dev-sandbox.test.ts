@@ -337,8 +337,8 @@ describe('a sandbox that calls out', () => {
       )
     ).toBe(true);
     // Every Claude launch, the managed runtime included, runs the sandbox's fake Claude CLI
-    // (CLAUDE_CODE_EXECUTABLE), never the bundled one: with exactly the server's environment it
-    // answers as the fake, and it logged the server's own launches too.
+    // (CLAUDE_CODE_EXECUTABLE), never the bundled one: the server's own launches and one made
+    // here with exactly the server's environment are in the fake's call log.
     const serverEnv = buildServerEnv({
       parentEnv: other.env,
       baseDir: other.baseDir,
@@ -346,12 +346,30 @@ describe('a sandbox that calls out', () => {
       egressPort: other.egressPort,
     });
     expect(serverEnv.CLAUDE_CODE_EXECUTABLE).toBe(join(other.baseDir, 'bin', 'claude'));
-    expect(await runClaude(serverEnv, other.repoPath, ['--version'])).toBe(
-      '2.1.312 (Claude Code)\n'
-    );
-    const claudeCalls = readFileSync(join(other.baseDir, 'claude-calls.log'), 'utf8');
-    expect(claudeCalls).toContain('"stream-json"');
+    const calls = () =>
+      readFileSync(join(other.baseDir, 'claude-calls.log'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => z.object({ argv: z.array(z.string()).optional() }).parse(JSON.parse(line)));
+    expect(calls().some((call) => call.argv?.includes('stream-json'))).toBe(true);
+    const marker = `sandbox-launch-${process.pid}`;
+    await runClaude(serverEnv, other.repoPath, ['--version', marker]);
+    expect(calls().some((call) => call.argv?.includes(marker))).toBe(true);
     expect(egressCalls(other.baseDir)).toEqual([]);
+    // A request to Claude's API base URL, with a placeholder key, is refused locally and
+    // recorded, without the key.
+    const placeholder = 'sandbox-placeholder-not-a-key';
+    const refused = await fetch(`${serverEnv.ANTHROPIC_BASE_URL}/v1/messages`, {
+      method: 'POST',
+      headers: { 'x-api-key': placeholder, 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(refused.status).toBe(403);
+    expect(await refused.text()).toContain('sandbox: outbound request refused');
+    expect(egressCalls(other.baseDir)).toEqual([`POST 127.0.0.1:${other.egressPort}`]);
+    expect(readFileSync(join(other.baseDir, 'egress-calls.log'), 'utf8')).not.toContain(
+      placeholder
+    );
   }, 300_000);
 
   it('--clean after the launcher is killed stops its descendants before removing baseDir', async () => {
