@@ -251,6 +251,10 @@ describe('a stream-json session', () => {
     await session.control('initialize', { hooks });
     const result = await session.prompt('Hello sandbox');
     expect(result).toMatchObject({ subtype: 'success', is_error: false, result: 'Hello sandbox' });
+    // The turn's last messages follow its result.
+    await session.next(
+      (message) => message.subtype === 'session_state_changed' && message.state === 'idle'
+    );
     const sequence = session.messages
       .filter((message) => message.type !== 'control_response')
       .map((message) => {
