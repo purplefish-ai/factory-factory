@@ -570,6 +570,8 @@ describe('production serve update integration', () => {
 
   it('keeps no extra snapshot when the replacement fails and the update is rolled back', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // Pending, with no backup from the child: only the rollback guard stops a kept snapshot.
+    await makeMigrationPending();
     await requestUpdate();
     exit((await backend(1)).child, 1);
     const recovered = await backend(2);

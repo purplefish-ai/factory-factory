@@ -268,11 +268,11 @@ among the three kept and pruned like the others; beside the installed package
 inside the update's `.factory-factory-update-*` directory there, as
 `database-backup`. Nothing deletes the last two: a kept
 `.factory-factory-update-*` directory, in the same directory as the package,
-also holds the previous installation, and the next update does not reuse it.
-Once the updated version works and you no longer want to go back to the database
-from before the update, delete the `.factory-factory-database-backup-*` file, or
-the whole `.factory-factory-update-*` directory while no update is running. When
-the backup succeeds, a failed migration's error names it; to restore it, stop
+then holds only that snapshot, and the next update does not reuse it. Once the
+updated version works and you no longer want to go back to the database from
+before the update, delete the `.factory-factory-database-backup-*` file, or the
+whole `.factory-factory-update-*` directory while no update is running. When the
+backup succeeds, a failed migration's error names it; to restore it, stop
 Factory Factory, copy the backup over the database file and delete its `-wal`
 and `-shm` files.
 
