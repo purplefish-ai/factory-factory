@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { z } from 'zod';
@@ -53,8 +53,34 @@ export function reply(conversation: Locator, text: string) {
     .filter({ hasText: new RegExp(`^${escapeRegExp(text)}$`) });
 }
 
-/** Opens the seeded project's board. The first load compiles the client in Vite's dev server. */
+/**
+ * Fails at once when the shared backend does not answer, which happens only when an earlier spec
+ * could not restore it (its `afterEach` error says why), instead of on a later two-minute wait.
+ */
+export async function expectBackendAnswering(sandbox: Sandbox) {
+  let problem: string;
+  try {
+    const response = await fetch(`${sandbox.backendUrl}/health`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.ok) {
+      return;
+    }
+    problem = `status ${response.status}`;
+  } catch (error) {
+    problem = String(error);
+  }
+  throw new Error(
+    `The sandbox backend does not answer /health (${problem}): an earlier spec left it down or stopped.`
+  );
+}
+
+/**
+ * Opens the seeded project's board, once the backend answers. The first load compiles the client
+ * in Vite's dev server.
+ */
 export async function openBoard(page: Page, sandbox: Sandbox) {
+  await expectBackendAnswering(sandbox);
   const project = basename(sandbox.repoPath);
   await page.goto(sandbox.frontendUrl, { timeout: 120_000 });
   await expect(page).toHaveURL(new RegExp(`/projects/${escapeRegExp(project)}/workspaces$`), {
@@ -89,4 +115,19 @@ export async function launchWorkspace(page: Page, prompt: string, cardName: RegE
   const conversation = page.getByRole('log', { name: 'Conversation' });
   await expect(reply(conversation, prompt)).toBeVisible({ timeout: 120_000 });
   return conversation;
+}
+
+/** The fake Codex's rollout file that mentions `word`, and the Codex thread id in its name. */
+export function rolloutHolding(sandbox: Sandbox, word: string) {
+  const sessions = join(sandboxPaths(sandbox.baseDir).codexHome, 'sessions');
+  const files = readdirSync(sessions, { recursive: true })
+    .map(String)
+    .filter((name) => name.endsWith('.jsonl'))
+    .map((name) => join(sessions, name))
+    .filter((file) => readFileSync(file, 'utf8').includes(word));
+  expect(files, `one rollout file mentions ${word}`).toHaveLength(1);
+  const [file = ''] = files;
+  const threadId = /-([0-9a-f-]{36})\.jsonl$/.exec(file)?.[1] ?? '';
+  expect(threadId, `the thread id in ${file}`).not.toBe('');
+  return { file, threadId };
 }

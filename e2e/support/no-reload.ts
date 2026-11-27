@@ -21,23 +21,30 @@ export async function expectNoReload(page: Page, marker: string) {
   ).toBe(marker);
 }
 
+/** One WebSocket the page opened: its URL path, the frames it has received, and whether it closed. */
+export type TrackedSocket = { path: string; frames: number; closed: boolean };
+
 /**
- * Counts the WebSockets the page opens from now on, by URL path (`/snapshots`, `/chat`, …), and
- * the frames all of them have received, by path, to tell a recovery on the same socket from one
- * through a new connection. `received(path)` says a frame arrived on some socket of that path
- * since tracking began: start tracking before the page opens its first one to know that one is
- * live.
+ * Tracks every WebSocket the page opens from now on, to tell a recovery on the same socket from
+ * one through a new connection. Start it before the page opens the sockets you care about.
  */
 export function trackSockets(page: Page) {
-  const opened: string[] = [];
-  const received = new Map<string, number>();
+  const sockets: TrackedSocket[] = [];
   page.on('websocket', (socket) => {
-    const path = new URL(socket.url()).pathname;
-    opened.push(path);
-    socket.on('framereceived', () => received.set(path, (received.get(path) ?? 0) + 1));
+    const tracked = { path: new URL(socket.url()).pathname, frames: 0, closed: false };
+    sockets.push(tracked);
+    socket.on('framereceived', () => {
+      tracked.frames += 1;
+    });
+    socket.on('close', () => {
+      tracked.closed = true;
+    });
   });
   return {
-    opened: (path: string) => opened.filter((pathname) => pathname === path).length,
-    received: (path: string) => received.get(path) ?? 0,
+    /** How many sockets the page has opened, on `path` or on any path. */
+    opened: (path?: string) =>
+      sockets.filter((socket) => path === undefined || socket.path === path).length,
+    /** The sockets on `path` that are still open. */
+    open: (path: string) => sockets.filter((socket) => socket.path === path && !socket.closed),
   };
 }

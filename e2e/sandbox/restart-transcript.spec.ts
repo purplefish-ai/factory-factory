@@ -1,15 +1,12 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { sandboxPaths } from '../../scripts/sandbox/paths.mjs';
 import {
   ensureBackendRunning,
+  hydrationsSince,
   killBackend,
-  readServerLog,
   restartBackend,
 } from '../support/backend-process';
 import { expectNoReload, markPage, trackSockets } from '../support/no-reload';
-import { launchWorkspace, openBoard, readSandbox, reply } from './sandbox';
+import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // A crash after a finished turn: the server dies with SIGKILL and starts again on the same port.
 // The open page must reconnect without a reload and show the same conversation, which the new
@@ -19,21 +16,6 @@ test.afterEach(async () => {
   await ensureBackendRunning();
 });
 
-/** The rollout file holding `word`, and the Codex thread id in its name. */
-function rolloutHolding(baseDir: string, word: string) {
-  const sessions = join(sandboxPaths(baseDir).codexHome, 'sessions');
-  const files = readdirSync(sessions, { recursive: true })
-    .map(String)
-    .filter((name) => name.endsWith('.jsonl'))
-    .map((name) => join(sessions, name))
-    .filter((file) => readFileSync(file, 'utf8').includes(word));
-  expect(files, `one rollout file mentions ${word}`).toHaveLength(1);
-  const [file = ''] = files;
-  const threadId = /-([0-9a-f-]{36})\.jsonl$/.exec(file)?.[1];
-  expect(threadId, `the thread id in ${file}`).toBeDefined();
-  return { file, threadId };
-}
-
 test('a finished conversation survives a server crash and restart', async ({ page }) => {
   const sandbox = readSandbox();
   await openBoard(page, sandbox);
@@ -42,7 +24,7 @@ test('a finished conversation survives a server crash and restart', async ({ pag
   // Every message as the user sees it: their own and the agent's, in order.
   const transcript = () => conversation.ariaSnapshot();
   const before = await transcript();
-  const rollout = rolloutHolding(sandbox.baseDir, 'Restartfinch');
+  const rollout = rolloutHolding(sandbox, 'Restartfinch');
 
   const sockets = trackSockets(page);
   const marker = await markPage(page);
@@ -53,16 +35,7 @@ test('a finished conversation survives a server crash and restart', async ({ pag
   // The restarted server rebuilt the conversation from the rollout file (the history loader), not
   // from the adapter's `session/load` replay, which reads the same file through the fake.
   await expect
-    .poll(
-      () =>
-        readServerLog().filter(
-          (record) =>
-            record.timestamp > killedAt &&
-            record.message === 'Hydrated provider transcript from JSONL history' &&
-            record.context?.providerSessionId === rollout.threadId
-        ),
-      { timeout: 60_000 }
-    )
+    .poll(() => hydrationsSince(rollout.threadId, killedAt), { timeout: 60_000 })
     .toEqual([
       expect.objectContaining({
         context: expect.objectContaining({ filePath: rollout.file }),

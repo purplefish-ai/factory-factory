@@ -4,12 +4,13 @@ import {
   backendStatus,
   ensureBackendRunning,
   isCrashPointArmed,
+  hydrationsSince,
   readServerOutput,
   restartBackend,
   waitForBackendExit,
 } from '../support/backend-process';
 import { expectNoReload, markPage } from '../support/no-reload';
-import { launchWorkspace, openBoard, readSandbox, reply } from './sandbox';
+import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // Crash points end the server where server code declares them (src/backend/services/
 // crash-point.ts), as a crash there would. One that no code declares cannot be armed.
@@ -54,15 +55,12 @@ test('an armed crash point ends the server once, where it is declared', async ({
   await expectNoReload(page, marker);
 });
 
-// Known bug, kept failing on purpose: the queue lives only in the server's memory, so a message
-// the server accepted, and the page shows as queued, is gone after a crash: after the restart the
-// conversation holds neither the message nor a reply. Task 3.4 of
-// docs/superpowers/plans/2026-11-27-architecture-consolidation.md makes accepted prompts durable;
-// remove `test.fail` then.
-test.fail('a message accepted before a crash is delivered after the restart', async ({ page }) => {
+test('a message accepted before a crash is delivered after the restart', async ({ page }) => {
   const sandbox = readSandbox();
   await openBoard(page, sandbox);
   const conversation = await launchWorkspace(page, 'Crashwren keeps its queue', /crashwren/);
+  const rollout = rolloutHolding(sandbox, 'Crashwren');
+  const marker = await markPage(page);
 
   armCrashPoint('after-message-queued');
   const message = 'Crashwren message accepted before the crash';
@@ -73,9 +71,22 @@ test.fail('a message accepted before a crash is delivered after the restart', as
   await expect(conversation.getByRole('button', { name: 'Cancel queued message' })).toBeVisible();
   await expect(conversation.getByText(message, { exact: true })).toBeVisible();
 
+  const crashedAt = new Date().toISOString();
   await restartBackend();
   await expect(page.getByTestId('connection-banner-reconnecting')).toHaveCount(0, {
     timeout: 60_000,
   });
-  await expect(reply(conversation, message)).toBeVisible({ timeout: 15_000 });
+  // The restarted server has loaded this session, and sent it to the page.
+  await expect
+    .poll(() => hydrationsSince(rollout.threadId, crashedAt).length, { timeout: 60_000 })
+    .toBe(1);
+  await expect(reply(conversation, 'Crashwren keeps its queue')).toBeVisible();
+  await expectNoReload(page, marker);
+
+  // Known bug: an accepted prompt is lost when the server crashes before dispatch; plan task 3.4
+  // (durable prompts, docs/superpowers/plans/2026-11-27-architecture-consolidation.md) makes this
+  // pass, and this marker is then removed. Everything above must pass; only the line below fails.
+  // Its short wait is enough today; a durable queue may need longer to dispatch the message.
+  test.fail();
+  await expect(reply(conversation, message)).toBeVisible({ timeout: 5000 });
 });

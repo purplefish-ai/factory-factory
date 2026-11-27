@@ -185,6 +185,19 @@ export function readServerLog(): ServerLogRecord[] {
     });
 }
 
+/**
+ * The records in which the history loader rebuilt the conversation of Codex thread `threadId` from
+ * its rollout file, logged after `since` (an ISO time): one per backend that loaded that session.
+ */
+export function hydrationsSince(threadId: string, since: string) {
+  return readServerLog().filter(
+    (record) =>
+      record.timestamp > since &&
+      record.message === 'Hydrated provider transcript from JSONL history' &&
+      record.context?.providerSessionId === threadId
+  );
+}
+
 /** What the server process wrote to its stdout and stderr (crash point lines go there). */
 export function readServerOutput(): string {
   const file = paths().serverOutput;

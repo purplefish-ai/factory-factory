@@ -180,7 +180,9 @@ export function createQueueMessageHandler(
       sessionId,
       buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
     );
-    // Accepted and announced, not yet dispatched: the message lives only in the queue.
+    // Accepted and announced, not yet dispatched: the message lives only in the queue. Every
+    // accepted message reaches this point: dispatch skips a message held for admission, and from
+    // the release above to here nothing awaits (queue-message.crash-point.test.ts).
     crashAt('after-message-queued');
 
     void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {

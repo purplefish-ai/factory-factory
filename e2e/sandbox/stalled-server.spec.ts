@@ -16,9 +16,13 @@ test('the page notices a silent server and recovers on the same sockets', async 
   await openBoard(page, readSandbox());
   const banner = page.getByTestId('connection-banner-reconnecting');
   await expect(banner).toHaveCount(0);
-  // The board's socket is live (the server's hello arrived), so the page watches it for silence.
-  await expect.poll(() => sockets.received('/snapshots'), { timeout: 60_000 }).toBeGreaterThan(0);
-  const openedBefore = sockets.opened('/snapshots');
+  // The board's one /snapshots socket is open and live now: a frame (the reply to the page's
+  // ping, every 4 s) arrives on it after this point, so the page is watching it for silence.
+  await expect.poll(() => sockets.open('/snapshots').length, { timeout: 60_000 }).toBe(1);
+  const [board] = sockets.open('/snapshots');
+  const framesBefore = board?.frames ?? 0;
+  await expect.poll(() => board?.frames ?? 0, { timeout: 15_000 }).toBeGreaterThan(framesBefore);
+  const openedBefore = sockets.opened();
 
   const marker = await markPage(page);
   await killBackend('SIGSTOP');
@@ -29,6 +33,8 @@ test('the page notices a silent server and recovers on the same sockets', async 
     await killBackend('SIGCONT');
   }
   await expect(banner).toHaveCount(0, { timeout: 15_000 });
-  expect(sockets.opened('/snapshots'), 'a new /snapshots socket').toBe(openedBefore);
+  // The same socket carried the page through, and the page opened no other.
+  expect(board?.closed, 'the /snapshots socket closed').toBe(false);
+  expect(sockets.opened(), 'sockets opened during the stall').toBe(openedBefore);
   await expectNoReload(page, marker);
 });
