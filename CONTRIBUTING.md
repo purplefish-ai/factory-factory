@@ -109,11 +109,12 @@ Playwright project (`playwright.sandbox.config.ts`), each with its own sandbox:
 `restart` runs `restart-*.spec.ts` and `crash-points.spec.ts`, `general` every
 other spec, a new file included. A test in `scripts/ci-workflow.test.ts` fails
 if a spec file runs in no shard or in both.
-`pnpm test:e2e:sandbox --project=<name>` runs one shard locally; two runs at
-once in one checkout get separate sandboxes but share `test-results/`. The
-`Smoke` check joins the shards and is not yet required. The sandbox runs in
-restart mode (`--restartable`), so a spec can kill, stop and restart the backend
-through `e2e/support/backend-process.ts`, and arm a crash point with
+`pnpm test:e2e:sandbox --project=<name>` runs one shard locally. Run one at a
+time in a checkout: concurrent runs share `test-results/`, including the
+launcher log the global setup reads its sandbox from. The `Smoke` check joins
+the shards and is not yet required. The sandbox runs in restart mode
+(`--restartable`), so a spec can kill, stop and restart the backend through
+`e2e/support/backend-process.ts`, and arm a crash point with
 `armCrashPoint('<name>')` there; server code declares each point with
 `crashAt('<name>')`. Specs share the backend: one that kills or stops it, or
 arms a crash point, calls `ensureBackendRunning()` in `afterEach`, which also

@@ -7,8 +7,8 @@ const restartSpecs = /(?:^|[\\/])(?:restart-[^\\/]*|crash-points)\.spec\.ts$/;
 // The real application in `pnpm dev:sandbox`, which the global setup starts once and stops; the
 // scripted Codex provider stands in for the agent. No credentials and no external service. Each
 // file in e2e/sandbox/ is one scenario, and every one of them in the run (both projects locally,
-// one with `--project`) runs against that one sandbox. The shards are a CI split: two runs at
-// once in one checkout get separate sandboxes but share test-results/.
+// one with `--project`) runs against that one sandbox. The shards are a CI split: concurrent runs
+// in one checkout share test-results/, including the launcher log the global setup reads.
 export default defineConfig({
   testDir: './e2e/sandbox',
   testMatch: '*.spec.ts',

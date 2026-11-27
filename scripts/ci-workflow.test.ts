@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -322,20 +322,25 @@ describe('sandbox smoke test', () => {
   });
 
   it('runs every sandbox spec file in exactly one shard: restart and crash specs apart', () => {
+    // Playwright reports each file relative to the config's testDir, e2e/sandbox/.
     const assigned = new Map<string, Set<string>>();
     for (const [file, project] of sandboxListing.tests) {
       assigned.set(file, (assigned.get(file) ?? new Set()).add(project));
     }
-    // Any file named like a spec counts, so a misnamed one shows up here as running nowhere.
-    const files = readdirSync('e2e/sandbox').filter((name) => name.includes('.spec.'));
-    expect(files.length).toBeGreaterThan(0);
+    // Any file named like a spec counts, subdirectories included, so a misnamed one shows up here
+    // as running nowhere.
+    const onDisk = readdirSync('e2e/sandbox', { recursive: true, encoding: 'utf8' }).filter(
+      (path) => basename(path).includes('.spec.')
+    );
+    expect(onDisk).toContain('echo.spec.ts');
+    const files = [...new Set([...onDisk, ...assigned.keys()])].toSorted();
     expect(
       Object.fromEntries(files.map((file) => [file, [...(assigned.get(file) ?? [])].toSorted()]))
     ).toEqual(
       Object.fromEntries(
         files.map((file) => [
           file,
-          [/^(?:restart-.*|crash-points)\.spec\.ts$/.test(file) ? 'restart' : 'general'],
+          [/^(?:restart-.*|crash-points)\.spec\.ts$/.test(basename(file)) ? 'restart' : 'general'],
         ])
       )
     );
