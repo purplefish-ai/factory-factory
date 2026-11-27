@@ -9,7 +9,7 @@ import {
   restartBackend,
   waitForBackendExit,
 } from '../support/backend-process';
-import { expectNoReload, markPage, trackSockets } from '../support/no-reload';
+import { expectChatReloaded, expectNoReload, markPage, trackSockets } from '../support/no-reload';
 import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // Crash points end the server where server code declares them (src/backend/services/
@@ -26,21 +26,6 @@ test('arming a crash point that no code declares fails', async () => {
   expect(isCrashPointArmed('no-such-crash-point')).toBe(false);
   expect(await backendStatus()).toMatchObject({ state: 'running' });
 });
-
-/**
- * Resolves once the chat has reloaded the session from the restarted server: a /chat socket opened
- * after the first `before` is still open and has received frames. Until then the page shows what it
- * held before the crash, so its transcript proves nothing.
- */
-async function expectChatReloaded(sockets: ReturnType<typeof trackSockets>, before: number) {
-  await expect
-    .poll(
-      () =>
-        sockets.openedAfter('/chat', before).some((socket) => !socket.closed && socket.frames > 0),
-      { timeout: 60_000 }
-    )
-    .toBe(true);
-}
 
 test('an armed crash point ends the server once, where it is declared', async ({ page }) => {
   const sandbox = readSandbox();
