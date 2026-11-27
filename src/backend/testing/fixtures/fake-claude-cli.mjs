@@ -45,7 +45,7 @@
 //   approval` (the adapter shows it as "Reason: …" in acp.jsonl), an `addRules` suggestion.
 // - Token counts and costs are small made-up numbers; ids are random.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, realpathSync } from 'node:fs';
+import { appendFileSync, lstatSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -55,10 +55,19 @@ const scenarioToken = /\bff-scenario:([a-z][a-z-]*)(?::([\w-]+))?/;
 
 /** True when `path`, or where it would be made, is strictly inside the OS temp dir. */
 function insideTempDir(path) {
-  // The real path of the nearest existing ancestor, with the parts not made yet appended.
+  // The real path of the nearest existing ancestor, with the parts not made yet appended. A
+  // dangling symlink counts as existing, so its realpath fails and the path is refused.
+  const present = (entry) => {
+    try {
+      lstatSync(entry);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   let existing = resolve(path);
   const missing = [];
-  while (!existsSync(existing) && dirname(existing) !== existing) {
+  while (!present(existing) && dirname(existing) !== existing) {
     missing.unshift(basename(existing));
     existing = dirname(existing);
   }

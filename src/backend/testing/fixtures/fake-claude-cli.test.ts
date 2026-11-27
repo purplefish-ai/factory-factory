@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -195,6 +195,15 @@ describe('the command line', () => {
         run(process.execPath, [fakePath, '--version'], { env: { ...env, ...unsafe } })
       ).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('fake Claude CLI') });
     }
+    expect(existsSync(outsideLog)).toBe(false);
+    // A dangling link in the temp directory that points outside it is refused too.
+    const link = join(temporary(), 'claude-calls.log');
+    symlinkSync(outsideLog, link);
+    await expect(
+      run(process.execPath, [fakePath, '--version'], {
+        env: { ...env, FF_SANDBOX_CLAUDE_LOG: link },
+      })
+    ).rejects.toMatchObject({ code: 2 });
     expect(existsSync(outsideLog)).toBe(false);
     // A file not made yet directly in the temp directory is inside it.
     const direct = join(tmpdir(), `ff-fake-claude-direct-${process.pid}-${Date.now()}.log`);
