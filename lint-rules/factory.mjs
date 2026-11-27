@@ -14,10 +14,12 @@ import noInternalModuleMock from './rules/no-internal-module-mock.mjs';
 import noMockTestSubject from './rules/no-mock-test-subject.mjs';
 import noNativeDialogs from './rules/no-native-dialogs.mjs';
 import noNextDirectives from './rules/no-next-directives.mjs';
+import noProviderLiteralBranch from './rules/no-provider-literal-branch.mjs';
 import noRawPaletteClasses from './rules/no-raw-palette-classes.mjs';
 import noRawSpinner from './rules/no-raw-spinner.mjs';
 import noRawTabRole from './rules/no-raw-tab-role.mjs';
 import noRenderRefWrite from './rules/no-render-ref-write.mjs';
+import noServiceSingleton from './rules/no-service-singleton.mjs';
 import noStateSyncEffect from './rules/no-state-sync-effect.mjs';
 import noToolInputCast from './rules/no-tool-input-cast.mjs';
 import noUnresolvedMockTarget from './rules/no-unresolved-mock-target.mjs';
@@ -48,10 +50,12 @@ export default {
     'no-mock-test-subject': noMockTestSubject,
     'no-native-dialogs': noNativeDialogs,
     'no-next-directives': noNextDirectives,
+    'no-provider-literal-branch': noProviderLiteralBranch,
     'no-raw-palette-classes': noRawPaletteClasses,
     'no-raw-spinner': noRawSpinner,
     'no-raw-tab-role': noRawTabRole,
     'no-render-ref-write': noRenderRefWrite,
+    'no-service-singleton': noServiceSingleton,
     'no-state-sync-effect': noStateSyncEffect,
     'no-tool-input-cast': noToolInputCast,
     'no-unresolved-mock-target': noUnresolvedMockTarget,

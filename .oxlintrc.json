@@ -168,6 +168,18 @@
       }
     },
     {
+      "files": ["src/backend/**/*.ts"],
+      "rules": {
+        "factory/no-service-singleton": "error"
+      }
+    },
+    {
+      "files": ["src/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/no-provider-literal-branch": "error"
+      }
+    },
+    {
       "files": ["src/components/ui/**/*.{ts,tsx}"],
       "rules": {
         "factory/no-forward-ref": "off"
