@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import { z } from 'zod';
 import { runMigrations } from '@/backend/migrate';
 
 const FIXTURE_DIRECTORY = join(import.meta.dirname, '..', 'fixtures', 'upgrade');
-const REPOSITORY_MIGRATIONS = join(
+export const REPOSITORY_MIGRATIONS = join(
   import.meta.dirname,
   '..',
   '..',
@@ -23,14 +24,20 @@ export const LAST_RELEASE_SEED_FILE = join(FIXTURE_DIRECTORY, 'last-release-seed
  * What the last published package shipped, written by
  * `scripts/update-last-release-migrations.mjs` when a release is cut.
  */
-const lastReleaseSchema = z.strictObject({
-  version: z.string().regex(/^\d+\.\d+\.\d+$/),
-  migrations: z.array(z.string().min(1)).min(1),
-  /** Every Prisma enum of the release's schema and its values. */
-  enums: z.record(z.string(), z.array(z.string().min(1)).min(1)),
-  /** `Table.column` to the enum it stores, for columns typed with an enum. */
-  enumColumns: z.record(z.string(), z.string()),
-});
+const lastReleaseSchema = z
+  .strictObject({
+    version: z.string().regex(/^\d+\.\d+\.\d+$/),
+    migrations: z.array(z.string().min(1)).min(1),
+    /** SHA-256 of each migration's `migration.sql` as published, by migration name. */
+    checksums: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
+    /** Every Prisma enum of the release's schema and its values. */
+    enums: z.record(z.string(), z.array(z.string().min(1)).min(1)),
+    /** `Table.column` to the enum it stores, for columns typed with an enum. */
+    enumColumns: z.record(z.string(), z.string()),
+  })
+  .refine((release) => release.migrations.every((name) => release.checksums[name] !== undefined), {
+    message: 'Every migration needs a published checksum',
+  });
 export type LastRelease = z.infer<typeof lastReleaseSchema>;
 
 export function readLastRelease(): LastRelease {
@@ -49,6 +56,21 @@ export function findMissingMigrations(
   return migrations.filter((name) => !existsSync(join(migrationsPath, name, 'migration.sql')));
 }
 
+/** Listed migrations whose SQL here differs from the bytes the release published. */
+export function findEditedMigrations(
+  lastRelease: Pick<LastRelease, 'migrations' | 'checksums'>,
+  migrationsPath = REPOSITORY_MIGRATIONS
+): string[] {
+  return lastRelease.migrations.filter((name) => {
+    const path = join(migrationsPath, name, 'migration.sql');
+    const published = lastRelease.checksums[name];
+    return (
+      existsSync(path) &&
+      createHash('sha256').update(readFileSync(path)).digest('hex') !== published
+    );
+  });
+}
+
 /**
  * Create `databasePath` as the last release left it: only the migrations that
  * release shipped, applied in order by the real migrator. The repository's copies
@@ -64,6 +86,13 @@ export function migrateToLastRelease(
     throw new Error(
       `prisma/migrations lacks ${missing.length} migration(s) shipped in ${lastRelease.version}: ` +
         `${missing.join(', ')}. A released migration must never be renamed, edited away or deleted.`
+    );
+  }
+  const edited = findEditedMigrations(lastRelease, migrationsPath);
+  if (edited.length > 0) {
+    throw new Error(
+      `${edited.length} migration(s) shipped in ${lastRelease.version} were edited after release: ` +
+        `${edited.join(', ')}. Users already ran the published SQL; write a new migration instead.`
     );
   }
   const staging = mkdtempSync(join(tmpdir(), 'ff-last-release-migrations-'));

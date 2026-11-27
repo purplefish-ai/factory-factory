@@ -414,6 +414,6 @@ export const prEvents: SeedRow[] = [
       replyToPrComments: true,
     },
     state: 'DELIVERED',
-    deliveredAt: stamp(53),
+    deliveredAt: stamp(55),
   },
 ];

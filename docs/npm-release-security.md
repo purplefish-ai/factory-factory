@@ -35,23 +35,26 @@ dependency review, and npm's staged approval.
 
 Pin the upgrade check to the version that just shipped. The check
 (`src/backend/upgrade-from-last-release.integration.test.ts`, run by the Test
-shards on every pull request) builds a database the way that release left it,
-loads a seed with a row in every table and every enum value in use, then runs
-the current migrations and application over it. Once npm serves the new version:
+shards whenever CI selects application tests, which is every pull request that
+is not documentation-only) builds a database the way that release left it, loads
+a seed with a row in every table and every enum value in use, then runs the
+current migrations and application over it. Once npm serves the new version, run
+the following with that version in place of `0.5.14`:
 
 ```sh
-node scripts/update-last-release-migrations.mjs <version>
+node scripts/update-last-release-migrations.mjs 0.5.14
 pnpm exec tsx scripts/generate-upgrade-seed.ts
 ```
 
 The first command downloads the published tarball (a read-only registry request)
 and rewrites `src/backend/testing/fixtures/upgrade/last-release.json` with its
-migration list and Prisma enums; it refuses a release whose migrations this
-checkout lacks. The second regenerates `last-release-seed.sql` and fails if the
-rows no longer cover every table and enum value. Commit both files, and the seed
-rows in `src/backend/testing/upgrade/` when the generator asks for them. CI
-never runs either script; a stale pin only makes the check start from an older
-release.
+migration list, the SHA-256 of each migration's SQL, and its Prisma enums; it
+refuses a checkout whose `prisma/migrations` lacks a shipped migration or holds
+one whose SQL differs from the published bytes. The second regenerates
+`last-release-seed.sql` and fails if the rows no longer cover every table and
+enum value. Commit both files, and the seed rows in
+`src/backend/testing/upgrade/` when the generator asks for them. CI never runs
+either script; a stale pin only makes the check start from an older release.
 
 ## Account controls
 

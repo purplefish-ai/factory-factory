@@ -1,9 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  findEditedMigrations,
   findMissingMigrations,
   loadSeed,
   type LastRelease,
@@ -47,6 +49,29 @@ describe('the last-release pin', () => {
   });
 });
 
+describe('the pinned migrations', () => {
+  it('are exactly the bytes the release published', () => {
+    expect(findEditedMigrations(readLastRelease())).toEqual([]);
+  });
+
+  it('refuse to replay a migration edited after release', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ff-edited-migration-'));
+    directories.push(directory);
+    mkdirSync(join(directory, '20260101000000_first'));
+    writeFileSync(join(directory, '20260101000000_first', 'migration.sql'), 'SELECT 1;\n');
+    const published = createHash('sha256').update('SELECT 2;\n').digest('hex');
+    const lastRelease: LastRelease = {
+      ...readLastRelease(),
+      migrations: ['20260101000000_first'],
+      checksums: { '20260101000000_first': published },
+    };
+    expect(findEditedMigrations(lastRelease, directory)).toEqual(['20260101000000_first']);
+    expect(() => migrateToLastRelease(temporaryDatabase(), lastRelease, directory)).toThrow(
+      /edited after release: 20260101000000_first/
+    );
+  });
+});
+
 describe('the seed', () => {
   it('is exactly what the generator writes from the rows, so it cannot rot unnoticed', () => {
     expect(readLastReleaseSeedSql()).toBe(renderSeedSql(seedTables));
@@ -60,7 +85,7 @@ describe('the seed', () => {
     const coverage = measureSeedCoverage(databasePath, lastRelease);
     expect(coverage.emptyTables).toEqual([]);
     expect(coverage.missingEnumValues).toEqual([]);
-    expect(Object.keys(coverage.tableRowCounts).length).toBeGreaterThanOrEqual(38);
+    expect(Object.keys(coverage.tableRowCounts).sort()).toEqual(Object.keys(seedTables).sort());
   });
 
   it('reports a table or an enum value the seed leaves out', () => {

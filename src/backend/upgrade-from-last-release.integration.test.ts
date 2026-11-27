@@ -14,7 +14,7 @@
  * Pinning a newer release is a script run, not an edit here; see
  * docs/npm-release-security.md.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -34,12 +34,14 @@ import {
   measureSeedCoverage,
   migrateToLastRelease,
   readLastRelease,
+  REPOSITORY_MIGRATIONS as MIGRATIONS_PATH,
   type SeedCoverage,
 } from '@/backend/testing/upgrade/last-release';
 import { DEFINITION_DIGEST, DEFINITION_TRIAGE } from '@/backend/testing/upgrade/seed-agent-rows';
 import { seedTables } from '@/backend/testing/upgrade/seed-rows';
 import { PROJECT_GITHUB, PROJECT_LINEAR } from '@/backend/testing/upgrade/seed-values';
 import {
+  SESSION_CODEX_RUNNING,
   WORKSPACE_CHILD,
   WORKSPACE_EVENT,
   WORKSPACE_MANUAL,
@@ -79,7 +81,6 @@ import {
 } from '@/shared/schemas/pr-event.schema';
 import { sessionLaunchSettingsSchema } from '@/shared/session-launch';
 
-const MIGRATIONS_PATH = join(process.cwd(), 'prisma', 'migrations');
 const lastRelease = readLastRelease();
 const seededWorkspaces = z
   .array(z.object({ id: z.string(), status: z.string() }))
@@ -114,7 +115,9 @@ beforeAll(async () => {
           // Silent in tests.
         },
       });
-      backupsTaken = existsSync(getPreMigrationBackupDirectory(databasePath));
+      const backups = getPreMigrationBackupDirectory(databasePath);
+      backupsTaken =
+        existsSync(backups) && readdirSync(backups).some((name) => name.endsWith('.db'));
     },
   });
   vi.stubEnv('BASE_DIR', join(db.tempDir, 'application'));
@@ -244,7 +247,17 @@ describe('upgrading from the last published release', () => {
     for (const { id } of projects) {
       await trpc.project.getById({ id });
     }
-    expect((await trpc.userSettings.get()).defaultSessionProvider).toBe('CLAUDE');
+    expect(await trpc.userSettings.get()).toMatchObject({
+      preferredIde: 'vscode',
+      defaultSessionProvider: 'CODEX',
+      defaultClaudeModel: 'opus',
+      defaultWorkspacePermissions: 'RELAXED',
+      automationPermissions: 'YOLO',
+      reviewerSessionProvider: 'CLAUDE',
+      voiceModeEnabled: true,
+      voiceTtsSpeed: 1.25,
+      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    });
     expect(await trpc.userSettings.getWorkspaceOrder({ projectId: PROJECT_GITHUB })).toEqual([
       'seed-workspace-manual',
       'seed-workspace-resume',
@@ -273,13 +286,23 @@ describe('upgrading from the last published release', () => {
     }
   });
 
-  it('runs the startup recovery steps over the seeded rows', async () => {
+  it('runs the startup recovery steps and leaves the seeded stale rows settled', async () => {
+    const { prisma } = db;
     const { reconciliationService, runScriptStateMachine, sessionLifecycleService } =
       application.services;
+    expect(
+      (await prisma.agentSession.findUniqueOrThrow({ where: { id: SESSION_CODEX_RUNNING } })).status
+    ).toBe('RUNNING');
     await reconciliationService.cleanupOrphans();
     await sessionLifecycleService.recoverStaleRunningSessions();
     await reconciliationService.recoverStaleProvisioningWorkspaces();
     await runScriptStateMachine.recoverStaleStates();
+    expect(await prisma.agentSession.findMany({ where: { status: 'RUNNING' } })).toEqual([]);
+    expect(
+      await prisma.workspaceRunScript.findMany({
+        where: { status: { in: ['STARTING', 'STOPPING'] } },
+      })
+    ).toEqual([]);
   });
 
   it('reads periodic tasks and their executions', async () => {
@@ -353,10 +376,12 @@ describe('upgrading from the last published release', () => {
     expect(origin?.origin.workspaceState).toBe('LIVE');
   });
 
-  it('exports every table through the backup schema, which parses stored JSON as it goes', async () => {
+  it('exports the seeded rows through the backup schema, which parses stored JSON as it goes', async () => {
     const exported = await trpc.admin.exportData();
-    expect(exported.data.projects).toHaveLength(2);
+    expect(exported.data.projects).toHaveLength(seedTables.Project?.length ?? 0);
     expect(exported.data.workspaces).toHaveLength(seededWorkspaces.length);
+    expect(exported.data.agentSessions).toHaveLength(seededSessions.length);
+    expect(exported.data.terminalSessions).toHaveLength(seedTables.TerminalSession?.length ?? 0);
   });
 
   it('parses the stored JSON no read above touches with the schemas the code declares', async () => {

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   buildLastRelease,
+  checksumOf,
   formatLastRelease,
   LAST_RELEASE_PATH,
   listPackedMigrations,
@@ -22,6 +23,12 @@ enum Color {
 enum Size {
   SMALL
   LARGE
+}
+
+enum Phase {
+  PENDING @map("pending")
+  DONE
+  @@map("phase")
 }
 
 model Paint {
@@ -55,7 +62,11 @@ describe('update-last-release-migrations', () => {
 
   it('reads enums and the columns that store them, by SQLite table and column name', () => {
     const enums = parsePrismaEnums(fakeSchema);
-    expect(enums).toEqual({ Color: ['RED', 'GREEN'], Size: ['SMALL', 'LARGE'] });
+    expect(enums).toEqual({
+      Color: ['RED', 'GREEN'],
+      Size: ['SMALL', 'LARGE'],
+      Phase: ['pending', 'DONE'],
+    });
     expect(parseEnumColumns(fakeSchema, enums)).toEqual({
       'Paint.color': 'Color',
       'Paint.size': 'Size',
@@ -63,27 +74,59 @@ describe('update-last-release-migrations', () => {
     });
   });
 
-  it('builds the fixture for a published listing and rejects an empty one', () => {
-    const files = ['package/prisma/migrations/20260101000000_first/migration.sql'];
-    expect(buildLastRelease({ version: '1.2.3', files, schema: fakeSchema })).toEqual({
+  const fakeFiles = [
+    'package/prisma/migrations/20260102000000_second/migration.sql',
+    'package/prisma/migrations/20260101000000_first/migration.sql',
+  ];
+  const fakeSql = {
+    '20260101000000_first': 'CREATE TABLE "A" ("id" TEXT NOT NULL PRIMARY KEY);\n',
+    '20260102000000_second': 'ALTER TABLE "A" ADD COLUMN "name" TEXT;\n',
+  };
+
+  it('builds the fixture for a published listing and rejects an incomplete one', () => {
+    expect(
+      buildLastRelease({
+        version: '1.2.3',
+        files: fakeFiles,
+        schema: fakeSchema,
+        migrationSql: fakeSql,
+      })
+    ).toEqual({
       version: '1.2.3',
-      migrations: ['20260101000000_first'],
-      enums: { Color: ['RED', 'GREEN'], Size: ['SMALL', 'LARGE'] },
+      migrations: ['20260101000000_first', '20260102000000_second'],
+      checksums: {
+        '20260101000000_first': checksumOf(fakeSql['20260101000000_first']),
+        '20260102000000_second': checksumOf(fakeSql['20260102000000_second']),
+      },
+      enums: { Color: ['RED', 'GREEN'], Size: ['SMALL', 'LARGE'], Phase: ['pending', 'DONE'] },
       enumColumns: { 'Paint.color': 'Color', 'Paint.size': 'Size', 'brushes.shade_color': 'Color' },
     });
-    expect(() => buildLastRelease({ version: '1.2.3', files: [], schema: fakeSchema })).toThrow(
-      'lists no prisma/migrations'
+    const build = (overrides: Partial<Parameters<typeof buildLastRelease>[0]>) =>
+      buildLastRelease({
+        version: '1.2.3',
+        files: fakeFiles,
+        schema: fakeSchema,
+        migrationSql: fakeSql,
+        ...overrides,
+      });
+    expect(() => build({ files: [] })).toThrow('lists no prisma/migrations');
+    expect(() => build({ schema: 'model A {}' })).toThrow('no enums');
+    expect(() => build({ migrationSql: {} })).toThrow('has no SQL for migration');
+  });
+
+  it('records a different checksum when a migration differs by one byte', () => {
+    expect(checksumOf(fakeSql['20260101000000_first'])).not.toBe(
+      checksumOf(`${fakeSql['20260101000000_first']} `)
     );
-    expect(() => buildLastRelease({ version: '1.2.3', files, schema: 'model A {}' })).toThrow(
-      'no enums'
-    );
+    expect(checksumOf('x')).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('writes JSON that round-trips through the formatter', () => {
     const lastRelease = buildLastRelease({
       version: '1.2.3',
-      files: ['package/prisma/migrations/20260101000000_first/migration.sql'],
+      files: fakeFiles,
       schema: fakeSchema,
+      migrationSql: fakeSql,
     });
     expect(JSON.parse(formatLastRelease(lastRelease))).toEqual(lastRelease);
     expect(formatLastRelease(lastRelease).endsWith('\n')).toBe(true);
@@ -104,7 +147,7 @@ describe('update-last-release-migrations', () => {
   it('refuses a missing or malformed version without touching the registry', () => {
     for (const args of [[], ['latest'], ['1.2'], ['1.2.3', 'extra']]) {
       const result = spawnSync(
-        'node',
+        process.execPath,
         [join(import.meta.dirname, 'update-last-release-migrations.mjs'), ...args],
         { encoding: 'utf8' }
       );

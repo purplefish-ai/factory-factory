@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 // Pins the upgrade check to a published release: reads the migration directory
-// names and the Prisma enums out of the published `factory-factory` package and
-// rewrites src/backend/testing/fixtures/upgrade/last-release.json. Run it by
+// names, their SQL checksums and the Prisma enums out of the published
+// `factory-factory` package and rewrites
+// src/backend/testing/fixtures/upgrade/last-release.json. Run it by
 // hand when a release has been published (see docs/npm-release-security.md); CI
 // never runs it. Usage: node scripts/update-last-release-migrations.mjs <version>
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -33,7 +35,8 @@ export function listPackedMigrations(files) {
 const stripComments = (line) => line.replace(/\/\/.*$/, '').trim();
 
 /**
- * `{ EnumName: [values] }` for every `enum` block of a Prisma schema.
+ * `{ EnumName: [stored values] }` for every `enum` block of a Prisma schema. A
+ * value with `@map("x")` is stored in SQLite as `x`, so that is the value listed.
  * @param {string} schema
  * @returns {Record<string, string[]>}
  */
@@ -43,8 +46,8 @@ export function parsePrismaEnums(schema) {
     enums[name] = body
       .split('\n')
       .map(stripComments)
-      .filter(Boolean)
-      .map((line) => line.split(/\s+/)[0]);
+      .filter((line) => line && !line.startsWith('@@'))
+      .map((line) => /@map\("([^"]+)"\)/.exec(line)?.[1] ?? line.split(/\s+/)[0]);
   }
   return enums;
 }
@@ -73,8 +76,22 @@ export function parseEnumColumns(schema, enums) {
   return Object.fromEntries(Object.entries(columns).sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
-/** The fixture for one published version, from its file listing and its schema text. */
-export function buildLastRelease({ version, files, schema }) {
+/** SHA-256 of a migration's exact bytes. */
+export function checksumOf(sql) {
+  return createHash('sha256').update(sql).digest('hex');
+}
+
+/**
+ * The fixture for one published version, from its file listing, its schema text
+ * and the SQL of each migration it ships (name to contents).
+ * @param {{
+ *   version: string,
+ *   files: string[],
+ *   schema: string,
+ *   migrationSql: Record<string, string | Uint8Array>,
+ * }} input
+ */
+export function buildLastRelease({ version, files, schema, migrationSql }) {
   const migrations = listPackedMigrations(files);
   if (migrations.length === 0) {
     throw new Error(`${PACKAGE_NAME}@${version} lists no prisma/migrations/*/migration.sql`);
@@ -83,7 +100,16 @@ export function buildLastRelease({ version, files, schema }) {
   if (Object.keys(enums).length === 0) {
     throw new Error(`${PACKAGE_NAME}@${version} has no enums in prisma/schema.prisma`);
   }
-  return { version, migrations, enums, enumColumns: parseEnumColumns(schema, enums) };
+  const checksums = Object.fromEntries(
+    migrations.map((name) => {
+      const sql = migrationSql[name];
+      if (sql === undefined) {
+        throw new Error(`${PACKAGE_NAME}@${version} has no SQL for migration ${name}`);
+      }
+      return [name, checksumOf(sql)];
+    })
+  );
+  return { version, migrations, checksums, enums, enumColumns: parseEnumColumns(schema, enums) };
 }
 
 export function formatLastRelease(lastRelease) {
@@ -101,22 +127,44 @@ function readPublishedPackage(version, directory) {
   const files = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8', maxBuffer: 1 << 26 })
     .split('\n')
     .filter(Boolean);
-  const schema = execFileSync('tar', ['-xzOf', tarball, 'package/prisma/schema.prisma'], {
-    encoding: 'utf8',
-    maxBuffer: 1 << 26,
-  });
-  return { files, schema };
+  const extracted = join(directory, 'extracted');
+  mkdirSync(extracted);
+  execFileSync('tar', [
+    '-xzf',
+    tarball,
+    '-C',
+    extracted,
+    'package/prisma/schema.prisma',
+    'package/prisma/migrations',
+  ]);
+  const schema = readFileSync(join(extracted, 'package/prisma/schema.prisma'), 'utf8');
+  const migrationSql = Object.fromEntries(
+    listPackedMigrations(files).map((name) => [
+      name,
+      readFileSync(join(extracted, 'package/prisma/migrations', name, 'migration.sql')),
+    ])
+  );
+  return { files, schema, migrationSql };
 }
 
-/** A published migration the repository no longer has cannot be replayed by the check. */
-function assertRepositoryHasMigrations(migrations) {
+/**
+ * The check replays this repository's copies of the published migrations, so
+ * each must exist and match the published bytes: a released migration is never
+ * edited.
+ */
+function assertRepositoryHasPublishedMigrations({ migrations, checksums }) {
   const directory = join(repositoryRoot, 'prisma/migrations');
-  const present = new Set(readdirSync(directory));
-  const missing = migrations.filter((name) => !present.has(name));
-  if (missing.length > 0) {
+  const problems = migrations.flatMap((name) => {
+    const path = join(directory, name, 'migration.sql');
+    if (!existsSync(path)) {
+      return [`${name} is missing`];
+    }
+    return checksumOf(readFileSync(path)) === checksums[name] ? [] : [`${name} differs`];
+  });
+  if (problems.length > 0) {
     throw new Error(
-      `prisma/migrations lacks migrations the published package ships: ${missing.join(', ')}. ` +
-        'Release from a commit on main that contains them.'
+      `prisma/migrations does not match the published package: ${problems.join('; ')}. ` +
+        'Release from a commit on main that contains the shipped migrations unchanged.'
     );
   }
 }
@@ -130,8 +178,13 @@ function main(argv) {
   const directory = mkdtempSync(join(tmpdir(), 'ff-last-release-'));
   try {
     const lastRelease = buildLastRelease({ version, ...readPublishedPackage(version, directory) });
-    assertRepositoryHasMigrations(lastRelease.migrations);
+    assertRepositoryHasPublishedMigrations(lastRelease);
     writeFileSync(LAST_RELEASE_PATH, formatLastRelease(lastRelease));
+    // Keep the committed layout: the repository formatter, not JSON.stringify, owns it.
+    execFileSync('pnpm', ['exec', 'oxfmt', '--write', LAST_RELEASE_PATH], {
+      cwd: repositoryRoot,
+      stdio: ['ignore', 'ignore', 'inherit'],
+    });
     process.stdout.write(
       `Pinned ${PACKAGE_NAME}@${version}: ${lastRelease.migrations.length} migrations, ` +
         `${Object.keys(lastRelease.enums).length} enums, ` +

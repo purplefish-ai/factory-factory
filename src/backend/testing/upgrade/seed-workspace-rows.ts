@@ -135,12 +135,35 @@ const settingsDefaults: SeedRow = {
   turnLimitMinutes: null,
 };
 
-/** The `default` row is the one the application reads; the others cover each remaining enum value. */
+/**
+ * The `default` row is the one the application reads, so it carries a user's
+ * choices rather than defaults; the others cover each remaining enum value.
+ */
 export const userSettings: SeedRow[] = [
   {
     ...settingsDefaults,
     id: 'seed-settings-default',
     userId: 'default',
+    preferredIde: 'vscode',
+    playSoundOnComplete: false,
+    ratchetEnabled: true,
+    ratchetReplyToPrComments: false,
+    defaultClaudeModel: 'opus',
+    defaultCodexModel: 'gpt-5.4',
+    defaultClaudeReasoningEffort: 'high',
+    defaultCodexReasoningEffort: 'medium',
+    reviewerClaudeModel: 'sonnet',
+    reviewerCodexModel: 'gpt-5.4',
+    postReviewToGitHub: false,
+    voiceModeEnabled: true,
+    deepgramApiKeyEncrypted: 'v1:seed-deepgram-ciphertext',
+    voiceTtsModel: 'flux-orion-en',
+    voiceTtsSpeed: 1.25,
+    voiceUtteranceEndMs: 1500,
+    voiceBargeInSustainedMs: 24,
+    appearanceColorScheme: 'factory',
+    appearanceFontScale: 110,
+    turnLimitMinutes: 45,
     workspaceOrder: {
       [PROJECT_GITHUB]: [WORKSPACE_MANUAL, WORKSPACE_RESUME, WORKSPACE_ISSUE],
     },
@@ -151,11 +174,11 @@ export const userSettings: SeedRow[] = [
         CODEX: [{ name: 'plan', description: 'Plan the work', argumentHint: '<task>' }],
       },
     },
-    ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-    defaultSessionProvider: 'CLAUDE',
-    defaultWorkspacePermissions: 'STRICT',
-    automationPermissions: 'RELAXED',
-    reviewerSessionProvider: 'CODEX',
+    ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+    defaultSessionProvider: 'CODEX',
+    defaultWorkspacePermissions: 'RELAXED',
+    automationPermissions: 'YOLO',
+    reviewerSessionProvider: 'CLAUDE',
     createdAt: stamp(0),
     updatedAt: stamp(3),
   },
@@ -165,11 +188,11 @@ export const userSettings: SeedRow[] = [
     userId: 'seed-second',
     workspaceOrder: null,
     cachedSlashCommands: null,
-    ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
-    defaultSessionProvider: 'CODEX',
-    defaultWorkspacePermissions: 'RELAXED',
-    automationPermissions: 'YOLO',
-    reviewerSessionProvider: 'CLAUDE',
+    ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
+    defaultSessionProvider: 'CLAUDE',
+    defaultWorkspacePermissions: 'YOLO',
+    automationPermissions: 'STRICT',
+    reviewerSessionProvider: 'CODEX',
     createdAt: stamp(0),
     updatedAt: stamp(3),
   },
@@ -181,8 +204,8 @@ export const userSettings: SeedRow[] = [
     cachedSlashCommands: null,
     ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
     defaultSessionProvider: 'CLAUDE',
-    defaultWorkspacePermissions: 'YOLO',
-    automationPermissions: 'STRICT',
+    defaultWorkspacePermissions: 'STRICT',
+    automationPermissions: 'RELAXED',
     reviewerSessionProvider: 'CODEX',
     createdAt: stamp(0),
     updatedAt: stamp(3),
@@ -452,6 +475,7 @@ export const workspaceMetadata: SeedRow[] = [
 
 const observation = (
   number: number,
+  headBranch: string,
   prState: string,
   ciStatus: string,
   extra: Record<string, unknown> = {}
@@ -461,7 +485,7 @@ const observation = (
   repository: 'seed-org/seed-repo',
   number,
   headSha: `${number}`.padStart(40, 'a'),
-  headBranch: `seed/branch-${number}`,
+  headBranch,
   baseBranch: 'main',
   observedAt: iso(50),
   prState,
@@ -489,7 +513,7 @@ const observation = (
 export const PR_OPEN = 'seed-pr-open';
 export const PR_DRAFT = 'seed-pr-draft';
 export const PR_MERGED = 'seed-pr-merged';
-export const PR_OPEN_OBSERVATION = observation(101, 'OPEN', 'SUCCESS');
+export const PR_OPEN_OBSERVATION = observation(101, 'seed/fix-flaky-test', 'OPEN', 'SUCCESS');
 
 const prDefaults: SeedRow = {
   title: null,
@@ -538,7 +562,7 @@ export const workspacePrs: SeedRow[] = [
     ciStatus: 'SUCCESS',
     completionDismissed: true,
     terminalObservedAt: stamp(35),
-    observation: observation(100, 'MERGED', 'SUCCESS'),
+    observation: observation(100, 'seed/earlier-cleanup', 'MERGED', 'SUCCESS'),
   },
   {
     ...prDefaults,
@@ -550,7 +574,7 @@ export const workspacePrs: SeedRow[] = [
     headRefName: 'feature/resume',
     state: 'DRAFT',
     ciStatus: 'PENDING',
-    observation: observation(102, 'DRAFT', 'PENDING'),
+    observation: observation(102, 'feature/resume', 'DRAFT', 'PENDING'),
   },
   {
     ...prDefaults,
@@ -580,7 +604,7 @@ export const workspacePrs: SeedRow[] = [
     ciLastNotifiedAt: stamp(48),
     reviewLastCheckedAt: stamp(48),
     reviewLastCommentId: 'seed-review-comment-1',
-    observation: observation(104, 'CHANGES_REQUESTED', 'FAILURE', {
+    observation: observation(104, 'seed/seed-7', 'CHANGES_REQUESTED', 'FAILURE', {
       reviewState: 'CHANGES_REQUESTED',
       hasMergeConflict: true,
       ciFailure: { since: iso(47), announced: true },
@@ -597,7 +621,9 @@ export const workspacePrs: SeedRow[] = [
     state: 'APPROVED',
     ciStatus: 'SUCCESS',
     reviewState: 'APPROVED',
-    observation: observation(105, 'APPROVED', 'SUCCESS', { reviewState: 'APPROVED' }),
+    observation: observation(105, 'seed/triage-issue-7', 'APPROVED', 'SUCCESS', {
+      reviewState: 'APPROVED',
+    }),
   },
   {
     ...prDefaults,
@@ -612,7 +638,7 @@ export const workspacePrs: SeedRow[] = [
     terminalObservedAt: stamp(-400),
     syncedAt: stamp(-400),
     detachedAt: stamp(-390),
-    observation: observation(99, 'CLOSED', 'UNKNOWN'),
+    observation: observation(99, 'seed/old-experiment', 'CLOSED', 'UNKNOWN'),
   },
 ];
 

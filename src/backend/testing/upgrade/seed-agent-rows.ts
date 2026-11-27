@@ -66,6 +66,18 @@ const runInput = {
   sourceUrl: ISSUE_URL,
   context: [{ id: 'issue', text: 'The retry test fails on slow machines.', url: ISSUE_URL }],
 };
+const digestDefinition = {
+  name: 'Daily digest',
+  instructions: 'Summarise yesterday and post it.',
+  isEnabled: false,
+  executionConfig: { version: 1, provider: 'CODEX', model: 'gpt-5.4', reasoningEffort: 'high' },
+};
+const slackInput = {
+  version: 1,
+  eventId: 'seed-provider-event-slack',
+  sourceUrl: 'https://seed.slack.com/archives/C0SEED/p1700000000000100',
+  context: [{ id: 'message', text: 'please deploy the staging build' }],
+};
 const claudeExecution = {
   version: 1,
   provider: 'CLAUDE',
@@ -558,14 +570,9 @@ export const agentRuns: SeedRow[] = [
     reservedSessionId: SESSION_EVENT,
     initialMessageId: 'seed-message-active',
     workspaceId: WORKSPACE_EVENT,
-    definitionSnapshot: {
-      ...triageDefinition,
-      name: 'Daily digest',
-      instructions: 'Summarise yesterday and post it.',
-      isEnabled: false,
-    },
+    definitionSnapshot: digestDefinition,
     triggerSnapshot: slackTrigger,
-    input: { version: 1, eventId: 'seed-provider-event-slack', context: [] },
+    input: slackInput,
   },
   {
     ...runDefaults,
@@ -741,12 +748,12 @@ export const agentInitialDeliveries: SeedRow[] = [
   },
 ];
 
-const snapshot = (definition: SeedRow, trigger: SeedRow): SeedRow => ({
-  definition,
-  trigger,
-  executionConfig: { version: 1, provider: 'CLAUDE', model: 'sonnet' },
-  input: runInput,
-});
+const snapshot = (
+  definition: SeedRow,
+  trigger: SeedRow,
+  executionConfig: SeedRow,
+  input: SeedRow
+): SeedRow => ({ definition, trigger, executionConfig, input });
 const classifier = {
   provider: 'CLAUDE',
   model: 'haiku',
@@ -778,7 +785,12 @@ export const agentEvaluations: SeedRow[] = [
     status: 'MATCHED',
     reasonCode: 'MATCHED',
     explanation: 'The label matched the trigger.',
-    configurationSnapshot: snapshot(triageDefinition, githubTrigger),
+    configurationSnapshot: snapshot(
+      triageDefinition,
+      githubTrigger,
+      { version: 1, provider: 'CLAUDE', model: 'sonnet' },
+      runInput
+    ),
     classifier,
     runId: RUN_FIRST,
   },
@@ -794,8 +806,10 @@ export const agentEvaluations: SeedRow[] = [
     reasonCode: 'NOT_MATCHED',
     explanation: 'The message was not about a production deploy.',
     configurationSnapshot: snapshot(
-      { ...triageDefinition, name: 'Daily digest', isEnabled: false },
-      slackTrigger
+      digestDefinition,
+      slackTrigger,
+      { version: 1, provider: 'CODEX', model: 'gpt-5.4', reasoningEffort: 'high' },
+      slackInput
     ),
     classifier,
   },
@@ -813,14 +827,9 @@ export const agentEvaluations: SeedRow[] = [
     configurationSnapshot: {
       version: 1,
       kind: 'NON_DISPATCHING',
-      definition: {
-        name: 'Daily digest',
-        instructions: 'Summarise yesterday and post it.',
-        isEnabled: false,
-        executionConfig: { version: 1, provider: 'CODEX', model: 'gpt-5.4' },
-      },
+      definition: digestDefinition,
       trigger: slackTrigger,
-      input: { version: 1, eventId: 'seed-provider-event-slack', context: [] },
+      input: slackInput,
     },
     attemptCount: 3,
     nextAttemptAt: stamp(97),
