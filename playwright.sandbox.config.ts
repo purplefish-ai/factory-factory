@@ -1,12 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
-// The real application in `pnpm dev:sandbox`, which the global setup starts and stops; the
-// scripted Codex provider stands in for the agent. No credentials and no external service.
+// The real application in `pnpm dev:sandbox`, which the global setup starts once and stops; the
+// scripted Codex provider stands in for the agent. No credentials and no external service. Each
+// file in e2e/sandbox/ is one scenario, and every one of them runs against that one sandbox.
 export default defineConfig({
-  testDir: './e2e',
-  testMatch: 'sandbox-smoke.spec.ts',
+  testDir: './e2e/sandbox',
+  testMatch: '*.spec.ts',
   outputDir: 'test-results/sandbox',
-  globalSetup: './e2e/sandbox-smoke.setup.ts',
+  globalSetup: './e2e/sandbox/global-setup.ts',
   workers: 1,
   // A failure here is a defect to investigate, never a retry.
   retries: 0,

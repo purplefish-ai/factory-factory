@@ -51,6 +51,8 @@ export function sandboxPaths(baseDir) {
     gitConfig: join(baseDir, 'gitconfig'),
     dotenv: join(baseDir, 'sandbox.env'),
     repoPath: join(baseDir, 'repo'),
+    // The fake Codex's gate files (FF_SANDBOX_GATE_DIR): a spec creates one to release a turn.
+    gateDir: join(baseDir, 'gates'),
     ghLog: join(baseDir, 'gh-calls.log'),
     sshLog: join(baseDir, 'ssh-calls.log'),
     egressLog: join(baseDir, 'egress-calls.log'),

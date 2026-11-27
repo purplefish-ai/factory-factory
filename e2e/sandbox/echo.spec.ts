@@ -1,28 +1,10 @@
-import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { expect, type Locator, test } from '@playwright/test';
-import { z } from 'zod';
+import { escapeRegExp, readSandbox } from './sandbox';
 
 // One user path through the real application in the sandbox: open it, find the seeded project,
 // create a workspace with the scripted Codex provider (scenario `echo`), send a message and see
 // the reply. Every timeout below is sized for a machine at load 100 or more.
-
-const sandboxSchema = z.object({
-  frontendUrl: z.url(),
-  repoPath: z.string().min(1),
-  scenario: z.literal('echo'),
-});
-
-function readSandbox() {
-  const path = z
-    .string({
-      message: 'FF_SANDBOX_JSON is unset: run this spec with playwright.sandbox.config.ts',
-    })
-    .parse(process.env.FF_SANDBOX_JSON);
-  return sandboxSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
-}
-
-const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The agent's reply: the echo scenario repeats the prompt, rendered as a paragraph. */
 function reply(conversation: Locator, text: string) {

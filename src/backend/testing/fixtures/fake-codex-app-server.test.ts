@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { chmod, copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,7 +22,11 @@ const messageSchema = z.object({
 });
 type Message = z.infer<typeof messageSchema>;
 
+const validScenarios =
+  'echo, tool-call, permission-request, async-question, error, retry-recover, retry-fail, slow-stream, gated-stream';
+
 const children: ChildProcessWithoutNullStreams[] = [];
+const directories: string[] = [];
 afterEach(async () => {
   for (const child of children.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) {
@@ -30,7 +35,16 @@ afterEach(async () => {
       await exited;
     }
   }
+  for (const directory of directories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
+
+function temporary() {
+  const directory = mkdtempSync(join(tmpdir(), 'ff-fake-codex-'));
+  directories.push(directory);
+  return directory;
+}
 
 // Longer than any test here: a stop test can only time out, never see the next chunk.
 const neverMs = '60000';
@@ -52,7 +66,19 @@ function startFake(scenario?: string, extraEnv: Record<string, string> = {}, arg
  */
 async function playPrompt(
   child: ChildProcessWithoutNullStreams,
-  { decision = 'accept', interruptOn }: { decision?: string; interruptOn?: string } = {}
+  {
+    decision = 'accept',
+    interruptOn,
+    text = 'Hello sandbox',
+    thread = threadId,
+    onMessage,
+  }: {
+    decision?: string;
+    interruptOn?: string;
+    text?: string;
+    thread?: string;
+    onMessage?: (message: Message, messages: Message[]) => void;
+  } = {}
 ) {
   let interrupted = false;
   const messages: Message[] = [];
@@ -61,9 +87,11 @@ async function playPrompt(
     lines.on('line', (line) => {
       const message = messageSchema.parse(JSON.parse(line));
       messages.push(message);
+      onMessage?.(message, messages);
       if (!interrupted && message.method !== undefined && message.method === interruptOn) {
         interrupted = true;
-        const interrupt = { id: 8, method: 'turn/interrupt', params: { threadId, turnId } };
+        const params = { threadId: thread, turnId };
+        const interrupt = { id: 8, method: 'turn/interrupt', params };
         child.stdin.write(`${JSON.stringify(interrupt)}\n`);
       } else if (message.method !== undefined && message.id !== undefined) {
         child.stdin.write(`${JSON.stringify({ id: message.id, result: { decision } })}\n`);
@@ -78,9 +106,9 @@ async function playPrompt(
       id: 7,
       method: 'turn/start',
       params: {
-        threadId,
+        threadId: thread,
         cwd,
-        input: [{ type: 'text', text: 'Hello sandbox', text_elements: [] }],
+        input: [{ type: 'text', text, text_elements: [] }],
       },
     })}\n`
   );
@@ -347,8 +375,224 @@ describe('fake Codex app-server scenarios', () => {
     const [code] = await once(child, 'close');
     expect(code).toBe(2);
     expect(stderr).toBe(
-      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, tool-call, permission-request, async-question, error, retry-recover, retry-fail, slow-stream\n`
+      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: ${validScenarios}\n`
     );
+  });
+});
+
+describe('fake Codex scenario chosen by the prompt', () => {
+  it('plays the scenario a prompt names, over FF_SANDBOX_SCENARIO', async () => {
+    const reply = 'I ran cat README.md; it printed one line of scripted text.';
+    const messages = await playPrompt(startFake('echo'), { text: 'Go ff-scenario:tool-call now' });
+    expect(messages).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      { method: 'item/started', params: { item: { id: 'tool-call-command' } } },
+      { method: 'item/commandExecution/outputDelta' },
+      { method: 'item/completed', params: { item: { id: 'tool-call-command' } } },
+      ...message('message-1', reply, [reply]),
+      turnCompleted('completed'),
+    ]);
+  });
+
+  it('plays the named scenario with no FF_SANDBOX_SCENARIO, and the contract reply without one', async () => {
+    const child = startFake();
+    expect(await playPrompt(child, { text: 'ff-scenario:echo' })).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      ...message('message-1', 'ff-scenario:echo', ['ff-scenario:echo']),
+      turnCompleted('completed'),
+    ]);
+    expect(await playPrompt(child)).toMatchObject([
+      turnStartResponse,
+      ...message('message', 'Synthetic response', ['Synthetic response']),
+      turnCompleted('completed'),
+    ]);
+  });
+
+  it('fails the turn on an unknown scenario name, naming the valid ones', async () => {
+    const error = { message: `Unknown scenario "nope". Valid scenarios: ${validScenarios}` };
+    expect(await playPrompt(startFake('echo'), { text: 'ff-scenario:nope' })).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      { method: 'error', params: { threadId, turnId, willRetry: false, error } },
+      { method: 'turn/completed', params: { turn: { id: turnId, status: 'failed', error } } },
+    ]);
+  });
+});
+
+describe('fake Codex gated stream', () => {
+  const gated = (gate: string) => [
+    turnStartResponse,
+    turnStarted,
+    ...message('message-1', `Waiting at gate ${gate}. Gate ${gate} released.`, [
+      `Waiting at gate ${gate}. `,
+      `Gate ${gate} released.`,
+    ]),
+    turnCompleted('completed'),
+  ];
+
+  it('holds the rest of its reply until the gate file appears, then deletes the file', async () => {
+    const gateDir = temporary();
+    const gate = join(gateDir, 'first');
+    let deltas = 0;
+    let deltasBeforeRelease = 0;
+    const messages = await playPrompt(startFake(undefined, { FF_SANDBOX_GATE_DIR: gateDir }), {
+      text: 'ff-scenario:gated-stream:first',
+      onMessage: (received) => {
+        if (received.method !== 'item/agentMessage/delta' || ++deltas > 1) {
+          return;
+        }
+        // Several polls of the gate pass with no file: the reply must still be held.
+        setTimeout(() => {
+          deltasBeforeRelease = deltas;
+          writeFileSync(gate, '');
+        }, 400);
+      },
+    });
+    expect(deltasBeforeRelease).toBe(1);
+    expect(messages).toMatchObject(gated('first'));
+    expect(existsSync(gate)).toBe(false);
+  });
+
+  it('passes a gate whose file was created before the turn reached it', async () => {
+    const gateDir = temporary();
+    writeFileSync(join(gateDir, 'early'), '');
+    const child = startFake('echo', { FF_SANDBOX_GATE_DIR: gateDir });
+    expect(await playPrompt(child, { text: 'ff-scenario:gated-stream:early' })).toMatchObject(
+      gated('early')
+    );
+    expect(existsSync(join(gateDir, 'early'))).toBe(false);
+  });
+
+  it('stops waiting on turn/interrupt', async () => {
+    const child = startFake(undefined, { FF_SANDBOX_GATE_DIR: temporary() });
+    const [started, delta, completed] = message('message-1', 'Waiting at gate never. ', [
+      'Waiting at gate never. ',
+    ]);
+    expect(
+      await playPrompt(child, {
+        text: 'ff-scenario:gated-stream:never',
+        interruptOn: 'item/agentMessage/delta',
+      })
+    ).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      started,
+      delta,
+      { id: 8, result: {} },
+      completed,
+      turnCompleted('interrupted'),
+    ]);
+  });
+
+  it.each([
+    ['ff-scenario:gated-stream', {}, 'gated-stream needs a gate name'],
+    ['ff-scenario:gated-stream:g', {}, 'gated-stream needs FF_SANDBOX_GATE_DIR'],
+  ])('fails %j without what it needs', async (text, env, reason) => {
+    const messages = await playPrompt(startFake(undefined, env), { text });
+    expect(messages.at(-1)).toMatchObject({
+      method: 'turn/completed',
+      params: { turn: { status: 'failed', error: { message: expect.stringContaining(reason) } } },
+    });
+  });
+});
+
+/** Sends one request and resolves with its response. */
+function call(child: ChildProcessWithoutNullStreams, id: number, method: string, params: object) {
+  const lines = createInterface({ input: child.stdout });
+  return new Promise<Message & { error?: { message: string } }>((resolve) => {
+    lines.on('line', (line) => {
+      const parsed = z
+        .object({ id: z.number().optional(), error: z.object({ message: z.string() }).optional() })
+        .passthrough()
+        .parse(JSON.parse(line));
+      if (parsed.id === id) {
+        lines.close();
+        resolve(parsed);
+      }
+    });
+    child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
+  });
+}
+
+describe('fake Codex threads and rollout files', () => {
+  const threadSchema = z.object({
+    thread: z.object({ id: z.string(), turns: z.array(z.unknown()) }),
+  });
+  const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('replays a recorded command with its output in a new process', async () => {
+    const env = { CODEX_HOME: temporary() };
+    const first = startFake(undefined, env);
+    const started = await call(first, 1, 'thread/start', { cwd });
+    const thread = threadSchema.parse(started.result).thread.id;
+    await playPrompt(first, { thread, text: 'ff-scenario:tool-call' });
+    const read = await call(startFake(undefined, env), 1, 'thread/read', {
+      threadId: thread,
+      includeTurns: true,
+    });
+    expect(threadSchema.parse(read.result).thread.turns).toMatchObject([
+      {
+        items: [
+          { type: 'userMessage' },
+          {
+            type: 'commandExecution',
+            id: 'tool-call-command',
+            command: 'cat README.md',
+            cwd,
+            status: 'completed',
+            aggregatedOutput: 'Scripted README.md contents from the fake provider.\n',
+            exitCode: 0,
+          },
+          { type: 'agentMessage' },
+        ],
+      },
+    ]);
+  });
+
+  it('issues a UUIDv7 id per thread and records a prompted one, which a new process resumes', async () => {
+    const codexHome = temporary();
+    const env = { CODEX_HOME: codexHome };
+    const first = startFake('echo', env);
+    const start = async (id: number) =>
+      threadSchema.parse((await call(first, id, 'thread/start', { cwd })).result).thread.id;
+    const [prompted, idle] = [await start(1), await start(2)];
+    expect(prompted).toMatch(uuidV7);
+    expect(idle).toMatch(uuidV7);
+    expect(idle).not.toBe(prompted);
+    const echo = await playPrompt(first, { thread: prompted, text: 'Remember this' });
+    expect(echo.at(-1)).toMatchObject({ method: 'turn/completed' });
+
+    const [rollout, ...others] = readdirSync(join(codexHome, 'sessions'), { recursive: true })
+      .map(String)
+      .filter((name) => name.endsWith('.jsonl'));
+    expect(others).toEqual([]);
+    expect(rollout).toMatch(
+      new RegExp(
+        `^\\d{4}/\\d{2}/\\d{2}/rollout-\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-${prompted}\\.jsonl$`
+      )
+    );
+
+    const second = startFake('echo', env);
+    const resumed = await call(second, 1, 'thread/resume', { threadId: prompted });
+    expect(threadSchema.parse(resumed.result).thread.id).toBe(prompted);
+    const read = await call(second, 2, 'thread/read', { threadId: prompted, includeTurns: true });
+    expect(threadSchema.parse(read.result).thread.turns).toMatchObject([
+      {
+        // Distinct from a later process's `turn-7`: request ids start again in each process.
+        id: expect.stringMatching(new RegExp(`^${turnId}-[0-9a-f]{8}$`)),
+        status: 'completed',
+        items: [
+          { type: 'userMessage', content: [{ type: 'text', text: 'Remember this' }] },
+          { type: 'agentMessage', text: 'Remember this' },
+        ],
+      },
+    ]);
+    // As Codex: a thread that was never prompted has no rollout to resume from.
+    expect(await call(second, 3, 'thread/resume', { threadId: idle })).toMatchObject({
+      error: { message: `no rollout found for thread id ${idle}` },
+    });
   });
 });
 

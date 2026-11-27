@@ -15,10 +15,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 
-// Starts one sandbox (`pnpm dev:sandbox`) for the run and stops it afterwards. The spec finds
-// its sandbox.json through FF_SANDBOX_JSON.
+// Starts one sandbox (`pnpm dev:sandbox`) for the run and stops it afterwards. Every spec in this
+// directory shares it, and finds its sandbox.json through FF_SANDBOX_JSON (see `./sandbox.ts`).
 
-const repoRoot = resolve(import.meta.dirname, '..');
+const repoRoot = resolve(import.meta.dirname, '..', '..');
 // Uploaded by CI when the run fails; emptied at the start of each run.
 const evidenceDir = join(repoRoot, 'test-results', 'sandbox-logs');
 const evidenceFiles = ['server-output.log', 'egress-calls.log', 'gh-calls.log'];

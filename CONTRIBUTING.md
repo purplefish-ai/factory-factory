@@ -92,10 +92,11 @@ Draft persistence also has a browser storage suite:
 installed Playwright Chromium and a frontend-only Vite server; the regular
 Vitest suite does not require a browser installation.
 
-`pnpm test:e2e:sandbox` starts `pnpm dev:sandbox`, drives one user path through
-the real application with the scripted Codex provider (scenario `echo`) in the
-installed Playwright Chromium, and stops the sandbox. CI runs it as a job that
-is not required.
+`pnpm test:e2e:sandbox` starts `pnpm dev:sandbox` once, runs every scenario spec
+in `e2e/sandbox/` against it with the scripted Codex provider in the installed
+Playwright Chromium, and stops the sandbox. A spec chooses the provider's
+behavior by its prompt text (see `e2e/sandbox/sandbox.ts`). CI runs it as a job
+that is not required.
 
 Test processes never write the real server log. When `NODE_ENV` is `test` or the
 process runs under Vitest (including children that inherit its environment), the
