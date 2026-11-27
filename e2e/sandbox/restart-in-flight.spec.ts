@@ -44,7 +44,12 @@ const GATES = {
 
 let tree: BackendTree | null = null;
 
-/** Observed, not explained by this spec: see the terminal links in its process reports. */
+/**
+ * KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3363
+ * On Linux every process the server starts holds the terminals opened before it (the process
+ * reports show which), so a shell outlives the server while any later process does. On macOS the
+ * shells end with the server.
+ */
 const shellsOutliveTheServer = process.platform === 'linux';
 
 const gateFile = (gate: string) => join(sandboxPaths(readSandbox().baseDir).gateDir, gate);
@@ -172,14 +177,20 @@ test('work in flight when the server is killed, and what the restarted server ma
     })
     .toBe(false);
   await reportProcesses('Still alive once the adapters have exited', survivorsOf(killed));
-  // The terminal shells end with the backend on macOS, and outlive it on Linux (the report above
-  // shows which processes hold their terminals open there).
+  // The run script and the setup script outlive the server. So do the shells on Linux: the setup
+  // script started after Heron's and Plover's terminals and holds them open. Curlew's terminal
+  // opens with its page, which can come before or after its setup starts, so its shell survives
+  // only in the first case.
+  const survivors = rolesByWorkspace(survivorsOf(killed), worktrees);
   const shell = shellsOutliveTheServer ? ['shell'] : [];
-  expect(rolesByWorkspace(survivorsOf(killed), worktrees)).toEqual({
+  expect({ ...survivors, curlew: survivors.curlew?.filter((role) => role !== 'shell') }).toEqual({
     heron: ['run script', ...shell],
     plover: shell,
-    curlew: ['setup script', ...shell],
+    curlew: ['setup script'],
   });
+  if (!shellsOutliveTheServer) {
+    expect(survivors.curlew).toEqual(['setup script']);
+  }
 
   await restartBackend();
 
