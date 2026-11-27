@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-// Recordings of the real Claude and Codex tools are published with the
+// Recordings of the real Claude, Codex and gh tools are published with the
 // repository. This test fails when one carries a home directory, an account or
 // machine name, an email address, a token-shaped string or a UUID that is not
 // one of the scrubber's fixed fakes. Failures name the file, line and rule,
@@ -48,6 +48,88 @@ const rules = [
   },
 ];
 
+const FAKE_LOGIN = /^(?:user-\d+|bot-\d+\[bot\]|app\/bot-\d+)$/;
+// The fake repository, and the gh release page `gh --version` prints.
+const GH_REPOSITORY_PATHS = new Set(['example-owner/example-repo', 'cli/cli']);
+const GITHUB_PATH = /github\.com\/(?:repos\/|repositories\/)?([^/\s"<>]+\/[^/\s"<>?#]+)/g;
+// `repositories/<id>/issues/events` names the repository by id: only the fake
+// id the scrubber gave the recorded repository (in its api-repo.json, and in
+// the scrubber's fake range) may appear there.
+const FAKE_REPOSITORY_IDS = new Set(
+  readdirSync(join(recordingsRoot, 'gh'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const repository = z
+        .object({ stdout: z.object({ id: z.number().int().min(1_000_001).max(1_999_999) }) })
+        .parse(
+          JSON.parse(readFileSync(join(recordingsRoot, 'gh', entry.name, 'api-repo.json'), 'utf8'))
+        );
+      return `${repository.stdout.id}/issues`;
+    })
+);
+
+/** Every string in a parsed JSON value, with the key it sits under. */
+function keyedStrings(value: unknown, key: string): [string, string][] {
+  if (typeof value === 'string') {
+    return [[key, value]];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => keyedStrings(item, key));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).flatMap(([childKey, child]) => keyedStrings(child, childKey));
+  }
+  return [];
+}
+
+const FAKE_REPOSITORY = 'example-owner/example-repo';
+// Where recorded arguments name a repository: `--repo o/r`, `repos/o/r/...`,
+// `repo:o/r` in a search, and `owner:`/`name:` in a GraphQL query.
+const ARGUMENT_REPOSITORY = [
+  /^([\w.-]+\/[\w.-]+)$/g,
+  /\brepos\/([\w.-]+\/[\w.-]+)/g,
+  /\brepo:([\w.-]+\/[\w.-]+)/g,
+];
+
+/** Repository names in one recorded `gh` argument that are not the fake one. */
+function argumentFindings(value: string): string[] {
+  const findings: string[] = [];
+  for (const pattern of ARGUMENT_REPOSITORY) {
+    for (const [, repository] of value.matchAll(pattern)) {
+      if (repository !== FAKE_REPOSITORY) {
+        findings.push('argument naming a repository that is not the fake one');
+      }
+    }
+  }
+  for (const [, field, name] of value.matchAll(/\b(owner|name): "([^"]*)"/g)) {
+    if (name !== (field === 'owner' ? 'example-owner' : 'example-repo')) {
+      findings.push('GraphQL argument naming a repository that is not the fake one');
+    }
+  }
+  return findings;
+}
+
+function ghAccountFindings(key: string, value: string): string[] {
+  const findings: string[] = key === 'args' ? argumentFindings(value) : [];
+  if (key === 'login' && !FAKE_LOGIN.test(value)) {
+    findings.push('login that is not a fake');
+  }
+  if ((key === 'nameWithOwner' || key === 'full_name') && value !== FAKE_REPOSITORY) {
+    findings.push(`${key} that is not the fake repository`);
+  }
+  for (const [, account = ''] of value.matchAll(/github\.com account (\S+)/g)) {
+    if (!FAKE_LOGIN.test(account)) {
+      findings.push('auth status account that is not a fake');
+    }
+  }
+  for (const [, path = ''] of value.matchAll(GITHUB_PATH)) {
+    if (!(GH_REPOSITORY_PATHS.has(path) || FAKE_REPOSITORY_IDS.has(path))) {
+      findings.push('repository path that is not the fake one');
+    }
+  }
+  return findings;
+}
+
 function listFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? listFiles(join(directory, entry.name)) : [join(directory, entry.name)]
@@ -57,9 +139,37 @@ function listFiles(directory: string): string[] {
 describe('upstream recordings', () => {
   const files = listFiles(recordingsRoot);
 
-  it('exist for both providers', () => {
+  it('exist for both providers and gh', () => {
     const tools = new Set(files.map((file) => relative(recordingsRoot, file).split(/[\\/]/)[0]));
-    expect([...tools].sort()).toEqual(['claude', 'codex']);
+    expect([...tools].sort()).toEqual(['claude', 'codex', 'gh']);
+  });
+
+  // gh recordings carry pull requests and issues of a public repository: every
+  // account in them must be a scrubber fake and every repository the fake one.
+  it('name only fake accounts and the fake repository in gh recordings', () => {
+    const findings = files
+      .filter((path) => relative(recordingsRoot, path).startsWith('gh'))
+      .flatMap((file) => {
+        const recording: unknown = JSON.parse(readFileSync(file, 'utf8'));
+        const where = relative(recordingsRoot, file);
+        // `gh api user --jq .login` prints the login alone.
+        const login = z
+          .object({ args: z.array(z.string()), stdout: z.string() })
+          .safeParse(recording);
+        const loginFindings =
+          login.success &&
+          login.data.args.includes('.login') &&
+          !FAKE_LOGIN.test(login.data.stdout.trim())
+            ? [`${where} --jq .login output that is not a fake`]
+            : [];
+        return [
+          ...loginFindings,
+          ...keyedStrings(recording, '').flatMap(([key, value]) =>
+            ghAccountFindings(key, value).map((rule) => `${where} ${rule}`)
+          ),
+        ];
+      });
+    expect(findings).toEqual([]);
   });
 
   it('carry no private values', () => {

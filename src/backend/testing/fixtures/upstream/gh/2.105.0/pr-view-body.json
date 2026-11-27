@@ -1,0 +1,18 @@
+{
+  "description": "The pull request description, for adversarial review (merged pull request).",
+  "args": [
+    "pr",
+    "view",
+    "3349",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "body",
+    "--jq",
+    ".body"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "text",
+  "stdout": "<text>\n",
+  "stderr": ""
+}

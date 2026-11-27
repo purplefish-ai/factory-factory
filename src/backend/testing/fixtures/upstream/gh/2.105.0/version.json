@@ -1,0 +1,8 @@
+{
+  "description": "`gh --version`; the health check reads the version with a regular expression.",
+  "args": ["--version"],
+  "exitCode": 0,
+  "stdoutFormat": "text",
+  "stdout": "gh version 2.105.0 (2026-11-17)\nhttps://github.com/cli/cli/releases/tag/v2.105.0\n",
+  "stderr": ""
+}

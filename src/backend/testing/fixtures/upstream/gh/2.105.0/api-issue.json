@@ -1,0 +1,19 @@
+{
+  "description": "REST issue, for an exact-number issue search.",
+  "args": ["api", "repos/example-owner/example-repo/issues/3340"],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "html_url": "https://github.com/example-owner/example-repo/issues/3340",
+    "id": 1000020,
+    "number": 3340,
+    "title": "<text>",
+    "user": {
+      "login": "user-1",
+      "type": "User"
+    },
+    "state": "open",
+    "created_at": "2026-01-01T00:09:00Z"
+  },
+  "stderr": ""
+}

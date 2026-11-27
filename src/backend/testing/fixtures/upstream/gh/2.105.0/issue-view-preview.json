@@ -1,0 +1,24 @@
+{
+  "description": "Issue link preview.",
+  "args": [
+    "issue",
+    "view",
+    "3340",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "title,state,author,createdAt"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "author": {
+      "is_bot": false,
+      "login": "user-1"
+    },
+    "createdAt": "2026-01-01T00:09:00Z",
+    "state": "OPEN",
+    "title": "<text>"
+  },
+  "stderr": ""
+}

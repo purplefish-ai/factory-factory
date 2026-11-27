@@ -1,0 +1,100 @@
+{
+  "description": "Core monitoring facts (open pull request).",
+  "args": [
+    "pr",
+    "view",
+    "3365",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "number,title,url,updatedAt,isDraft,state,reviewDecision,statusCheckRollup,headRefOid,headRefName,baseRefName,mergeStateStatus"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "baseRefName": "main",
+    "headRefName": "branch-1",
+    "headRefOid": "fake-sha-1",
+    "isDraft": false,
+    "mergeStateStatus": "BLOCKED",
+    "number": 3365,
+    "reviewDecision": "",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/example-owner/example-repo/actions/runs/1000001/job/1000002",
+        "name": "Analyze (javascript-typescript)",
+        "startedAt": "2026-01-01T00:35:00Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "CodeQL"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-01-01T00:36:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/example-owner/example-repo/actions/runs/1000003/job/1000004",
+        "name": "Select CI jobs",
+        "startedAt": "2026-01-01T00:35:00Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-01-01T00:40:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/example-owner/example-repo/actions/runs/1000001/job/1000005",
+        "name": "Analyze (actions)",
+        "startedAt": "2026-01-01T00:35:00Z",
+        "status": "COMPLETED",
+        "workflowName": "CodeQL"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "conclusion": "",
+        "detailsUrl": "https://github.com/example-owner/example-repo/actions/runs/1000003/job/1000006",
+        "name": "Storybook Tests work",
+        "startedAt": "2026-01-01T00:37:00Z",
+        "status": "IN_PROGRESS",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-01-01T00:39:00Z",
+        "conclusion": "NEUTRAL",
+        "detailsUrl": "https://github.com/example-owner/example-repo/runs/1000007",
+        "name": "CodeQL",
+        "startedAt": "2026-01-01T00:38:00Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-01-01T00:35:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://example.invalid/",
+        "name": "Socket Security: Project Report",
+        "startedAt": "2026-01-01T00:33:00Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-01-01T00:41:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://example.invalid/",
+        "name": "cubic · AI code reviewer",
+        "startedAt": "2026-01-01T00:34:00Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "title": "<text>",
+    "updatedAt": "2026-01-01T00:32:00Z",
+    "url": "https://github.com/example-owner/example-repo/pull/3365"
+  },
+  "stderr": "<string>"
+}

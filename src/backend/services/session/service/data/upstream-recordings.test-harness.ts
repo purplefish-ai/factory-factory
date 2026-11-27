@@ -43,6 +43,10 @@ export const UPSTREAM_RECORDINGS_ROOT = join(
 );
 
 const PROVIDERS = { claude: 'CLAUDE', codex: 'CODEX' } as const;
+/** Recorded tools that hold no agent session, and the tests that read them instead. */
+const NOT_AGENT_SESSIONS: Record<string, string> = {
+  gh: 'src/backend/services/github/service/gh-recordings.test.ts and scripts/record-upstream/gh-fidelity.test.ts',
+};
 
 const MetaSchema = z.object({
   tool: z.enum(['claude', 'codex']),
@@ -140,6 +144,17 @@ export function upstreamRecording(parts: {
 export function listUpstreamRecordingDirectories(): { tool: string; version: string }[] {
   return readdirSync(UPSTREAM_RECORDINGS_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
+    .filter((tool) => {
+      if (tool.name in PROVIDERS) {
+        return true;
+      }
+      if (tool.name in NOT_AGENT_SESSIONS) {
+        return false;
+      }
+      throw new Error(
+        `Upstream recordings of an unknown tool: ${tool.name}. Add it to PROVIDERS, or to NOT_AGENT_SESSIONS with the test that reads it.`
+      );
+    })
     .flatMap((tool) =>
       readdirSync(join(UPSTREAM_RECORDINGS_ROOT, tool.name), { withFileTypes: true })
         .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))

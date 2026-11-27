@@ -1,0 +1,8 @@
+{
+  "description": "`gh api user --jq .login`: the authenticated login.",
+  "args": ["api", "user", "--jq", ".login"],
+  "exitCode": 0,
+  "stdoutFormat": "text",
+  "stdout": "user-1\n",
+  "stderr": ""
+}

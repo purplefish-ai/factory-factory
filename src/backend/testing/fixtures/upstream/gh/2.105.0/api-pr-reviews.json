@@ -1,0 +1,55 @@
+{
+  "description": "REST reviews, every page (merged pull request).",
+  "args": [
+    "api",
+    "repos/example-owner/example-repo/pulls/3349/reviews?per_page=100",
+    "--paginate",
+    "--slurp"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": [
+    [
+      {
+        "id": 1000014,
+        "node_id": "fake-node-3",
+        "user": {
+          "login": "bot-3[bot]",
+          "type": "Bot"
+        },
+        "body": "<text>",
+        "state": "COMMENTED",
+        "author_association": "CONTRIBUTOR",
+        "submitted_at": "2026-01-01T00:11:00Z",
+        "commit_id": "fake-sha-3"
+      },
+      {
+        "id": 1000015,
+        "node_id": "fake-node-4",
+        "user": {
+          "login": "bot-3[bot]",
+          "type": "Bot"
+        },
+        "body": "<text>",
+        "state": "COMMENTED",
+        "author_association": "CONTRIBUTOR",
+        "submitted_at": "2026-01-01T00:14:00Z",
+        "commit_id": "fake-sha-4"
+      },
+      {
+        "id": 1000016,
+        "node_id": "fake-node-5",
+        "user": {
+          "login": "bot-3[bot]",
+          "type": "Bot"
+        },
+        "body": "<text>",
+        "state": "COMMENTED",
+        "author_association": "CONTRIBUTOR",
+        "submitted_at": "2026-01-01T00:15:00Z",
+        "commit_id": "fake-sha-5"
+      }
+    ]
+  ],
+  "stderr": "<string>"
+}
