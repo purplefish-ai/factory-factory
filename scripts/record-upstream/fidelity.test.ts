@@ -255,7 +255,9 @@ const CLAUDE_MESSAGE_READS = [
   ...['tool_use_id', 'content', 'content.text'].map((path) => `message.content.${path}`),
 ];
 const CODEX_MESSAGE_READS = [
-  ...['role', 'phase', 'content.type', 'content.text'].map((path) => `payload.${path}`),
+  ...['role', 'phase', 'content.type', 'content.text', 'content.image_url'].map(
+    (path) => `payload.${path}`
+  ),
   'payload.internal_chat_message_metadata_passthrough.turn_id',
   'payload.internal_chat_message_metadata_passthrough.content_item_kinds',
 ];

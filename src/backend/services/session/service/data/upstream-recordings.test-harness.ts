@@ -54,7 +54,7 @@ export type RecordingMeta = z.infer<typeof MetaSchema>;
 
 const JsonRpcMessageSchema = z.looseObject({
   jsonrpc: z.literal('2.0'),
-  id: z.number().optional(),
+  id: z.union([z.number(), z.string()]).optional(),
   method: z.string().optional(),
   params: z.unknown().optional(),
   result: z.unknown().optional(),

@@ -710,6 +710,7 @@ describe('the Codex rollout policy', () => {
     );
     expect(payload.role).toBe('developer');
     expect(payload.tools[0].type).toBe('namespace');
+    expect(payload.tools[0].tools[0].type).toBe('function');
     expect(payload.tools[0].tools[0].parameters).toEqual({
       type: 'object',
       properties: { '<key>': { type: 'array', items: { type: 'string' } } },

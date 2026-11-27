@@ -69,7 +69,8 @@ only lines that contain its marker.
   (`src/backend/testing/fixtures/upstream/`), and the transcript reloaded from
   its history file equals the one built from its live ACP stream, apart from the
   differences listed in the test with their reasons.
-  `upstream-recordings.test.ts`, `scripts/record-upstream/fidelity.test.ts`.
+  `upstream-recordings.test.ts`, and `scripts/record-upstream/fidelity.test.ts`
+  from the repository root.
 - A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.
