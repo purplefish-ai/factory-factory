@@ -134,15 +134,25 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The packed check installs the tarball as a consumer, serves it and drives a
+  # workspace turn with the scripted fake Codex. Ubuntu runs every supported
+  # floor. macOS, where most users run the package, runs one leg because its
+  # runners are slower and scarcer: the oldest floor, where support broke last.
+  # The release workflow runs every Node version on macOS before publishing.
   minimum-node:
-    name: Minimum Node runtime (${{ matrix.node-version }})
+    name: Minimum Node runtime (${{ matrix.node-version }}${{ matrix.os == 'macos-latest' && ', macOS' || '' }})
     needs: [changes, build]
     if: needs.changes.outputs.app == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node-version: ['24.0.0', '26.8.1']
+        include:
+          - os: macos-latest
+            node-version: '24.0.0'
     permissions:
       contents: read
     steps:

@@ -26,8 +26,18 @@ const workflowSchema = z.object({
       name: z.string().optional(),
       if: z.string().optional(),
       needs: z.union([z.string(), z.array(z.string())]).optional(),
+      'runs-on': z.string().optional(),
       strategy: z
-        .object({ matrix: z.object({ 'node-version': z.array(z.string()).optional() }).optional() })
+        .object({
+          'fail-fast': z.boolean().optional(),
+          matrix: z
+            .object({
+              os: z.array(z.string()).optional(),
+              'node-version': z.array(z.string()).optional(),
+              include: z.array(z.record(z.string(), z.string())).optional(),
+            })
+            .optional(),
+        })
         .optional(),
       steps: z.array(stepSchema).optional(),
       outputs: z.record(z.string(), z.string()).optional(),
@@ -76,6 +86,31 @@ describe('conservative CI selection', () => {
     const smoke = job?.steps?.find((step) => step.name === 'Launch the packed CLI')?.run;
     expect(downloaded?.with?.path).toBe('npm-package');
     expect(smoke).toBe('bash scripts/check-packed-consumer.sh cold');
+  });
+
+  it('runs the packed checks on macOS beside Ubuntu, on the oldest floor only', () => {
+    const job = ci.jobs['minimum-node'];
+    expect(job?.['runs-on']).toBe('${{ matrix.os }}');
+    expect(job?.strategy?.['fail-fast']).toBe(false);
+    expect(job?.strategy?.matrix?.os).toEqual(['ubuntu-latest']);
+    const floors = job?.strategy?.matrix?.['node-version'] ?? [];
+    // One macOS leg rather than one per floor: macOS runners are slower and scarcer.
+    expect(job?.strategy?.matrix?.include).toEqual([
+      { os: 'macos-latest', 'node-version': floors[0] },
+    ]);
+    // The leg needs nothing but the packed artifact, so it stays off the browser and test work.
+    expect(job?.steps?.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      'actions/checkout',
+      'actions/download-artifact',
+      'actions/setup-node',
+      'bash scripts/check-packed-consumer.sh cold',
+    ]);
+    // Other jobs stay on Ubuntu, the browser smoke test included.
+    for (const [name, other] of Object.entries(ci.jobs)) {
+      if (name !== 'minimum-node') {
+        expect(other['runs-on'], name).toBe('ubuntu-latest');
+      }
+    }
   });
 
   it('skips app work only for the explicit documentation allowlist', () => {
