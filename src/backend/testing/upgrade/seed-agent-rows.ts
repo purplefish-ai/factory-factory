@@ -70,7 +70,7 @@ const digestDefinition = {
   name: 'Daily digest',
   instructions: 'Summarise yesterday and post it.',
   isEnabled: false,
-  executionConfig: { version: 1, provider: 'CODEX', model: 'gpt-5.4', reasoningEffort: 'high' },
+  executionConfig: { version: 1, provider: 'CLAUDE', model: 'sonnet', reasoningEffort: 'high' },
 };
 const slackInput = {
   version: 1,
@@ -152,7 +152,7 @@ export const agentDefinitions: SeedRow[] = [
     name: 'Daily digest',
     instructions: 'Summarise yesterday and post it.',
     isEnabled: false,
-    executionConfig: { version: 1, provider: 'CODEX', model: 'gpt-5.4', reasoningEffort: 'high' },
+    executionConfig: { version: 1, provider: 'CLAUDE', model: 'sonnet', reasoningEffort: 'high' },
     definitionRevision: 2,
     managementRevision: 2,
     validatedIntent: null,
@@ -808,7 +808,7 @@ export const agentEvaluations: SeedRow[] = [
     configurationSnapshot: snapshot(
       digestDefinition,
       slackTrigger,
-      { version: 1, provider: 'CODEX', model: 'gpt-5.4', reasoningEffort: 'high' },
+      { version: 1, provider: 'CLAUDE', model: 'sonnet', reasoningEffort: 'high' },
       slackInput
     ),
     classifier,
