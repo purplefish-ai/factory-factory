@@ -212,11 +212,11 @@ is a loopback one (the default, and every local launch mode), its own page is
 always an allowed origin: an `http:` loopback origin (`localhost`, `127.x.x.x`
 or `[::1]`) on the port the server actually bound. When the requested port is
 taken and the server falls back to the next free one (for example a second
-desktop instance while `ff serve` holds 3001), the app on that port keeps
-working without listing it in `CORS_ALLOWED_ORIGINS`. Loopback pages on other,
-unconfigured ports are still rejected. A server bound beyond loopback, or
-configured with a public origin (`ff tailscale`, a reverse proxy), allows only
-the configured origins.
+`ff serve` while another holds 3001), the app on that port keeps working without
+listing it in `CORS_ALLOWED_ORIGINS`. Loopback pages on other, unconfigured
+ports are still rejected. A server bound beyond loopback, or configured with a
+public origin (`ff tailscale`, a reverse proxy), allows only the configured
+origins.
 
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
