@@ -1,7 +1,8 @@
-import { type ReactNode, Suspense, useEffect } from 'react';
+import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
+import { ConnectionBanner } from '@/client/components/connection-banner';
 import { FactoryUpdateBanner } from '@/client/components/factory-update-banner';
 import { Loading } from '@/client/components/loading';
 import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
@@ -14,6 +15,10 @@ import { hasExplicitLegacyProjectOwner } from '@/client/lib/project-navigation';
 import { TRPCProvider, useProjects } from '@/client/lib/providers';
 import { Toaster } from '@/components/ui/sonner';
 import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
+import {
+  ConnectionHealthContext,
+  ConnectionHealthStore,
+} from '@/hooks/websocket-connection-health';
 
 /** Banners render outside the page boundary; a failing one must not take down the app. */
 function BannerBoundary({ children }: { children: ReactNode }) {
@@ -65,6 +70,9 @@ function RootLayout() {
         banners={
           <>
             <BannerBoundary>
+              <ConnectionBanner />
+            </BannerBoundary>
+            <BannerBoundary>
               <FactoryUpdateBanner />
             </BannerBoundary>
             <BannerBoundary>
@@ -87,18 +95,22 @@ function RootLayout() {
 }
 
 export function Root() {
+  // Every WebSocket below reports here, for the connection banner.
+  const [connectionHealth] = useState(() => new ConnectionHealthStore());
   return (
     <ThemeProvider>
       <TRPCProvider>
-        <AppearanceProvider>
-          <DataImportResultsProvider
-            onDismiss={() => document.getElementById('app-content')?.focus()}
-          >
-            <WorkspaceNotificationManager />
-            <RootLayout />
-            <Toaster />
-          </DataImportResultsProvider>
-        </AppearanceProvider>
+        <ConnectionHealthContext.Provider value={connectionHealth}>
+          <AppearanceProvider>
+            <DataImportResultsProvider
+              onDismiss={() => document.getElementById('app-content')?.focus()}
+            >
+              <WorkspaceNotificationManager />
+              <RootLayout />
+              <Toaster />
+            </DataImportResultsProvider>
+          </AppearanceProvider>
+        </ConnectionHealthContext.Provider>
       </TRPCProvider>
     </ThemeProvider>
   );

@@ -9,8 +9,7 @@ import { type UseSetupTerminalResult, useSetupTerminal } from './use-setup-termi
 
 let capturedOptions: UseWebSocketTransportOptions | null = null;
 const send = vi.fn();
-const reconnect = vi.fn();
-const transportState = { connected: false, gaveUp: false };
+const transportState = { connected: false };
 let harnessRenders = 0;
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -22,7 +21,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (opts: UseWebSocketTransportOptions) => {
     capturedOptions = opts;
-    return { connected: transportState.connected, gaveUp: transportState.gaveUp, send, reconnect };
+    return { connected: transportState.connected, send };
   },
 }));
 
@@ -68,9 +67,7 @@ describe('useSetupTerminal', () => {
     capturedOptions = null;
     resultRef.current = null;
     send.mockReset();
-    reconnect.mockReset();
     transportState.connected = false;
-    transportState.gaveUp = false;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -267,18 +264,6 @@ describe('useSetupTerminal', () => {
     render(true);
     connect();
     expect(resultRef.current?.output.snapshot()).not.toContain('starting a new shell');
-  });
-
-  it('exposes the transport gave-up state and manual reconnect', () => {
-    render(true);
-    expect(resultRef.current?.gaveUp).toBe(false);
-
-    transportState.gaveUp = true;
-    render(true);
-    expect(resultRef.current?.gaveUp).toBe(true);
-
-    resultRef.current?.reconnect();
-    expect(reconnect).toHaveBeenCalledTimes(1);
   });
 
   it('caps accumulated output with the terminal rolling buffer', () => {

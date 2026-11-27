@@ -14,7 +14,7 @@
  *
  * Usage:
  * ```ts
- * const { connected, send, reconnect } = useWebSocketTransport({ url, onMessage: handleMessage });
+ * const { connected, send } = useWebSocketTransport({ url, onMessage: handleMessage });
  * const chatState = useChatState({
  *   dbSessionId,
  *   send,

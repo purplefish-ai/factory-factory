@@ -15,9 +15,7 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn(),
   destroy: vi.fn(),
   setActive: vi.fn(),
-  reconnect: vi.fn(),
   connected: true,
-  gaveUp: false,
   renderedStream: null as TerminalOutputStream | null,
   terminalRenders: 0,
   requestedFocus: false,
@@ -58,13 +56,11 @@ vi.mock('./use-terminal-websocket', () => ({
     mocks.options = options;
     return {
       connected: mocks.connected,
-      gaveUp: mocks.gaveUp,
       create: mocks.create,
       sendInput: mocks.sendInput,
       resize: mocks.resize,
       destroy: mocks.destroy,
       setActive: mocks.setActive,
-      reconnect: mocks.reconnect,
     };
   },
 }));
@@ -110,9 +106,7 @@ describe('TerminalPanel', () => {
     mocks.resize.mockReset();
     mocks.destroy.mockReset();
     mocks.setActive.mockReset();
-    mocks.reconnect.mockReset();
     mocks.connected = true;
-    mocks.gaveUp = false;
     mocks.renderedStream = null;
     mocks.terminalRenders = 0;
     mocks.requestedFocus = false;
@@ -386,15 +380,14 @@ describe('TerminalPanel', () => {
     await vi.dynamicImportSettled();
 
     expect(container.textContent).toContain('disconnected');
-    // The manual Reconnect button must only appear once the transport gave up.
+    // The transport never stops retrying, so there is no manual Reconnect.
     expect(container.textContent).not.toContain('Reconnect');
 
     root.unmount();
   });
 
-  it('offers a manual reconnect once the transport gives up', async () => {
+  it('says it is connecting while an empty panel waits for the transport', async () => {
     mocks.connected = false;
-    mocks.gaveUp = true;
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -404,16 +397,8 @@ describe('TerminalPanel', () => {
     });
     await vi.dynamicImportSettled();
 
-    const reconnectButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Reconnect')
-    );
-    expect(reconnectButton).toBeDefined();
-
-    flushSync(() => {
-      reconnectButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mocks.reconnect).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Connecting…');
+    expect(container.textContent).not.toContain('Reconnect');
 
     root.unmount();
   });

@@ -17,8 +17,6 @@ const setupTerminalState: UseSetupTerminalResult = {
   authenticate: vi.fn(),
   authenticatingProvider: null,
   connected: false,
-  gaveUp: false,
-  reconnect: vi.fn(),
   showTerminal: false,
   output: new TerminalOutputStream(),
   handleData: vi.fn(),
@@ -52,9 +50,7 @@ describe('SetupTerminalModal', () => {
     vi.mocked(setupTerminalState.authenticate).mockClear();
     setupTerminalState.authenticatingProvider = null;
     setupTerminalState.connected = false;
-    setupTerminalState.gaveUp = false;
     setupTerminalState.showTerminal = false;
-    setupTerminalState.reconnect = vi.fn();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -111,27 +107,17 @@ describe('SetupTerminalModal', () => {
     expect(actions.every((button) => button.disabled)).toBe(true);
   });
 
-  it('shows a Retry control when the connection gives up before ever connecting', async () => {
-    setupTerminalState.gaveUp = true;
+  it('says it is connecting until the first connection, which explains the disabled sign-in', async () => {
     await render();
 
-    const retry = findRetryButton();
-    expect(retry).not.toBeNull();
-    expect(document.body.textContent).toContain('Connection failed.');
-
-    void act(() => {
-      retry?.click();
-    });
-    expect(setupTerminalState.reconnect).toHaveBeenCalledTimes(1);
-  });
-
-  it('says the connection was lost when an established terminal gives up', async () => {
-    setupTerminalState.gaveUp = true;
-    setupTerminalState.showTerminal = true;
-    await render();
-
-    expect(document.body.textContent).toContain('Connection lost.');
-    expect(findRetryButton()).not.toBeNull();
+    expect(document.body.textContent).toContain('Connecting…');
+    const signIns = [...document.querySelectorAll('button')].filter((button) =>
+      /Sign in to (Claude|Codex)/.test(button.textContent ?? '')
+    );
+    expect(signIns).toHaveLength(2);
+    expect(signIns.every((button) => button.disabled)).toBe(true);
+    // The transport never stops retrying, so there is no manual retry.
+    expect(findRetryButton()).toBeNull();
   });
 
   it('shows the reconnecting status while a previous session reconnects', async () => {
@@ -142,11 +128,7 @@ describe('SetupTerminalModal', () => {
     expect(findRetryButton()).toBeNull();
   });
 
-  it('shows no status overlay while connected or during the initial connect', async () => {
-    await render();
-    expect(document.body.textContent).not.toContain('Reconnecting');
-    expect(findRetryButton()).toBeNull();
-
+  it('shows no status overlay while connected', async () => {
     setupTerminalState.connected = true;
     setupTerminalState.showTerminal = true;
     await render();

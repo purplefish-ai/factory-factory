@@ -4,8 +4,10 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RECONNECT_BASE_DELAY_MS } from '@/lib/websocket-config';
 import type { UseWebSocketTransportReturn } from './use-websocket-transport';
 import { useWebSocketTransport } from './use-websocket-transport';
+import { LIVENESS_ABANDON_AFTER_MS, LIVENESS_PING_INTERVAL_MS } from './websocket-liveness';
 
 const WS_CONNECTING = 0;
 const WS_OPEN = 1;
@@ -63,22 +65,6 @@ class MockWebSocket {
 }
 
 let createdSockets: MockWebSocket[] = [];
-// React's Scheduler keeps the real performance object; fake timers replace
-// the global one.
-const schedulerPerformance = performance;
-const readRealClock = performance.now.bind(performance);
-
-// A loaded host makes React's Scheduler yield before a render it queued for a
-// later macrotask. Advance its real clock 6 ms per read so it always does, to
-// force the ordering a test must wait out. Restore the spy after the wait.
-function skewSchedulerClock() {
-  let skew = 0;
-  return vi.spyOn(schedulerPerformance, 'now').mockImplementation(() => {
-    skew += 6;
-    return readRealClock() + skew;
-  });
-}
-
 function getLastSocket(): MockWebSocket {
   const socket = createdSockets.at(-1);
   if (!socket) {
@@ -442,134 +428,6 @@ describe('useWebSocketTransport replay queue', () => {
     harness.cleanup();
   });
 
-  it('exposes gaveUp after exhausting reconnect attempts and resets on manual reconnect', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-
-    const harness = createHarness();
-    await flushEffects();
-
-    flushSync(() => {
-      getLastSocket().simulateOpen();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
-
-    // Each close schedules one reconnect until the attempt budget is spent.
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      flushSync(() => {
-        getLastSocket().close();
-      });
-      expect(harness.transportRef.current?.gaveUp).toBe(false);
-      await vi.advanceTimersByTimeAsync(40_000);
-      await flushEffects();
-    }
-
-    // The budget is exhausted, so this close must surface the give-up state.
-    flushSync(() => {
-      getLastSocket().close();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(true);
-
-    flushSync(() => {
-      harness.transportRef.current?.reconnect();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
-
-    harness.cleanup();
-  });
-
-  it('resets gaveUp when the url becomes null so consumers never see stale give-up state', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-
-    const harness = createHarness();
-    await flushEffects();
-
-    flushSync(() => {
-      getLastSocket().simulateOpen();
-    });
-
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      flushSync(() => {
-        getLastSocket().close();
-      });
-      await vi.advanceTimersByTimeAsync(40_000);
-      await flushEffects();
-    }
-    flushSync(() => {
-      getLastSocket().close();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(true);
-
-    // Dropping the URL means no connection is desired, so there is nothing
-    // to have given up on; a later reconnect starts a fresh attempt budget.
-    // The reset is a render the Scheduler runs in a later macrotask: skew its
-    // clock, and wait for the render instead of a fixed number of ticks.
-    const schedulerClock = skewSchedulerClock();
-    harness.rerenderUrl(null);
-    await vi.waitFor(() => expect(harness.transportRef.current?.gaveUp).toBe(false));
-    schedulerClock.mockRestore();
-
-    // Restoring the URL must grant a fresh attempt budget: the first failure
-    // schedules a retry instead of immediately giving up again.
-    const socketBeforeRestore = getLastSocket();
-    harness.rerenderUrl('ws://localhost:3000/chat');
-    await vi.waitFor(() => expect(getLastSocket()).not.toBe(socketBeforeRestore));
-    flushSync(() => {
-      getLastSocket().close();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
-
-    harness.cleanup();
-  });
-
-  it('starts a fresh reconnect budget when switching directly to a new url', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-
-    const harness = createHarness({
-      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
-    });
-    await flushEffects();
-
-    flushSync(() => {
-      getLastSocket().simulateOpen();
-    });
-
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      flushSync(() => {
-        getLastSocket().close();
-      });
-      await vi.advanceTimersByTimeAsync(40_000);
-      await flushEffects();
-    }
-    flushSync(() => {
-      getLastSocket().close();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(true);
-
-    // The switch's effect resets gaveUp through a render that React's
-    // Scheduler runs in a later macrotask: skew its clock, and wait for the
-    // render instead of a fixed number of ticks.
-    const schedulerClock = skewSchedulerClock();
-    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
-    await vi.waitFor(() => expect(harness.transportRef.current?.gaveUp).toBe(false));
-    schedulerClock.mockRestore();
-
-    // The replacement session's first failure must schedule a retry instead
-    // of inheriting the previous session's exhausted attempt budget.
-    const replacementSocket = getLastSocket();
-    flushSync(() => {
-      replacementSocket.close();
-    });
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
-    await vi.advanceTimersByTimeAsync(40_000);
-    await flushEffects();
-    expect(getLastSocket()).not.toBe(replacementSocket);
-
-    harness.cleanup();
-  });
-
   it('ignores open events from sockets superseded by a URL change', async () => {
     let connectedCount = 0;
     const harness = createHarness({
@@ -599,11 +457,15 @@ describe('useWebSocketTransport replay queue', () => {
   });
 
   it('fences stale messages and closes at the socket boundary after same-URL reconnect', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const onMessage = vi.fn();
     const onDisconnected = vi.fn();
     const harness = createHarness({ onMessage, onDisconnected });
+    await flushEffects();
     const retired = getLastSocket();
     flushSync(() => retired.simulateOpen());
+    retired.simulateMessage({ ffTransport: 'hello', version: '1.0.0' });
     let deliverClose: () => void = () => {
       throw new Error('Retired socket was not closed');
     };
@@ -615,8 +477,11 @@ describe('useWebSocketTransport replay queue', () => {
         onClose?.({ type: 'close' });
       };
     });
-    flushSync(() => harness.transportRef.current?.reconnect());
+    // The ping goes unanswered, so the transport abandons the socket and
+    // reconnects to the same URL after the first backoff delay.
+    await vi.advanceTimersByTimeAsync(LIVENESS_PING_INTERVAL_MS + LIVENESS_ABANDON_AFTER_MS);
     expect(close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(RECONNECT_BASE_DELAY_MS);
     const current = getLastSocket();
     expect(current).not.toBe(retired);
     flushSync(() => current.simulateOpen());

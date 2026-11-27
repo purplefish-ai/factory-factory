@@ -30,6 +30,7 @@ function createConfigService(
       trustProxyHeaders,
       disableCorsChecks,
     })),
+    getAppVersion: vi.fn(() => '1.2.3'),
   };
 }
 

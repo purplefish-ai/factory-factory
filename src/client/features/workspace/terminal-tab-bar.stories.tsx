@@ -25,7 +25,7 @@ const meta: Meta<typeof TerminalTabBar> = {
       <div className="border-b px-2 py-1">
         <TerminalTabBar {...args} />
       </div>
-      <TerminalDisconnectBanner gaveUp onReconnect={() => undefined} />
+      <TerminalDisconnectBanner />
       <pre className="p-3 text-sm">$ pnpm test</pre>
     </div>
   ),

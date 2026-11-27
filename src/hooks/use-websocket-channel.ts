@@ -19,6 +19,8 @@ export interface UseWebSocketChannelOptions<TSchema extends z.ZodType> {
   onDisconnected?: () => void;
   /** How to handle outbound messages while disconnected. @default 'replay' */
   queuePolicy?: WebSocketQueuePolicy;
+  /** Shows a lost connection in the app-wide connection banner. @default false */
+  announceConnectionLoss?: boolean;
 }
 
 /**
@@ -31,7 +33,15 @@ export interface UseWebSocketChannelOptions<TSchema extends z.ZodType> {
 export function useWebSocketChannel<TSchema extends z.ZodType>(
   options: UseWebSocketChannelOptions<TSchema>
 ): UseWebSocketTransportReturn {
-  const { url, schema, onMessage, onConnected, onDisconnected, queuePolicy } = options;
+  const {
+    url,
+    schema,
+    onMessage,
+    onConnected,
+    onDisconnected,
+    queuePolicy,
+    announceConnectionLoss,
+  } = options;
 
   const handleMessage = useCallback(
     (data: unknown) => {
@@ -50,5 +60,6 @@ export function useWebSocketChannel<TSchema extends z.ZodType>(
     onConnected,
     onDisconnected,
     queuePolicy,
+    announceConnectionLoss,
   });
 }

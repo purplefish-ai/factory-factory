@@ -4,7 +4,6 @@
  * These tests verify the WebSocket transport logic including:
  * - Connection state management
  * - Message sending
- * - Reconnection logic
  * - Cleanup on unmount
  *
  * Note: Testing React hooks with WebSocket requires mocking WebSocket and
@@ -12,7 +11,7 @@
  * have that setup, we test the core logic patterns instead.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-config';
+import { getReconnectDelay } from '@/lib/websocket-config';
 
 // =============================================================================
 // WebSocket Config Tests
@@ -43,12 +42,12 @@ describe('getReconnectDelay', () => {
     expect(delay2).toBeGreaterThan(3500); // min ~4000
   });
 
-  it('should cap delay at 30 seconds', () => {
+  it('should cap delay at 10 seconds', () => {
     // After several attempts, delay should be capped
     const delay = getReconnectDelay(10);
-    // Maximum is 30000ms + 25% jitter = 37500ms
-    expect(delay).toBeLessThanOrEqual(37_500);
-    expect(delay).toBeGreaterThanOrEqual(30_000);
+    // Maximum is 10000ms + 25% jitter = 12500ms
+    expect(delay).toBeLessThanOrEqual(12_500);
+    expect(delay).toBeGreaterThanOrEqual(10_000);
   });
 
   it('should add jitter to prevent thundering herd', () => {
@@ -63,16 +62,12 @@ describe('getReconnectDelay', () => {
   });
 
   it('should handle very large attempt numbers gracefully', () => {
-    const delay = getReconnectDelay(100);
-    // Should still be capped at 30s + jitter
-    expect(delay).toBeLessThanOrEqual(37_500);
-    expect(delay).toBeGreaterThanOrEqual(30_000);
-  });
-});
-
-describe('MAX_RECONNECT_ATTEMPTS', () => {
-  it('should be 10', () => {
-    expect(MAX_RECONNECT_ATTEMPTS).toBe(10);
+    // The transport never stops retrying, so the attempt count only grows.
+    for (const attempt of [100, 10_000]) {
+      const delay = getReconnectDelay(attempt);
+      expect(delay).toBeLessThanOrEqual(12_500);
+      expect(delay).toBeGreaterThanOrEqual(10_000);
+    }
   });
 });
 
@@ -387,207 +382,6 @@ describe('WebSocket transport patterns', () => {
     });
   });
 
-  describe('reconnection logic', () => {
-    it('should attempt reconnection on unexpected close', () => {
-      vi.useFakeTimers();
-
-      let reconnectAttempts = 0;
-      const maxAttempts = MAX_RECONNECT_ATTEMPTS;
-      const intentionalClose = false;
-
-      const connect = (): MockWebSocketInstance => {
-        new WebSocket('ws://localhost:3000/chat');
-        const ws = getLastWs(lastCreatedWs);
-        ws.simulateOpen();
-
-        ws.onclose = () => {
-          if (!intentionalClose && reconnectAttempts < maxAttempts) {
-            const delay = getReconnectDelay(reconnectAttempts);
-            reconnectAttempts++;
-            setTimeout(connect, delay);
-          }
-        };
-
-        return ws;
-      };
-
-      const ws = connect();
-
-      // Simulate unexpected close
-      ws.simulateClose();
-
-      // Should have scheduled a reconnect
-      expect(reconnectAttempts).toBe(1);
-
-      // Advance time to trigger reconnect
-      vi.advanceTimersByTime(2000);
-
-      // Should have created another WebSocket
-      expect(createdWebSockets.length).toBeGreaterThan(1);
-
-      vi.useRealTimers();
-    });
-
-    it('should not reconnect on intentional close', () => {
-      let reconnectAttempts = 0;
-      let intentionalClose = false;
-
-      new WebSocket('ws://localhost:3000/chat');
-      const ws = getLastWs(lastCreatedWs);
-      ws.simulateOpen();
-
-      ws.onclose = () => {
-        if (!intentionalClose && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          reconnectAttempts++;
-        }
-      };
-
-      // Set intentional flag before closing
-      intentionalClose = true;
-      ws.simulateClose();
-
-      expect(reconnectAttempts).toBe(0);
-    });
-
-    it('should reset reconnect attempts after successful connection', () => {
-      let reconnectAttempts = 3;
-
-      new WebSocket('ws://localhost:3000/chat');
-      const ws = getLastWs(lastCreatedWs);
-
-      ws.onopen = () => {
-        reconnectAttempts = 0;
-      };
-
-      ws.simulateOpen();
-
-      expect(reconnectAttempts).toBe(0);
-    });
-
-    it('should stop reconnecting after max attempts', () => {
-      let reconnectAttempts = 0;
-      const attemptedReconnects: number[] = [];
-
-      const attemptReconnect = () => {
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          attemptedReconnects.push(reconnectAttempts);
-          reconnectAttempts++;
-          return true;
-        }
-        return false;
-      };
-
-      // Simulate multiple failed reconnects
-      while (attemptReconnect()) {
-        // Continue attempting
-      }
-
-      expect(attemptedReconnects).toHaveLength(MAX_RECONNECT_ATTEMPTS);
-      expect(reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
-      expect(attemptReconnect()).toBe(false);
-    });
-
-    it('should allow lifecycle recovery after max reconnect attempts', () => {
-      let reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
-      let connectCalls = 0;
-      const online = true;
-      const readyState: number = WS_CLOSED;
-
-      const connect = () => {
-        connectCalls += 1;
-      };
-
-      const recoverConnection = () => {
-        if (!online) {
-          return;
-        }
-        if (readyState === WS_OPEN) {
-          return;
-        }
-        reconnectAttempts = 0;
-        connect();
-      };
-
-      recoverConnection();
-
-      expect(reconnectAttempts).toBe(0);
-      expect(connectCalls).toBe(1);
-    });
-
-    it('should skip lifecycle recovery while offline', () => {
-      let reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
-      let connectCalls = 0;
-      const online = false;
-      const readyState: number = WS_CLOSED;
-
-      const connect = () => {
-        connectCalls += 1;
-      };
-
-      const recoverConnection = () => {
-        if (!online) {
-          return;
-        }
-        if (readyState === WS_OPEN) {
-          return;
-        }
-        reconnectAttempts = 0;
-        connect();
-      };
-
-      recoverConnection();
-
-      expect(reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
-      expect(connectCalls).toBe(0);
-    });
-
-    it('should skip lifecycle recovery while socket is connecting', () => {
-      let reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
-      let connectCalls = 0;
-      const online = true;
-      const readyState: number = WS_CONNECTING;
-
-      const connect = () => {
-        connectCalls += 1;
-      };
-
-      const recoverConnection = () => {
-        if (!online) {
-          return;
-        }
-        if (readyState === WS_OPEN || readyState === WS_CONNECTING) {
-          return;
-        }
-        reconnectAttempts = 0;
-        connect();
-      };
-
-      recoverConnection();
-
-      expect(reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
-      expect(connectCalls).toBe(0);
-    });
-
-    it('should only recover on pageshow when restored from bfcache', () => {
-      let recoverCalls = 0;
-
-      const recoverConnection = () => {
-        recoverCalls += 1;
-      };
-
-      const handlePageShow = (event: { persisted: boolean }) => {
-        if (event.persisted) {
-          recoverConnection();
-        }
-      };
-
-      handlePageShow({ persisted: false });
-      handlePageShow({ persisted: true });
-
-      expect(recoverCalls).toBe(1);
-    });
-  });
-
   describe('cleanup on unmount', () => {
     it('should close WebSocket and clear timeouts on cleanup', () => {
       vi.useFakeTimers();
@@ -623,42 +417,6 @@ describe('WebSocket transport patterns', () => {
 
       // Should not throw
       expect(() => cleanup()).not.toThrow();
-    });
-  });
-
-  describe('manual reconnect', () => {
-    it('should allow manual reconnection', () => {
-      let ws: MockWebSocketInstance | null = null;
-      let reconnectAttempts = 5; // Simulate that we've been trying
-
-      const connect = () => {
-        new WebSocket('ws://localhost:3000/chat');
-        ws = lastCreatedWs;
-        return ws;
-      };
-
-      const reconnect = () => {
-        // Reset attempt counter for manual reconnect
-        reconnectAttempts = 0;
-
-        // Close existing connection if any
-        if (ws) {
-          ws.close();
-        }
-
-        // Connect
-        connect();
-      };
-
-      // Initial connection
-      connect();
-      expect(createdWebSockets).toHaveLength(1);
-
-      // Manual reconnect
-      reconnect();
-
-      expect(reconnectAttempts).toBe(0);
-      expect(createdWebSockets).toHaveLength(2);
     });
   });
 

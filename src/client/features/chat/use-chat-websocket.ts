@@ -378,6 +378,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     onMessage: handleMessage,
     onConnected: handleConnected,
     onDisconnected: handleDisconnected,
+    announceConnectionLoss: true,
   });
 
   // Wire up the send function to the transport

@@ -5,6 +5,7 @@ import type { ApplicationServices } from '@/backend/app-context';
 import { toError } from '@/backend/lib/error-utils';
 import { isBrowserOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-trust';
 import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
+import { acceptTransportFrames, wantsTransportFrames } from './transport-frames';
 
 type WebSocketOriginLogger = Pick<ReturnType<ApplicationServices['createLogger']>, 'warn'>;
 type WebSocketUpgradeLogger = Pick<
@@ -12,6 +13,10 @@ type WebSocketUpgradeLogger = Pick<
   'warn' | 'error'
 >;
 type WebSocketOriginConfigService = Pick<ApplicationServices['configService'], 'getCorsConfig'>;
+type WebSocketUpgradeConfigService = Pick<
+  ApplicationServices['configService'],
+  'getCorsConfig' | 'getAppVersion'
+>;
 
 function getForwardedClientAddressHeaders(request: IncomingMessage): string[] {
   return FORWARDED_CLIENT_ADDRESS_HEADERS.filter((header) => request.headers[header] !== undefined);
@@ -121,17 +126,6 @@ export interface WebSocketUpgradeOpenContext<TAuth, TParam extends string = neve
   auth: TAuth;
 }
 
-/**
- * Build a WebSocket upgrade handler with the preamble shared by every
- * channel: origin validation, trusted-local validation, required query
- * params, an optional authorization hook, then `handleUpgrade` +
- * `markWebSocketAlive` before handing the socket to `onOpen`.
- *
- * The `authorize` hook runs after validation and before the upgrade. It may
- * return (or resolve) `null` to reject the upgrade, in which case it is
- * responsible for writing a response to the raw socket; any thrown error is
- * logged and answered with a generic 400.
- */
 function extractRequiredParams<TParam extends string>(
   url: URL,
   requiredParams: readonly TParam[],
@@ -190,12 +184,25 @@ function runAuthorize<TAuth>(
   }
 }
 
+/**
+ * Build a WebSocket upgrade handler with the preamble shared by every
+ * channel: origin validation, trusted-local validation, required query
+ * params, an optional authorization hook, then `handleUpgrade` +
+ * `markWebSocketAlive` and, for a client that opted in, the transport hello
+ * and ping answers (`transport-frames.ts`) before handing the socket to
+ * `onOpen`.
+ *
+ * The `authorize` hook runs after validation and before the upgrade. It may
+ * return (or resolve) `null` to reject the upgrade, in which case it is
+ * responsible for writing a response to the raw socket; any thrown error is
+ * logged and answered with a generic 400.
+ */
 export function createWebSocketUpgradeHandler<
   TAuth = undefined,
   TParam extends string = never,
 >(options: {
   connectionName: string;
-  configService: WebSocketOriginConfigService;
+  configService: WebSocketUpgradeConfigService;
   logger: WebSocketUpgradeLogger;
   requiredParams?: readonly TParam[];
   // NonNullable in the return position makes a hook that can return
@@ -236,6 +243,9 @@ export function createWebSocketUpgradeHandler<
     const upgrade = (auth: TAuth): void => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         markWebSocketAlive(ws, wsAliveMap);
+        if (wantsTransportFrames(url)) {
+          acceptTransportFrames(ws, configService.getAppVersion());
+        }
         onOpen(ws, { params, url, request, auth });
       });
     };

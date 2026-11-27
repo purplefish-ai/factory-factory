@@ -13,12 +13,11 @@ vi.mock('react', async (importOriginal) => {
 
 let capturedOptions: UseWebSocketTransportOptions | null = null;
 const send = vi.fn();
-const reconnect = vi.fn();
 
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (opts: UseWebSocketTransportOptions) => {
     capturedOptions = opts;
-    return { connected: true, gaveUp: false, send, reconnect };
+    return { connected: true, send };
   },
 }));
 
@@ -31,10 +30,9 @@ describe('useWebSocketChannel', () => {
   beforeEach(() => {
     capturedOptions = null;
     send.mockReset();
-    reconnect.mockReset();
   });
 
-  it('passes url, queue policy, and lifecycle callbacks through to the transport', () => {
+  it('passes url, queue policy, banner opt-in and lifecycle callbacks through to the transport', () => {
     const onConnected = vi.fn();
     const onDisconnected = vi.fn();
 
@@ -45,10 +43,12 @@ describe('useWebSocketChannel', () => {
       onConnected,
       onDisconnected,
       queuePolicy: 'drop',
+      announceConnectionLoss: true,
     });
 
     expect(capturedOptions?.url).toBe('ws://example.test/logs');
     expect(capturedOptions?.queuePolicy).toBe('drop');
+    expect(capturedOptions?.announceConnectionLoss).toBe(true);
 
     capturedOptions?.onConnected?.();
     capturedOptions?.onDisconnected?.();
@@ -84,11 +84,8 @@ describe('useWebSocketChannel', () => {
     });
 
     expect(channel.connected).toBe(true);
-    expect(channel.gaveUp).toBe(false);
 
     channel.send({ type: 'input', data: 'x' });
-    channel.reconnect();
     expect(send).toHaveBeenCalledWith({ type: 'input', data: 'x' });
-    expect(reconnect).toHaveBeenCalledTimes(1);
   });
 });

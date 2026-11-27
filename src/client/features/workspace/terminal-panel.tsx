@@ -3,7 +3,6 @@ import { lazy, Suspense } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { ErrorBoundary } from '@/client/error-boundary';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { TerminalDisconnectBanner } from './terminal-disconnect-banner';
 import type { TerminalTabs } from './use-terminal-tabs';
@@ -13,13 +12,6 @@ import type { TerminalTabs } from './use-terminal-tabs';
 const TerminalInstance = lazy(() =>
   import('@/client/components/terminal-instance').then((m) => ({ default: m.TerminalInstance }))
 );
-
-function emptyStateDescription(connected: boolean, gaveUp: boolean): string {
-  if (connected) {
-    return 'Click + to open a new terminal';
-  }
-  return gaveUp ? 'Disconnected' : 'Connecting…';
-}
 
 interface TerminalPanelProps {
   /** Tabs from useTerminalTabs, called by the component that renders the tab bar. */
@@ -37,11 +29,11 @@ export function TerminalPanel({
   isVisible = true,
   autoCreateWhenEmpty = false,
 }: TerminalPanelProps) {
-  const { tabs, activeTabId, connected, gaveUp, reconnect } = terminal;
+  const { tabs, activeTabId, connected } = terminal;
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   // Restoring or creating the first terminal should not show a manual-create prompt.
-  if (tabs.length === 0 && autoCreateWhenEmpty && !gaveUp) {
+  if (tabs.length === 0 && autoCreateWhenEmpty) {
     return <Loading size="compact" message={connected ? 'Opening terminal…' : 'Connecting…'} />;
   }
 
@@ -52,14 +44,7 @@ export function TerminalPanel({
         size="compact"
         icon={TerminalIcon}
         title="No terminal open"
-        description={emptyStateDescription(connected, gaveUp)}
-        action={
-          gaveUp ? (
-            <Button variant="outline" size="sm" onClick={reconnect}>
-              Reconnect
-            </Button>
-          ) : null
-        }
+        description={connected ? 'Click + to open a new terminal' : 'Connecting…'}
         className={cn('h-full bg-background', className)}
       />
     );
@@ -68,7 +53,7 @@ export function TerminalPanel({
   return (
     <div className={cn('h-full flex flex-col', className)}>
       {/* Input sent while disconnected is dropped, so make the gap visible */}
-      {!connected && <TerminalDisconnectBanner gaveUp={gaveUp} onReconnect={reconnect} />}
+      {!connected && <TerminalDisconnectBanner />}
 
       {/* Terminal content */}
       <div className="flex-1 overflow-hidden bg-background">

@@ -1,5 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { getReconnectDelay, MAX_RECONNECT_ATTEMPTS } from '@/lib/websocket-config';
+import { useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import {
+  CONNECT_TIMEOUT_MS,
+  getReconnectDelay,
+  STABLE_CONNECTION_MS,
+} from '@/lib/websocket-config';
+import {
+  createTransportPing,
+  isTransportFrame,
+  TransportServerFrameSchema,
+  withTransportOptIn,
+} from '@/shared/websocket-transport';
+import {
+  type ChannelConnectionState,
+  ConnectionHealthContext,
+  type ConnectionHealthStore,
+} from './websocket-connection-health';
+import { ConnectionLiveness, setTrustedTimeout } from './websocket-liveness';
 
 // =============================================================================
 // Constants
@@ -86,6 +102,18 @@ function sendMessageBatch(
   return index;
 }
 
+function parseFrame(data: unknown): { parsed: true; value: unknown } | { parsed: false } {
+  if (typeof data !== 'string') {
+    return { parsed: false };
+  }
+  try {
+    const value: unknown = JSON.parse(data);
+    return { parsed: true, value };
+  } catch {
+    return { parsed: false };
+  }
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -97,7 +125,7 @@ export interface UseWebSocketTransportOptions {
   onMessage?: (data: unknown) => void;
   /** Called when connection is established. */
   onConnected?: () => void;
-  /** Called when connection is lost. */
+  /** Called when connection is lost, including each failed reconnect attempt. */
   onDisconnected?: () => void;
   /**
    * How to handle outbound messages while disconnected.
@@ -107,26 +135,24 @@ export interface UseWebSocketTransportOptions {
    * @default 'replay'
    */
   queuePolicy?: WebSocketQueuePolicy;
+  /**
+   * Shows this channel's lost connection in the app-wide connection banner
+   * (`ConnectionHealthContext`). Set it for the channels every page depends
+   * on; channels with their own disconnect UI, such as the terminals, leave
+   * it unset.
+   */
+  announceConnectionLoss?: boolean;
 }
 
 export interface UseWebSocketTransportReturn {
   /** Whether the WebSocket is currently connected. */
   connected: boolean;
   /**
-   * Whether automatic reconnection has stopped after exhausting its attempt
-   * budget. Consumers should offer a manual-reconnect affordance when true.
-   * Resets whenever a new connection attempt starts (manual reconnect,
-   * lifecycle recovery, or URL change).
-   */
-  gaveUp: boolean;
-  /**
    * Send a message (will be JSON stringified).
    * If disconnected, message is queued for delivery on reconnect unless the effective
    * queue policy is 'drop'. Returns true if sent immediately, false if queued or dropped.
    */
   send: WebSocketSend;
-  /** Manually trigger a reconnection attempt. */
-  reconnect: () => void;
 }
 
 // =============================================================================
@@ -138,7 +164,13 @@ export interface UseWebSocketTransportReturn {
  *
  * Handles:
  * - Connection lifecycle management
- * - Exponential backoff reconnection with jitter
+ * - Reconnection that never gives up, with exponential backoff, jitter and a
+ *   capped delay (`getReconnectDelay`), and a timeout for an attempt that
+ *   never opens
+ * - Transport frames below the channel (`@/shared/websocket-transport`): the
+ *   server's version hello, reported to `ConnectionHealthContext`, and an
+ *   application-level ping that drops a connection which stopped answering
+ *   (`ConnectionLiveness`)
  * - JSON serialization/deserialization
  * - Proper cleanup on unmount
  *
@@ -154,10 +186,18 @@ export interface UseWebSocketTransportReturn {
 export function useWebSocketTransport(
   options: UseWebSocketTransportOptions
 ): UseWebSocketTransportReturn {
-  const { url, onMessage, onConnected, onDisconnected, queuePolicy = 'replay' } = options;
+  const {
+    url,
+    onMessage,
+    onConnected,
+    onDisconnected,
+    queuePolicy = 'replay',
+    announceConnectionLoss = false,
+  } = options;
 
+  const health = useContext(ConnectionHealthContext);
+  const channelId = useId();
   const [connected, setConnected] = useState(false);
-  const [gaveUp, setGaveUp] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -166,11 +206,20 @@ export function useWebSocketTransport(
   // Message queue for messages sent while disconnected
   const messageQueueRef = useRef<unknown[]>([]);
   const previousUrlRef = useRef<string | null>(null);
+  // Per-socket timers: the open timeout while connecting, then the stability
+  // timer that resets the backoff; the liveness pings once the server says hello.
+  const cancelSocketTimerRef = useRef<(() => void) | null>(null);
+  const livenessRef = useRef<ConnectionLiveness | null>(null);
+  // The state last reported to the health store; null while no connection is wanted.
+  const connectionStateRef = useRef<ChannelConnectionState | null>(null);
+  const connectRef = useRef<() => void>(() => undefined);
 
   // Store callbacks in refs to avoid reconnection on callback changes
   const onMessageRef = useRef(onMessage);
   const onConnectedRef = useRef(onConnected);
   const onDisconnectedRef = useRef(onDisconnected);
+  const healthRef = useRef<ConnectionHealthStore | null>(health);
+  const announceRef = useRef(announceConnectionLoss);
 
   // Update callback refs when callbacks change
   useEffect(() => {
@@ -178,6 +227,83 @@ export function useWebSocketTransport(
     onConnectedRef.current = onConnected;
     onDisconnectedRef.current = onDisconnected;
   }, [onMessage, onConnected, onDisconnected]);
+
+  // Joining or leaving the banner mid-connection publishes or withdraws the
+  // current state, so the banner never keeps a state the channel moved past.
+  useEffect(() => {
+    healthRef.current = health;
+    announceRef.current = announceConnectionLoss;
+    const state = connectionStateRef.current;
+    if (announceConnectionLoss && state !== null) {
+      health?.setChannelState(channelId, state);
+    }
+    return () => health?.removeChannel(channelId);
+  }, [health, announceConnectionLoss, channelId]);
+
+  const reportState = useCallback(
+    (state: ChannelConnectionState) => {
+      if (connectionStateRef.current === state) {
+        return;
+      }
+      connectionStateRef.current = state;
+      if (announceRef.current) {
+        healthRef.current?.setChannelState(channelId, state);
+      }
+    },
+    [channelId]
+  );
+
+  const stopSocketTimers = useCallback(() => {
+    cancelSocketTimerRef.current?.();
+    cancelSocketTimerRef.current = null;
+    livenessRef.current?.stop();
+    livenessRef.current = null;
+  }, []);
+
+  // The current socket is gone (closed, timed out or abandoned as dead): fence it
+  // off, report the loss and, unless the close was ours, retry. Retries never
+  // stop; the backoff delay is capped.
+  const loseSocket = useCallback(
+    (ws: WebSocket): boolean => {
+      if (wsRef.current !== ws) {
+        return false;
+      }
+      stopSocketTimers();
+      wsRef.current = null;
+      setConnected(false);
+      onDisconnectedRef.current?.();
+
+      if (!intentionalCloseRef.current) {
+        reportState('reconnecting');
+        const delay = getReconnectDelay(reconnectAttemptsRef.current);
+        reconnectAttemptsRef.current += 1;
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectRef.current();
+        }, delay);
+      }
+      return true;
+    },
+    [reportState, stopSocketTimers]
+  );
+
+  // Drops a socket that is still open or connecting but no longer trusted.
+  const abandonSocket = useCallback(
+    (ws: WebSocket) => {
+      if (loseSocket(ws)) {
+        ws.close();
+      }
+    },
+    [loseSocket]
+  );
+
+  const handleTransportFrame = useCallback((frame: unknown) => {
+    const parsed = TransportServerFrameSchema.safeParse(frame);
+    if (parsed.success && parsed.data.ffTransport === 'hello') {
+      healthRef.current?.reportServerVersion(parsed.data.version);
+      // The server answers pings, so liveness can start.
+      livenessRef.current?.start();
+    }
+  }, []);
 
   // Drain replay queue in FIFO order, preserving unsent messages if send fails.
   const flushQueuedMessages = useCallback((ws: WebSocket, dropStaleMessages: boolean) => {
@@ -203,6 +329,55 @@ export function useWebSocketTransport(
     }
   }, []);
 
+  const handleOpen = useCallback(
+    (ws: WebSocket) => {
+      setConnected(true);
+      reportState('connected');
+      // An open alone proves little: a server can accept the upgrade and then
+      // stall. The backoff resets only after a full window with no missed
+      // reply; a missed reply cancels the window and a late one starts it
+      // again, so a server that keeps stalling is not retried at the shortest
+      // delay every time.
+      const cancelStabilityWindow = () => {
+        cancelSocketTimerRef.current?.();
+        cancelSocketTimerRef.current = null;
+      };
+      const startStabilityWindow = () => {
+        cancelStabilityWindow();
+        const handle = setTimeout(() => {
+          cancelSocketTimerRef.current = null;
+          reconnectAttemptsRef.current = 0;
+        }, STABLE_CONNECTION_MS);
+        cancelSocketTimerRef.current = () => clearTimeout(handle);
+      };
+      livenessRef.current = new ConnectionLiveness({
+        sendPing: (id) =>
+          ws.readyState === WebSocket.OPEN && trySendMessage(ws, createTransportPing(id)),
+        onUnresponsive: () => {
+          cancelStabilityWindow();
+          reportState('unresponsive');
+        },
+        onResponsive: () => {
+          startStabilityWindow();
+          reportState('connected');
+        },
+        onDead: () => abandonSocket(ws),
+      });
+      startStabilityWindow();
+
+      if (queuePolicy !== 'replay') {
+        messageQueueRef.current = [];
+        onConnectedRef.current?.();
+        return;
+      }
+
+      flushQueuedMessages(ws, true);
+
+      onConnectedRef.current?.();
+    },
+    [abandonSocket, flushQueuedMessages, queuePolicy, reportState]
+  );
+
   // Connect to WebSocket
   const connect = useCallback(() => {
     // Don't connect if no URL provided
@@ -218,6 +393,7 @@ export function useWebSocketTransport(
     // Close any existing WebSocket in a transitional state (CONNECTING, CLOSING)
     if (wsRef.current) {
       const previous = wsRef.current;
+      stopSocketTimers();
       wsRef.current = null;
       setConnected(false);
       onDisconnectedRef.current?.();
@@ -232,78 +408,54 @@ export function useWebSocketTransport(
 
     // Reset intentional close flag when establishing a new connection
     intentionalCloseRef.current = false;
-    setGaveUp(false);
 
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(withTransportOptIn(url));
     wsRef.current = ws;
+    // An attempt can hang while opening, for example when a stopped server's
+    // kernel still accepts the connection; give up on it and try again.
+    cancelSocketTimerRef.current = setTrustedTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        abandonSocket(ws);
+      }
+    }, CONNECT_TIMEOUT_MS);
 
     ws.onopen = () => {
-      if (wsRef.current !== ws) {
-        return;
+      if (wsRef.current === ws) {
+        handleOpen(ws);
       }
-
-      setConnected(true);
-      reconnectAttemptsRef.current = 0;
-
-      if (queuePolicy !== 'replay') {
-        messageQueueRef.current = [];
-        onConnectedRef.current?.();
-        return;
-      }
-
-      flushQueuedMessages(ws, true);
-
-      onConnectedRef.current?.();
     };
 
     ws.onmessage = (event) => {
       if (wsRef.current !== ws) {
         return;
       }
-
-      try {
-        if (typeof event.data !== 'string') {
-          return;
-        }
-        const data: unknown = JSON.parse(event.data);
-        onMessageRef.current?.(data);
-      } catch {
-        // Silently ignore parse errors
-      }
-    };
-
-    ws.onclose = () => {
-      // Only handle this close event if this WebSocket is still the current one.
-      // If wsRef.current is different or null, we've already moved on to a new connection
-      // and should not reconnect from this stale close event.
-      if (wsRef.current !== ws) {
+      livenessRef.current?.frameReceived();
+      const frame = parseFrame(event.data);
+      if (!frame.parsed) {
+        // Silently ignore binary frames and parse errors
         return;
       }
-
-      setConnected(false);
-      wsRef.current = null;
-      onDisconnectedRef.current?.();
-
-      // Only attempt to reconnect if this wasn't an intentional close
-      if (!intentionalCloseRef.current) {
-        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          const delay = getReconnectDelay(reconnectAttemptsRef.current);
-          reconnectAttemptsRef.current += 1;
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, delay);
-        } else {
-          // Attempt budget exhausted: stop retrying and surface the state so
-          // consumers can offer a manual-reconnect affordance.
-          setGaveUp(true);
-        }
+      if (isTransportFrame(frame.value)) {
+        handleTransportFrame(frame.value);
+        return;
       }
+      onMessageRef.current?.(frame.value);
+    };
+
+    // A close event from a socket that is no longer current is ignored: the
+    // transport has already moved on to a new connection.
+    ws.onclose = () => {
+      loseSocket(ws);
     };
 
     ws.onerror = () => {
       // WebSocket errors are handled by onclose
     };
-  }, [flushQueuedMessages, queuePolicy, url]);
+  }, [abandonSocket, handleOpen, handleTransportFrame, loseSocket, stopSocketTimers, url]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Attempt immediate recovery when the app returns to the foreground or network.
   const recoverConnection = useCallback(() => {
@@ -341,12 +493,11 @@ export function useWebSocketTransport(
     }
 
     if (url) {
+      reportState('connecting');
       connect();
     } else {
       // URL became null - disconnect and clear queue. With no connection
-      // desired there is nothing to have given up on, so clear gaveUp and
-      // the attempt budget too; otherwise a consumer that restores the URL
-      // sees stale give-up state or re-gives-up on its first failure.
+      // desired, a consumer that restores the URL starts a fresh backoff.
       intentionalCloseRef.current = true;
       messageQueueRef.current = [];
       if (wsRef.current) {
@@ -354,13 +505,15 @@ export function useWebSocketTransport(
         wsRef.current = null;
       }
       setConnected(false);
-      setGaveUp(false);
       reconnectAttemptsRef.current = 0;
     }
 
     return () => {
       // Mark as intentional close to prevent reconnection in onclose handler
       intentionalCloseRef.current = true;
+      stopSocketTimers();
+      connectionStateRef.current = null;
+      healthRef.current?.removeChannel(channelId);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -375,16 +528,20 @@ export function useWebSocketTransport(
         setConnected(false);
       }
     };
-  }, [url, connect]);
+  }, [url, connect, channelId, reportState, stopSocketTimers]);
 
   // Mobile browsers often suspend tabs and delay close events while backgrounded.
-  // Recover immediately when the tab is foregrounded or network comes back.
+  // Recover immediately when the tab is foregrounded or network comes back, and
+  // check an open connection at once: it may have died while the tab was away.
+  // Liveness pauses while the tab is hidden, where throttled timers would
+  // report a healthy connection as lost.
   useEffect(() => {
     if (!url || typeof window === 'undefined' || typeof document === 'undefined') {
       return;
     }
 
     const handleVisibilityChange = () => {
+      livenessRef.current?.visibilityChanged();
       if (document.visibilityState === 'visible') {
         recoverConnection();
       }
@@ -395,6 +552,7 @@ export function useWebSocketTransport(
       }
     };
     const handleOnline = () => {
+      livenessRef.current?.checkNow();
       recoverConnection();
     };
 
@@ -439,29 +597,8 @@ export function useWebSocketTransport(
     [flushQueuedMessages, queuePolicy]
   );
 
-  // Manual reconnect
-  const reconnect = useCallback(() => {
-    // Reset attempt counter for manual reconnect
-    reconnectAttemptsRef.current = 0;
-    intentionalCloseRef.current = false;
-
-    // Clear message queue on manual reconnect to avoid stale messages
-    messageQueueRef.current = [];
-
-    // Close existing connection if any
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    // Connect
-    connect();
-  }, [connect]);
-
   return {
     connected,
-    gaveUp,
     send,
-    reconnect,
   };
 }
