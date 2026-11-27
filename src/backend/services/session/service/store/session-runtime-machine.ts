@@ -1,5 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import {
+  SessionRuntimeCombinationReport,
+  type SessionRuntimeWriter,
+} from './session-runtime-combinations';
 import type { SessionStore } from './session-store.types';
 
 function selectWork(
@@ -44,24 +48,29 @@ export class SessionRuntimeMachine {
     };
     const launch = { idle };
     this.initialLaunches.set(store, launch);
-    this.markRuntime(store, {
-      phase: 'starting',
-      processState: 'unknown',
-      activity: 'IDLE',
-    });
+    this.markRuntime(
+      store,
+      { phase: 'starting', processState: 'unknown', activity: 'IDLE' },
+      { caller: 'beginInitialLaunch' }
+    );
     return () => {
       if (this.initialLaunches.get(store) !== launch) {
         return;
       }
       this.initialLaunches.delete(store);
-      this.markRuntime(store, { ...launch.idle, updatedAt: this.nowIso() }, { replace: true });
+      this.markRuntime(
+        store,
+        { ...launch.idle, updatedAt: this.nowIso() },
+        { replace: true, caller: 'releaseInitialLaunch' }
+      );
     };
   }
 
   constructor(
     private readonly emitRuntimeDelta: (sessionId: string, runtime: SessionRuntimeState) => void,
     private readonly nowIso: () => string,
-    private readonly clearSlashCommands?: (sessionId: string) => void
+    private readonly clearSlashCommands?: (sessionId: string) => void,
+    readonly combinationReport = new SessionRuntimeCombinationReport()
   ) {}
 
   markRuntime(
@@ -72,7 +81,7 @@ export class SessionRuntimeMachine {
       work?: SessionRuntimeState['work'];
       updatedAt?: string;
     },
-    options?: { emitDelta?: boolean; replace?: boolean }
+    options?: { emitDelta?: boolean; replace?: boolean; caller?: SessionRuntimeWriter }
   ): void {
     const {
       lastExit: _lastExit,
@@ -99,6 +108,13 @@ export class SessionRuntimeMachine {
     };
 
     this.projectInitialLaunch(store);
+    // Observation only: never changes the write above.
+    this.combinationReport.record(
+      store.sessionId,
+      before,
+      store.runtime,
+      options?.caller ?? 'unlabelled'
+    );
 
     if (options?.emitDelta !== false) {
       if (clearSlashCommands) {

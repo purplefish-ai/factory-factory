@@ -10,7 +10,8 @@ import { eventLoopMonitor } from '@/backend/lib/event-loop-monitor';
 
 export function createHealthRouter(appContext: AppContext): Router {
   const router = Router();
-  const { configService, createLogger, settingsHealthService, rateLimiter } = appContext.services;
+  const { configService, createLogger, settingsHealthService, rateLimiter, sessionDomainService } =
+    appContext.services;
   const logger = createLogger('health-route');
 
   /**
@@ -53,7 +54,8 @@ export function createHealthRouter(appContext: AppContext): Router {
   /**
    * GET /health/all
    * Comprehensive health check - database + rate limiter status, plus
-   * event-loop lag since the previous call
+   * event-loop lag since the previous call and the session runtime
+   * combinations counted since start (observation for the runtime redesign)
    */
   router.get('/all', async (_req, res) => {
     const checks: Record<string, { status: string; details?: unknown }> = {};
@@ -93,6 +95,7 @@ export function createHealthRouter(appContext: AppContext): Router {
       timestamp: new Date().toISOString(),
       checks,
       ...(eventLoop ? { eventLoop } : {}),
+      sessionRuntimeCombinations: sessionDomainService.runtimeCombinations.counts(),
     });
   });
 
