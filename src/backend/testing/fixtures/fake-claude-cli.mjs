@@ -45,8 +45,9 @@
 //   approval` (the adapter shows it as "Reason: …" in acp.jsonl), an `addRules` suggestion.
 // - Token counts and costs are small made-up numbers; ids are random.
 // - rate_limit_event: status `allowed`, a 7-day window resetting in 3 days, utilization 0.
-// - tool_result_meta: `permission_decision {decision: allow, source: user}` when run (scrubbed in
-//   the recording); `non_execution_kind: user-rejected` when refused (not recorded).
+// - tool_result_meta: `permission_decision {decision: allow, source: user | hook | mode}` when
+//   run (scrubbed in the recording); `non_execution_kind: user-rejected` when refused (not
+//   recorded).
 // - Structured output: every string starts with the prompt's first word (its `objective` for the
 //   workspace metadata input), so a renamed workspace keeps its distinguishing word.
 //
@@ -337,7 +338,7 @@ function sampleFor(schema, subject, key = 'value') {
     case 'string': {
       const words = key.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
       const text = schema.pattern
-        ? `${subject.toLowerCase()}-${words.replace(/\s+/g, '-')}`
+        ? `${subject.toLowerCase().replace(/[^a-z0-9]/g, '') || 'sandbox'}-${words.replace(/\s+/g, '-')}`
         : `${subject} ${words}`;
       return text.slice(0, schema.maxLength ?? text.length);
     }
@@ -357,7 +358,7 @@ function subjectOf(text) {
   } catch {
     // Not JSON: the prompt itself.
   }
-  return /[A-Za-z][A-Za-z0-9]*/.exec(source)?.[0] ?? 'Sandbox';
+  return /[\p{L}\p{N}]+/u.exec(source)?.[0] ?? 'Sandbox';
 }
 
 let currentTurn = null;
@@ -547,11 +548,15 @@ function createTurn(message, text) {
       const decisions = (await preHooks).map(
         (response) => response?.hookSpecificOutput?.permissionDecision
       );
-      let decision = decisions.includes('deny')
-        ? { behavior: 'deny', message: 'A PreToolUse hook denied this command.' }
-        : decisions.includes('allow') || !asksForBash()
-          ? { behavior: 'allow', updatedInput: input }
-          : null;
+      // `source` says what decided: a hook, the permission mode, or the user's answer below.
+      let decision = null;
+      if (decisions.includes('deny')) {
+        decision = { behavior: 'deny', message: 'A PreToolUse hook denied this command.' };
+      } else if (decisions.includes('allow')) {
+        decision = { behavior: 'allow', updatedInput: input, source: 'hook' };
+      } else if (!asksForBash()) {
+        decision = { behavior: 'allow', updatedInput: input, source: 'mode' };
+      }
       if (!decision && !turn.interrupted) {
         emit({ type: 'system', subtype: 'session_state_changed', state: 'requires_action' });
         const answer = request('can_use_tool', {
@@ -618,7 +623,10 @@ function createTurn(message, text) {
         // How the decision was made, or why the tool did not run (the adapter reads the kind).
         tool_result_meta: [
           allowed
-            ? { id: toolUseId, permission_decision: { decision: 'allow', source: 'user' } }
+            ? {
+                id: toolUseId,
+                permission_decision: { decision: 'allow', source: decision.source ?? 'user' },
+              }
             : { id: toolUseId, non_execution_kind: 'user-rejected' },
         ],
       });

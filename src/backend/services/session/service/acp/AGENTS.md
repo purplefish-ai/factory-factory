@@ -78,6 +78,7 @@ here directly.
   (plan usage, `../inference/`) run it only in the dev sandbox, because the SDK
   and its bundled CLI are a version-locked pair a user's own CLI could break.
   `../inference/disposable-inference.test.ts`, `scripts/sandbox/env.test.ts`,
+  `claude-plan-usage-loader.test.ts`,
   `fake-claude-scenarios.integration.test.ts`.
 - A catalog loader or the probe reports its child drained only on the child's
   `close` (its pipes closed), the probe also only after its ACP connection

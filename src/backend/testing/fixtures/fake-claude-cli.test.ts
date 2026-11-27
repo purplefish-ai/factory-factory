@@ -357,6 +357,26 @@ describe('a stream-json session', () => {
     expect(textOf(session.messages)).toEqual(['You declined the command, so I did not run it.']);
   });
 
+  it('runs Bash without asking in bypassPermissions mode, and says the mode decided', async () => {
+    const session = startSession(sandboxEnv().env, [
+      ...streamArgs.filter((arg) => !arg.startsWith('--permission-mode')),
+      '--permission-mode=bypassPermissions',
+    ]);
+    await session.control('initialize', { hooks: {} });
+    await session.prompt('ff-scenario:permission-request');
+    expect(session.messages.some((message) => message.request?.subtype === 'can_use_tool')).toBe(
+      false
+    );
+    expect(
+      session.messages.find((message) => message.type === 'user' && 'tool_result_meta' in message)
+    ).toMatchObject({
+      tool_result_meta: [
+        expect.objectContaining({ permission_decision: { decision: 'allow', source: 'mode' } }),
+      ],
+    });
+    expect(textOf(session.messages)).toEqual(['You approved the command, so I ran it.']);
+  });
+
   it('ends a turn waiting for permission when interrupted', async () => {
     const session = startSession(sandboxEnv().env);
     await session.control('initialize', { hooks: {} });
@@ -406,6 +426,16 @@ describe('a stream-json session', () => {
         branch: 'clauderobin-branch',
         sidebarSummary: 'Clauderobin sidebar summary',
       },
+    });
+    // A first word in any script is kept; the pattern-bound branch keeps its ASCII letters.
+    const second = startSession(sandboxEnv().env, [
+      ...streamArgs,
+      `--json-schema=${JSON.stringify(schema)}`,
+    ]);
+    await second.control('initialize', { hooks: {} });
+    const accented = JSON.stringify({ objective: 'Éclair says hello', messages: [] });
+    expect(await second.prompt(accented)).toMatchObject({
+      structured_output: { title: 'Éclair title', branch: 'clair-branch' },
     });
   });
 
