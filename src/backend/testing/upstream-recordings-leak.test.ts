@@ -52,6 +52,21 @@ const FAKE_LOGIN = /^(?:user-\d+|bot-\d+\[bot\]|app\/bot-\d+)$/;
 // The fake repository, and the gh release page `gh --version` prints.
 const GH_REPOSITORY_PATHS = new Set(['example-owner/example-repo', 'cli/cli']);
 const GITHUB_PATH = /github\.com\/(?:repos\/|repositories\/)?([^/\s"<>]+\/[^/\s"<>?#]+)/g;
+// `repositories/<id>/issues/events` names the repository by id: only the fake
+// id the scrubber gave the recorded repository (in its api-repo.json, and in
+// the scrubber's fake range) may appear there.
+const FAKE_REPOSITORY_IDS = new Set(
+  readdirSync(join(recordingsRoot, 'gh'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const repository = z
+        .object({ stdout: z.object({ id: z.number().int().min(1_000_001).max(1_999_999) }) })
+        .parse(
+          JSON.parse(readFileSync(join(recordingsRoot, 'gh', entry.name, 'api-repo.json'), 'utf8'))
+        );
+      return `${repository.stdout.id}/issues`;
+    })
+);
 
 /** Every string in a parsed JSON value, with the key it sits under. */
 function keyedStrings(value: unknown, key: string): [string, string][] {
@@ -108,8 +123,7 @@ function ghAccountFindings(key: string, value: string): string[] {
     }
   }
   for (const [, path = ''] of value.matchAll(GITHUB_PATH)) {
-    // `repositories/<fake id>/issues/events` names the repository by its fake id.
-    if (!(GH_REPOSITORY_PATHS.has(path) || /^\d+\/issues$/.test(path))) {
+    if (!(GH_REPOSITORY_PATHS.has(path) || FAKE_REPOSITORY_IDS.has(path))) {
       findings.push('repository path that is not the fake one');
     }
   }

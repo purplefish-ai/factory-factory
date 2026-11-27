@@ -160,8 +160,21 @@ function unsafeToKeep(value, context) {
     !KEEPABLE.test(value) ||
     looksPrivate(value) ||
     forbiddenTerms.some((term) => lower.includes(term)) ||
-    context.knownLogins.some((login) => login.length >= 3 && lower.includes(login))
+    context.knownLogins.some((login) => namesLogin(lower, login))
   );
+}
+
+/**
+ * True when `lower` contains `login`: anywhere for a login of three or more
+ * characters, and as a whole word for a shorter one, which would otherwise
+ * match inside ordinary words.
+ */
+function namesLogin(lower, login) {
+  if (login.length >= 3) {
+    return lower.includes(login);
+  }
+  const escaped = login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^a-z0-9-])${escaped}(?:$|[^a-z0-9-])`).test(lower);
 }
 
 function keepString(value, context) {

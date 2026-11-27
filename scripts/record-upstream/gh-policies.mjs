@@ -269,7 +269,7 @@ export const GH_SHAPES = [
   {
     file: 'auth-status.json',
     description:
-      '`gh auth status`; the health check reads the exit code and the New Project badge the "Logged in" line.',
+      '`gh auth status`; the health check reads its exit code, and the New Project badge reads the login from its "Logged in" line.',
     args: () => ['auth', 'status'],
     output: 'text',
     text: 'authStatus',
@@ -469,7 +469,7 @@ export const GH_SHAPES = [
   {
     file: 'graphql-thread-comments.json',
     description:
-      "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: no thread on the pull request has more than 100 comments).",
+      "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: that thread has no further comments).",
     args: (v) => [
       'api',
       'graphql',

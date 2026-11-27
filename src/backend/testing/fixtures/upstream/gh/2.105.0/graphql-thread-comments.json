@@ -1,5 +1,5 @@
 {
-  "description": "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: no thread on the pull request has more than 100 comments).",
+  "description": "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: that thread has no further comments).",
   "args": [
     "api",
     "graphql",

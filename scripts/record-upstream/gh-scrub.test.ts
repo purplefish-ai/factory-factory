@@ -67,6 +67,14 @@ describe('scrubJson', () => {
     });
   });
 
+  it('refuses a string naming a short login only where the login is a whole word', () => {
+    const shared = context({ logins: ['an'] });
+    const fields = { a: 'keep', b: 'keep', c: 'keep' };
+    expect(
+      scrubJson({ a: 'Lint and Build', b: 'Deploy by an', c: 'an-other check' }, fields, shared)
+    ).toEqual({ a: 'Lint and Build', b: PLACEHOLDER, c: 'an-other check' });
+  });
+
   it('refuses to keep a string naming a login, a forbidden term or a private value', () => {
     const shared = context({ logins: ['jane-doe'] });
     const fields = { a: 'keep', b: 'keep', c: 'keep', d: 'keep', e: 'keep' };

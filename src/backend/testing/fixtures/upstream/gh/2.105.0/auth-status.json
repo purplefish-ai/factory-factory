@@ -1,5 +1,5 @@
 {
-  "description": "`gh auth status`; the health check reads the exit code and the New Project badge the \"Logged in\" line.",
+  "description": "`gh auth status`; the health check reads its exit code, and the New Project badge reads the login from its \"Logged in\" line.",
   "args": ["auth", "status"],
   "exitCode": 0,
   "stdoutFormat": "text",

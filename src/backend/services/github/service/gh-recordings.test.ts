@@ -81,9 +81,18 @@ function stdoutText(fixture: z.infer<typeof fixtureSchema>): string {
   return lines.join(head.lineEnding) + head.lineEnding + head.lineEnding + JSON.stringify(body);
 }
 
-/** Whitespace inside a GraphQL query is not part of the call shape. */
+/**
+ * Whitespace inside a GraphQL query (the `query=` field of `gh api graphql`)
+ * is not part of the call shape; every other argument must match exactly.
+ */
 const callKey = (args: readonly string[]) =>
-  args.map((arg) => arg.replace(/\s+/g, ' ').trim()).join('\u0000');
+  args
+    .map((arg, index) =>
+      args[1] === 'graphql' && args[index - 1] === '-f' && arg.startsWith('query=')
+        ? arg.replace(/\s+/g, ' ').trim()
+        : arg
+    )
+    .join('\u0000');
 
 /**
  * The recording drops `review-requested:@me` from the review-request search so
@@ -158,14 +167,46 @@ function receiverName(node: ts.Expression): string {
   return '<inline>';
 }
 
-/** The leading string literals of a `gh` argument list, up to three. */
-function ghArgumentPrefix(node: ts.ArrayLiteralExpression): string | null {
+/** The `const name = '<string>'` bindings of a source file. */
+function constantStrings(source: ts.SourceFile): Map<string, string> {
+  const constants = new Map<string, string>();
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Const) !== 0) {
+      for (const declaration of node.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.initializer &&
+          ts.isStringLiteralLike(declaration.initializer)
+        ) {
+          constants.set(declaration.name.text, declaration.initializer.text);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return constants;
+}
+
+/**
+ * The leading words of a `gh` argument list, up to three: string literals, or
+ * identifiers bound to one by a `const` in the same file.
+ */
+function ghArgumentPrefix(
+  node: ts.ArrayLiteralExpression,
+  constants: Map<string, string>
+): string | null {
   const prefix: string[] = [];
   for (const element of node.elements.slice(0, 3)) {
-    if (!ts.isStringLiteral(element)) {
+    const word = ts.isStringLiteralLike(element)
+      ? element.text
+      : ts.isIdentifier(element)
+        ? constants.get(element.text)
+        : undefined;
+    if (word === undefined) {
       break;
     }
-    prefix.push(element.text);
+    prefix.push(word);
   }
   return prefix[0] !== undefined && GH_COMMANDS.has(prefix[0]) ? prefix.join(' ') : null;
 }
@@ -184,10 +225,13 @@ function parseName(node: ts.CallExpression): string | null {
 }
 
 /**
- * Every `gh` call (an argument list whose first element is a `gh` command) and
- * every parse (`parseGhJson`, `parseProviderJson`, `JSON.parse` and a Zod
- * `parse`/`safeParse` on any receiver) in this capsule's sources, read from
- * the syntax tree, so the way a call is written does not hide it. Keys are
+ * Every `gh` argument list and every parse in this capsule's sources, read
+ * from the syntax tree. An argument list is an array literal, wherever it is
+ * built (inline in the call or bound first), whose first element is a `gh`
+ * command word, written as a string or as a `const` bound to one; arguments
+ * assembled any other way (pushed one by one, a computed first word) are not
+ * found. A parse is a call of `parseGhJson`, `parseProviderJson`,
+ * `JSON.parse` or a Zod `parse`/`safeParse` on any receiver. Keys are
  * `<file> <function>: <what>`, with ` #n` for the nth such site in a function.
  */
 function capsuleSites(): { calls: string[]; parses: string[] } {
@@ -203,6 +247,7 @@ function capsuleSites(): { calls: string[]; parses: string[] } {
       ts.ScriptTarget.Latest,
       true
     );
+    const constants = constantStrings(source);
     const counts = new Map<string, number>();
     const add = (list: string[], node: ts.Node, what: string) => {
       const key = `${basename(file)} ${enclosingFunction(node)}: ${what}`;
@@ -211,7 +256,7 @@ function capsuleSites(): { calls: string[]; parses: string[] } {
       list.push(n === 1 ? key : `${key} #${n}`);
     };
     const visit = (node: ts.Node) => {
-      const prefix = ts.isArrayLiteralExpression(node) ? ghArgumentPrefix(node) : null;
+      const prefix = ts.isArrayLiteralExpression(node) ? ghArgumentPrefix(node, constants) : null;
       if (prefix) {
         add(calls, node, prefix);
       }

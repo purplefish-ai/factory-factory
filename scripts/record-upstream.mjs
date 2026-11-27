@@ -313,23 +313,29 @@ async function record(tool, keepRaw) {
   }
 }
 
+async function recordAgentTool(argv) {
+  const options = parseArguments(argv);
+  if (options.rescrub) {
+    if (!existsSync(join(options.rescrub, 'run.json'))) {
+      throw new Error('--rescrub needs a directory written with --keep-raw');
+    }
+    // A signal while rescrubbing removes the half-written staging directory.
+    const uninstallAbortCleanup = installAbortCleanup();
+    try {
+      writeFixtures(options.tool, options.rescrub);
+    } finally {
+      uninstallAbortCleanup();
+    }
+  } else {
+    await record(options.tool, options.keepRaw);
+  }
+}
+
+// Refuses only Windows, where the 0600 raw captures' POSIX file modes do not
+// hold; recording gh needs no agent platform.
+assertSupportedPlatform();
 if (process.argv[2] === 'gh') {
   recordGitHubCli(process.argv.slice(3), { fixturesRoot: FIXTURES, checkout: checkoutRoot() });
-  process.exit(0);
-}
-assertSupportedPlatform();
-const options = parseArguments(process.argv.slice(2));
-if (options.rescrub) {
-  if (!existsSync(join(options.rescrub, 'run.json'))) {
-    throw new Error('--rescrub needs a directory written with --keep-raw');
-  }
-  // A signal while rescrubbing removes the half-written staging directory.
-  const uninstallAbortCleanup = installAbortCleanup();
-  try {
-    writeFixtures(options.tool, options.rescrub);
-  } finally {
-    uninstallAbortCleanup();
-  }
 } else {
-  await record(options.tool, options.keepRaw);
+  await recordAgentTool(process.argv.slice(2));
 }

@@ -1,15 +1,6 @@
 {
   "description": "Data for upstream-recordings-leak.test.ts. Terms match case-insensitively as substrings; patterns are JavaScript regular expressions (flags i). The runner's own account and machine names are added at run time unless they are in genericAccountNames. Extend any list when a new kind of private value is found.",
-  "terms": [
-    "martin",
-    "macbook",
-    "purplefish",
-    "martin-purplefish",
-    ".ts.net",
-    "tailscale",
-    "/Users/",
-    "/home/"
-  ],
+  "terms": ["martin", "macbook", "purplefish", ".ts.net", "tailscale", "/Users/", "/home/"],
   "genericAccountNames": [
     "root",
     "user",
