@@ -114,3 +114,25 @@ export const ScrollButtonOverlayOnPhone: Story = {
   ...ScrollButtonOverlay,
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+export const Compacting: Story = {
+  render: (args) => <ComposerScrollPreview {...args} />,
+  args: {
+    thinkingInFooter: true,
+    loadingSession: false,
+    isCompacting: true,
+    messages: [createUserMessage('Review the test results.')],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const footer = canvas.getByTestId('thinking-footer');
+    const status = within(footer).getByRole('status');
+    const composer = canvas.getByRole('textbox', { name: 'Message' });
+    await expect(status).toHaveTextContent(/^Compacting$/);
+    await expect(status.querySelector('[data-slot="spinner"]')).toBeVisible();
+    await expect(canvas.getByRole('log')).not.toHaveTextContent('Compacting');
+    await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      composer.getBoundingClientRect().top
+    );
+  },
+};

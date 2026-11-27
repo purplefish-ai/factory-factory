@@ -13,7 +13,6 @@ export type { ChatMessage } from '@/lib/chat-protocol';
 export { GroupedMessageItemRenderer } from './agent-activity';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';
-export { CompactingIndicator } from './compacting-indicator';
 export { getChatPendingRequestType } from './pending-request-type';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 export { projectAcpTranscriptUpdates } from './project-acp-transcript';

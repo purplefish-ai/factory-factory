@@ -3,20 +3,19 @@ import { StatusIcon } from '@/client/components/status-indicators';
 import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
 import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { PendingRequestType } from '@/shared/pending-request-types';
 import { LoadingIndicator } from './agent-activity';
 import { formatThinkingText, getLatestThinkingParagraph } from './thinking-preview';
 
+const footerClassName = 'h-8 min-h-[var(--touch-target-size,2rem)] shrink-0 min-w-0 px-4';
+
 /** Replaces the spinner while the agent is blocked on the user. */
 function WaitingForUser({ type }: { type: PendingRequestType }) {
   const request = getPendingRequestPresentation(type);
   return (
-    <div
-      data-testid="thinking-footer"
-      data-waiting-for={type}
-      className="h-8 min-h-[var(--touch-target-size,2rem)] shrink-0 min-w-0 px-4"
-    >
+    <div data-testid="thinking-footer" data-waiting-for={type} className={footerClassName}>
       <div
         role="status"
         className={cn(
@@ -34,27 +33,36 @@ function WaitingForUser({ type }: { type: PendingRequestType }) {
 /** Always occupies one line; activity changes cannot resize the transcript viewport. */
 export function ThinkingFooter({
   active,
+  isCompacting = false,
   latestThinking,
   waitingFor = null,
 }: {
   active: boolean;
+  isCompacting?: boolean;
   latestThinking?: string | null;
   /** The request the agent is blocked on; shown instead of "Agent is working". */
   waitingFor?: PendingRequestType | null;
 }) {
   const [open, setOpen] = useState(false);
-  const latestParagraph = getLatestThinkingParagraph(latestThinking);
-  if ((!active || waitingFor) && open) {
+  if ((!active || isCompacting || waitingFor) && open) {
     setOpen(false);
+  }
+  if (isCompacting) {
+    return (
+      <div data-testid="thinking-footer" className={footerClassName}>
+        <div role="status" className="flex h-full items-center gap-2 text-sm text-muted-foreground">
+          <Spinner aria-hidden="true" />
+          <span>Compacting</span>
+        </div>
+      </div>
+    );
   }
   if (active && waitingFor) {
     return <WaitingForUser type={waitingFor} />;
   }
+  const latestParagraph = getLatestThinkingParagraph(latestThinking);
   return (
-    <div
-      data-testid="thinking-footer"
-      className="h-8 min-h-[var(--touch-target-size,2rem)] shrink-0 min-w-0 px-4"
-    >
+    <div data-testid="thinking-footer" className={footerClassName}>
       <div
         inert={!active}
         className={cn(

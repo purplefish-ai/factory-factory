@@ -10,7 +10,7 @@ describe('inline tasks', () => {
   it('shows shared ACP tasks while idle, updates them, and hides them during hydration', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
-    const render = (acpPlan: AcpPlanState | null, loadingSession = false, isCompacting = false) =>
+    const render = (acpPlan: AcpPlanState | null, loadingSession = false) =>
       flushSync(() =>
         root.render(
           <TranscriptTail
@@ -21,7 +21,6 @@ describe('inline tasks', () => {
               running: false,
               startingSession: false,
               loadingSession,
-              isCompacting,
             }}
           />
         )
@@ -35,7 +34,7 @@ describe('inline tasks', () => {
       updatedAt: '2026-10-30T00:00:00Z',
     };
     try {
-      render(plan, false, true);
+      render(plan);
       expect(container.querySelector('[aria-label="Tasks"]')?.textContent).toContain(
         'Read the code'
       );
@@ -45,9 +44,6 @@ describe('inline tasks', () => {
       expect(container.querySelectorAll('[aria-label="Completed"]')).toHaveLength(1);
       expect(container.querySelectorAll('[aria-label="In progress"]')).toHaveLength(1);
       expect(container.textContent).not.toContain('Ready to start');
-      expect(container.textContent?.indexOf('Implement tasks')).toBeLessThan(
-        container.textContent?.indexOf('Compacting context…') ?? -1
-      );
       render({
         ...plan,
         entries: plan.entries.map((entry) => ({ ...entry, status: 'completed' })),
