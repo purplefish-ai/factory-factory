@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { sendMessage } from './conversation';
+import { expectHolds } from './restart-support';
 import { launchWorkspace, openBoard, readSandbox, releaseGate, reply } from './sandbox';
 
 // A workspace holds several chats, and the chat tabs switch between them. A user starts a second
@@ -10,6 +11,9 @@ import { launchWorkspace, openBoard, readSandbox, releaseGate, reply } from './s
 
 // A new chat starts an agent process, which the launch helper also gives this long.
 const SLOW = 120_000;
+// How long a transcript that has loaded must stay as it is: the page's events for a chat arrive in
+// well under a second once the socket is open.
+const SETTLE = 2000;
 
 test('a user starts a second chat, switches back to the first and returns, and each shows its own conversation', async ({
   page,
@@ -68,4 +72,21 @@ test('a user starts a second chat, switches back to the first and returns, and e
   ).toBeVisible({ timeout: 60_000 });
   await expect(conversation.getByText('Waiting at gate smoke-switch.')).toHaveCount(1);
   await expect(firstChatText).toHaveCount(0);
+
+  // And back in the first chat once more: the second chat's whole turn has finished since the
+  // snapshot, and none of it may have reached this transcript (a leak that arrives late, when the
+  // chat is opened again, is caught here). The transcript loads on the switch, so wait for it to
+  // equal the snapshot, then check that it stays equal for a while (the poll passes at the first
+  // match, so a message of the second chat that arrives after it would otherwise go unseen).
+  await firstTab.click();
+  await expect(firstTab).toHaveAttribute('aria-selected', 'true');
+  await expect(reply(conversation, first)).toBeVisible();
+  await expect
+    .poll(() => conversation.ariaSnapshot(), { timeout: 60_000 })
+    .toEqual(firstChatBefore);
+  await expectHolds(SETTLE, async () => {
+    expect(await conversation.ariaSnapshot()).toEqual(firstChatBefore);
+    await expect(conversation.getByText('Gate smoke-switch released.')).toHaveCount(0);
+    await expect(conversation.getByText(second, { exact: true })).toHaveCount(0);
+  });
 });

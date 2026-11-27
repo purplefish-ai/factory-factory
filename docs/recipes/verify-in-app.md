@@ -36,7 +36,8 @@ this and begin the "Driven in the sandbox" section with `Does not apply:`.
    `/workspaces/<id>` link, not by your prompt's text. The scripted agent
    (scenario `echo`) repeats every message back. While the fake Claude CLI is
    installed, an event run's stop is reported unconfirmed. More selectors: the
-   specs in `e2e/sandbox/`. With no browser tool, use a Playwright script.
+   specs in `e2e/sandbox/` (ones that kill the backend need `--restartable`, as
+   in `pnpm test:e2e:sandbox`). With no browser tool, use a Playwright script.
 
 4. Screenshot the page that shows your change (the board, a workspace, a
    dialog), and save it and notes on what you did and saw in `.context/verify/`

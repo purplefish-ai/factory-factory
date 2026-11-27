@@ -324,6 +324,22 @@ describe('stopping what a killed backend left behind', () => {
     expect(events).toEqual(['SIGTERM 30', 'SIGTERM 31', 'SIGKILL 30', 'SIGKILL 31', 'SIGKILL 32']);
   });
 
+  it('does not report a process that was gone when its signal was sent', async () => {
+    const { system, events } = fakeSystem(orphans, exitOn(['SIGTERM']), environments);
+    // Pid 30 exits between the listing and the signal: `kill` finds no such process.
+    const racing = {
+      ...system,
+      signal: (target: number, signal: string) => {
+        system.signal(target, signal);
+        return target !== 30;
+      },
+    };
+    await expect(
+      stopProcessesWithEnvironment(entry, { system: racing, exclude: [50] })
+    ).resolves.toEqual([31]);
+    expect(events).toEqual(['SIGTERM 30', 'SIGTERM 31']);
+  });
+
   it('signals nothing once a tracked pid belongs to another process', async () => {
     const { system, events } = fakeSystem(orphans, (processes) => processes, environments);
     const listings = [orphans, orphans.map((p) => (p.pid === 30 ? { ...p, startedAt: LATER } : p))];
@@ -332,7 +348,8 @@ describe('stopping what a killed backend left behind', () => {
       listProcesses: () => listings.shift() ?? listings.at(-1) ?? [],
       processesWithEnvironment: (_entry: string) => [30],
     };
-    await expect(stopProcessesWithEnvironment(entry, { system: reused })).resolves.toEqual([30]);
+    // The report names only what was signalled: the reused pid was listed and never signalled.
+    await expect(stopProcessesWithEnvironment(entry, { system: reused })).resolves.toEqual([]);
     expect(events).toEqual([]);
   });
 });

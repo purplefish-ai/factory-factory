@@ -6,7 +6,7 @@ import {
   restartBackend,
 } from '../support/backend-process';
 import { expectNoReload, markPage, trackSockets } from '../support/no-reload';
-import { sendMessage } from './conversation';
+import { selectedChatTab, sendMessage } from './conversation';
 import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // A crash after a finished turn: the server dies with SIGKILL and starts again on the same port.
@@ -24,6 +24,15 @@ test('a finished conversation survives a server crash and restart', async ({ pag
   const conversation = await launchWorkspace(page, prompt, /restartfinch/);
   // Every message as the user sees it: their own and the agent's, in order.
   const transcript = () => conversation.ariaSnapshot();
+  // `launchWorkspace` returns at the agent's echo, which the page can show while the workspace is
+  // still starting: the conversation then also holds the startup line ("Running init script…",
+  // "Creating worktree…", "Starting agent…" or "Loading session…"), and a snapshot taken then
+  // differs from every later one, since the line goes away. Take it once the chat has settled:
+  // the first turn finished (the tab reads Idle) and the transcript is exactly the two messages.
+  await expect(selectedChatTab(page, /^Idle\b/)).toBeVisible({ timeout: 120_000 });
+  await expect
+    .poll(transcript, { timeout: 60_000 })
+    .toBe(['- log "Conversation":', `  - text: ${prompt}`, `  - paragraph: ${prompt}`].join('\n'));
   const before = await transcript();
   const rollout = rolloutHolding(sandbox, 'Restartfinch');
 

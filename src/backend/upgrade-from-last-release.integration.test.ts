@@ -482,6 +482,22 @@ function parseStored(label: string, values: unknown[], schema: z.ZodType) {
   }
 }
 
+/**
+ * The three tests that read every seeded row through the real application (the workspace loop,
+ * recovery and the `findMany` sweep) can pass vitest's default 5 s on a loaded CI shard.
+ */
+const SLOW_TEST_MS = 60_000;
+
+/**
+ * The environment for the test's `git init`: no system git configuration, and no GIT_DIR or
+ * GIT_WORK_TREE inherited from a caller (a git hook sets them), which would make `git init`
+ * initialise that repository instead of the seeded project's.
+ */
+function gitInitEnvironment() {
+  const { GIT_DIR: _gitDir, GIT_WORK_TREE: _workTree, ...inherited } = process.env;
+  return { ...inherited, GIT_CONFIG_NOSYSTEM: '1' };
+}
+
 describe('upgrading from the last published release', () => {
   it('runs on temporary directories only, never on the data directory of a real install', () => {
     const { configService } = application.services;
@@ -536,49 +552,53 @@ describe('upgrading from the last published release', () => {
     }
   });
 
-  it('reads each workspace, its sessions, terminals and closed sessions', async () => {
-    for (const { id, status } of seededWorkspaces) {
-      const detail = await trpc.workspace.get({ id });
-      expect(detail.status).toBe(status);
-      const expected = DERIVED_WORKSPACES[id];
-      expect(detail, id).toMatchObject({
-        kanbanColumn: expected?.kanbanColumn,
-        sidebarStatus: expected?.sidebarStatus,
-        flowPhase: expected?.flowPhase,
-        ciObservation: expected?.ciObservation,
-        statusReason: { code: expected?.statusReason },
-        ratchetButtonAnimated: expected?.ratchetButtonAnimated,
-        pendingRequestType: null,
-      });
-      for (const summary of detail.sessionSummaries) {
-        expect(summary, summary.sessionId).toMatchObject({
-          ...DERIVED_SESSIONS[summary.sessionId],
-          runtimePhase: 'idle',
-          processState: 'stopped',
-          activity: 'IDLE',
+  it(
+    'reads each workspace, its sessions, terminals and closed sessions',
+    async () => {
+      for (const { id, status } of seededWorkspaces) {
+        const detail = await trpc.workspace.get({ id });
+        expect(detail.status).toBe(status);
+        const expected = DERIVED_WORKSPACES[id];
+        expect(detail, id).toMatchObject({
+          kanbanColumn: expected?.kanbanColumn,
+          sidebarStatus: expected?.sidebarStatus,
+          flowPhase: expected?.flowPhase,
+          ciObservation: expected?.ciObservation,
+          statusReason: { code: expected?.statusReason },
+          ratchetButtonAnimated: expected?.ratchetButtonAnimated,
           pendingRequestType: null,
         });
+        for (const summary of detail.sessionSummaries) {
+          expect(summary, summary.sessionId).toMatchObject({
+            ...DERIVED_SESSIONS[summary.sessionId],
+            runtimePhase: 'idle',
+            processState: 'stopped',
+            activity: 'IDLE',
+            pendingRequestType: null,
+          });
+        }
+        const sessions = await trpc.session.listSessions({ workspaceId: id });
+        expect(sessions.map((session) => session.id).sort()).toEqual(
+          seededSessions
+            .filter((session) => session.workspaceId === id)
+            .map((session) => session.id)
+            .sort()
+        );
+        for (const session of sessions) {
+          expect((await trpc.session.getSession({ id: session.id })).workspaceId).toBe(id);
+          expect(session.isWorking, session.id).toBe(false);
+          expect(session, session.id).toMatchObject({
+            provider: DERIVED_SESSIONS[session.id]?.provider,
+            status: DERIVED_SESSIONS[session.id]?.persistedStatus,
+          });
+        }
+        await trpc.session.listTerminalSessions({ workspaceId: id });
+        await trpc.closedSessions.list({ workspaceId: id });
+        await trpc.workspace.getInitStatus({ id });
       }
-      const sessions = await trpc.session.listSessions({ workspaceId: id });
-      expect(sessions.map((session) => session.id).sort()).toEqual(
-        seededSessions
-          .filter((session) => session.workspaceId === id)
-          .map((session) => session.id)
-          .sort()
-      );
-      for (const session of sessions) {
-        expect((await trpc.session.getSession({ id: session.id })).workspaceId).toBe(id);
-        expect(session.isWorking, session.id).toBe(false);
-        expect(session, session.id).toMatchObject({
-          provider: DERIVED_SESSIONS[session.id]?.provider,
-          status: DERIVED_SESSIONS[session.id]?.persistedStatus,
-        });
-      }
-      await trpc.session.listTerminalSessions({ workspaceId: id });
-      await trpc.closedSessions.list({ workspaceId: id });
-      await trpc.workspace.getInitStatus({ id });
-    }
-  });
+    },
+    SLOW_TEST_MS
+  );
 
   it('reads the projects, settings, workspace order and relationships the sidebar needs', async () => {
     const projects = await trpc.project.list({ includeBoardCounts: true });
@@ -650,44 +670,49 @@ describe('upgrading from the last published release', () => {
     }
   });
 
-  it('runs the startup recovery steps and leaves the seeded stale rows settled', async () => {
-    const { prisma } = db;
-    const { reconciliationService, runScriptStateMachine, sessionLifecycleService } =
-      application.services;
-    // Provisioning recovery asks git about the project's repository, so point the
-    // seeded project at a real, empty one inside the temp directory.
-    const repoPath = join(db.tempDir, 'repo');
-    execFileSync('git', ['init', '-q', repoPath]);
-    await prisma.project.update({
-      where: { id: PROJECT_GITHUB },
-      data: { repoPath, worktreeBasePath: join(db.tempDir, 'worktrees') },
-    });
-    expect(
-      (await prisma.agentSession.findUniqueOrThrow({ where: { id: SESSION_CODEX_RUNNING } })).status
-    ).toBe('RUNNING');
-    expect(
-      (await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })).status
-    ).toBe('PROVISIONING');
-    expectGuardsActive();
-    await reconciliationService.cleanupOrphans();
-    await sessionLifecycleService.recoverStaleRunningSessions();
-    await reconciliationService.recoverStaleProvisioningWorkspaces();
-    await runScriptStateMachine.recoverStaleStates();
-    expect(await prisma.agentSession.findMany({ where: { status: 'RUNNING' } })).toEqual([]);
-    expect(
-      await prisma.workspaceRunScript.findMany({
-        where: { status: { in: ['STARTING', 'STOPPING'] } },
-      })
-    ).toEqual([]);
-    expect(
-      await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })
-    ).toMatchObject({
-      status: 'FAILED',
-      initErrorMessage: expect.stringContaining('Provisioning timed out'),
-    });
-    // The only process question recovery asks is a liveness probe of the seeded pid.
-    expect(signalAttempts).toEqual([{ pid: UNUSED_PID, signal: 0 }]);
-  });
+  it(
+    'runs the startup recovery steps and leaves the seeded stale rows settled',
+    async () => {
+      const { prisma } = db;
+      const { reconciliationService, runScriptStateMachine, sessionLifecycleService } =
+        application.services;
+      // Provisioning recovery asks git about the project's repository, so point the
+      // seeded project at a real, empty one inside the temp directory.
+      const repoPath = join(db.tempDir, 'repo');
+      execFileSync('git', ['init', '-q', repoPath], { env: gitInitEnvironment() });
+      await prisma.project.update({
+        where: { id: PROJECT_GITHUB },
+        data: { repoPath, worktreeBasePath: join(db.tempDir, 'worktrees') },
+      });
+      expect(
+        (await prisma.agentSession.findUniqueOrThrow({ where: { id: SESSION_CODEX_RUNNING } }))
+          .status
+      ).toBe('RUNNING');
+      expect(
+        (await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })).status
+      ).toBe('PROVISIONING');
+      expectGuardsActive();
+      await reconciliationService.cleanupOrphans();
+      await sessionLifecycleService.recoverStaleRunningSessions();
+      await reconciliationService.recoverStaleProvisioningWorkspaces();
+      await runScriptStateMachine.recoverStaleStates();
+      expect(await prisma.agentSession.findMany({ where: { status: 'RUNNING' } })).toEqual([]);
+      expect(
+        await prisma.workspaceRunScript.findMany({
+          where: { status: { in: ['STARTING', 'STOPPING'] } },
+        })
+      ).toEqual([]);
+      expect(
+        await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })
+      ).toMatchObject({
+        status: 'FAILED',
+        initErrorMessage: expect.stringContaining('Provisioning timed out'),
+      });
+      // The only process question recovery asks is a liveness probe of the seeded pid.
+      expect(signalAttempts).toEqual([{ pid: UNUSED_PID, signal: 0 }]);
+    },
+    SLOW_TEST_MS
+  );
 
   it('reads periodic tasks and their executions', async () => {
     const tasks = await trpc.periodicTask.list({ projectId: PROJECT_GITHUB });
@@ -954,16 +979,20 @@ describe('upgrading from the last published release', () => {
     );
   });
 
-  it('reads every row of every table through Prisma, which rejects unknown enum values', async () => {
-    const { Prisma } =
-      await vi.importActual<typeof import('@prisma-gen/client')>('@prisma-gen/client');
-    const delegates = db.prisma as unknown as Record<string, { findMany(): Promise<unknown[]> }>;
-    const models = Object.values(Prisma.ModelName);
-    expect(models.length).toBeGreaterThanOrEqual(Object.keys(seedTables).length);
-    for (const name of models) {
-      const delegate = delegates[`${name.charAt(0).toLowerCase()}${name.slice(1)}`];
-      expect(delegate, name).toBeDefined();
-      await delegate?.findMany();
-    }
-  });
+  it(
+    'reads every row of every table through Prisma, which rejects unknown enum values',
+    async () => {
+      const { Prisma } =
+        await vi.importActual<typeof import('@prisma-gen/client')>('@prisma-gen/client');
+      const delegates = db.prisma as unknown as Record<string, { findMany(): Promise<unknown[]> }>;
+      const models = Object.values(Prisma.ModelName);
+      expect(models.length).toBeGreaterThanOrEqual(Object.keys(seedTables).length);
+      for (const name of models) {
+        const delegate = delegates[`${name.charAt(0).toLowerCase()}${name.slice(1)}`];
+        expect(delegate, name).toBeDefined();
+        await delegate?.findMany();
+      }
+    },
+    SLOW_TEST_MS
+  );
 });
