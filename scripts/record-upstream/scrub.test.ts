@@ -298,11 +298,18 @@ describe('scrubCapturedLines', () => {
 });
 
 describe('POLICIES', () => {
-  it('name keep, text, numbers and maps paths for every kind and a kind for every record', () => {
+  it('name keep, text, numbers, maps and words paths for every kind and a kind for every record', () => {
     for (const policy of Object.values(POLICIES)) {
       expect(typeof policy.kindOf).toBe('function');
       for (const kind of [policy.common, ...Object.values(policy.kinds)]) {
-        expect(Object.keys(kind).sort()).toEqual(['ids', 'keep', 'maps', 'numbers', 'text']);
+        expect(Object.keys(kind).sort()).toEqual([
+          'ids',
+          'keep',
+          'maps',
+          'numbers',
+          'text',
+          'words',
+        ]);
       }
     }
   });
@@ -317,6 +324,7 @@ describe('POLICIES', () => {
           ...kind.text,
           ...kind.numbers,
           ...kind.maps,
+          ...kind.words.flatMap((words: { paths: string[] }) => words.paths),
         ];
         for (const path of paths) {
           for (const segment of path.split(/[.>]/).filter((part) => part && part !== '*')) {
@@ -585,6 +593,23 @@ describe('paths, opaque discriminators and random ids', () => {
     expect(scrubbed[1]?.message.response.request_id).toBe(scrubbed[0]?.message.request_id);
   });
 
+  it('keeps how Claude was asked to show thinking, as an allowed word only', () => {
+    const shared = context();
+    const scrub = (record: object) => scrubRecord(record, POLICIES.claudeHistory, shared);
+    expect(scrub({ type: 'assistant', thinkingDisplay: 'omitted' }).thinkingDisplay).toBe(
+      'omitted'
+    );
+    expect(scrub({ type: 'assistant', thinkingDisplay: 'jane' }).thinkingDisplay).toBe(
+      PLACEHOLDER_STRING
+    );
+    expect(
+      scrub({
+        type: 'api-request',
+        params: { thinking: { type: 'adaptive', display: 'summarized' } },
+      }).params
+    ).toEqual({ thinking: { type: 'adaptive', display: 'summarized' } });
+  });
+
   it('keeps the model names of Claude cost totals and zeroes the figures', () => {
     const scrubbed = scrubRecord(
       { type: 'cost-state', modelUsage: { 'claude-model-1': { inputTokens: 12, costUSD: 3 } } },
@@ -716,6 +741,44 @@ describe('the Codex rollout policy', () => {
       properties: { '<key>': { type: 'array', items: { type: 'string' } } },
     });
     expect(JSON.stringify(payload)).not.toContain('private');
+  });
+
+  it('keeps only JSON Schema type words at a schema type path', () => {
+    const { payload } = scrubRecord(
+      {
+        type: 'response_item',
+        payload: {
+          type: 'additional_tools',
+          tools: [
+            {
+              type: 'namespace',
+              tools: [
+                {
+                  type: 'function',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      when: {
+                        type: ['string', 'null'],
+                        default: { type: 'jane-at-acme' },
+                        examples: [{ type: 'call jane' }],
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      POLICIES.codexRollout,
+      context()
+    );
+    const when = payload.tools[0].tools[0].parameters.properties['<key>'];
+    expect(when.type).toEqual(['string', 'null']);
+    expect(when.default).toEqual({ type: PLACEHOLDER_STRING });
+    expect(when['<key>']).toEqual([{ type: PLACEHOLDER_STRING }]);
+    expect(JSON.stringify(payload)).not.toMatch(/jane/);
   });
 
   it('treats world state as opaque and session instructions as unlisted', () => {

@@ -82,11 +82,15 @@ function readStream(tool: string, version: string, file: string): unknown[] {
 }
 
 /** Scrubs a recording's streams again, the way the recorder scrubs raw captures. */
-function rescrub(tool: string, version: string): Record<string, unknown[]> {
+function rescrub(
+  tool: string,
+  version: string,
+  input: (file: string) => unknown[] = (file) => readStream(tool, version, file)
+): Record<string, unknown[]> {
   const context = createScrubContext({ roots: ROOTS });
   const streams: Record<string, unknown[]> = {};
   for (const [file, policy, history] of STREAMS[tool] ?? []) {
-    streams[file] = readStream(tool, version, file).map((record) => {
+    streams[file] = input(file).map((record) => {
       if (history) {
         return scrubRecord(record, policy, context);
       }
@@ -206,12 +210,17 @@ const TOLERATED_LOSSES: (Loss & { tool: string; reason: string })[] = [
 // What the application's parsers read, by tool, stream and record kind (`*`
 // is every kind): the stream normalizer, ACP client handler, event processor,
 // update translator and permission service read acp.jsonl; the history
-// loaders read history.jsonl.
+// loaders read history.jsonl. This list is written by hand from those parsers:
+// when a parser starts reading a new path, add it here, or a scrubber change
+// that drops it will not fail this test.
 const ACP_READS = {
   '*': [
     'message.method',
     'message.id',
     ...[
+      'used',
+      'size',
+      '_meta.terminal_exit.exit_code',
       'sessionUpdate',
       'messageId',
       'content.type',
@@ -409,6 +418,61 @@ function placeholdersParsersRead(tool: string, version: string): string[] {
   return [...new Set(found)].sort();
 }
 
+// A number no recording holds where a parser reads one, so a 0 coming back is the scrubber's.
+const MARKER_NUMBER = 7;
+
+/** Sets every number at a path (through arrays) to MARKER_NUMBER, in place. */
+function markNumbers(value: unknown, keys: string[]): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      markNumbers(item, keys);
+    }
+    return;
+  }
+  const [key, ...rest] = keys;
+  if (!(isRecord(value) && key !== undefined && key in value)) {
+    return;
+  }
+  const child = value[key];
+  if (rest.length > 0) {
+    markNumbers(child, rest);
+  } else if (typeof child === 'number') {
+    value[key] = MARKER_NUMBER;
+  } else if (Array.isArray(child)) {
+    value[key] = child.map((item) => (typeof item === 'number' ? MARKER_NUMBER : item));
+  }
+}
+
+/**
+ * Numbers at paths a parser reads, checked by scrubbing the recording again
+ * with each of them set to a marker: `checked` counts them, `dropped` names
+ * the paths where the scrubber would replace a real number with 0.
+ */
+function numbersParsersRead(tool: string, version: string) {
+  const records = committedRecords(tool, version);
+  const marked = records.map(({ file, kind, value }) => {
+    const copy = structuredClone(value);
+    for (const path of readsFor(tool, file, kind)) {
+      markNumbers(copy, path.split('.'));
+    }
+    return { file, copy };
+  });
+  const again = rescrub(tool, version, (file) =>
+    marked.filter((record) => record.file === file).map(({ copy }) => copy)
+  );
+  const numeric = records.flatMap(({ file, kind, value, index }) =>
+    readsFor(tool, file, kind)
+      .filter((path) => valuesAt(value, path).some((item) => typeof item === 'number'))
+      .map((path) => ({ file, kind, path, index }))
+  );
+  const dropped = numeric
+    .filter(({ file, index, path }) =>
+      valuesAt(again[file]?.[index], path).some((item) => item !== MARKER_NUMBER)
+    )
+    .map(describeLoss);
+  return { checked: numeric.length, dropped: [...new Set(dropped)].sort() };
+}
+
 describe('scrubbing a committed recording again', () => {
   it('tolerates no loss at a path a parser reads', () => {
     for (const loss of TOLERATED_LOSSES) {
@@ -435,6 +499,12 @@ describe('scrubbing a committed recording again', () => {
           .map(describeLoss)
           .sort()
       );
+    });
+
+    it('keeps every number a parser reads', () => {
+      const { checked, dropped } = numbersParsersRead(tool, version);
+      expect(checked).toBeGreaterThan(0);
+      expect(dropped).toEqual([]);
     });
 
     it('is read the same way by the parsers', async () => {
