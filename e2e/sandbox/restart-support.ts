@@ -223,6 +223,33 @@ export function rolesByWorkspace(rows: ProcessRow[], worktrees: Record<string, s
 }
 
 /**
+ * Ends what the backend that owned `tree` left running, if it is gone (exited, or restarted under
+ * another pid), and resolves true. While it still runs (the kill or the crash never happened), its
+ * children are the shared backend's own: nothing is signalled and it resolves false.
+ */
+export async function stopSurvivorsIfKilled(tree: BackendTree): Promise<boolean> {
+  const { pid, state } = await backendStatus();
+  if (pid === tree.backendPid && state !== 'exited') {
+    return false;
+  }
+  await stopSurvivors(tree);
+  return true;
+}
+
+/**
+ * Checks that `check` keeps passing for `ms`: for a state that must stay as it is, where one look
+ * would also pass just before a fix acts.
+ */
+export async function expectHolds(ms: number, check: () => void | Promise<void>) {
+  const deadline = Date.now() + ms;
+  do {
+    await check();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  } while (Date.now() < deadline);
+  await check();
+}
+
+/**
  * Ends what a killed backend left running: each survivor of `tree` that is still the same process,
  * and anything it started since. Nothing else is signalled.
  */

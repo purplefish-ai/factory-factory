@@ -4,6 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { sandboxPaths } from '../../scripts/sandbox/paths.mjs';
 import {
   ensureBackendRunning,
+  hydrationsSince,
   killBackend,
   readServerLog,
   restartBackend,
@@ -11,16 +12,16 @@ import {
 import {
   type BackendTree,
   cancelSetupHold,
+  expectHolds,
   holdNextSetup,
   launchWithoutWaiting,
-  processRole,
   readBackendTree,
   readProcessTable,
   reportProcesses,
   rolesByWorkspace,
   runScriptRow,
   sessionRows,
-  stopSurvivors,
+  stopSurvivorsIfKilled,
   survivorsOf,
   terminalRows,
   workspaceIdOf,
@@ -62,20 +63,43 @@ test.beforeEach(() => {
 });
 
 test.afterEach(async () => {
-  // Unclaimed, the request would hold the next workspace's setup, in another spec.
-  cancelSetupHold(readSandbox());
-  await ensureBackendRunning();
-  if (tree) {
-    // Whatever the killed backend left running, which nothing else would end.
-    await stopSurvivors(tree);
-    tree = null;
-  } else {
-    // A failure before the kill leaves the turns and the setup waiting at their gates.
-    for (const gate of Object.values(GATES)) {
-      writeFileSync(gateFile(gate), '');
+  try {
+    // Unclaimed, the request would hold the next workspace's setup, in another spec.
+    cancelSetupHold(readSandbox());
+    // Whatever the killed backend left running, which nothing else would end. Without a kill, the
+    // turns and the setup still wait at their gates in the shared backend: release them.
+    if (!(tree && (await stopSurvivorsIfKilled(tree)))) {
+      for (const gate of Object.values(GATES)) {
+        writeFileSync(gateFile(gate), '');
+      }
     }
+  } finally {
+    tree = null;
+    await ensureBackendRunning();
   }
 });
+
+/**
+ * Runs each step to the end even when an earlier one failed, so that every scenario reports; the
+ * test then fails with all of their errors.
+ */
+function stepRunner() {
+  const failures: string[] = [];
+  return {
+    step: async (name: string, body: () => Promise<void>) => {
+      try {
+        await test.step(name, body);
+      } catch (error) {
+        failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+    finish: () => {
+      if (failures.length > 0) {
+        throw new Error(`${failures.length} step(s) failed:\n\n${failures.join('\n\n')}`);
+      }
+    },
+  };
+}
 
 async function send(page: Page, text: string, button: 'Send message' | 'Queue message') {
   await page.getByRole('textbox', { name: 'Message' }).fill(text);
@@ -94,6 +118,10 @@ test('work in flight when the server is killed, and what the restarted server ma
   await launchWorkspace(page, 'Recoverheron runs everything', /recoverheron/);
   const heron = workspaceIdOf(page);
   const heronUrl = page.url();
+  // Opened again: a page that read the run-script status before the worktree's commands were
+  // saved (on a loaded machine) keeps showing "Setup dev server" until it reads it again, since
+  // nothing refetches it while the status stays IDLE.
+  await page.goto(heronUrl);
   await page.getByRole('button', { name: /^Start dev server/ }).click();
   const stopDevServer = page.getByRole('button', { name: /^Stop dev server \(port \d+\)$/ });
   await expect(stopDevServer).toBeVisible({ timeout: 60_000 });
@@ -168,33 +196,41 @@ test('work in flight when the server is killed, and what the restarted server ma
   const killedAt = new Date().toISOString();
   await killBackend('SIGKILL');
   await reportProcesses('Still alive at once after the kill', survivorsOf(killed));
-  // Each Codex ACP adapter outlives the backend briefly (it interrupts its turn on the way out);
-  // the Codex app-servers end with it. What stays after that is not owned by anyone.
-  const agents = new Set(['codex ACP adapter', 'codex app-server']);
-  await expect
-    .poll(() => survivorsOf(killed).some((row) => agents.has(processRole(row))), {
-      timeout: 30_000,
-    })
-    .toBe(false);
-  await reportProcesses('Still alive once the adapters have exited', survivorsOf(killed));
-  // The run script and the setup script outlive the server. So do the shells on Linux: the setup
-  // script started after Heron's and Plover's terminals and holds them open. Curlew's terminal
-  // opens with its page, which can come before or after its setup starts, so its shell survives
-  // only in the first case.
-  const survivors = rolesByWorkspace(survivorsOf(killed), worktrees);
+  // Each Codex ACP adapter outlives the backend for a few seconds (about 3 s in CI: it interrupts
+  // its turn on the way out); the Codex app-servers end with it. What stays after that is not
+  // owned by anyone. The run script and the setup script outlive the server. So do the shells on
+  // Linux: the setup script started after Heron's and Plover's terminals and holds them open.
+  // Curlew's terminal opens with its page, which can come before or after its setup starts, so on
+  // Linux its shell survives only in the first case and is left out. Polled, so that a short-lived
+  // child working in a worktree at that moment does not count.
   const shell = shellsOutliveTheServer ? ['shell'] : [];
-  expect({ ...survivors, curlew: survivors.curlew?.filter((role) => role !== 'shell') }).toEqual({
-    heron: ['run script', ...shell],
-    plover: shell,
-    curlew: ['setup script'],
-  });
-  if (!shellsOutliveTheServer) {
-    expect(survivors.curlew).toEqual(['setup script']);
-  }
+  await expect
+    .poll(
+      () => {
+        const roles = rolesByWorkspace(survivorsOf(killed), worktrees);
+        return shellsOutliveTheServer
+          ? { ...roles, curlew: roles.curlew?.filter((role) => role !== 'shell') }
+          : roles;
+      },
+      { timeout: 30_000 }
+    )
+    .toEqual({
+      heron: ['run script', ...shell],
+      plover: shell,
+      curlew: ['setup script'],
+    });
+  await reportProcesses('Still alive once the adapters have exited', survivorsOf(killed));
 
   await restartBackend();
+  const { step, finish } = stepRunner();
+  // Heron's page, unless a failed step left the page elsewhere.
+  const onHeron = async () => {
+    if (page.url() !== heronUrl) {
+      await page.goto(heronUrl);
+    }
+  };
 
-  await test.step('a turn running when the server dies', async () => {
+  await step('a turn running when the server dies', async () => {
     // KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3357
     // The turn is cut off: the restarted server marks the session idle and shows the partial reply
     // the adapter recorded as it exited, with no notice that the turn was interrupted; nothing
@@ -219,11 +255,12 @@ test('work in flight when the server is killed, and what the restarted server ma
       );
   });
 
-  await test.step('a run script', async () => {
+  await step('a run script', async () => {
     // KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3360
     // The dev server outlives the backend and the restarted server adopts its row: shown running on
     // its port, and Stop ends it. Its output before the restart is gone, and nothing reads what it
     // writes after it.
+    await onHeron();
     expect(runScriptRow(sandbox, heron)).toEqual(run);
     await expect(stopDevServer).toBeVisible();
     expect(await (await fetch(`http://127.0.0.1:${run.port}/`)).text()).toBe(
@@ -244,13 +281,17 @@ test('work in flight when the server is killed, and what the restarted server ma
       .toBe(false);
   });
 
-  await test.step('a terminal', async () => {
+  await step('a terminal', async () => {
     // KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3361
     // The page opens a new, empty shell as "Terminal 1", and the old one's output is lost. On
     // macOS the old shell ended with the server and the restarted server clears its row's pid; on
     // Linux it lives on, orphaned, and its row keeps the pid.
+    await onHeron();
     await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
-    await expect(page.locator('.xterm')).toBeVisible();
+    // The new shell answers, so the terminal shows all it will of the old one.
+    await page.getByRole('application', { name: 'Terminal' }).click();
+    await page.keyboard.type('echo recoverheron-new-$((1+1))\n');
+    await expect(page.locator('.xterm')).toContainText('recoverheron-new-2', { timeout: 30_000 });
     await expect(page.locator('.xterm')).not.toContainText('recoverheron-42');
     await expect
       .poll(() => terminalRows(sandbox, heron), { timeout: 30_000 })
@@ -260,7 +301,7 @@ test('work in flight when the server is killed, and what the restarted server ma
       ]);
   });
 
-  await test.step('a prompt queued behind a running turn', async () => {
+  await step('a prompt queued behind a running turn', async () => {
     // KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3358
     // The queued message is lost: neither queued nor sent after the restart, and absent from the
     // conversation (plan task 3.4 makes accepted prompts durable).
@@ -271,14 +312,21 @@ test('work in flight when the server is killed, and what the restarted server ma
     await expect(
       conversation.getByText(`Waiting at gate ${GATES.queuedTurn}.`, { exact: true })
     ).toBeVisible({ timeout: 60_000 });
-    await expect(conversation.getByText(queued)).toHaveCount(0);
-    await expect(conversation.getByRole('button', { name: 'Cancel queued message' })).toHaveCount(
-      0
-    );
-    expect(sessionRows(sandbox, plover)).toEqual([expect.objectContaining({ status: 'IDLE' })]);
+    // The restarted server has loaded the session from its rollout file, and it stays idle.
+    const rollout = rolloutHolding(sandbox, 'Recoverplover');
+    await expect
+      .poll(() => hydrationsSince(rollout.threadId, killedAt).length, { timeout: 60_000 })
+      .toBe(1);
+    await expectHolds(2000, async () => {
+      expect(sessionRows(sandbox, plover)).toEqual([expect.objectContaining({ status: 'IDLE' })]);
+      await expect(conversation.getByText(queued)).toHaveCount(0);
+      await expect(conversation.getByRole('button', { name: 'Cancel queued message' })).toHaveCount(
+        0
+      );
+    });
   });
 
-  await test.step('a workspace provisioning with its setup script alive', async () => {
+  await step('a workspace provisioning with its setup script alive', async () => {
     // Startup recovery looks only at PROVISIONING rows older than ten minutes (and would skip
     // this one while its script runs): the restarted server leaves it as it was.
     expect(workspaceRow(sandbox, curlew)).toMatchObject({
@@ -306,17 +354,21 @@ test('work in flight when the server is killed, and what the restarted server ma
         timeout: 30_000,
       })
       .toBe(false);
-    expect(workspaceRow(sandbox, curlew)).toMatchObject({
-      status: 'PROVISIONING',
-      initScriptPid: setupPid,
+    await expectHolds(2000, async () => {
+      expect(workspaceRow(sandbox, curlew)).toMatchObject({
+        status: 'PROVISIONING',
+        initScriptPid: setupPid,
+      });
+      await expect(page.getByText(/^Running init script/)).toBeVisible();
+      expect(sessionRows(sandbox, curlew)).toEqual([
+        expect.objectContaining({ status: 'IDLE', providerSessionId: null }),
+      ]);
     });
-    await expect(page.getByText(/^Running init script/)).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute(
       'placeholder',
       'Type a message to start the agent…'
     );
-    expect(sessionRows(sandbox, curlew)).toEqual([
-      expect.objectContaining({ status: 'IDLE', providerSessionId: null }),
-    ]);
   });
+
+  finish();
 });

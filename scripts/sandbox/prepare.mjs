@@ -159,6 +159,13 @@ process.stdout.write('Sandbox setup finished\\n');
 `;
 
 /**
+ * Runs the setup script only when a hold is requested. Otherwise it is a plain `echo`, as fast as
+ * before holds existed: starting Node takes seconds on a loaded machine, and a slower setup changes
+ * what other specs see while a workspace starts. `exec`, so that the held setup is one process.
+ */
+const SEED_SETUP_COMMAND = `if [ -e "$FF_SANDBOX_GATE_DIR/${HOLD_SETUP_FILE}" ]; then exec node sandbox-setup.mjs; else echo "Sandbox setup finished"; fi`;
+
+/**
  * The seed repository: a README, and a setup script and a run script that finish or start at
  * once, so that a workspace goes through provisioning and has something to run. A spec can hold
  * one setup at a gate (`HOLD_SETUP_FILE`).
@@ -170,7 +177,7 @@ export function createSeedRepository(paths, env) {
     'factory-factory.json': `${JSON.stringify(
       {
         scripts: {
-          setup: 'node sandbox-setup.mjs',
+          setup: SEED_SETUP_COMMAND,
           run: 'node sandbox-server.mjs {port}',
         },
       },

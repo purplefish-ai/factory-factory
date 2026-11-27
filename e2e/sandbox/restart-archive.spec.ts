@@ -12,19 +12,23 @@ import {
 } from '../support/backend-process';
 import {
   type BackendTree,
+  launchWithoutWaiting,
   readBackendTree,
   reportProcesses,
   rolesByWorkspace,
-  stopSurvivors,
+  stopSurvivorsIfKilled,
   survivorsOf,
-  workspaceIdOf,
   workspaceRow,
 } from './restart-support';
-import { escapeRegExp, launchWorkspace, openBoard, readSandbox } from './sandbox';
+import { escapeRegExp, openBoard, readSandbox } from './sandbox';
 
 // Characterises recovery of an archive in flight (see restart-in-flight.spec.ts for the rest):
 // the server crashes after the archive has snapshotted the worktree and before it removes it,
 // which a kill at an arbitrary moment cannot reach, since an archive takes about a second.
+//
+// Known and accepted: this spec leaves the row ARCHIVING. Its lease goes stale 105 to 120 s after
+// the crash, and the archive-recovery job then finishes the archive in the background, which can
+// fall inside a later spec's run.
 
 /** Under the archive lease's two minutes, with room for the checks that follow. */
 const LEASE_FRESH_MS = 100_000;
@@ -32,10 +36,14 @@ const LEASE_FRESH_MS = 100_000;
 let tree: BackendTree | null = null;
 
 test.afterEach(async () => {
-  await ensureBackendRunning();
-  if (tree) {
-    await stopSurvivors(tree);
+  try {
+    // Only once the crash happened: before it, the tree is the live shared backend's.
+    if (tree) {
+      await stopSurvivorsIfKilled(tree);
+    }
+  } finally {
     tree = null;
+    await ensureBackendRunning();
   }
 });
 
@@ -43,8 +51,9 @@ test('an archive in flight when the server crashes', async ({ page }) => {
   const sandbox = readSandbox();
   await openBoard(page, sandbox);
   const board = page.url();
-  await launchWorkspace(page, 'Recoverstint archives in flight', /recoverstint/);
-  const stint = workspaceIdOf(page);
+  // No agent reply is needed: a READY workspace is what gets archived.
+  const stint = await launchWithoutWaiting(page, 'Recoverstint archives in flight', /recoverstint/);
+  await expect.poll(() => workspaceRow(sandbox, stint).status, { timeout: 60_000 }).toBe('READY');
   const worktree = workspaceRow(sandbox, stint).worktreePath ?? '';
   expect(existsSync(worktree)).toBe(true);
 
