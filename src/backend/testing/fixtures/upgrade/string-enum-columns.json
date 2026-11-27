@@ -33,7 +33,8 @@
     "RESUME_FAILED",
     "DELIVERY_FAILED",
     "RECEIPT_UNAVAILABLE",
-    "INVALID_EVENT"
+    "INVALID_EVENT",
+    "LEGACY_FIXER"
   ],
   "workspace_notifications.kind": [
     "MESSAGE",

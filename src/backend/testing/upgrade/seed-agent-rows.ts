@@ -22,6 +22,7 @@ const EVENT_GITHUB = 'seed-event-github';
 const EVENT_SLACK = 'seed-event-slack';
 const PROVIDER_EVENT_GITHUB = 'seed-provider-event-github';
 const SCAN = 'seed-scan-1';
+const SCANS = ['seed-scan-2', 'seed-scan-3', 'seed-scan-4'] as const;
 const ISSUE_URL = 'https://github.com/seed-org/seed-repo/issues/7';
 const PR_URL = 'https://github.com/seed-org/seed-repo/pull/201';
 
@@ -441,7 +442,7 @@ export const agentSourcePages: SeedRow[] = [
   ...(['CAPTURE', 'VERIFY'] as const).map((phase, ordinal): SeedRow => ({
     id: `seed-source-page-${phase.toLowerCase()}`,
     connectionId: CONNECTION_GITHUB,
-    scanId: 'seed-scan-2',
+    scanId: SCANS[0],
     ordinal,
     phase,
     requestPage: ordinal + 1,
@@ -482,7 +483,7 @@ export const agentSourceCheckpoints: SeedRow[] = [
   },
   ...(['BUILDING', 'INDEXED', 'INVALID'] as const).map((status, index): SeedRow => ({
     connectionId: CONNECTION_GITHUB,
-    scanId: `seed-scan-${index + 2}`,
+    scanId: SCANS[index] ?? SCAN,
     status,
     nextOrdinal: 0,
     entryCount: 0,

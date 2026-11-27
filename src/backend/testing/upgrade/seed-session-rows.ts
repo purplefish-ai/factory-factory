@@ -2,7 +2,9 @@ import { iso, type SeedRow, stamp, UNUSED_PID } from './seed-values';
 import {
   CODEX_ACCOUNT_MANAGED,
   PR_DRAFT,
+  PR_DRAFT_OBSERVATION,
   PR_MERGED,
+  PR_MERGED_OBSERVATION,
   PR_OPEN,
   PR_OPEN_OBSERVATION,
   SESSION_CLAUDE_FAILED,
@@ -267,6 +269,7 @@ export const prMonitoring: SeedRow[] = [
       [WORKSPACE_EVENT, 'DELIVERY_FAILED'],
       [WORKSPACE_PERIODIC, 'RECEIPT_UNAVAILABLE'],
       [WORKSPACE_CHILD, 'INVALID_EVENT'],
+      [WORKSPACE_ARCHIVED, 'LEGACY_FIXER'],
     ] as const
   ).map(([workspaceId, deliveryPauseReason]): SeedRow => ({
     workspaceId,
@@ -399,7 +402,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'CI_FAILED',
       target: { workspaceId: WORKSPACE_RESUME, prId: PR_DRAFT },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'DRAFT' },
+      observation: PR_DRAFT_OBSERVATION,
     },
     state: 'DISPATCHING',
     attempts: 2,
@@ -423,7 +426,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'CI_FAILED',
       target: { workspaceId: WORKSPACE_RESUME, prId: PR_DRAFT },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'DRAFT' },
+      observation: PR_DRAFT_OBSERVATION,
     },
     state: 'PENDING',
     batchId: 'seed-delivery-retry',
@@ -438,7 +441,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'CI_RECOVERED',
       target: { workspaceId: WORKSPACE_RESUME, prId: PR_DRAFT },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'DRAFT' },
+      observation: PR_DRAFT_OBSERVATION,
     },
     state: 'CANCELLED',
     attempts: 1,
@@ -455,7 +458,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'CONFLICT_DETECTED',
       target: { workspaceId: WORKSPACE_RESUME, prId: PR_DRAFT },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'DRAFT' },
+      observation: PR_DRAFT_OBSERVATION,
     },
     state: 'CANCELLED',
     attempts: 2,
@@ -541,7 +544,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'PR_MERGED',
       target: { workspaceId: WORKSPACE_MANUAL, prId: PR_MERGED },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'MERGED' },
+      observation: PR_MERGED_OBSERVATION,
     },
     state: 'PENDING',
   },
@@ -555,7 +558,7 @@ export const prEvents: SeedRow[] = [
     payload: {
       kind: 'PR_CLOSED',
       target: { workspaceId: WORKSPACE_MANUAL, prId: PR_MERGED },
-      observation: { ...PR_OPEN_OBSERVATION, prState: 'CLOSED' },
+      observation: { ...PR_MERGED_OBSERVATION, prState: 'CLOSED' },
     },
     state: 'CANCELLED',
   },

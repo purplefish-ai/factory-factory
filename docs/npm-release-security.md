@@ -53,9 +53,10 @@ one whose SQL differs from the published bytes. It then regenerates
 `last-release-seed.sql` from the rows in `src/backend/testing/upgrade/`, which
 fails if they no longer cover every table and every enum value (string-typed
 columns with a closed set of values are listed in `string-enum-columns.json`),
-and records the seed's digest in `last-release.json`. Commit both files. CI
-never runs the command; a stale pin only makes the check start from an older
-release.
+and records the seed's digest in `last-release.json`. Commit both files and any
+changes to the seed rows in `src/backend/testing/upgrade/` or to
+`string-enum-columns.json` that the run needed. CI never runs the command; a
+stale pin only makes the check start from an older release.
 
 A failing upgrade check means the code broke upgrades from the pinned release:
 fix the code. The seed is the baseline an upgrade must cope with, so it changes

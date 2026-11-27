@@ -214,7 +214,7 @@
     "20261112200000_agent_source_epochs": "8446b8d6cf2d2add732fa748b70c1aa9d3f448e04fabe441f8ba547619c0360e",
     "20261124150000_session_question_response": "18992f5c221b0ed72be7a3fabd2b909825aff26212787f877425a16d9d9f0b06"
   },
-  "seedDigest": "7e4dc9ef450110132d076df33ffe8edd70ec449994873a4decb52cfc6b407459",
+  "seedDigest": "ab42f4c93be2dd9c59372ad0a5d1133fa318518578f61801fb43d2856eb82284",
   "enums": {
     "WorkspaceStatus": ["NEW", "PROVISIONING", "READY", "FAILED", "ARCHIVING", "ARCHIVED"],
     "SessionStatus": ["IDLE", "RUNNING", "PAUSED", "COMPLETED", "FAILED"],

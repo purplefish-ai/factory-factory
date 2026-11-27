@@ -42,7 +42,11 @@ import {
   REPOSITORY_MIGRATIONS as MIGRATIONS_PATH,
   type SeedCoverage,
 } from '@/backend/testing/upgrade/last-release';
-import { DEFINITION_DIGEST, DEFINITION_TRIAGE } from '@/backend/testing/upgrade/seed-agent-rows';
+import {
+  DEFINITION_DIGEST,
+  DEFINITION_LEGACY,
+  DEFINITION_TRIAGE,
+} from '@/backend/testing/upgrade/seed-agent-rows';
 import { seedTables } from '@/backend/testing/upgrade/seed-rows';
 import { PROJECT_GITHUB, PROJECT_LINEAR, UNUSED_PID } from '@/backend/testing/upgrade/seed-values';
 import {
@@ -345,6 +349,15 @@ const DERIVED_TRIGGERS: Record<string, [string, string, string | null, string | 
   'seed-trigger-slack': ['STARTING', 'SLACK_INTAKE_UNAVAILABLE', 'CATCHING_UP', null],
   // Schedules run as periodic tasks, so an event automation reports them unsupported.
   'seed-trigger-schedule': ['PAUSED', 'UNSUPPORTED_SCHEDULE', null, 'ACTIVATION_EXPIRED'],
+  // Triggers saved before membership was recorded have no known configuration.
+  'seed-trigger-legacy': ['PAUSED', 'UNKNOWN_MEMBERSHIP', null, null],
+  'seed-trigger-paused-source-error': ['PAUSED', 'UNKNOWN_MEMBERSHIP', 'READY', 'SOURCE_ERROR'],
+  'seed-trigger-paused-source-recovery-required': [
+    'PAUSED',
+    'UNKNOWN_MEMBERSHIP',
+    'READY',
+    'SOURCE_RECOVERY_REQUIRED',
+  ],
 };
 
 let db: IntegrationDatabase;
@@ -701,7 +714,7 @@ describe('upgrading from the last published release', () => {
     const triggers = Object.fromEntries(
       (
         await Promise.all(
-          [DEFINITION_TRIAGE, DEFINITION_DIGEST].map((agentId) =>
+          [DEFINITION_TRIAGE, DEFINITION_DIGEST, DEFINITION_LEGACY].map((agentId) =>
             trpc.automation.get({ projectId, agentId })
           )
         )

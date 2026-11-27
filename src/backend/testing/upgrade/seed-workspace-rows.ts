@@ -517,6 +517,8 @@ export const PR_OPEN = 'seed-pr-open';
 export const PR_DRAFT = 'seed-pr-draft';
 export const PR_MERGED = 'seed-pr-merged';
 export const PR_OPEN_OBSERVATION = observation(101, 'seed/fix-flaky-test', 'OPEN', 'SUCCESS');
+export const PR_DRAFT_OBSERVATION = observation(102, 'feature/resume', 'DRAFT', 'PENDING');
+export const PR_MERGED_OBSERVATION = observation(100, 'seed/earlier-cleanup', 'MERGED', 'SUCCESS');
 
 const prDefaults: SeedRow = {
   title: null,
@@ -565,7 +567,7 @@ export const workspacePrs: SeedRow[] = [
     ciStatus: 'SUCCESS',
     completionDismissed: true,
     terminalObservedAt: stamp(35),
-    observation: observation(100, 'seed/earlier-cleanup', 'MERGED', 'SUCCESS'),
+    observation: PR_MERGED_OBSERVATION,
   },
   {
     ...prDefaults,
@@ -577,7 +579,7 @@ export const workspacePrs: SeedRow[] = [
     headRefName: 'feature/resume',
     state: 'DRAFT',
     ciStatus: 'PENDING',
-    observation: observation(102, 'feature/resume', 'DRAFT', 'PENDING'),
+    observation: PR_DRAFT_OBSERVATION,
   },
   {
     ...prDefaults,
