@@ -96,11 +96,6 @@ export class ConnectionLiveness {
     this.clearTimer();
   }
 
-  /** Whether a ping is overdue: the connection is open but silent. */
-  isUnresponsive(): boolean {
-    return this.unresponsive;
-  }
-
   /** Any inbound frame proves the connection is alive. */
   frameReceived(): void {
     if (!this.running) {

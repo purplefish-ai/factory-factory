@@ -331,33 +331,39 @@ export function useWebSocketTransport(
 
   const handleOpen = useCallback(
     (ws: WebSocket) => {
-      cancelSocketTimerRef.current?.();
       setConnected(true);
       reportState('connected');
-      const liveness = new ConnectionLiveness({
-        sendPing: (id) =>
-          ws.readyState === WebSocket.OPEN && trySendMessage(ws, createTransportPing(id)),
-        onUnresponsive: () => reportState('unresponsive'),
-        onResponsive: () => reportState('connected'),
-        onDead: () => abandonSocket(ws),
-      });
-      livenessRef.current = liveness;
       // An open alone proves little: a server can accept the upgrade and then
-      // stall. The backoff resets only once the connection has stayed open
-      // and answering, so a server that keeps doing that is not retried at
-      // the shortest delay every time.
-      const awaitStability = () => {
+      // stall. The backoff resets only after a full window with no missed
+      // reply; a missed reply cancels the window and a late one starts it
+      // again, so a server that keeps stalling is not retried at the shortest
+      // delay every time.
+      const cancelStabilityWindow = () => {
+        cancelSocketTimerRef.current?.();
+        cancelSocketTimerRef.current = null;
+      };
+      const startStabilityWindow = () => {
+        cancelStabilityWindow();
         const handle = setTimeout(() => {
-          if (liveness.isUnresponsive()) {
-            awaitStability();
-            return;
-          }
-          reconnectAttemptsRef.current = 0;
           cancelSocketTimerRef.current = null;
+          reconnectAttemptsRef.current = 0;
         }, STABLE_CONNECTION_MS);
         cancelSocketTimerRef.current = () => clearTimeout(handle);
       };
-      awaitStability();
+      livenessRef.current = new ConnectionLiveness({
+        sendPing: (id) =>
+          ws.readyState === WebSocket.OPEN && trySendMessage(ws, createTransportPing(id)),
+        onUnresponsive: () => {
+          cancelStabilityWindow();
+          reportState('unresponsive');
+        },
+        onResponsive: () => {
+          startStabilityWindow();
+          reportState('connected');
+        },
+        onDead: () => abandonSocket(ws),
+      });
+      startStabilityWindow();
 
       if (queuePolicy !== 'replay') {
         messageQueueRef.current = [];

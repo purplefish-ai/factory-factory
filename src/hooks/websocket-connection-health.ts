@@ -11,7 +11,7 @@ import { createContext, useContext, useSyncExternalStore } from 'react';
 
 /**
  * - `connecting`: the first attempt for the current URL, not yet open.
- * - `connected`: open and answering.
+ * - `connected`: open and not known to be unresponsive (no reply is overdue).
  * - `unresponsive`: open, but a ping has gone unanswered; the socket is kept
  *   in case the server is only slow (`ConnectionLiveness`).
  * - `reconnecting`: an attempt failed or an open connection was lost or

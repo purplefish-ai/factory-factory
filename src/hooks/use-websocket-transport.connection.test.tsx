@@ -215,6 +215,30 @@ describe('useWebSocketTransport connection health', () => {
     view.unmount();
   });
 
+  it('restarts the stability window when a late reply ends a silence', async () => {
+    const view = mount();
+    // Two failed attempts: the next delay is 4 s unless the backoff resets.
+    flushSync(() => lastSocket().drop());
+    await vi.advanceTimersByTimeAsync(1000);
+    flushSync(() => lastSocket().drop());
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const socket = openWithHello();
+    await vi.advanceTimersByTimeAsync(LIVENESS_PING_INTERVAL_MS + LIVENESS_REPLY_TIMEOUT_MS);
+    expect(view.store.getSnapshot().connection).toBe('unresponsive');
+    // A late reply just before the window would have ended proves too little.
+    await vi.advanceTimersByTimeAsync(STABLE_CONNECTION_MS - 8000 - 100);
+    socket.answerPing();
+    await vi.advanceTimersByTimeAsync(500);
+    flushSync(() => socket.drop());
+
+    await vi.advanceTimersByTimeAsync(4000 - 1);
+    expect(lastSocket()).toBe(socket);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(lastSocket()).not.toBe(socket);
+    view.unmount();
+  });
+
   it('abandons and retries an attempt that never opens', async () => {
     const view = mount();
     const hanging = lastSocket();
