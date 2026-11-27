@@ -15,7 +15,42 @@ export interface IntegrationDatabase {
   tempDir: string;
 }
 
-export async function createIntegrationDatabase(): Promise<IntegrationDatabase> {
+export interface IntegrationDatabaseOptions {
+  /**
+   * Builds the database file instead of copying the current-schema template,
+   * for tests that start from an older database. It runs before any connection
+   * to the file is opened.
+   */
+  prepareDatabase?: (databasePath: string) => void | Promise<void>;
+}
+
+/** Put a migrated database at `databasePath`: the options' own, the shared template, or a fresh migration. */
+async function prepareDatabaseFile(
+  databasePath: string,
+  options: IntegrationDatabaseOptions
+): Promise<void> {
+  if (options.prepareDatabase) {
+    await options.prepareDatabase(databasePath);
+    return;
+  }
+  const templatePath = inject('integrationDatabaseTemplate');
+  if (templatePath) {
+    copyFileSync(templatePath, databasePath);
+    return;
+  }
+  // Keep the helper usable with standalone Vitest configs without global setup.
+  runMigrations({
+    databasePath,
+    migrationsPath: MIGRATIONS_PATH,
+    log: () => {
+      // No-op in tests.
+    },
+  });
+}
+
+export async function createIntegrationDatabase(
+  options: IntegrationDatabaseOptions = {}
+): Promise<IntegrationDatabase> {
   const tempDir = mkdtempSync(join(tmpdir(), 'ff-integration-'));
   const databasePath = join(tempDir, 'integration.db');
   const previousPrisma = globalThis.prismaGlobal;
@@ -26,19 +61,7 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
 
   let prisma: PrismaClient | undefined;
   try {
-    const templatePath = inject('integrationDatabaseTemplate');
-    if (templatePath) {
-      copyFileSync(templatePath, databasePath);
-    } else {
-      // Keep the helper usable with standalone Vitest configs without global setup.
-      runMigrations({
-        databasePath,
-        migrationsPath: MIGRATIONS_PATH,
-        log: () => {
-          // No-op in tests.
-        },
-      });
-    }
+    await prepareDatabaseFile(databasePath, options);
 
     process.env.DATABASE_PATH = databasePath;
     Reflect.deleteProperty(process.env, 'BASE_DIR');

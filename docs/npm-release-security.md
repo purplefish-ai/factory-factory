@@ -73,6 +73,38 @@ for them. To handle them, run the workflow by hand from `main`, first with
 The same checks apply in every mode, and newer versions are always tagged and
 released together.
 
+## After a release is published
+
+Pin the upgrade check to the version that just shipped. The check
+(`src/backend/upgrade-from-last-release.integration.test.ts`, run by the Test
+shards whenever CI selects application tests, which is every pull request that
+is not documentation-only) builds a database the way that release left it, loads
+a seed with a row in every table and every enum value in use, then runs the
+current migrations and application over it. Once npm serves the new version, run
+the following with that version in place of `0.5.14`:
+
+```sh
+node scripts/update-last-release-migrations.mjs 0.5.14
+```
+
+The command downloads the published tarball (a read-only registry request) and
+rewrites `src/backend/testing/fixtures/upgrade/last-release.json` with its
+migration list, the SHA-256 of each migration's SQL, and its Prisma enums. It
+refuses a checkout whose `prisma/migrations` lacks a shipped migration or holds
+one whose SQL differs from the published bytes. It then regenerates
+`last-release-seed.sql` from the rows in `src/backend/testing/upgrade/`, which
+fails if they no longer cover every table and every enum value (string-typed
+columns with a closed set of values are listed in `string-enum-columns.json`),
+and records the seed's digest in `last-release.json`. Commit both files and any
+changes to the seed rows in `src/backend/testing/upgrade/` or to
+`string-enum-columns.json` that the run needed. CI never runs the command; a
+stale pin only makes the check start from an older release.
+
+A failing upgrade check means the code broke upgrades from the pinned release:
+fix the code. The seed is the baseline an upgrade must cope with, so it changes
+only through this command, when re-pinning or adding rows for a new table or
+value, and the check refuses a seed whose digest the pin does not record.
+
 ## Account controls
 
 Workflow YAML alone cannot enforce account controls. Verify on npm that the

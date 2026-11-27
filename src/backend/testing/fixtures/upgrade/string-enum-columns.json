@@ -1,0 +1,47 @@
+{
+  "AgentSourceCheckpoint.status": ["BUILDING", "INDEXED", "COMPLETE", "INVALID"],
+  "AgentSourcePage.phase": ["CAPTURE", "VERIFY", "FINALIZED"],
+  "AgentTrigger.pausedReasonCode": [
+    "ACTIVATION_EXPIRED",
+    "SOURCE_ERROR",
+    "SOURCE_RECOVERY_REQUIRED"
+  ],
+  "UserSettings.preferredIde": ["cursor", "vscode", "custom"],
+  "WorkspacePRDelivery.state": [
+    "PENDING",
+    "DISPATCHING",
+    "DELIVERED",
+    "CANCELLED",
+    "BLOCKED",
+    "DISMISSED"
+  ],
+  "WorkspacePREvent.kind": [
+    "CI_FAILED",
+    "CI_RECOVERED",
+    "REVIEW_FEEDBACK",
+    "CONFLICT_DETECTED",
+    "CONFLICT_CLEARED",
+    "PR_MERGED",
+    "PR_CLOSED",
+    "MONITORING_ENABLED"
+  ],
+  "WorkspacePREvent.state": ["PENDING", "DISPATCHING", "DELIVERED", "SUPERSEDED", "CANCELLED"],
+  "WorkspacePRMonitoring.deliveryMode": ["MAIN", "DEDICATED"],
+  "WorkspacePRMonitoring.deliveryPauseReason": [
+    "USER_STOPPED",
+    "SESSION_FAILED",
+    "RESUME_FAILED",
+    "DELIVERY_FAILED",
+    "RECEIPT_UNAVAILABLE",
+    "INVALID_EVENT",
+    "LEGACY_FIXER"
+  ],
+  "workspace_notifications.kind": [
+    "MESSAGE",
+    "PROGRESS",
+    "BLOCKER",
+    "QUESTION",
+    "COMPLETION",
+    "INSTRUCTION"
+  ]
+}
