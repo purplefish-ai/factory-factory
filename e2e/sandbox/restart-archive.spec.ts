@@ -20,7 +20,7 @@ import {
   survivorsOf,
   workspaceRow,
 } from './restart-support';
-import { escapeRegExp, openBoard, readSandbox } from './sandbox';
+import { escapeRegExp, openBoard, readSandbox, reply } from './sandbox';
 
 // Characterises recovery of an archive in flight (see restart-in-flight.spec.ts for the rest):
 // the server crashes after the archive has snapshotted the worktree and before it removes it,
@@ -51,9 +51,17 @@ test('an archive in flight when the server crashes', async ({ page }) => {
   const sandbox = readSandbox();
   await openBoard(page, sandbox);
   const board = page.url();
-  // No agent reply is needed: a READY workspace is what gets archived.
-  const stint = await launchWithoutWaiting(page, 'Recoverstint archives in flight', /recoverstint/);
+  // A READY workspace is what gets archived.
+  const prompt = 'Recoverstint archives in flight';
+  const stint = await launchWithoutWaiting(page, prompt, /recoverstint/);
   await expect.poll(() => workspaceRow(sandbox, stint).status, { timeout: 60_000 }).toBe('READY');
+  // And its first turn over, so that the archive does not race a session starting or at work. The
+  // session row says RUNNING while its agent process lives, so the page tells: the reply is shown
+  // and the chat is idle.
+  await expect(reply(page.getByRole('log', { name: 'Conversation' }), prompt)).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(page.getByRole('tab', { name: 'Idle Chat 1' })).toBeVisible({ timeout: 60_000 });
   const worktree = workspaceRow(sandbox, stint).worktreePath ?? '';
   expect(existsSync(worktree)).toBe(true);
 

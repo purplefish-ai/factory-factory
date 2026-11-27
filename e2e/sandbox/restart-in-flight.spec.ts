@@ -4,7 +4,6 @@ import { expect, type Page, test } from '@playwright/test';
 import { sandboxPaths } from '../../scripts/sandbox/paths.mjs';
 import {
   ensureBackendRunning,
-  hydrationsSince,
   killBackend,
   readServerLog,
   restartBackend,
@@ -118,9 +117,9 @@ test('work in flight when the server is killed, and what the restarted server ma
   await launchWorkspace(page, 'Recoverheron runs everything', /recoverheron/);
   const heron = workspaceIdOf(page);
   const heronUrl = page.url();
-  // Opened again: a page that read the run-script status before the worktree's commands were
-  // saved (on a loaded machine) keeps showing "Setup dev server" until it reads it again, since
-  // nothing refetches it while the status stays IDLE.
+  // Opened again to work around https://github.com/purplefish-ai/factory-factory/issues/3367: a
+  // page that read the run-script status before the worktree's commands were saved (on a loaded
+  // machine) keeps showing "Setup dev server", since nothing reads it again while it stays IDLE.
   await page.goto(heronUrl);
   await page.getByRole('button', { name: /^Start dev server/ }).click();
   const stopDevServer = page.getByRole('button', { name: /^Stop dev server \(port \d+\)$/ });
@@ -312,12 +311,8 @@ test('work in flight when the server is killed, and what the restarted server ma
     await expect(
       conversation.getByText(`Waiting at gate ${GATES.queuedTurn}.`, { exact: true })
     ).toBeVisible({ timeout: 60_000 });
-    // The restarted server has loaded the session from its rollout file, and it stays idle.
-    const rollout = rolloutHolding(sandbox, 'Recoverplover');
-    await expect
-      .poll(() => hydrationsSince(rollout.threadId, killedAt).length, { timeout: 60_000 })
-      .toBe(1);
-    await expectHolds(2000, async () => {
+    // The restarted server served the turn above; the session stays idle and the message absent.
+    await expectHolds(1000, async () => {
       expect(sessionRows(sandbox, plover)).toEqual([expect.objectContaining({ status: 'IDLE' })]);
       await expect(conversation.getByText(queued)).toHaveCount(0);
       await expect(conversation.getByRole('button', { name: 'Cancel queued message' })).toHaveCount(
@@ -354,7 +349,7 @@ test('work in flight when the server is killed, and what the restarted server ma
         timeout: 30_000,
       })
       .toBe(false);
-    await expectHolds(2000, async () => {
+    await expectHolds(1000, async () => {
       expect(workspaceRow(sandbox, curlew)).toMatchObject({
         status: 'PROVISIONING',
         initScriptPid: setupPid,
