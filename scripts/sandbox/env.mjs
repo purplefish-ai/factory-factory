@@ -106,5 +106,6 @@ export function buildServerEnv({
     FF_UPDATE_CHECKS_ENABLED: 'false',
     AGENT_SLACK_INTAKE_ENABLED: 'false',
     FF_SANDBOX_SCENARIO: scenario,
+    FF_SANDBOX_GATE_DIR: paths.gateDir,
   };
 }

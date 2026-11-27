@@ -37,6 +37,7 @@ export function prepareSandbox(baseDir) {
     paths.worktreeBaseDir,
     paths.codexHome,
     paths.claudeConfigDir,
+    paths.gateDir,
   ]) {
     mkdirSync(dir, { recursive: true });
   }
@@ -112,12 +113,41 @@ export function checkScenario(codexPath, env) {
   }
 }
 
+/** The run script: one page on the port the application gives it. */
+const SEED_SERVER = `import { createServer } from 'node:http';
+
+const port = Number(process.argv[2]);
+createServer((_request, response) => response.end('Sandbox run script\\n')).listen(port, () => {
+  process.stdout.write(\`Sandbox run script listening on port \${port}\\n\`);
+});
+`;
+
+/**
+ * The seed repository: a README, and a setup script and a run script that finish or start at
+ * once, so that a workspace goes through provisioning and has something to run.
+ */
 export function createSeedRepository(paths, env) {
   mkdirSync(paths.repoPath);
-  writeFileSync(join(paths.repoPath, 'README.md'), '# Sandbox project\n');
+  const files = {
+    'README.md': '# Sandbox project\n',
+    'factory-factory.json': `${JSON.stringify(
+      {
+        scripts: {
+          setup: 'echo "Sandbox setup finished"',
+          run: 'node sandbox-server.mjs {port}',
+        },
+      },
+      null,
+      2
+    )}\n`,
+    'sandbox-server.mjs': SEED_SERVER,
+  };
+  for (const [name, content] of Object.entries(files)) {
+    writeFileSync(join(paths.repoPath, name), content);
+  }
   const git = (...args) =>
     execFileSync('git', args, { cwd: paths.repoPath, env, stdio: ['ignore', 'pipe', 'pipe'] });
   git('init', '--quiet');
-  git('add', 'README.md');
+  git('add', ...Object.keys(files));
   git('commit', '--quiet', '-m', 'Initial commit');
 }

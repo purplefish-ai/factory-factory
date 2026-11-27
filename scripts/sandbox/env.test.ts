@@ -67,6 +67,7 @@ describe('server environment', () => {
       FF_UPDATE_CHECKS_ENABLED: 'false',
       AGENT_SLACK_INTAKE_ENABLED: 'false',
       FF_SANDBOX_SCENARIO: 'slow-turn',
+      FF_SANDBOX_GATE_DIR: '/tmp/ff-sandbox/sb-1/gates',
     });
     const bare = buildServerEnv({
       parentEnv: { FF_NPM_REGISTRY_URL: 'https://user:token@registry.example' },

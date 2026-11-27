@@ -195,7 +195,7 @@ describe('sandbox smoke test', () => {
     'scripts/dev-sandbox.mjs',
     'scripts/sandbox/launch.mjs',
     'src/backend/testing/fixtures/fake-codex-app-server.mjs',
-    'e2e/sandbox-smoke.spec.ts',
+    'e2e/sandbox/echo.spec.ts',
     'playwright.sandbox.config.ts',
     'src/client/main.tsx',
     'src/backend/service.ts',

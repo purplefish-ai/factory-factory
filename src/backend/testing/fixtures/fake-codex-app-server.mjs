@@ -1,23 +1,163 @@
 #!/usr/bin/env node
 // Synthetic app-server for testing the published ACP executable without inference.
-// FF_SANDBOX_SCENARIO selects what a prompt plays (see `scenarios`); unset keeps
-// the contract reply. Self-contained: tests copy this one file into a temp dir.
-import { appendFileSync } from 'node:fs';
+// Self-contained: tests copy this one file into a temp dir.
+//
+// Choosing a scenario (see `scenarios`). A prompt containing `ff-scenario:<name>` plays that
+// scenario; `ff-scenario:<name>:<argument>` also passes an argument (letters, digits, `_`, `-`).
+// Each prompt is read on its own, so every turn of a conversation can choose. A prompt without
+// the token plays FF_SANDBOX_SCENARIO (the sandbox sets `echo`); with neither, the fake sends the
+// contract reply. An unknown name in a prompt fails that turn, naming the valid ones; an unknown
+// FF_SANDBOX_SCENARIO stops the process. Title threads (ephemeral) always get the contract reply.
+//
+// Releasing a gate. `ff-scenario:gated-stream:<gate>` streams a first chunk, then waits until the
+// file `<FF_SANDBOX_GATE_DIR>/<gate>` exists, deletes it and streams the rest. A file created
+// before the turn reaches the gate releases it at once. The sandbox sets FF_SANDBOX_GATE_DIR to
+// `<baseDir>/gates` (`gateDir` in scripts/sandbox/paths.mjs).
+//
+// History. Each thread/start issues a new UUIDv7 thread id. With CODEX_HOME set, a conversation is
+// appended, from its first prompt as Codex does, to
+// `CODEX_HOME/sessions/YYYY/MM/DD/rollout-<UTC time>-<thread id>.jsonl`, and thread/resume and
+// thread/read find it there after a restart. The line shapes are copied from the fixtures in
+// codex-session-history-loader.service.test.ts until a recorded Codex session replaces them.
+import { randomBytes } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-const nativeId = '11111111-1111-4111-8111-111111111111';
-const thread = {
-  id: nativeId,
-  cwd: process.cwd(),
-  turns: [],
-  historyMode: 'legacy',
-  status: { type: 'idle' },
-  source: 'cli',
-  modelProvider: 'openai',
-  createdAt: 0,
-  updatedAt: 0,
-  preview: 'Synthetic conversation',
-};
+const codexHome = process.env.CODEX_HOME?.trim() || null;
+const gateDir = process.env.FF_SANDBOX_GATE_DIR?.trim() || null;
+// How often a waiting gate looks for its file.
+const gatePollMs = 50;
+const scenarioToken = /\bff-scenario:([a-z][a-z-]*)(?::([\w-]+))?/;
+const processNonce = randomBytes(4).toString('hex');
+
+/** A UUIDv7, whose first 48 bits are the creation time: the loader finds its date directory. */
+function uuidV7(timeMs) {
+  const bytes = randomBytes(16);
+  bytes.writeUIntBE(timeMs, 0, 6);
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// Every thread this process knows: { id, cwd, ephemeral, rollout (a path, or null) }.
+const threads = new Map();
+
+function rolloutPath(id, timeMs) {
+  const iso = new Date(timeMs).toISOString();
+  const [year, month, day] = iso.slice(0, 10).split('-');
+  const stamp = iso.slice(0, 19).replaceAll(':', '-');
+  return join(codexHome, 'sessions', year, month, day, `rollout-${stamp}-${id}.jsonl`);
+}
+
+function addThread(id, cwd, ephemeral = false) {
+  const record = {
+    id,
+    cwd,
+    ephemeral,
+    // Codex keeps no rollout for an ephemeral thread.
+    rollout: codexHome && !ephemeral ? rolloutPath(id, Date.now()) : null,
+  };
+  threads.set(id, record);
+  return record;
+}
+
+/** A thread from this process, or one an earlier process wrote a rollout for. */
+function findThread(id) {
+  const known = threads.get(id);
+  if (known || !codexHome || !existsSync(join(codexHome, 'sessions'))) {
+    return known ?? null;
+  }
+  const sessions = join(codexHome, 'sessions');
+  const file = readdirSync(sessions, { recursive: true }).find(
+    (name) => typeof name === 'string' && basename(name).endsWith(`-${id}.jsonl`)
+  );
+  if (file === undefined) {
+    return null;
+  }
+  const rollout = join(sessions, file);
+  const meta = JSON.parse(readFileSync(rollout, 'utf8').split('\n')[0]);
+  const record = { id, cwd: meta.payload.cwd, ephemeral: false, rollout };
+  threads.set(id, record);
+  return record;
+}
+
+/** Appends one rollout line, after the session_meta line that opens a new file. */
+function record(thread, type, payload) {
+  if (!thread.rollout) {
+    return;
+  }
+  const lines = [];
+  if (!existsSync(thread.rollout)) {
+    mkdirSync(dirname(thread.rollout), { recursive: true });
+    lines.push({ type: 'session_meta', payload: { id: thread.id, cwd: thread.cwd } });
+  }
+  lines.push({ timestamp: new Date().toISOString(), type, payload });
+  appendFileSync(thread.rollout, lines.map((line) => `${JSON.stringify(line)}\n`).join(''));
+}
+
+const turnShape = (id) => ({
+  id,
+  rootTurnId: null,
+  items: [],
+  itemsView: 'notLoaded',
+  status: 'inProgress',
+  error: null,
+  startedAt: 0,
+  completedAt: null,
+  durationMs: null,
+});
+
+/** The recorded turns, with their prompts and replies, for thread/read with includeTurns. */
+function readTurns(thread) {
+  if (!(thread.rollout && existsSync(thread.rollout))) {
+    return [];
+  }
+  const turns = [];
+  for (const line of readFileSync(thread.rollout, 'utf8').split('\n')) {
+    const { type, payload } = line ? JSON.parse(line) : {};
+    if (type !== 'event_msg') {
+      continue;
+    }
+    if (payload.type === 'task_started') {
+      const done = { status: 'completed', completedAt: 0, durationMs: 0 };
+      turns.push({ ...turnShape(payload.turn_id), ...done, itemsView: 'full' });
+    }
+    const turn = turns.at(-1);
+    if (!turn) {
+      continue;
+    }
+    const id = `${turn.id}-item-${turn.items.length + 1}`;
+    if (payload.type === 'user_message') {
+      const content = [{ type: 'text', text: payload.message, text_elements: [] }];
+      turn.items.push({ type: 'userMessage', id, content });
+    } else if (payload.type === 'agent_message') {
+      const message = { type: 'agentMessage', id, text: payload.message };
+      turn.items.push({ ...message, phase: null, memoryCitation: null });
+    }
+  }
+  return turns;
+}
+
+function threadShape(thread, turns = []) {
+  return {
+    id: thread.id,
+    cwd: thread.cwd,
+    turns,
+    historyMode: 'legacy',
+    status: { type: 'idle' },
+    source: 'cli',
+    modelProvider: 'openai',
+    createdAt: 0,
+    updatedAt: 0,
+    preview: 'Synthetic conversation',
+  };
+}
+
+const promptText = (input = []) =>
+  input.flatMap((item) => (item.type === 'text' ? [item.text] : [])).join('\n');
+
 const model = {
   id: 'contract-model',
   model: 'contract-model',
@@ -111,16 +251,8 @@ const scenarios = {
       await turn.reply(['The async answer reached Codex.']);
     }
   },
-  error: (turn) => {
-    const error = {
-      message: 'Sandbox scenario error: the fake provider failed this turn on purpose.',
-      codexErrorInfo: null,
-      additionalDetails: null,
-      misalignment: null,
-    };
-    turn.notify('error', { error, willRetry: false, threadId: turn.threadId, turnId: turn.id });
-    return { status: 'failed', error };
-  },
+  error: (turn) =>
+    turn.fail('Sandbox scenario error: the fake provider failed this turn on purpose.'),
   'retry-recover': async (turn) => {
     if (await playRetries(turn)) {
       await turn.reply(['The scripted response resumed.']);
@@ -133,6 +265,19 @@ const scenarios = {
   },
   'slow-stream': async (turn) => {
     await turn.reply(slowStreamChunks, chunkDelayMs);
+  },
+  // Stays in progress until its gate file appears (see the top of this file), or a stop.
+  'gated-stream': async (turn) => {
+    const gate = turn.argument;
+    if (!gate) {
+      return turn.fail('gated-stream needs a gate name: ff-scenario:gated-stream:<gate>.');
+    }
+    if (!gateDir) {
+      return turn.fail('gated-stream needs FF_SANDBOX_GATE_DIR, the directory of gate files.');
+    }
+    await turn.reply([`Waiting at gate ${gate}. `, `Gate ${gate} released.`], () =>
+      turn.gate(join(gateDir, gate))
+    );
   },
 };
 const scenarioName = process.env.FF_SANDBOX_SCENARIO;
@@ -202,20 +347,26 @@ const interrupts = new Map();
 const pendingSteers = new Map();
 let serverRequestCount = 0;
 
-/** Plays the selected scenario as one turn, with the item shapes of the Codex app-server protocol. */
-async function playScenario(request, turnId) {
+/**
+ * The scenario a prompt plays: its own `ff-scenario:` token, else FF_SANDBOX_SCENARIO, else null
+ * for the contract reply. An unknown name in the prompt plays a failure that names the valid ones.
+ */
+function chooseScenario(text) {
+  const [, name, argument] = scenarioToken.exec(text) ?? [];
+  if (name === undefined) {
+    return scenarioName === undefined ? null : { play: scenarios[scenarioName] };
+  }
+  if (!Object.hasOwn(scenarios, name)) {
+    const valid = Object.keys(scenarios).join(', ');
+    return { play: (turn) => turn.fail(`Unknown scenario "${name}". Valid scenarios: ${valid}`) };
+  }
+  return { play: scenarios[name], argument };
+}
+
+/** Plays a scenario as one turn, with the item shapes of the Codex app-server protocol. */
+async function playScenario(request, turnId, thread, scenario) {
   const threadId = request.params.threadId;
-  const baseTurn = {
-    id: turnId,
-    rootTurnId: null,
-    items: [],
-    itemsView: 'notLoaded',
-    status: 'inProgress',
-    error: null,
-    startedAt: 0,
-    completedAt: null,
-    durationMs: null,
-  };
+  const baseTurn = turnShape(turnId);
   const item = (method, value) =>
     notify(method, {
       item: value,
@@ -251,6 +402,7 @@ async function playScenario(request, turnId) {
     threadId,
     cwd,
     input: request.params.input ?? [],
+    argument: scenario.argument,
     notify,
     async wait(ms) {
       if (!interrupted) {
@@ -258,12 +410,30 @@ async function playScenario(request, turnId) {
       }
       return !interrupted;
     },
+    /** Waits until `file` exists, then deletes it; returns false if the turn stops first. */
+    async gate(file) {
+      while (!interrupted) {
+        if (existsSync(file)) {
+          rmSync(file, { force: true });
+          return true;
+        }
+        await sleep(gatePollMs);
+      }
+      return false;
+    },
+    /** Ends the turn as failed with a visible error. */
+    fail(message) {
+      const error = { message, codexErrorInfo: null, additionalDetails: null, misalignment: null };
+      notify('error', { error, willRetry: false, threadId, turnId });
+      return { status: 'failed', error };
+    },
     request(method, params) {
       const id = `fake-server-request-${++serverRequestCount}`;
       send({ id, method, params });
       return new Promise((resolve) => pendingServerRequests.set(id, resolve));
     },
-    async reply(chunks, delayMs = 0) {
+    /** One message in `chunks`; between two chunks, sleeps `pause` ms or awaits `pause()`. */
+    async reply(chunks, pause = 0) {
       if (interrupted) {
         return;
       }
@@ -274,7 +444,7 @@ async function playScenario(request, turnId) {
       const sent = [];
       for (const delta of chunks) {
         if (sent.length > 0) {
-          await sleep(delayMs);
+          await (typeof pause === 'function' ? pause() : sleep(pause));
         }
         if (interrupted) {
           break;
@@ -283,6 +453,7 @@ async function playScenario(request, turnId) {
         notify('item/agentMessage/delta', { threadId, turnId, itemId: id, delta });
       }
       item('item/completed', { ...fields, text: sent.join('') });
+      record(thread, 'event_msg', { type: 'agent_message', message: sent.join('') });
     },
     command(id, command, commandActions, output) {
       const base = { type: 'commandExecution', id, command, cwd, commandActions };
@@ -308,10 +479,17 @@ async function playScenario(request, turnId) {
         exitCode: 0,
         durationMs: 1,
       });
+      const call = {
+        name: 'exec_command',
+        call_id: id,
+        arguments: JSON.stringify({ cmd: command }),
+      };
+      record(thread, 'response_item', { type: 'function_call', ...call });
+      record(thread, 'response_item', { type: 'function_call_output', call_id: id, output });
     },
   };
   notify('turn/started', { threadId, turn: baseTurn });
-  const played = (await scenarios[scenarioName](turn)) ?? { status: 'completed', error: null };
+  const played = (await scenario.play(turn)) ?? { status: 'completed', error: null };
   interrupts.delete(turnId);
   const ending = interrupted ? { status: 'interrupted', error: null } : played;
   notify('turn/completed', {
@@ -351,9 +529,11 @@ appServerInput?.on('line', (line) => {
     case 'skills/list':
       result = { data: [] };
       break;
-    case 'thread/start':
+    case 'thread/start': {
+      const cwd = request.params.cwd ?? process.cwd();
+      const thread = addThread(uuidV7(Date.now()), cwd, request.params.ephemeral === true);
       result = {
-        thread: request.params.ephemeral ? { ...thread, id: 'title-thread' } : thread,
+        thread: threadShape(thread),
         model: model.id,
         modelProvider: 'openai',
         approvalPolicy: 'on-request',
@@ -362,13 +542,17 @@ appServerInput?.on('line', (line) => {
         serviceTier: null,
       };
       break;
-    case 'thread/resume':
-      if (request.params.threadId !== nativeId) {
-        send({ id: request.id, error: { code: -32_602, message: 'Unknown synthetic thread' } });
+    }
+    case 'thread/resume': {
+      // As Codex: a thread resumes from its rollout, so one that was never prompted cannot.
+      const thread = findThread(request.params.threadId);
+      if (!(thread?.rollout && existsSync(thread.rollout))) {
+        const message = `no rollout found for thread id ${request.params.threadId}`;
+        send({ id: request.id, error: { code: -32_600, message } });
         return;
       }
       result = {
-        thread,
+        thread: threadShape(thread),
         model: model.id,
         modelProvider: 'openai',
         approvalPolicy: 'on-request',
@@ -378,9 +562,19 @@ appServerInput?.on('line', (line) => {
         collaborationMode: 'default',
       };
       break;
-    case 'thread/read':
-      result = { thread };
+    }
+    case 'thread/read': {
+      const thread = findThread(request.params.threadId);
+      if (!thread) {
+        const message = `thread not found: ${request.params.threadId}`;
+        send({ id: request.id, error: { code: -32_600, message } });
+        return;
+      }
+      result = {
+        thread: threadShape(thread, request.params.includeTurns ? readTurns(thread) : []),
+      };
       break;
+    }
     case 'thread/goal/get':
       result = { goal: null };
       break;
@@ -399,10 +593,19 @@ appServerInput?.on('line', (line) => {
     case 'turn/start': {
       const turn = { id: `turn-${request.id}`, status: 'inProgress', items: [], error: null };
       const threadId = request.params.threadId;
+      // A thread this process did not start (the tests send turn/start alone) is adopted.
+      const thread =
+        findThread(threadId) ?? addThread(threadId, request.params.cwd ?? process.cwd());
       send({ id: request.id, result: { turn } });
+      const text = promptText(request.params.input);
+      // Request ids, and so turn ids, start again in each process: the rollout's carry this
+      // process's nonce, so that the turns of one conversation stay distinct across restarts.
+      record(thread, 'event_msg', { type: 'task_started', turn_id: `${turn.id}-${processNonce}` });
+      record(thread, 'event_msg', { type: 'user_message', message: text });
       // Ephemeral title threads keep the contract reply, so only the conversation plays a scenario.
-      if (scenarioName !== undefined && threadId === nativeId) {
-        setTimeout(() => void playScenario(request, turn.id), 5);
+      const scenario = thread.ephemeral ? null : chooseScenario(text);
+      if (scenario) {
+        setTimeout(() => void playScenario(request, turn.id, thread, scenario), 5);
         return;
       }
       setTimeout(() => {
@@ -452,6 +655,7 @@ appServerInput?.on('line', (line) => {
             item: { id: 'message', type: 'agentMessage', text: 'Synthetic response' },
           },
         });
+        record(thread, 'event_msg', { type: 'agent_message', message: 'Synthetic response' });
         send({
           method: 'turn/completed',
           params: { threadId, turn: { ...turn, status: 'completed' } },
