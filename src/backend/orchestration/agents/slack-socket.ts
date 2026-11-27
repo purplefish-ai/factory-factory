@@ -97,12 +97,6 @@ export function createSlackSocket(
       handlers.onDisconnected();
     }
   });
-  // `disconnect()` cannot cancel an in-flight `apps.connections.open`; close what it opens late.
-  client.on('connected', () => {
-    if (!wanted) {
-      void client.disconnect();
-    }
-  });
   return {
     start: () => client.start(),
     disconnect: () => {

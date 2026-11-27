@@ -1,5 +1,6 @@
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { SMConnectAbortedError } from '@slack/socket-mode';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { SlackSocketHandlers } from '@/backend/services/agent-definition';
@@ -24,7 +25,6 @@ let socketUrl: string;
 let received: string[];
 let peers: WebSocket[];
 let consoleOutput: unknown[][];
-let onConnection: (peer: WebSocket) => void;
 
 function hello(appId = 'A1') {
   return JSON.stringify({
@@ -101,15 +101,12 @@ beforeEach(async () => {
       consoleOutput.push(args);
     });
   }
-  onConnection = (peer) => {
-    peer.send(hello());
-    peer.send(envelope);
-  };
   server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
   server.on('connection', (peer) => {
     peers.push(peer);
     peer.on('message', (data) => received.push(String(data)));
-    onConnection(peer);
+    peer.send(hello());
+    peer.send(envelope);
   });
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const { port } = server.address() as AddressInfo;
@@ -204,16 +201,10 @@ it('rejects start without retrying when Slack is unreachable', async () => {
   expect(fetch).toHaveBeenCalledOnce();
 });
 
-it('closes a socket that finishes connecting after it was disconnected', async () => {
+it('cancels a pending connection when disconnected before Slack responds', async () => {
   const { handlers, events } = recorder();
   const requested = Promise.withResolvers<void>();
   const responseReady = Promise.withResolvers<void>();
-  const peerClosed = Promise.withResolvers<void>();
-  const sendInitialFrames = onConnection;
-  onConnection = (peer) => {
-    peer.once('close', () => peerClosed.resolve());
-    sendInitialFrames(peer);
-  };
   const respond = slackApi();
   const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
     requested.resolve();
@@ -221,15 +212,13 @@ it('closes a socket that finishes connecting after it was disconnected', async (
     return await respond(url, init);
   });
   const socket = createSlackSocket(APP_TOKEN, handlers, { fetch });
-  const started = socket.start().catch(() => undefined);
+  const cancelled = expect(socket.start()).rejects.toBeInstanceOf(SMConnectAbortedError);
   await requested.promise;
-  expect(fetch).toHaveBeenCalledOnce();
   await socket.disconnect();
   responseReady.resolve();
-  await started;
-  await peerClosed.promise;
-  expect(peers).toHaveLength(1);
-  expect(peers[0]?.readyState).toBe(3);
+  await cancelled;
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(peers).toHaveLength(0);
   expect(received).toEqual([]);
   expect(events).toEqual([]);
 });

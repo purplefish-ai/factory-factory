@@ -114,7 +114,7 @@
     "@linear/sdk": "^103.0.0",
     "@openai/codex": "0.166.0",
     "@prisma/client": "7.10.1",
-    "@slack/socket-mode": "3.1.1",
+    "@slack/socket-mode": "3.2.0",
     "@trpc/server": "^11.22.1",
     "better-sqlite3": "^13.0.3",
     "chalk": "^6.0.1",
