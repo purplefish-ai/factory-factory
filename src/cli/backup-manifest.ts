@@ -1,6 +1,6 @@
 import type { Stats } from 'node:fs';
 import { lstat, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 /** Names inside a backup directory. `ff restore` reads the same layout. */
@@ -12,15 +12,19 @@ export const BACKUP_CODEX_ACCOUNTS_DIRECTORY = 'codex-accounts';
 /** Bump when the layout or the manifest changes in a way an older reader cannot restore. */
 export const BACKUP_FORMAT_VERSION = 1;
 
+const AbsolutePathSchema = z
+  .string()
+  .refine((path) => isAbsolute(path), 'must be an absolute path');
+
 export const BackupManifestSchema = z
   .object({
     formatVersion: z.literal(BACKUP_FORMAT_VERSION),
     applicationVersion: z.string().min(1),
     createdAt: z.iso.datetime(),
     /** Absolute path of the database that was backed up; informational. */
-    sourceDatabasePath: z.string().min(1),
+    sourceDatabasePath: AbsolutePathSchema,
     /** Absolute data directory the key and accounts came from; informational. */
-    sourceDataDirectory: z.string().min(1),
+    sourceDataDirectory: AbsolutePathSchema,
     contents: z
       .object({
         /** Always present: `database.db`, a consistent SQLite snapshot. */

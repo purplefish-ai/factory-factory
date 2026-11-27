@@ -1,5 +1,5 @@
 import type { Stats } from 'node:fs';
-import { chmod, copyFile, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
@@ -114,6 +114,17 @@ async function copyCodexAccounts(
   return true;
 }
 
+async function realpathIfExists(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if (isNotFound(error)) {
+      return path;
+    }
+    throw error;
+  }
+}
+
 function isInside(path: string, directory: string): boolean {
   const relation = relative(directory, path);
   return relation !== '' && !relation.startsWith('..') && !isAbsolute(relation);
@@ -151,17 +162,21 @@ async function reserveDirectory(directory: string, restrictParent: boolean): Pro
  * this can pair one install's database with another's key, which leaves the
  * database's stored secrets undecryptable after a restore.
  */
-export function describeMismatchedSources(options: {
+export async function describeMismatchedSources(options: {
   databasePath: string;
   baseDir: string;
-}): string | undefined {
+}): Promise<string | undefined> {
   const databasePath = resolve(options.databasePath);
   const baseDir = resolve(options.baseDir);
-  if (isInside(databasePath, baseDir)) {
+  // SQLite opens the link's target, so compare where each path really lives.
+  const realDatabasePath = await realpathIfExists(databasePath);
+  const realBaseDir = await realpathIfExists(baseDir);
+  if (isInside(realDatabasePath, realBaseDir)) {
     return undefined;
   }
+  const target = realDatabasePath === databasePath ? '' : ` (a link to ${realDatabasePath})`;
   return (
-    `The database ${databasePath} is not inside the data directory ${baseDir}, ` +
+    `The database ${databasePath}${target} is not inside the data directory ${baseDir}, ` +
     'which supplies the encryption key and Codex accounts. Check that they belong ' +
     'to the same installation; set BASE_DIR to change the data directory.'
   );
@@ -240,7 +255,7 @@ export function registerBackupCommand(program: Command, applicationVersion: stri
         const baseDir = resolve(getBaseDir());
         console.log(chalk.blue(`Backing up ${databasePath}`));
         console.log(chalk.gray(`  data directory (encryption key, Codex accounts): ${baseDir}`));
-        const mismatch = describeMismatchedSources({ databasePath, baseDir });
+        const mismatch = await describeMismatchedSources({ databasePath, baseDir });
         if (mismatch) {
           console.warn(chalk.yellow(`  Warning: ${mismatch}`));
         }

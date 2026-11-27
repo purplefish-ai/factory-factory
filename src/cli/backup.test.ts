@@ -1,5 +1,15 @@
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -233,6 +243,12 @@ describe('ff backup', () => {
       await writeFile(manifestPath, valid.replace('"encryptionKey":false', '"encryptionKey":true'));
       await expect(readBackup(directory)).rejects.toThrow('encryption.key is missing');
 
+      await writeFile(
+        manifestPath,
+        valid.replace(JSON.stringify(databasePath), JSON.stringify('data.db'))
+      );
+      await expect(readBackup(directory)).rejects.toThrow('absolute path');
+
       if (IS_POSIX) {
         const elsewhere = join(root, 'elsewhere.json');
         await writeFile(elsewhere, valid);
@@ -295,8 +311,24 @@ describe('ff backup', () => {
       expect(log).toHaveBeenCalled();
     });
 
-    it('does not warn when the database is inside the data directory', () => {
-      expect(describeMismatchedSources({ databasePath, baseDir })).toBeUndefined();
+    it('does not warn when the database is inside the data directory', async () => {
+      expect(await describeMismatchedSources({ databasePath, baseDir })).toBeUndefined();
+    });
+
+    it('warns when a link inside the data directory leads to a database elsewhere', async () => {
+      if (!IS_POSIX) {
+        return;
+      }
+      const external = join(root, 'other-install');
+      await mkdir(external);
+      await writeFile(join(external, 'data.db'), '');
+      const link = join(baseDir, 'linked.db');
+      await symlink(join(external, 'data.db'), link);
+
+      const warning = await describeMismatchedSources({ databasePath: link, baseDir });
+
+      expect(warning).toContain('is not inside the data directory');
+      expect(warning).toContain(`a link to ${await realpath(join(external, 'data.db'))}`);
     });
 
     it('reports a failure and sets a nonzero exit code', async () => {
