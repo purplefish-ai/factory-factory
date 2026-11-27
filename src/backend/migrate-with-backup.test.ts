@@ -17,8 +17,12 @@ import { UnknownAppliedMigrationsError } from './migrate';
 import {
   getPreMigrationBackupDirectory,
   type MigrateWithBackupOptions,
+  MigrationBackupError,
   runMigrationsWithBackup,
 } from './migrate-with-backup';
+import { configService } from './services/config.service';
+
+const ORIGINAL_ENV = { ...process.env };
 
 describe('runMigrationsWithBackup', () => {
   let tempDir: string;
@@ -54,6 +58,21 @@ describe('runMigrationsWithBackup', () => {
           name: string;
         }>
       ).map((row) => row.name);
+    } finally {
+      db.close();
+    }
+  };
+
+  const appliedMigrations = () => {
+    const db = new Database(databasePath, { readonly: true });
+    try {
+      return (
+        db
+          .prepare('SELECT migration_name FROM _prisma_migrations ORDER BY migration_name')
+          .all() as Array<{
+          migration_name: string;
+        }>
+      ).map((row) => row.migration_name);
     } finally {
       db.close();
     }
@@ -217,17 +236,53 @@ describe('runMigrationsWithBackup', () => {
     expect(backups()).toHaveLength(1);
   });
 
-  it('still migrates, with a warning, when the backup cannot be written', async () => {
-    addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
-    await migrate();
-    addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
-    const blocked = join(tempDir, 'not-a-directory');
-    writeFileSync(blocked, '');
+  describe('when the backup cannot be written', () => {
+    let blocked: string;
 
-    await migrate({ backupDirectory: blocked });
+    beforeEach(() => {
+      addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+      return migrate().then(() => {
+        addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+        // A file where the backup directory should be: the real failure, not a stub.
+        blocked = join(tempDir, 'not-a-directory');
+        writeFileSync(blocked, '');
+      });
+    });
 
-    expect(tablesIn(databasePath)).toContain('posts');
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('could not back up the database');
+    afterEach(() => {
+      process.env = { ...ORIGINAL_ENV };
+      configService.reload();
+    });
+
+    it('stops before any migration runs, naming the reason and the variable that overrides it', async () => {
+      const failure = migrate({ backupDirectory: blocked });
+
+      await expect(failure).rejects.toBeInstanceOf(MigrationBackupError);
+      await expect(failure).rejects.toThrow(/ENOTDIR|EEXIST|not a directory/i);
+      await expect(failure).rejects.toThrow('FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1');
+      expect(tablesIn(databasePath)).not.toContain('posts');
+      expect(appliedMigrations()).toEqual(['001_users']);
+    });
+
+    it('proceeds, with a warning, when FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1 is set', async () => {
+      process.env.FF_ALLOW_MIGRATION_WITHOUT_BACKUP = '1';
+      configService.reload();
+
+      await migrate({ backupDirectory: blocked });
+
+      expect(tablesIn(databasePath)).toContain('posts');
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('could not back up the database');
+      expect(warnings[0]).toContain('FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
+    });
+
+    it('still starts a database with nothing to migrate', async () => {
+      await migrate({ backupDirectory: join(tempDir, 'ok-backups') });
+      warnings.length = 0;
+
+      await migrate({ backupDirectory: blocked });
+
+      expect(warnings).toEqual([]);
+    });
   });
 });

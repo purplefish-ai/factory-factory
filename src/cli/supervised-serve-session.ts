@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
+import { ALLOW_MIGRATION_WITHOUT_BACKUP_ENV } from '@/backend/migrate-with-backup';
 import {
   applicationUpdateStatusSchema,
   updateSupervisorMessageSchema,
@@ -141,7 +142,8 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
           options.databasePath,
         ],
         {
-          env: options.env,
+          // The supervisor's own snapshot, taken just before, is this update's backup.
+          env: { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' },
           timeout: 120_000,
           maxBuffer: 4 * 1024 * 1024,
         }

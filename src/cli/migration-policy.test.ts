@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { UnknownAppliedMigrationsError } from '@/backend/migrate';
+import { MigrationBackupError } from '@/backend/migrate-with-backup';
 import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 
 describe('resolveUnknownMigrationPolicy', () => {
@@ -43,6 +44,16 @@ describe('describeMigrationFailure', () => {
 
     expect(text).toContain('ff serve --dev');
     expect(text).toContain('FF_ALLOW_UNKNOWN_MIGRATIONS=1');
+  });
+
+  it('shows a failed backup as it is, naming the variable that proceeds without one', () => {
+    const text = describeMigrationFailure(
+      new MigrationBackupError('ENOSPC: no space left on device')
+    );
+
+    expect(text).toContain('ENOSPC: no space left on device');
+    expect(text).toContain('FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1');
+    expect(text).not.toMatch(/^Migration failed/);
   });
 
   it('labels other errors as migration failures', () => {

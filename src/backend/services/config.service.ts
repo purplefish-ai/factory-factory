@@ -387,6 +387,11 @@ function loadReleaseCheckConfig(): ReleaseCheckConfig {
   return { enabled: env.FF_UPDATE_CHECKS_ENABLED, registryUrl: env.FF_NPM_REGISTRY_URL };
 }
 
+/** `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`: migrate even when the pre-migration backup fails. */
+function loadAllowMigrationWithoutBackup(): boolean {
+  return ConfigEnvSchema.parse(process.env).FF_ALLOW_MIGRATION_WITHOUT_BACKUP;
+}
+
 /** `FF_PROJECT_ROOT`: when set, new projects must live inside it (the dev sandbox sets it). */
 function loadProjectRoot(): string | null {
   return ConfigEnvSchema.parse(process.env).FF_PROJECT_ROOT ?? null;
@@ -437,6 +442,7 @@ class ConfigService {
   private agentRuntimeLimits = loadAgentRuntimeLimits();
   private releaseCheck = loadReleaseCheckConfig();
   private projectRoot = loadProjectRoot();
+  private allowMigrationWithoutBackup = loadAllowMigrationWithoutBackup();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -704,6 +710,11 @@ class ConfigService {
     return { ...this.releaseCheck };
   }
 
+  /** Whether a failed pre-migration backup may be skipped (`FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`). */
+  getAllowMigrationWithoutBackup(): boolean {
+    return this.allowMigrationWithoutBackup;
+  }
+
   /** The directory new projects must live in, or null when they may live anywhere. */
   getProjectRoot(): string | null {
     return this.projectRoot;
@@ -769,6 +780,7 @@ class ConfigService {
     this.agentRuntimeLimits = loadAgentRuntimeLimits();
     this.releaseCheck = loadReleaseCheckConfig();
     this.projectRoot = loadProjectRoot();
+    this.allowMigrationWithoutBackup = loadAllowMigrationWithoutBackup();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }
