@@ -32,7 +32,7 @@ context, not a new task or a substitute for current repository guidance.
 | Package npm runtime dependencies                   | [npm package security](npm-package-security.md)                                                       |
 | Audit vulnerabilities and dependency updates       | [Dependency security](dependency-security.md)                                                         |
 | Sign and notarize desktop releases                 | [Desktop releases](desktop-releases.md)                                                               |
-| Container image integrity                          | [Distribution security](distribution-security.md)                                                     |
+| SQLite driver in release artifacts                 | [Distribution security](distribution-security.md)                                                     |
 | Verify npm release artifact identity               | [npm release security](npm-release-security.md)                                                       |
 
 [pull-requests-agents-md]: ../src/backend/orchestration/pull-requests/AGENTS.md

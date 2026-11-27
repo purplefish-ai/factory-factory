@@ -193,7 +193,7 @@ describe('browser origin gate per launch mode', () => {
     }
   });
 
-  it('ff serve --host 0.0.0.0 and Docker: the own origin is not implied', async () => {
+  it('ff serve --host 0.0.0.0: the own origin is not implied', async () => {
     const { app, state } = createApp({
       backendHost: '0.0.0.0',
       cors: { allowedOrigins: ['http://localhost:7001'] },
@@ -264,7 +264,7 @@ describe('browser origin gate per launch mode', () => {
     expect(state.writes).toBe(1);
   });
 
-  it('ff serve --host 0.0.0.0 and Docker: configured origins work on any Host', async () => {
+  it('ff serve --host 0.0.0.0: configured origins work on any Host', async () => {
     const { app, state } = createApp({
       backendHost: '0.0.0.0',
       cors: { allowedOrigins: ['http://localhost:7001', 'http://192.168.1.20:7001'] },

@@ -6,7 +6,7 @@ import { isBrowserOriginAllowed } from '@/backend/lib/request-trust';
  * CORS middleware.
  * Configures Cross-Origin Resource Sharing based on CORS_ALLOWED_ORIGINS env var.
  * The CLI sets this automatically to the frontend origin; fallback defaults are
- * only used when running outside the CLI (e.g., Docker, custom deployments).
+ * only used when running outside the CLI (e.g., custom deployments).
  * Handles OPTIONS preflight requests.
  */
 export function createCorsMiddleware(appContext: AppContext) {
