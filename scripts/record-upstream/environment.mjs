@@ -1,7 +1,7 @@
 // Shared plumbing for the upstream recorder: versions, clean environments,
 // the throwaway repository and line capture.
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
@@ -70,24 +70,99 @@ export function resolveVersions(provider) {
   };
 }
 
+/** The recorder runs POSIX tools from fixed paths; it does not support Windows. */
+export function assertSupportedPlatform() {
+  if (process.platform === 'win32') {
+    throw new Error('The upstream recorder runs on macOS and Linux only');
+  }
+}
+
 /**
  * A minimal environment built from nothing, so none of the recorder's own
  * variables (database paths, session sockets and tokens) reach a recorded tool.
+ * Git reads only an empty global configuration and no system one. `user` is
+ * the account name the tool sees; only Claude needs the real one, for its
+ * keychain sign-in.
  */
-export function cleanEnvironment({ home, tmp, extra = {} }) {
+export function cleanEnvironment({ home, tmp, user = 'user', extra = {} }) {
+  const gitConfig = join(tmp, 'empty-gitconfig');
+  writeFileSync(gitConfig, '');
   return {
     PATH: [dirname(process.execPath), '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':'),
     HOME: home,
-    USER: process.env.USER ?? 'user',
+    USER: user,
     TMPDIR: tmp,
     TERM: 'dumb',
     LANG: 'en_US.UTF-8',
     TZ: 'UTC',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: gitConfig,
     // What Factory Factory adds when it spawns an adapter.
     BROWSER: 'none',
     ELECTRON_RUN_AS_NODE: '1',
     ...extra,
   };
+}
+
+const children = new Set();
+
+/** Registers a child process so an interrupted run can kill it. */
+export function trackChild(child) {
+  children.add(child);
+  child.once('close', () => children.delete(child));
+  return child;
+}
+
+/** Paths an interrupted run removes: the temp directory (sign-in copy, raw captures), a half-written fixture directory. */
+export const removeOnAbort = new Set();
+
+/**
+ * On SIGINT, SIGTERM, SIGHUP or an uncaught error: kills the tracked tools,
+ * removes every path in `removeOnAbort` synchronously, then exits. Returns a
+ * function that uninstalls the handlers.
+ */
+export function installAbortCleanup() {
+  const abort = (code) => {
+    for (const child of children) {
+      child.kill('SIGKILL');
+    }
+    for (const path of removeOnAbort) {
+      rmSync(path, { recursive: true, force: true });
+    }
+    process.exit(code);
+  };
+  const fail = (error) => {
+    console.error(error);
+    abort(1);
+  };
+  const handlers = {
+    SIGINT: () => abort(130),
+    SIGTERM: () => abort(143),
+    SIGHUP: () => abort(129),
+    uncaughtException: fail,
+    unhandledRejection: fail,
+  };
+  for (const [event, handler] of Object.entries(handlers)) {
+    process.on(event, handler);
+  }
+  return () => {
+    for (const [event, handler] of Object.entries(handlers)) {
+      process.off(event, handler);
+    }
+  };
+}
+
+/**
+ * Ends a child: closes its stdin, sends SIGTERM after `graceMs`, and SIGKILL
+ * after as long again, so a child that ignores SIGTERM cannot hang the run.
+ */
+export async function stopChild(child, exited, graceMs) {
+  child.stdin?.end();
+  const term = setTimeout(() => child.kill('SIGTERM'), graceMs);
+  const kill = setTimeout(() => child.kill('SIGKILL'), graceMs * 2);
+  await exited;
+  clearTimeout(term);
+  clearTimeout(kill);
 }
 
 export const REPOSITORY_FILES = {
@@ -152,9 +227,9 @@ export function lineSplitter(onLine) {
   };
 }
 
-/** Writes records as JSON lines. */
-export function writeJsonLines(path, records) {
-  writeFileSync(path, records.map((record) => `${JSON.stringify(record)}\n`).join(''));
+/** Writes records as JSON lines; `mode` 0o600 for raw captures. */
+export function writeJsonLines(path, records, mode = 0o644) {
+  writeFileSync(path, records.map((record) => `${JSON.stringify(record)}\n`).join(''), { mode });
 }
 
 export function readJsonLines(path) {

@@ -6,13 +6,15 @@ import { z } from 'zod';
 
 // Recordings of the real Claude and Codex tools are published with the
 // repository. This test fails when one carries a home directory, an account or
-// machine name, an email address or a token-shaped string. Failures name the
-// file, line and rule, never the matched value.
+// machine name, an email address, a token-shaped string or a UUID that is not
+// one of the scrubber's fixed fakes. Failures name the file, line and rule,
+// never the matched value.
 
 const recordingsRoot = join(import.meta.dirname, 'fixtures', 'upstream');
 const forbidden = z
   .object({
     terms: z.array(z.string().min(3)),
+    genericAccountNames: z.array(z.string()),
     patterns: z.array(z.object({ name: z.string(), source: z.string() })),
   })
   .parse(
@@ -21,14 +23,18 @@ const forbidden = z
     )
   );
 
-// Whoever runs the test adds their own account and machine names.
+// Whoever runs the test adds their own account and machine names, unless they
+// are generic ones (a CI runner, a container's root), which match ordinary words.
+const generic = new Set(forbidden.genericAccountNames);
 const localTerms = [userInfo().username, hostname().split('.')[0] ?? ''].filter(
-  (term) => term.length >= 4
+  (term) => term.length >= 4 && !generic.has(term.toLowerCase())
 );
 const termRule = (name: string, term: string) => ({
   name,
   test: (line: string) => line.toLowerCase().includes(term.toLowerCase()),
 });
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const FAKE_UUID = /^00000000-0000-4000-8000-[0-9a-f]{12}$/;
 const rules = [
   ...forbidden.terms.map((term, index) => termRule(`forbidden term #${index}`, term)),
   ...localTerms.map((term) => termRule('local account or machine name', term)),
@@ -36,6 +42,10 @@ const rules = [
     const pattern = new RegExp(source, 'i');
     return { name, test: (line: string) => pattern.test(line) };
   }),
+  {
+    name: 'UUID that is not a fixed fake',
+    test: (line: string) => (line.match(UUID) ?? []).some((uuid) => !FAKE_UUID.test(uuid)),
+  },
 ];
 
 function listFiles(directory: string): string[] {
@@ -48,7 +58,7 @@ describe('upstream recordings', () => {
   const files = listFiles(recordingsRoot);
 
   it('exist for both providers', () => {
-    const tools = new Set(files.map((file) => relative(recordingsRoot, file).split('/')[0]));
+    const tools = new Set(files.map((file) => relative(recordingsRoot, file).split(/[\\/]/)[0]));
     expect([...tools].sort()).toEqual(['claude', 'codex']);
   });
 
@@ -72,15 +82,22 @@ describe('upstream recordings', () => {
     const invented = [
       '/Users/someone/project',
       '/home/someone/project',
+      '%2FUsers%2Fsomeone%2Fproject',
       'Contact jane.doe@example.org',
       'key sk-abcdefghijklmnop',
       'Authorization: Bearer abc',
+      'authorization: bearer abc',
       'eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl',
+      'token ghp_ABCDEFGHIJKLMNOPQRST0123',
+      'token github_pat_11ABCDEFG0123456789_abc',
+      'slack xoxb-1234567890-abcdef',
+      'aws AKIAABCDEFGHIJKLMNOP',
       'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9w',
       'commit 0123456789abcdef0123456789abcdef01234567',
       '/var/folders/xy/abc/T/recording',
       '/private/tmp/recording',
       'host.example-tailnet.ts.net',
+      '"sessionId":"3f2b8c1e-9a7d-4e6f-b5c4-1d2e3f4a5b6c"',
     ];
     for (const sample of invented) {
       expect(
@@ -88,5 +105,8 @@ describe('upstream recordings', () => {
         sample
       ).toBe(true);
     }
+    expect(rules.some((rule) => rule.test('"id":"00000000-0000-4000-8000-00000000000a"'))).toBe(
+      false
+    );
   });
 });

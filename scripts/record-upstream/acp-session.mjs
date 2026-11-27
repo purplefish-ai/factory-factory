@@ -2,7 +2,7 @@
 // line in both directions, in order.
 import { spawn } from 'node:child_process';
 import { client, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk/unstable';
-import { lineSplitter } from './environment.mjs';
+import { lineSplitter, stopChild, trackChild } from './environment.mjs';
 
 const PROMPT_TIMEOUT_MS = 180_000;
 
@@ -45,11 +45,9 @@ export function startAcpSession({ entrypoint, env, cwd }) {
   const records = [];
   const permissions = [];
   let onUpdate = () => undefined;
-  const child = spawn(process.execPath, [entrypoint], {
-    cwd,
-    env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const child = trackChild(
+    spawn(process.execPath, [entrypoint], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
+  );
   // Adapter diagnostics are not part of the protocol and may carry local paths.
   child.stderr.resume();
   const exited = new Promise((resolve) => child.once('close', resolve));
@@ -111,11 +109,6 @@ export function startAcpSession({ entrypoint, env, cwd }) {
       return withTimeout(agent.request(methods.agent.session.prompt, params), 'session/prompt');
     },
     cancel: (params) => agent.notify(methods.agent.session.cancel, params),
-    async stop() {
-      child.stdin.end();
-      const timer = setTimeout(() => child.kill('SIGTERM'), 10_000);
-      await exited;
-      clearTimeout(timer);
-    },
+    stop: () => stopChild(child, exited, 10_000),
   };
 }

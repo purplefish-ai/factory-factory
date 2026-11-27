@@ -1,392 +1,144 @@
 // Allowlist scrubber for upstream recordings (see scripts/record-upstream.mjs).
 //
 // A recording is published in a public repository, so nothing is kept because
-// it "looks safe". Each stream has a policy that names what may survive:
+// it "looks safe". What may survive is named in ./policies.mjs, by record kind
+// and key path; a record kind that is not named there is opaque. Everything
+// else is replaced:
 //
-// - `keep`: keys whose short strings are structural (types, roles, methods,
-//   tool names, ids of modes and options). A kept value that still looks
-//   private after path rewriting becomes "<string>".
-// - `opaque`: record types (configuration, account and environment snapshots,
-//   listings) that keep only their shape and discriminators.
-// - `text`: keys whose strings are conversation text: the recorder's prompts,
-//   the model's replies, and tool input and output in the throwaway repository.
-//   They are kept only in the record types `allowsText` accepts; context the
-//   tools inject on their own (system prompts, account and environment
-//   attachments, listings) is never conversation text. Known roots are
-//   rewritten (`/workspace` for the repository), any other home directory
-//   becomes `/user-home`, and text that still looks private becomes
-//   "<redacted>".
-// - `numbers`: keys whose numbers a parser needs (JSON-RPC ids, protocol
-//   versions, token counts, exit codes). Every other number becomes 0.
-//
-// Regardless of key, UUIDs map to fixed fake UUIDs, prefixed ids (`toolu_…`,
-// `msg_…`, `exec-<uuid>`) to fixed fake ids with the same prefix (and length,
-// up to 24 characters), and ISO timestamps to a fixed sequence, so references
-// between records still line up. Object keys that are ids are faked too.
-// Absolute paths under a known root are rewritten. Every other string becomes
-// "<string>". Booleans and null are kept.
+// - strings become "<string>", numbers 0; booleans and null are kept;
+// - an object key survives only when it is a known field name
+//   (./known-keys.json), an id, or a plain name in a listed map; any other key
+//   becomes "<key>" (numbered when an object has several);
+// - UUIDs map to fixed fake UUIDs and ids with a known prefix (`toolu_…`,
+//   `msg_…`, `exec-<uuid>`) to fixed fakes with that prefix (and length, up to
+//   24 characters); an id with any other prefix becomes `id_<fake>`; ISO
+//   timestamps map to a fixed sequence. References between records still line
+//   up;
+// - outside conversation text, an absolute path survives only under the
+//   throwaway repository (`/workspace`), the recording's temp directory
+//   (`/recording-tmp`) or Claude's own project directory for the session;
+// - conversation text keeps the recorder's prompts and the model's replies,
+//   with known roots rewritten and any other home directory made
+//   `/user-home`; text that still looks private becomes "<redacted>".
+import { createRequire } from 'node:module';
+import { POLICIES } from './policies.mjs';
+
+export { POLICIES };
 
 export const PLACEHOLDER_STRING = '<string>';
 export const PLACEHOLDER_NUMBER = 0;
+export const PLACEHOLDER_KEY = '<key>';
 export const HOME_PLACEHOLDER = '/user-home';
 /** Text that still looked private after rewriting; the recorder reports how many. */
 export const REDACTED = '<redacted>';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const UUID_GLOBAL = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const KNOWN_KEYS = new Set(createRequire(import.meta.url)('./known-keys.json'));
+
+const UUID_SOURCE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const UUID = new RegExp(`^${UUID_SOURCE}$`, 'i');
+const UUID_GLOBAL = new RegExp(UUID_SOURCE, 'gi');
 // A UUID behind a short prefix, as in `exec-<uuid>` or `msg_<uuid>`.
-const PREFIXED_UUID =
-  /^([A-Za-z][A-Za-z0-9]{0,15}[-_])([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const PREFIXED_UUID = new RegExp(`^([A-Za-z][A-Za-z0-9]{0,15}[-_])(${UUID_SOURCE})$`, 'i');
 // An id body has a digit; `input_transformations` is a key, not an id.
 const PREFIXED_ID = /^([a-z]{2,12}_)((?=[A-Za-z]*\d)[A-Za-z0-9]{12,})$/;
+// Prefixes the tools use for their own ids. Any other prefix may be a name.
+const ID_PREFIXES = new Set([
+  'toolu_',
+  'srvtoolu_',
+  'msg_',
+  'req_',
+  'call_',
+  'resp_',
+  'ctc_',
+  'ctco_',
+  'at_',
+  'exec-',
+  'fc_',
+  'rs_',
+  'item_',
+  'turn_',
+  'retained_',
+]);
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/;
 const HOME_PATH = /\/(?:Users|home)\/[^/\s"'`<>]+/;
 const HOME_PATH_GLOBAL = new RegExp(HOME_PATH.source, 'g');
 const EMAIL = /[\w.+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
-const TOKEN_SHAPES = [
+const PRIVATE_SHAPES = [
   /\bsk-[A-Za-z0-9_-]{8,}/,
-  /\bBearer\s/,
+  /\bbearer\s/i,
   /eyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]{5,}/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/,
+  /\bxox[abpr]-[A-Za-z0-9-]{10,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bnpm_[A-Za-z0-9]{20,}/,
   /[A-Za-z0-9+/]{40,}/,
   /[0-9a-f]{32,}/i,
+  /%2F(?:Users|home)%2F/i,
+  /\/var\/folders\//,
+  /\/private\/(?:tmp|var)\//,
 ];
+// Placeholders a rewritten path may start with outside conversation text.
+const PATH_SURVIVORS = [
+  /^\/workspace(?:\/|$)/,
+  /^\/recording-tmp(?:\/|$)/,
+  /^\/user-home\/\.claude(?:\/projects(?:\/-workspace(?:\/[^/]*)*\/?)?)?\/?$/,
+];
+// Discriminators an opaque record keeps at any depth, when they look like one.
+const OPAQUE_KEEP = new Set(['type', 'subtype', 'role', 'kind', 'status', 'operation']);
+const DISCRIMINATOR = /^[A-Za-z0-9_.:/-]{1,64}$/;
+const MAP_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const FAKE_EPOCH = Date.parse('2026-01-01T00:00:00.000Z');
 const MAX_KEPT_LENGTH = 200;
 const MAX_FAKE_ID_BODY = 24;
-const NO_TEXT = new Set();
-// Records a policy marks opaque (configuration, account and environment
-// snapshots, listings of commands, tools, plugins and skills) keep their shape
-// and these discriminators only.
-const OPAQUE_RULES = {
-  keep: new Set(['type', 'subtype', 'role', 'kind', 'status', 'operation', 'request_id']),
-  text: NO_TEXT,
-  numbers: NO_TEXT,
-};
 
-// Keys every stream may keep as structural strings.
-const COMMON_KEEP = [
-  'type',
-  'subtype',
-  'role',
-  'method',
-  'jsonrpc',
-  'kind',
-  'status',
-  'name',
-  'tool_name',
-  'toolName',
-  'stop_reason',
-  'stopReason',
-  'outcome',
-  'optionId',
-  'modeId',
-  'currentModeId',
-  'model',
-  'modelId',
-  'permissionMode',
-];
-const TOKEN_COUNTS = [
-  'input_tokens',
-  'output_tokens',
-  'cache_creation_input_tokens',
-  'cache_read_input_tokens',
-  'ephemeral_5m_input_tokens',
-  'ephemeral_1h_input_tokens',
-];
+function matcher(paths) {
+  const exact = new Set(paths.filter((path) => !path.includes('*')));
+  const patterns = paths
+    .filter((path) => path.includes('*'))
+    .map(
+      (path) =>
+        new RegExp(
+          `^${path
+            .split('*')
+            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('[^.>]+')}$`
+        )
+    );
+  return (path) => exact.has(path) || patterns.some((pattern) => pattern.test(path));
+}
 
-const ACP_TEXT_UPDATES = new Set([
-  'agent_message_chunk',
-  'agent_thought_chunk',
-  'user_message_chunk',
-  'tool_call',
-  'tool_call_update',
-  'plan',
-]);
-const CODEX_TEXT_ITEMS = new Set([
-  'message',
-  'reasoning',
-  'function_call',
-  'function_call_output',
-  'custom_tool_call',
-  'custom_tool_call_output',
-  'local_shell_call',
-  'user_message',
-  'agent_message',
-  'agent_reasoning',
-  'exec_command_begin',
-  'exec_command_end',
-  'exec_approval_request',
-  'item_completed',
-  'item_started',
-  'task_complete',
-]);
+function compile(policy, kind) {
+  const own = policy.kinds[kind];
+  const parts = own ? [policy.common, own] : [policy.common];
+  const join = (name) => parts.flatMap((part) => part[name]);
+  return {
+    opaque: !own,
+    keep: matcher(join('keep')),
+    text: matcher(join('text')),
+    numbers: matcher(join('numbers')),
+    maps: matcher(join('maps')),
+  };
+}
 
-/** One policy per recorded stream. Anything not listed is scrubbed. */
-export const POLICIES = {
-  // ACP JSON-RPC between the client and the adapter, both directions.
-  acp: {
-    keep: new Set([
-      ...COMMON_KEEP,
-      'sessionUpdate',
-      'id',
-      'category',
-      'currentValue',
-      'value',
-      'currency',
-      'title',
-      'mimeType',
-      'version',
-      'capabilities',
-      'actions',
-      'phase',
-      'currentModelId',
-      'configId',
-      'resetValue',
-      'controlMethod',
-      'presentation',
-      'commandTitle',
-      'activeFlags',
-      '_claude/model',
-    ]),
-    text: new Set([
-      'text',
-      'command',
-      'description',
-      'content',
-      'stdout',
-      'stderr',
-      'output',
-      'data',
-      'path',
-    ]),
-    numbers: new Set([
-      'id',
-      'version',
-      'protocolVersion',
-      'code',
-      'line',
-      'exitCode',
-      'exit_code',
-      'used',
-      'size',
-      'inputTokens',
-      'outputTokens',
-      'totalTokens',
-      'cachedReadTokens',
-      'cachedWriteTokens',
-      'thoughtTokens',
-    ]),
-    // Prompts, conversation updates and permission requests; not listings or
-    // configuration.
-    allowsText: (message) =>
-      message.method === 'session/prompt' ||
-      message.method === 'session/request_permission' ||
-      (message.method === 'session/update' &&
-        ACP_TEXT_UPDATES.has(message.params?.update?.sessionUpdate)),
-  },
-  // stream-json between the Claude Agent SDK and the Claude Code CLI.
-  claudeStdio: {
-    keep: new Set([
-      ...COMMON_KEEP,
-      'request_id',
-      'behavior',
-      'claude_code_version',
-      'apiKeySource',
-      'authMethod',
-      'apiProvider',
-      'output_style',
-      'tools',
-      'mode',
-      'state',
-      'event',
-      'id',
-      'rateLimitType',
-      'stop_sequence',
-      'service_tier',
-      'destination',
-      'decisionReason',
-      'decision_reason_type',
-      'decisionClassification',
-      'hook_event_name',
-      'permission_mode',
-      'terminal_reason',
-    ]),
-    text: new Set([
-      'text',
-      'thinking',
-      'partial_json',
-      'content',
-      'command',
-      'description',
-      'result',
-      'stdout',
-      'stderr',
-      'file_path',
-    ]),
-    numbers: new Set([
-      ...TOKEN_COUNTS,
-      'index',
-      'num_turns',
-      'inputTokens',
-      'outputTokens',
-      'cacheReadInputTokens',
-      'cacheCreationInputTokens',
-      'contextWindow',
-      'maxOutputTokens',
-    ]),
-    // Conversation messages and tool permission requests; not the initialize
-    // exchange, settings, status or account records.
-    allowsText: (message) =>
-      ['user', 'assistant', 'stream_event', 'result'].includes(message.type) ||
-      (message.type === 'control_request' && message.request?.subtype === 'can_use_tool') ||
-      (message.type === 'control_response' && message.response?.response?.behavior !== undefined),
-    // `auth status` output (no type), the init record, the initialize request
-    // and the CLI's control responses (account, commands, models, plugins,
-    // context usage). A permission decision stays readable.
-    opaque: (message) =>
-      message.type === undefined ||
-      (message.type === 'system' && message.subtype === 'init') ||
-      (message.type === 'control_request' && message.request?.subtype === 'initialize') ||
-      (message.type === 'control_response' && message.response?.response?.behavior === undefined),
-  },
-  // The Claude Code session history file (~/.claude/projects/<cwd>/<id>.jsonl).
-  claudeHistory: {
-    keep: new Set([
-      ...COMMON_KEEP,
-      'id',
-      'version',
-      'userType',
-      'entrypoint',
-      'gitBranch',
-      'operation',
-      'level',
-      'stop_sequence',
-      'service_tier',
-      'origin',
-      'promptSource',
-      'turnOrigin',
-      'renderedRole',
-      'querySource',
-      'effort',
-      'perTurnEffort',
-      'requestedModel',
-      'advisorModel',
-      'decision',
-      'source',
-      'grantScope',
-      'reasonCode',
-    ]),
-    text: new Set([
-      'text',
-      'thinking',
-      'content',
-      'command',
-      'description',
-      'stdout',
-      'stderr',
-      'file_path',
-      'lastPrompt',
-      'aiTitle',
-    ]),
-    numbers: new Set([...TOKEN_COUNTS, 'apiBlockIndex']),
-    // User and assistant messages, the last prompt and the generated title;
-    // not attachments, API request snapshots or cost records.
-    allowsText: (record) => ['user', 'assistant', 'last-prompt', 'ai-title'].includes(record.type),
-    // Attachments (environment, account, listings, prompt snapshots), API
-    // request snapshots, tool usage and cost records.
-    opaque: (record) =>
-      [
-        'attachment',
-        'api-request-shape',
-        'api-request-blob',
-        'api-request',
-        'tools-used',
-        'atis-latch',
-        'cost-state',
-      ].includes(record.type),
-  },
-  // The Codex rollout file (CODEX_HOME/sessions/…/rollout-*.jsonl).
-  codexRollout: {
-    keep: new Set([
-      ...COMMON_KEEP,
-      'id',
-      'cli_version',
-      'originator',
-      'source',
-      'approval_policy',
-      'sandbox_mode',
-      'mode',
-      'effort',
-      'summary',
-      'phase',
-      'model_provider',
-      'reason',
-      'call_id',
-    ]),
-    text: new Set([
-      'text',
-      'message',
-      'command',
-      'cmd',
-      'arguments',
-      'input',
-      'output',
-      'aggregated_output',
-      'stdout',
-      'stderr',
-      'formatted_output',
-      'cwd',
-      'workdir',
-      'justification',
-      'last_agent_message',
-    ]),
-    numbers: new Set([
-      'exit_code',
-      'ordinal',
-      'input_tokens',
-      'cached_input_tokens',
-      'output_tokens',
-      'reasoning_output_tokens',
-      'total_tokens',
-      'model_context_window',
-    ]),
-    // Conversation items between the user and the model, tool calls and their
-    // output; not session metadata, developer instructions, tool listings,
-    // world state, settings or usage records. User messages Codex writes on its
-    // own (environment context) are kept: they hold only the rewritten cwd,
-    // the shell and the date.
-    allowsText: (record) =>
-      (record.type === 'response_item' || record.type === 'event_msg') &&
-      CODEX_TEXT_ITEMS.has(record.payload?.type) &&
-      record.payload?.role !== 'developer' &&
-      record.payload?.role !== 'system',
-    // World state (instructions, skills, environment) and tool listings.
-    opaque: (record) =>
-      record.type === 'world_state' ||
-      (record.type === 'response_item' && record.payload?.type === 'additional_tools'),
-  },
-  // Codex app-server requests and responses read outside a turn.
-  codexAppServer: {
-    keep: new Set([
-      ...COMMON_KEEP,
-      'id',
-      'displayName',
-      'reasoningEffort',
-      'defaultReasoningEffort',
-      'inputModalities',
-      'limitId',
-      'limitName',
-    ]),
-    text: NO_TEXT,
-    numbers: new Set(['id', 'windowDurationMins', 'limit']),
-    allowsText: () => false,
-  },
-};
+const compiled = new WeakMap();
+function rulesFor(policy, kind) {
+  let byKind = compiled.get(policy);
+  if (!byKind) {
+    byKind = new Map();
+    compiled.set(policy, byKind);
+  }
+  if (!byKind.has(kind)) {
+    byKind.set(kind, compile(policy, kind));
+  }
+  return byKind.get(kind);
+}
 
 /**
- * Per-recording state: the path roots to rewrite and the fakes already handed
- * out, so one original value always maps to the same placeholder. `roots` maps
- * an absolute path to its placeholder, for example the throwaway repository to
+ * Per-recording state: the path roots to rewrite, the fakes already handed
+ * out (one original always maps to the same fake) and the requests seen, so a
+ * response is scrubbed by the request it answers. `roots` maps an absolute
+ * path to its placeholder, for example the throwaway repository to
  * `/workspace`.
  */
 export function createScrubContext({ roots = {} } = {}) {
@@ -406,6 +158,7 @@ export function createScrubContext({ roots = {} } = {}) {
     uuids: new Map(),
     ids: new Map(),
     timestamps: new Map(),
+    requests: new Map(),
     redactions: 0,
   };
 }
@@ -442,6 +195,26 @@ function fakeTimestamp(context, original) {
   return fake;
 }
 
+/** The fixed fake for an id-shaped string, or null when the string is not an id. */
+function fakeIdentifier(value, context) {
+  if (UUID.test(value)) {
+    return fakeUuid(context, value);
+  }
+  const prefixedUuid = PREFIXED_UUID.exec(value);
+  if (prefixedUuid) {
+    const prefix = ID_PREFIXES.has(prefixedUuid[1]) ? prefixedUuid[1] : 'id-';
+    return prefix + fakeUuid(context, prefixedUuid[2]);
+  }
+  const prefixed = PREFIXED_ID.exec(value);
+  // A credential (`ghp_…`, `npm_…`) is not an id: it is redacted, not faked.
+  if (!prefixed || looksPrivate(value)) {
+    return null;
+  }
+  return ID_PREFIXES.has(prefixed[1])
+    ? fakeId(context, prefixed[1], prefixed[2])
+    : fakeId(context, 'id_', prefixed[1] + prefixed[2]);
+}
+
 /** Rewrites known roots, then any other home directory, then embedded UUIDs. */
 export function rewritePaths(value, context) {
   let result = value;
@@ -456,30 +229,50 @@ export function rewritePaths(value, context) {
 /** True when a string still carries something that must never be published. */
 export function looksPrivate(value) {
   return (
-    HOME_PATH.test(value) ||
-    EMAIL.test(value) ||
-    TOKEN_SHAPES.some((pattern) => pattern.test(value))
+    HOME_PATH.test(value) || EMAIL.test(value) || PRIVATE_SHAPES.some((shape) => shape.test(value))
   );
 }
 
-function isRootedPath(value, context) {
-  return value.startsWith('/') && context.roots.some(([from]) => value.startsWith(from));
+function survivingPath(value, context) {
+  if (!(value.startsWith('/') && context.roots.some(([from]) => value.startsWith(from)))) {
+    return null;
+  }
+  const path = rewritePaths(value, context);
+  return PATH_SURVIVORS.some((survivor) => survivor.test(path)) && !looksPrivate(path)
+    ? path
+    : null;
 }
 
-/** The fixed fake for an id-shaped string, or null when the string is not an id. */
-function fakeIdentifier(value, context) {
-  if (UUID.test(value)) {
-    return fakeUuid(context, value);
-  }
-  const prefixedUuid = PREFIXED_UUID.exec(value);
-  if (prefixedUuid) {
-    return prefixedUuid[1] + fakeUuid(context, prefixedUuid[2]);
-  }
-  const prefixed = PREFIXED_ID.exec(value);
-  return prefixed ? fakeId(context, prefixed[1], prefixed[2]) : null;
+function childPath(path, key) {
+  return path === '' || path.endsWith('>') ? `${path}${key}` : `${path}.${key}`;
 }
 
-function scrubString(value, key, rules, context) {
+function parsedJson(value) {
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+}
+
+function scrubText(value, path, rules, context) {
+  const json = parsedJson(value);
+  if (json !== undefined && typeof json === 'object' && json !== null) {
+    return JSON.stringify(scrubNode(json, `${path}>`, '', rules, context));
+  }
+  const text = rewritePaths(value, context);
+  if (looksPrivate(text)) {
+    context.redactions += 1;
+    return REDACTED;
+  }
+  return text;
+}
+
+function scrubString(value, path, key, rules, context) {
   const fake = fakeIdentifier(value, context);
   if (fake !== null) {
     return fake;
@@ -487,66 +280,73 @@ function scrubString(value, key, rules, context) {
   if (ISO_TIMESTAMP.test(value)) {
     return fakeTimestamp(context, value);
   }
-  if (rules.keep.has(key)) {
+  if (rules.text(path)) {
+    return scrubText(value, path, rules, context);
+  }
+  if (rules.keep(path)) {
     const kept = rewritePaths(value, context);
     return kept.length <= MAX_KEPT_LENGTH && !looksPrivate(kept) ? kept : PLACEHOLDER_STRING;
   }
-  if (rules.text.has(key)) {
-    const text = rewritePaths(value, context);
-    if (looksPrivate(text)) {
-      context.redactions += 1;
-      return REDACTED;
-    }
-    return text;
+  if (rules.opaque && OPAQUE_KEEP.has(key) && DISCRIMINATOR.test(value) && !looksPrivate(value)) {
+    return value;
   }
-  if (isRootedPath(value, context)) {
-    const path = rewritePaths(value, context);
-    return looksPrivate(path) ? PLACEHOLDER_STRING : path;
-  }
-  return PLACEHOLDER_STRING;
+  return survivingPath(value, context) ?? PLACEHOLDER_STRING;
 }
 
-// Object keys can be ids too (a map from tool use id to input, for example).
-function scrubKey(key, context) {
+function scrubKey(key, inMap, context, used) {
   const fake = fakeIdentifier(key, context);
   if (fake !== null) {
     return fake;
   }
-  const rewritten = rewritePaths(key, context);
-  return looksPrivate(rewritten) ? PLACEHOLDER_STRING : rewritten;
+  if (inMap ? MAP_KEY.test(key) && !looksPrivate(key) : KNOWN_KEYS.has(key)) {
+    return key;
+  }
+  let placeholder = PLACEHOLDER_KEY;
+  for (let n = 2; used.has(placeholder); n += 1) {
+    placeholder = `<key-${n}>`;
+  }
+  return placeholder;
 }
 
-function scrubNode(value, rules, context, key) {
+function scrubNode(value, path, key, rules, context) {
   if (typeof value === 'string') {
-    return scrubString(value, key, rules, context);
+    return scrubString(value, path, key, rules, context);
   }
   if (typeof value === 'number') {
-    return rules.numbers.has(key) ? value : PLACEHOLDER_NUMBER;
+    return rules.numbers(path) ? value : PLACEHOLDER_NUMBER;
   }
   if (typeof value === 'boolean' || value === null) {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => scrubNode(item, rules, context, key));
+    return value.map((item) => scrubNode(item, path, key, rules, context));
   }
   if (typeof value === 'object') {
+    const inMap = !rules.opaque && rules.maps(path);
     const result = {};
     for (const [childKey, child] of Object.entries(value)) {
-      result[scrubKey(childKey, context)] = scrubNode(child, rules, context, childKey);
+      const scrubbedKey = scrubKey(childKey, inMap, context, new Set(Object.keys(result)));
+      const known = scrubbedKey === childKey || inMap;
+      // A replaced key's subtree matches no rule.
+      const segment = inMap ? '*' : known ? childKey : '\u0000';
+      result[scrubbedKey] = scrubNode(child, childPath(path, segment), childKey, rules, context);
     }
     return result;
   }
   return PLACEHOLDER_STRING;
 }
 
-/** Returns a copy of one recorded message or history line that keeps only what `policy` allows. */
-export function scrubRecord(record, policy, context) {
-  const isObject = record !== null && typeof record === 'object' && !Array.isArray(record);
-  if (isObject && policy.opaque?.(record)) {
-    return scrubNode(record, OPAQUE_RULES, context, '');
+/**
+ * Returns a copy of one recorded message or history line that keeps only what
+ * `policy` names for its kind. `dir` is the direction it travelled, which a
+ * JSON-RPC response needs to find its request.
+ */
+export function scrubRecord(record, policy, context, dir) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return scrubNode(record, '', '', rulesFor(policy, '\u0000unknown'), context);
   }
-  const allowsText = isObject && policy.allowsText(record);
-  return scrubNode(record, allowsText ? policy : { ...policy, text: NO_TEXT }, context, '');
+  const rules = rulesFor(policy, policy.kindOf(record, { dir, requests: context.requests }));
+  return scrubNode(record, '', '', rules, context);
 }
 
 function parseJson(text) {
@@ -590,7 +390,8 @@ export function scrubArgument(arg) {
 
 /**
  * Scrubs captured `{ dir, line }` records (and `{ dir: 'argv', args }`) into
- * `{ dir, message }` records. A line that is not JSON becomes "<string>".
+ * `{ dir, message }` records, in order. A line that is not JSON becomes
+ * "<string>".
  */
 export function scrubCapturedLines(records, policy, context) {
   return joinMultilineOutput(records).map((record) => {
@@ -600,7 +401,9 @@ export function scrubCapturedLines(records, policy, context) {
     const parsed = parseJson(record.line);
     return {
       dir: record.dir,
-      message: parsed.ok ? scrubRecord(parsed.value, policy, context) : PLACEHOLDER_STRING,
+      message: parsed.ok
+        ? scrubRecord(parsed.value, policy, context, record.dir)
+        : PLACEHOLDER_STRING,
     };
   });
 }

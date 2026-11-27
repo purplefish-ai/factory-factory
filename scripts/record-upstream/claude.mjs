@@ -1,5 +1,12 @@
 // Records one synthetic Claude session through claude-agent-acp.
-import { chmodSync, copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -19,18 +26,19 @@ export const CLAUDE_SCENARIOS = [
   {
     scenario: 'interrupted-reply',
     text: 'Without using any tools, count from one to one hundred in words, one number per line.',
-    action: 'session/cancel is sent after the third agent_message_chunk.',
+    action:
+      'session/cancel is sent when the third agent_message_chunk arrives; chunks already in flight can still follow it.',
   },
 ];
 
 // The SDK starts this instead of the CLI (CLAUDE_CODE_EXECUTABLE). It runs the
-// real executable and appends every stdin and stdout line to the log.
+// real executable and appends every stdin and stdout line to the log (0600).
 function stdioWrapperSource(realExecutable, logPath) {
   return `#!${process.execPath}
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const { StringDecoder } = require('node:string_decoder');
-const log = fs.openSync(${JSON.stringify(logPath)}, 'a');
+const log = fs.openSync(${JSON.stringify(logPath)}, 'a', 0o600);
 const write = (record) => fs.writeSync(log, JSON.stringify(record) + '\\n');
 const tee = (dir) => {
   const decoder = new StringDecoder('utf8');
@@ -61,29 +69,60 @@ child.on('close', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 `;
 }
 
+// Same lookup as the adapter's claudeCliPath(): on Linux the libc variant the
+// runtime uses comes first.
 function claudeCliPath(fromAdapter) {
-  // Same lookup as the adapter's claudeCliPath() on macOS and glibc Linux.
   const fromSdk = createRequire(fromAdapter.resolve('@anthropic-ai/claude-agent-sdk'));
-  return fromSdk.resolve(
-    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`
-  );
+  const base = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+  const musl =
+    process.platform === 'linux' && !process.report?.getReport().header.glibcVersionRuntime;
+  const candidates =
+    process.platform === 'linux'
+      ? musl
+        ? [`${base}-musl/claude`, `${base}/claude`]
+        : [`${base}/claude`, `${base}-musl/claude`]
+      : [`${base}/claude`];
+  for (const candidate of candidates) {
+    try {
+      return fromSdk.resolve(candidate);
+    } catch {
+      /* Try the other libc variant. */
+    }
+  }
+  throw new Error(`No Claude CLI binary for ${process.platform}-${process.arch}`);
+}
+
+function listOrEmpty(directory) {
+  return existsSync(directory) ? readdirSync(directory) : [];
 }
 
 /**
  * Runs the scenarios and writes raw captures into `rawDir`. The Claude sign-in
  * cannot be isolated (see the script header), so the CLI runs with the real
- * HOME and writes its history under ~/.claude/projects/<encoded cwd>/.
+ * HOME and writes under ~/.claude. Returns what it left there.
  */
 export async function recordClaude({ versions, repository, tmp, rawDir }) {
+  const claudeHome = join(homedir(), '.claude');
+  const snapshotsDir = join(claudeHome, 'shell-snapshots');
+  const snapshotsBefore = new Set(listOrEmpty(snapshotsDir));
   const wrapper = join(tmp, 'claude-stdio-wrapper');
   const stdioLog = join(rawDir, 'cli-stdio.raw.jsonl');
   writeFileSync(wrapper, stdioWrapperSource(claudeCliPath(versions.fromAdapter), stdioLog));
   chmodSync(wrapper, 0o700);
+  // An empty ZDOTDIR and an explicit SHELL keep the owner's zsh setup
+  // (aliases, functions, options) out of the Bash tool's shell snapshot.
+  // Unverified until the next recording; the run lists any snapshot it made.
+  const zdotdir = join(tmp, 'zdotdir');
+  mkdirSync(zdotdir);
   const env = cleanEnvironment({
     home: homedir(),
     tmp,
+    // The keychain sign-in is looked up for the real account name.
+    user: process.env.USER ?? 'user',
     extra: {
       CLAUDE_CODE_EXECUTABLE: wrapper,
+      SHELL: '/bin/zsh',
+      ZDOTDIR: zdotdir,
       // Keep the account's claude.ai connectors out of the synthetic session.
       ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
     },
@@ -118,22 +157,36 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
     }
   } finally {
     await session.stop();
-    writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records);
+    writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records, 0o600);
+  }
+  const leftovers = [];
+  const projectDir = join(claudeHome, 'projects', repository.replace(/[^A-Za-z0-9]/g, '-'));
+  if (existsSync(projectDir)) {
+    leftovers.push(`${projectDir}/ (${readdirSync(projectDir).join(', ')})`);
+  }
+  const sessionEnv = join(claudeHome, 'session-env', String(sessionId));
+  if (existsSync(sessionEnv)) {
+    leftovers.push(`${sessionEnv}/`);
+  }
+  for (const name of listOrEmpty(snapshotsDir).filter((entry) => !snapshotsBefore.has(entry))) {
+    leftovers.push(
+      `${join(snapshotsDir, name)} (a shell snapshot; check it holds no own functions)`
+    );
   }
   if (session.permissions.length === 0) {
-    console.warn('claude: no permission request was observed');
+    throw new Error('claude: the approved-command scenario raised no permission request');
   }
-  const projectDir = join(
-    homedir(),
-    '.claude',
-    'projects',
-    repository.replace(/[^A-Za-z0-9]/g, '-')
-  );
   const historyFile = join(projectDir, `${sessionId}.jsonl`);
   if (!existsSync(historyFile)) {
     throw new Error('The Claude history file for the recorded session was not found');
   }
   copyFileSync(historyFile, join(rawDir, 'history.raw.jsonl'));
-  console.log(`claude: the CLI wrote ${projectDir} (${readdirSync(projectDir).join(', ')})`);
-  return { createdOutsideTemp: [projectDir] };
+  chmodSync(join(rawDir, 'history.raw.jsonl'), 0o600);
+  return {
+    leftovers,
+    notes: [
+      `${join(homedir(), '.claude.json')} and its backups under ${join(claudeHome, 'backups')} were rewritten, as on any Claude run`,
+      `${join(claudeHome, 'plugins', 'store')} may have had a built-in plugin record rewritten`,
+    ],
+  };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import knownKeys from './known-keys.json';
 import {
   createScrubContext,
   PLACEHOLDER_NUMBER,
@@ -35,30 +36,37 @@ function promptRequest(text: string) {
 
 describe('scrubRecord', () => {
   it('keeps listed structure and replaces every other value with a placeholder of its type', () => {
+    const shared = context();
+    scrubRecord(promptRequest('hi'), POLICIES.acp, shared, 'client->agent');
     const scrubbed = scrubRecord(
       {
         jsonrpc: '2.0',
-        id: 7,
+        id: 3,
         result: {
           stopReason: 'end_turn',
-          accountLabel: 'Personal plan',
-          seats: 42,
+          usage: { inputTokens: 12, seats: 42 },
+          label: 'Personal plan',
           active: true,
-          nested: { note: 'anything', missing: null },
+          content: { text: 'anything', missing: null },
+          accountLabel: 'x',
+          planLabel: 'y',
         },
       },
       POLICIES.acp,
-      context()
+      shared,
+      'agent->client'
     );
     expect(scrubbed).toEqual({
       jsonrpc: '2.0',
-      id: 7,
+      id: 3,
       result: {
         stopReason: 'end_turn',
-        accountLabel: PLACEHOLDER_STRING,
-        seats: PLACEHOLDER_NUMBER,
+        usage: { inputTokens: 12, '<key>': PLACEHOLDER_NUMBER },
+        label: PLACEHOLDER_STRING,
         active: true,
-        nested: { note: PLACEHOLDER_STRING, missing: null },
+        content: { text: PLACEHOLDER_STRING, '<key>': null },
+        '<key>': PLACEHOLDER_STRING,
+        '<key-2>': PLACEHOLDER_STRING,
       },
     });
   });
@@ -184,26 +192,79 @@ describe('scrubRecord', () => {
   });
 
   it('replaces rate-limit and account figures in app-server responses', () => {
-    const scrubbed = scrubRecord(
-      {
-        id: 3,
-        result: {
-          account: { type: 'chatgpt', email: 'jane.doe@example.org', planType: 'team' },
-          rateLimits: {
-            primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_790_000_000 },
-          },
+    const scrubbed = scrubCapturedLines(
+      [
+        { dir: 'client->server', line: JSON.stringify({ id: 2, method: 'account/read' }) },
+        {
+          dir: 'server->client',
+          line: JSON.stringify({
+            id: 2,
+            result: {
+              account: { type: 'chatgpt', email: 'jane.doe@example.org', planType: 'team' },
+            },
+          }),
         },
-      },
+        {
+          dir: 'client->server',
+          line: JSON.stringify({ id: 3, method: 'account/rateLimits/read' }),
+        },
+        {
+          dir: 'server->client',
+          line: JSON.stringify({
+            id: 3,
+            result: {
+              rateLimits: {
+                primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_790_000_000 },
+              },
+            },
+          }),
+        },
+      ],
       POLICIES.codexAppServer,
       context()
     );
-    expect(scrubbed).toEqual({
-      id: 3,
+    expect(scrubbed[1]?.message).toEqual({
+      id: 2,
       result: {
         account: { type: 'chatgpt', email: PLACEHOLDER_STRING, planType: PLACEHOLDER_STRING },
-        rateLimits: { primary: { usedPercent: 0, windowDurationMins: 300, resetsAt: 0 } },
       },
     });
+    expect(scrubbed[3]?.message).toEqual({
+      id: 3,
+      result: { rateLimits: { primary: { usedPercent: 0, windowDurationMins: 300, resetsAt: 0 } } },
+    });
+  });
+
+  it('scrubs a response by the request it answers in the other direction', () => {
+    const shared = context();
+    // Both sides number their own requests from 0.
+    const lines = scrubCapturedLines(
+      [
+        { dir: 'client->agent', line: JSON.stringify({ id: 0, method: 'initialize' }) },
+        {
+          dir: 'agent->client',
+          line: JSON.stringify({ id: 0, method: 'session/request_permission', params: {} }),
+        },
+        {
+          dir: 'client->agent',
+          line: JSON.stringify({
+            id: 0,
+            result: { outcome: { outcome: 'selected', optionId: 'a' } },
+          }),
+        },
+        {
+          dir: 'agent->client',
+          line: JSON.stringify({ id: 0, result: { agentInfo: { name: 'agent' } } }),
+        },
+      ],
+      POLICIES.acp,
+      shared
+    );
+    expect(lines[2]?.message).toEqual({
+      id: 0,
+      result: { outcome: { outcome: 'selected', optionId: 'a' } },
+    });
+    expect(lines[3]?.message).toEqual({ id: 0, result: { agentInfo: { name: 'agent' } } });
   });
 });
 
@@ -237,12 +298,258 @@ describe('scrubCapturedLines', () => {
 });
 
 describe('POLICIES', () => {
-  it('declare keep, text and numbers allowlists and a text gate for every stream', () => {
+  it('name keep, text, numbers and maps paths for every kind and a kind for every record', () => {
     for (const policy of Object.values(POLICIES)) {
-      expect(policy.keep).toBeInstanceOf(Set);
-      expect(policy.text).toBeInstanceOf(Set);
-      expect(policy.numbers).toBeInstanceOf(Set);
-      expect(typeof policy.allowsText).toBe('function');
+      expect(typeof policy.kindOf).toBe('function');
+      for (const kind of [policy.common, ...Object.values(policy.kinds)]) {
+        expect(Object.keys(kind).sort()).toEqual(['keep', 'maps', 'numbers', 'text']);
+      }
     }
+  });
+
+  it('name only field names the key allowlist knows', () => {
+    const known = new Set(knownKeys);
+    for (const policy of Object.values(POLICIES)) {
+      for (const kind of [policy.common, ...Object.values(policy.kinds)]) {
+        const paths: string[] = [...kind.keep, ...kind.text, ...kind.numbers, ...kind.maps];
+        for (const path of paths) {
+          for (const segment of path.split(/[.>]/).filter((part) => part && part !== '*')) {
+            expect(known.has(segment), `${path}: ${segment}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+});
+
+// Inputs from the review of the first recordings: values a later CLI version
+// could add, none of which may survive without being named in an allowlist.
+describe('values that are not allowlisted', () => {
+  const asJson = (value: unknown) => JSON.stringify(value);
+
+  it('treats a record type it does not know as opaque', () => {
+    const scrubbed = scrubRecord(
+      { type: 'account_snapshot', name: 'Jane Doe', id: 'acct-42x' },
+      POLICIES.claudeStdio,
+      context()
+    );
+    expect(scrubbed).toEqual({
+      type: 'account_snapshot',
+      name: PLACEHOLDER_STRING,
+      id: PLACEHOLDER_STRING,
+    });
+  });
+
+  it('drops values and numbers of an unknown ACP notification', () => {
+    const scrubbed = scrubRecord(
+      {
+        jsonrpc: '2.0',
+        method: '_claude/account',
+        params: {
+          title: 'Jane',
+          value: 'Acme',
+          currentValue: 'x',
+          name: 'Jane Doe',
+          account: { id: 123_456_789 },
+        },
+      },
+      POLICIES.acp,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/Jane|Acme|"x"|123456789/);
+  });
+
+  it('drops a new field in a known app-server response', () => {
+    const scrubbed = scrubCapturedLines(
+      [
+        {
+          dir: 'client->server',
+          line: asJson({ id: 2, method: 'account/read', params: { refreshToken: false } }),
+        },
+        {
+          dir: 'server->client',
+          line: asJson({
+            id: 2,
+            result: {
+              account: { type: 'chatgpt', workspace: { name: 'Acme', displayName: 'Acme Inc' } },
+              credits: { limit: 250 },
+            },
+          }),
+        },
+      ],
+      POLICIES.codexAppServer,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/Acme|250/);
+    expect(asJson(scrubbed)).toContain('"chatgpt"');
+  });
+
+  it('drops a new field in a conversation record and keeps the conversation text', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'user',
+        context: { description: 'Jane at Acme' },
+        message: { role: 'user', content: [{ type: 'text', text: 'hello there' }] },
+      },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/Jane|Acme/);
+    expect(scrubbed.message.content[0].text).toBe('hello there');
+  });
+
+  it('scrubs JSON carried inside conversation text', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_01AbCdEfGhIjKlMnOpQrStUv',
+              content: '{"login":"jane-doe","org":"Acme"}',
+            },
+          ],
+        },
+      },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/jane|Acme/);
+  });
+
+  it('drops a known key that appears where it is not listed', () => {
+    const scrubbed = scrubRecord(
+      { type: 'system', subtype: 'status', tools: [['Bash', 'jane-doe']] },
+      POLICIES.claudeStdio,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/Bash|jane/);
+  });
+
+  it('replaces object keys that carry data, in opaque records too', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'system',
+        subtype: 'init',
+        projects: { '/Volumes/Work/acme-secret': {} },
+        modelUsage: { 'acme-finetune-jane': {} },
+      },
+      POLICIES.claudeStdio,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/acme|Volumes/);
+  });
+
+  it('keeps only paths under the repository, the temp root and the Claude project directory', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'user',
+        cwd: `${HOME}/Clients/Acme/secret`,
+        message: { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toMatch(/Clients|Acme/);
+  });
+
+  it('redacts conversation text holding credentials or temp paths in any spelling', () => {
+    for (const secret of [
+      'use bearer abc123def',
+      'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+      'github_pat_11ABCDEFG0123456789_abcdefghijklmnop',
+      'xoxb-1234567890-abcdefghij',
+      'AKIAABCDEFGHIJKLMNOP',
+      'see /private/var/folders/xy/abc/T/other',
+      'see %2FUsers%2Fsomeone%2Fx',
+    ]) {
+      const scrubbed = scrubRecord(promptRequest(secret), POLICIES.acp, context());
+      expect(scrubbed.params.prompt[0].text, secret).toBe(REDACTED);
+    }
+  });
+
+  it('does not keep an id prefix it does not know', () => {
+    const scrubbed = scrubRecord(
+      { type: 'assistant', message: { id: 'janedoe_0123456789abcdef', content: [] } },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(asJson(scrubbed)).not.toContain('janedoe');
+  });
+});
+
+describe('the Codex rollout policy', () => {
+  it('keeps user text and drops developer instructions', () => {
+    const shared = context();
+    const user = scrubRecord(
+      {
+        type: 'response_item',
+        payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      },
+      POLICIES.codexRollout,
+      shared
+    );
+    const developer = scrubRecord(
+      {
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'developer',
+          content: [{ type: 'input_text', text: 'secret rules' }],
+        },
+      },
+      POLICIES.codexRollout,
+      shared
+    );
+    expect(user.payload.content[0].text).toBe('hi');
+    expect(developer.payload.content[0].text).toBe(PLACEHOLDER_STRING);
+  });
+
+  it('treats world state as opaque and session instructions as unlisted', () => {
+    const shared = context();
+    const world = scrubRecord(
+      {
+        type: 'world_state',
+        payload: { state: { model: { model: 'm', instructions: 'private' } } },
+      },
+      POLICIES.codexRollout,
+      shared
+    );
+    const meta = scrubRecord(
+      {
+        type: 'session_meta',
+        payload: { cwd: REPOSITORY, cli_version: '1.2.3', base_instructions: { text: 'private' } },
+      },
+      POLICIES.codexRollout,
+      shared
+    );
+    expect(JSON.stringify(world)).not.toContain('private');
+    expect(meta.payload).toEqual({
+      cwd: '/workspace',
+      cli_version: '1.2.3',
+      base_instructions: { text: PLACEHOLDER_STRING },
+    });
+  });
+
+  it('keeps the command of a function call and drops unknown argument fields', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'response_item',
+        payload: {
+          type: 'function_call',
+          name: 'exec_command',
+          call_id: 'call_0123456789abcdef',
+          arguments: JSON.stringify({ cmd: 'ls', workdir: REPOSITORY, account: 'jane' }),
+        },
+      },
+      POLICIES.codexRollout,
+      context()
+    );
+    const args = JSON.parse(scrubbed.payload.arguments);
+    expect(args.cmd).toBe('ls');
+    expect(args.workdir).toBe('/workspace');
+    expect(JSON.stringify(args)).not.toContain('jane');
   });
 });

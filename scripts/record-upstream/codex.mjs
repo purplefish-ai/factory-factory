@@ -6,7 +6,13 @@ import { copyFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, rmSync }
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { startAcpSession } from './acp-session.mjs';
-import { cleanEnvironment, lineSplitter, writeJsonLines } from './environment.mjs';
+import {
+  cleanEnvironment,
+  lineSplitter,
+  stopChild,
+  trackChild,
+  writeJsonLines,
+} from './environment.mjs';
 
 export const CODEX_SCENARIOS = [
   {
@@ -60,11 +66,13 @@ const APP_SERVER_REQUESTS = [
 
 async function recordAppServer({ versions, env, cwd }) {
   const records = [];
-  const child = spawn(process.execPath, [versions.adapterEntrypoint, 'cli', 'app-server'], {
-    cwd,
-    env: { ...env, DOTENV_CONFIG_QUIET: 'true' },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const child = trackChild(
+    spawn(process.execPath, [versions.adapterEntrypoint, 'cli', 'app-server'], {
+      cwd,
+      env: { ...env, DOTENV_CONFIG_QUIET: 'true' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+  );
   // Native stderr may carry account details; it is never kept.
   child.stderr.resume();
   const exited = new Promise((resolve) => child.once('close', resolve));
@@ -96,16 +104,16 @@ async function recordAppServer({ versions, env, cwd }) {
         setTimeout(() => reject(new Error(`${method} timed out`)), 30_000).unref();
       });
       send({ id, method, params });
-      await response;
+      // A failed read would leave the recording without the shape it is for.
+      if ((await response).error !== undefined) {
+        throw new Error(`The app-server answered ${method} with an error`);
+      }
       if (method === 'initialize') {
         send({ method: 'initialized' });
       }
     }
   } finally {
-    child.stdin.end();
-    const timer = setTimeout(() => child.kill('SIGTERM'), 5000);
-    await exited;
-    clearTimeout(timer);
+    await stopChild(child, exited, 5000);
   }
   return records;
 }
@@ -141,7 +149,8 @@ export async function recordCodex({ versions, repository, tmp, rawDir }) {
     });
     writeJsonLines(
       join(rawDir, 'app-server.raw.jsonl'),
-      await recordAppServer({ versions, env, cwd: tmp })
+      await recordAppServer({ versions, env, cwd: tmp }),
+      0o600
     );
     const session = startAcpSession({
       entrypoint: versions.adapterEntrypoint,
@@ -158,21 +167,22 @@ export async function recordCodex({ versions, repository, tmp, rawDir }) {
       }
     } finally {
       await session.stop();
-      writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records);
+      writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records, 0o600);
     }
     if (session.permissions.length === 0) {
-      console.warn('codex: no permission request was observed');
+      throw new Error('codex: the approved-command scenario raised no permission request');
     }
     const rollouts = findRollouts(join(codexHome, 'sessions'));
     if (rollouts.length !== 1) {
       throw new Error(`Expected one Codex rollout, found ${rollouts.length}`);
     }
     copyFileSync(rollouts[0], join(rawDir, 'history.raw.jsonl'));
+    chmodSync(join(rawDir, 'history.raw.jsonl'), 0o600);
   } finally {
     if (digest(auth.copy) !== auth.before) {
       console.warn('codex: the sign-in copy changed during the run (a token refresh)');
     }
     rmSync(codexHome, { recursive: true, force: true });
   }
-  return { createdOutsideTemp: [] };
+  return { leftovers: [], notes: [] };
 }
