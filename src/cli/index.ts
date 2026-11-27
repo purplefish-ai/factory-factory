@@ -14,6 +14,7 @@ import { getCurrentProcessEnv, getLogFilePath } from '@/backend/services/logger.
 import { registerApplicationServerMarker } from './application-server-marker';
 import { ApplicationUpdateInstaller } from './application-update-installer';
 import { recoverInterruptedApplicationUpdate } from './application-update-recovery';
+import { registerBackupCommand } from './backup';
 import { registerBuildCommand } from './build-command';
 import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
@@ -363,6 +364,12 @@ program
 // ============================================================================
 
 registerStudioCommand(program, PROJECT_ROOT);
+
+// ============================================================================
+// backup command
+// ============================================================================
+
+registerBackupCommand(program, getVersion());
 
 // ============================================================================
 // build command

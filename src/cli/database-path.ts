@@ -23,6 +23,7 @@ export function resolveDatabasePath({
   return resolve(configuredPath);
 }
 
-function getBaseDir(env: Record<string, string | undefined>): string {
+/** The data directory: `BASE_DIR` with variables expanded, else `~/factory-factory`. */
+export function getBaseDir(env: Record<string, string | undefined> = process.env): string {
   return env.BASE_DIR ? expandEnvVars(env.BASE_DIR, env) : getDefaultBaseDir();
 }
