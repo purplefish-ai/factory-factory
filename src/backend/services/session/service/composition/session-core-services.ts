@@ -104,7 +104,9 @@ export const claudeModelCatalogService = new ClaudeModelCatalogService({
 
 export const providerUsageService = new ProviderUsageService({
   fetchUsage: () =>
-    fetchClaudePlanUsage({ claudeCodeExecutable: configService.getClaudeCodeExecutable() }),
+    fetchClaudePlanUsage({
+      claudeCodeExecutable: configService.getSandboxClaudeCodeExecutable() ?? undefined,
+    }),
   accounts: codexAccountService,
 });
 

@@ -144,7 +144,7 @@ async function runClaude<T>(
         CLAUDE_CODE_SAFE_MODE: '1',
       },
       spawnClaudeCodeProcess,
-      ...claudeCodeExecutableOption(configService.getClaudeCodeExecutable()),
+      ...claudeCodeExecutableOption(configService.getSandboxClaudeCodeExecutable() ?? undefined),
     },
   });
   const rateLimit: RateLimitObservation = { limited: false };

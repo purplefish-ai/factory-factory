@@ -38,7 +38,7 @@ vi.mock('@/backend/services/config.service', () => ({
       maxConcurrent: 2,
     }),
     getChildProcessEnv: () => ({ CLAUDE_CONFIG_DIR: '/managed/claude' }),
-    getClaudeCodeExecutable: () => undefined,
+    getSandboxClaudeCodeExecutable: () => null,
   },
 }));
 

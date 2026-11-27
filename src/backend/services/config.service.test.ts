@@ -585,4 +585,28 @@ describe('sandbox crash point configuration', () => {
     configService.reload();
     expect(configService.getSandboxCrashPointDir()).toBe(expected);
   });
+  it.each([
+    [
+      'in the sandbox',
+      'echo',
+      '/tmp/ff-sandbox/sb-1/bin/claude',
+      '/tmp/ff-sandbox/sb-1/bin/claude',
+    ],
+    ["never outside it: a user's own CLI keeps the bundled one", undefined, '/opt/claude', null],
+    ['never without the variable', 'echo', undefined, null],
+  ])(
+    'names a Claude CLI for the direct SDK queries %s',
+    (_case, scenario, executable, expected) => {
+      Reflect.deleteProperty(process.env, 'FF_SANDBOX_SCENARIO');
+      Reflect.deleteProperty(process.env, 'CLAUDE_CODE_EXECUTABLE');
+      if (scenario !== undefined) {
+        process.env.FF_SANDBOX_SCENARIO = scenario;
+      }
+      if (executable !== undefined) {
+        process.env.CLAUDE_CODE_EXECUTABLE = executable;
+      }
+      configService.reload();
+      expect(configService.getSandboxClaudeCodeExecutable()).toBe(expected);
+    }
+  );
 });

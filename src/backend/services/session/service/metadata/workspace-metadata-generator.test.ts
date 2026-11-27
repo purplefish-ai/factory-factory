@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   context: vi.fn(),
   cleanup: vi.fn(),
-  claudeExecutable: vi.fn<() => string | undefined>(),
+  claudeExecutable: vi.fn<() => string | null>(),
 }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({ query: mocks.query }));
@@ -33,7 +33,7 @@ vi.mock('@/backend/services/config.service', () => ({
     }),
     getChildProcessEnv: () => ({ CLAUDE_CONFIG_DIR: '/managed/claude' }),
     getNodeExecPath: () => '/electron/node',
-    getClaudeCodeExecutable: mocks.claudeExecutable,
+    getSandboxClaudeCodeExecutable: mocks.claudeExecutable,
   },
 }));
 const result = {
@@ -147,7 +147,7 @@ describe('disposable metadata inference', () => {
     });
   });
 
-  it('runs the Claude CLI named by CLAUDE_CODE_EXECUTABLE, and the bundled one without it', async () => {
+  it("runs the sandbox's Claude CLI when there is one, and the bundled one without it", async () => {
     const run = async () => {
       mocks.query.mockReturnValue({
         async *[Symbol.asyncIterator]() {
@@ -164,7 +164,7 @@ describe('disposable metadata inference', () => {
     };
     mocks.claudeExecutable.mockReturnValue('/sandbox/bin/claude');
     expect(await run()).toMatchObject({ pathToClaudeCodeExecutable: '/sandbox/bin/claude' });
-    mocks.claudeExecutable.mockReturnValue(undefined);
+    mocks.claudeExecutable.mockReturnValue(null);
     expect(await run()).not.toHaveProperty('pathToClaudeCodeExecutable');
   });
 

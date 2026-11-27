@@ -125,8 +125,6 @@ interface SystemConfig {
   debugLogDir: string;
   acpTraceLogsPath: string;
   claudeConfigDir: string;
-  /** The Claude CLI every Claude launch runs instead of the bundled one, when set. */
-  claudeCodeExecutable?: string;
   codexHome: string;
   codexSessionsDir: string;
   wsLogsPath: string;
@@ -299,7 +297,6 @@ function loadSystemConfig(): SystemConfig {
     debugLogDir,
     acpTraceLogsPath: env.ACP_TRACE_LOGS_PATH ?? join(debugLogDir, 'acp-events'),
     claudeConfigDir: env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),
-    claudeCodeExecutable: env.CLAUDE_CODE_EXECUTABLE || undefined,
     codexHome: env.CODEX_HOME ?? join(homedir(), '.codex'),
     codexSessionsDir:
       env.CODEX_SESSIONS_DIR ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions'),
@@ -401,6 +398,16 @@ function loadSandboxCrashPointDir(): string | null {
   return env.FF_SANDBOX_SCENARIO ? (env.FF_SANDBOX_CRASH_POINT_DIR ?? null) : null;
 }
 
+/**
+ * `CLAUDE_CODE_EXECUTABLE` for the application's direct Claude Agent SDK queries, honoured only
+ * in the dev sandbox (`FF_SANDBOX_SCENARIO` set), whose fake CLI speaks this SDK. The SDK and its
+ * bundled CLI are a version-locked pair, so outside the sandbox a user's own CLI never replaces it.
+ */
+function loadSandboxClaudeCodeExecutable(): string | null {
+  const env = ConfigEnvSchema.parse(process.env);
+  return env.FF_SANDBOX_SCENARIO ? env.CLAUDE_CODE_EXECUTABLE || null : null;
+}
+
 /** Event-agent limits are separate from the public application configuration shape. */
 function loadAgentRuntimeLimits() {
   const env = ConfigEnvSchema.parse(process.env);
@@ -447,6 +454,7 @@ class ConfigService {
   private releaseCheck = loadReleaseCheckConfig();
   private projectRoot = loadProjectRoot();
   private sandboxCrashPointDir = loadSandboxCrashPointDir();
+  private sandboxClaudeCodeExecutable = loadSandboxClaudeCodeExecutable();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -752,11 +760,11 @@ class ConfigService {
   }
 
   /**
-   * The Claude CLI named by CLAUDE_CODE_EXECUTABLE, which the ACP adapter also honours; undefined
-   * means the SDK's bundled CLI.
+   * The fake Claude CLI the dev sandbox names in CLAUDE_CODE_EXECUTABLE, for the direct SDK
+   * queries; null outside the sandbox, where they keep the SDK's bundled CLI.
    */
-  getClaudeCodeExecutable(): string | undefined {
-    return this.config.claudeCodeExecutable;
+  getSandboxClaudeCodeExecutable(): string | null {
+    return this.sandboxClaudeCodeExecutable;
   }
 
   /**
@@ -798,6 +806,7 @@ class ConfigService {
     this.releaseCheck = loadReleaseCheckConfig();
     this.projectRoot = loadProjectRoot();
     this.sandboxCrashPointDir = loadSandboxCrashPointDir();
+    this.sandboxClaudeCodeExecutable = loadSandboxClaudeCodeExecutable();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }
