@@ -57,8 +57,8 @@ export function ChordKeys({
 }
 
 /**
- * Key caps for a registry shortcut. `all` lists every chord available in this
- * runtime ("⌥⇧P or ⌘⇧P"); otherwise only the primary chord is shown.
+ * Key caps for a registry shortcut. `all` lists every chord available on this
+ * platform; otherwise only the primary chord is shown.
  */
 export function ShortcutKeys({
   id,

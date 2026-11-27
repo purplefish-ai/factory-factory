@@ -11,7 +11,7 @@ this and begin the "Driven in the sandbox" section with `Does not apply:`.
 1. Start the sandbox in the background, from the repository root. It runs the
    real application with its own data, ports and scripted stand-ins for the
    agent; it contacts no real provider, GitHub or Slack. The output goes to a
-   file because the first start may build native modules.
+   file.
 
    ```sh
    mkdir -p .context/verify && pnpm dev:sandbox --ttl-minutes 60 > .context/verify/sandbox.log 2>&1 &

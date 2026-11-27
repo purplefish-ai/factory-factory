@@ -155,8 +155,8 @@ in `.github/workflows/ci.yml`. The browser cache path stays `/ms-playwright`; CI
 never installs OS dependencies or silently downloads another browser at runtime.
 The browser worker installs dependencies without lifecycle scripts, explicitly
 rebuilds Prisma engines and esbuild, then generates the Prisma client. It avoids
-compiling unused native/Electron modules in the browser image; application and
-native test jobs retain their normal installation and checks.
+compiling unused native modules in the browser image; application and native
+test jobs retain their normal installation and checks.
 
 - Run one file with `pnpm test:storybook path/to/name.stories.tsx`, or open the
   testing widget in `pnpm storybook` to run stories from the sidebar.

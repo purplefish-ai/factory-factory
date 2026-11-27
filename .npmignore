@@ -1,6 +1,5 @@
 # Source files (compiled versions are in dist/)
 src/
-electron/
 
 # Scripts (except postinstall.mjs which is in package.json files array)
 scripts/*
@@ -20,8 +19,7 @@ biome.json
 !README.md
 docs/
 
-# Build resources and assets
-build-resources/
+# Storybook
 storybook/
 .storybook/
 
@@ -36,12 +34,6 @@ storybook/
 **/*.spec.*
 coverage/
 vitest.workspace.ts
-
-# Native module cache (rebuilt on install)
-.native-cache/
-
-# Electron-specific (not needed for CLI)
-electron-builder.yml
 
 # Git
 .git/

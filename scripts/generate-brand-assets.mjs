@@ -69,7 +69,6 @@ try {
     source.replace('<svg ', '<svg width="32" height="32" ')
   );
   writeFileSync(join(root, 'public/gear.svg'), source.replace(/\s*<rect[^>]+\/>/, ''));
-  writeFileSync(join(root, 'build-resources/icon.svg'), source);
   writeFileSync(join(root, 'public/logo-full.svg'), wordmark(false));
   writeFileSync(join(root, 'public/logo-full-dark.svg'), wordmark(true));
   writeFileSync(join(root, 'public/wordmark.svg'), standaloneWordmark(false));
@@ -91,45 +90,9 @@ try {
     [80, 'public/logo.sips.png'],
     [192, 'public/icons/app-192.png'],
     [180, 'public/icons/apple-touch-icon.png'],
-    [512, 'build-resources/icon.png'],
   ]) {
     rasterize(size, destination);
   }
-  execFileSync('magick', [
-    join(temporary, 'master.png'),
-    '-strip',
-    '-define',
-    'icon:auto-resize=256,128,64,48,32,16',
-    join(root, 'build-resources/icon.ico'),
-  ]);
-
-  // PNG-backed ICNS chunks keep generation portable; no macOS iconutil needed.
-  const chunks = [];
-  for (const [type, size] of [
-    ['icp4', 16],
-    ['icp5', 32],
-    ['ic12', 64], // 32x32@2x: 64 physical pixels, interpreted as Retina by macOS.
-    ['ic07', 128],
-    ['ic08', 256],
-    ['ic09', 512],
-    ['ic10', 1024],
-  ]) {
-    const png = execFileSync('magick', [
-      join(temporary, 'master.png'),
-      '-resize',
-      `${size}x${size}`,
-      '-strip',
-      'PNG24:-',
-    ]);
-    const header = Buffer.alloc(8);
-    header.write(type, 0, 4, 'ascii');
-    header.writeUInt32BE(png.length + 8, 4);
-    chunks.push(header, png);
-  }
-  const header = Buffer.alloc(8);
-  header.write('icns', 0, 4, 'ascii');
-  header.writeUInt32BE(8 + chunks.reduce((size, chunk) => size + chunk.length, 0), 4);
-  writeFileSync(join(root, 'build-resources/icon.icns'), Buffer.concat([header, ...chunks]));
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

@@ -45,8 +45,6 @@ const meta = {
     error: '',
     repoPath: '/Users/martin/code/factory-factory',
     setRepoPath: fn(),
-    isElectron: true,
-    handleBrowse: async () => undefined,
     factoryConfigExists: true,
     helperText: 'Path to a git repository on your local machine.',
     scriptType: 'command',

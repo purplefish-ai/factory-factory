@@ -6,7 +6,7 @@ import { setShortcutEnvironmentForTesting } from '@/client/lib/keyboard-shortcut
 import { SessionTabBar } from './session-tab-bar';
 it('provides one tab stop, arrow navigation with manual activation, and sibling close controls', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'other' });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -80,7 +80,7 @@ function ClosingChats() {
 
 it('keeps keyboard focus in the chat bar after deleting the focused tab', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'other' });
 
   const container = document.createElement('div');
   document.body.append(container);

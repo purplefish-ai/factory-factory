@@ -8,19 +8,19 @@ files carry what you need only when you are working in the subsystem; a guide
 beside the code leaves the "why" to [decision records](../decisions/). Read the
 one that matches your change before you touch it.
 
-| File                                         | Covers                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [Backend process guide][backend-guide]       | Recurring work, `jobRunner`, shutdown order and fatal errors (beside the code)             |
-| [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
-| [workspace-state.md](./workspace-state.md)   | Pointer: workspace, lifecycle, snapshot, Kanban, client cache, run-script, backup guides   |
-| [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
-| [integrations.md](./integrations.md)         | Pointer: GitHub, Linear, event automation, Slack and client transport guides               |
-| [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |
-| [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle, HTTP compression, query/mutation failures   |
-| [client-state.md](./client-state.md)         | State resets by identity, latest-value refs, debounced values, following log output        |
-| [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                                 |
-| [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
-| [Chat feature guide][chat-feature-agents-md] | Chat client: frames, loading, reducer, transcript (beside the code)                        |
+| File                                         | Covers                                                                                   |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [Backend process guide][backend-guide]       | Recurring work, `jobRunner`, shutdown order and fatal errors (beside the code)           |
+| [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)       |
+| [workspace-state.md](./workspace-state.md)   | Pointer: workspace, lifecycle, snapshot, Kanban, client cache, run-script, backup guides |
+| [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions                        |
+| [integrations.md](./integrations.md)         | Pointer: GitHub, Linear, event automation, Slack and client transport guides             |
+| [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                              |
+| [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle, HTTP compression, query/mutation failures |
+| [client-state.md](./client-state.md)         | State resets by identity, latest-value refs, debounced values, following log output      |
+| [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                               |
+| [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                               |
+| [Chat feature guide][chat-feature-agents-md] | Chat client: frames, loading, reducer, transcript (beside the code)                      |
 
 [backend-guide]: ../../src/backend/AGENTS.md
 [pr-guide]: ../../src/backend/orchestration/pull-requests/AGENTS.md

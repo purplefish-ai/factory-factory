@@ -46,11 +46,8 @@ export function expandEnvVars(
  * Get the database file path based on environment.
  *
  * Priority:
- * 1. DATABASE_PATH environment variable (for Electron or explicit override)
+ * 1. DATABASE_PATH environment variable (explicit override)
  * 2. Default: ~/factory-factory/data.db (development default)
- *
- * For Electron production, set DATABASE_PATH to app.getPath('userData')/data.db
- * before importing this module.
  */
 export function getDatabasePath(): string {
   // Default development path - expand any env vars in BASE_DIR (e.g., $USER)

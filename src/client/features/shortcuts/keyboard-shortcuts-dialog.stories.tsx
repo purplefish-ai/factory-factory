@@ -7,7 +7,7 @@ const meta = {
   args: {
     open: true,
     onOpenChange: () => undefined,
-    environment: { platform: 'mac', runtime: 'browser' },
+    environment: { platform: 'mac' },
   },
 } satisfies Meta<typeof KeyboardShortcutsDialog>;
 export default meta;
@@ -22,10 +22,6 @@ export const MacBrowser: Story = {
   },
 };
 export const WindowsBrowser: Story = {
-  args: { environment: { platform: 'other', runtime: 'browser' } },
-};
-export const DesktopDark: Story = {
-  args: { environment: { platform: 'mac', runtime: 'electron' } },
-  globals: { theme: 'dark' },
+  args: { environment: { platform: 'other' } },
 };
 export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: false } } };

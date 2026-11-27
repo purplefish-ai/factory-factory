@@ -24,16 +24,12 @@ export type {
 export function detectShortcutEnvironment(): ShortcutEnvironment {
   const platformHint =
     typeof navigator === 'undefined' ? '' : `${navigator.platform} ${navigator.userAgent}`;
-  return {
-    platform: /mac|iphone|ipad|ipod/i.test(platformHint) ? 'mac' : 'other',
-    runtime:
-      typeof window !== 'undefined' && window.electronAPI?.isElectron ? 'electron' : 'browser',
-  };
+  return { platform: /mac|iphone|ipad|ipod/i.test(platformHint) ? 'mac' : 'other' };
 }
 
 let cachedEnvironment: ShortcutEnvironment | null = null;
 
-/** The current platform and runtime; neither changes while the app runs. */
+/** The current platform; it does not change while the app runs. */
 export function getShortcutEnvironment(): ShortcutEnvironment {
   cachedEnvironment ??= detectShortcutEnvironment();
   return cachedEnvironment;
@@ -44,15 +40,13 @@ export function setShortcutEnvironmentForTesting(environment: ShortcutEnvironmen
   cachedEnvironment = environment;
 }
 
-/** Chords that apply in this runtime, in display order. */
+/** Chords that apply on this platform, in display order. */
 export function getShortcutChords(
   id: ShortcutId,
   environment: ShortcutEnvironment = getShortcutEnvironment()
 ): KeyChord[] {
   return getShortcut(id).chords.filter(
-    (chord) =>
-      (!chord.runtime || chord.runtime === environment.runtime) &&
-      (!chord.platform || chord.platform === environment.platform)
+    (chord) => !chord.platform || chord.platform === environment.platform
   );
 }
 
@@ -229,7 +223,7 @@ export function formatChord(chord: KeyChord, platform: ShortcutPlatform): string
   return getChordKeys(chord, platform).join(platform === 'mac' ? '' : '+');
 }
 
-/** Label for the primary chord in this runtime, or null for ⌘K-only commands. */
+/** Label for the primary chord on this platform, or null for ⌘K-only commands. */
 export function formatShortcut(
   id: ShortcutId,
   environment: ShortcutEnvironment = getShortcutEnvironment()
@@ -245,7 +239,7 @@ function getAriaKey(chord: KeyChord): string {
   return chord.key.length === 1 ? chord.key.toUpperCase() : chord.key;
 }
 
-/** `aria-keyshortcuts` value listing every chord available in this runtime. */
+/** `aria-keyshortcuts` value listing every chord available on this platform. */
 export function getAriaKeyShortcuts(
   id: ShortcutId,
   environment: ShortcutEnvironment = getShortcutEnvironment()

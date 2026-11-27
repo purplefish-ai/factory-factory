@@ -68,7 +68,7 @@ does not own:
 ## Map
 
 - `bootstrap.mjs`: the `ff` binary; it ensures a usable Node before starting the
-  CLI in a child process and checks native modules in source checkouts.
+  CLI in a child process.
 - `index.ts`: the commands. A production `serve` writes this server's running
   marker when the installation supports automatic updates, recovers an
   interrupted update (relaunching the restored CLI when it rolled back), then

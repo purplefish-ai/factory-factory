@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
-import { ensureNativeModules as buildNativeModules } from './native-modules.mjs';
 import { assertInsideTempDir, sandboxPaths, sandboxRoot } from './paths.mjs';
 import { findFreePort } from './ports.mjs';
 import { checkScenario, createSeedRepository, prepareSandbox } from './prepare.mjs';
@@ -32,7 +31,6 @@ const message = (error) => (error instanceof Error ? error.message : String(erro
  * @property {(signal: string, handler: () => void) => unknown} [onSignal]
  * @property {(text: string) => unknown} [log]
  * @property {(text: string) => unknown} [print]
- * @property {(options: { signal: AbortSignal }) => Promise<{ rebuilt: boolean }>} [ensureNativeModules]
  * @property {number} [startupTimeoutMs]
  * @property {(target: number, signal: string) => unknown} [kill]
  */
@@ -57,14 +55,11 @@ export async function run(
     onSignal = (signal, handler) => process.on(signal, handler),
     log = (text) => process.stderr.write(`dev-sandbox: ${text}\n`),
     print = (text) => process.stdout.write(text),
-    ensureNativeModules = buildNativeModules,
     startupTimeoutMs,
     kill = (target, signal) => process.kill(target, signal),
   } = {}
 ) {
   const state = { baseDir: null, recorder: null, server: null, stopping: null };
-  // Ends the native-module build when the launcher stops during it.
-  const buildAbort = new AbortController();
   let stopWatchdog = () => undefined;
   let resolveStopped;
   const stopped = new Promise((resolve) => {
@@ -73,7 +68,6 @@ export async function run(
   const stop = (reason, exitCode) => {
     state.stopping ??= (async () => {
       log(`stopping (${reason})`);
-      buildAbort.abort();
       stopWatchdog();
       let code = exitCode;
       let listingFailed = false;
@@ -184,18 +178,6 @@ export async function run(
       system,
       onExpire: (reason) => void stop(reason, 0),
     });
-
-    // Once, before any server, and outside its startup timer (a first build can outlast it).
-    const buildStartedAt = system.now();
-    const { rebuilt } = await ensureNativeModules({ signal: buildAbort.signal });
-    log(
-      rebuilt
-        ? `built the native modules for Node in ${((system.now() - buildStartedAt) / 1000).toFixed(1)} s`
-        : 'the native modules are already built for Node'
-    );
-    if (state.stopping) {
-      return;
-    }
 
     prepareSandbox(state.baseDir);
     state.recorder = await startEgressRecorder({ logFile: paths.egressLog });

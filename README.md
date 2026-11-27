@@ -34,14 +34,8 @@ terminals, issues, and pull request status together in one place.
 
 ## Quick start
 
-### macOS desktop
-
-The desktop app runs on macOS 13 (Ventura) or newer and includes its own Node.js
-runtime through Electron. Check
-[GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases) for
-a signed disk image (`.dmg`). When one is available, open it, drag Factory
-Factory to Applications, and launch the app. Until the first desktop release is
-published, use the CLI below.
+The desktop app is no longer provided. Factory Factory runs from the npm package
+(`npx factory-factory@latest serve`), which supports macOS and Linux.
 
 ### Command line
 
@@ -109,9 +103,6 @@ runtime packages, their notices appear together and share the application
 update. Installing an unrelated global provider CLI does not update these
 bundled runtimes. Other installation methods show manual update guidance.
 
-- **Desktop app:** Download and install the latest package from
-  [GitHub Releases](https://github.com/purplefish-ai/factory-factory/releases/latest),
-  then reopen Factory Factory.
 - **CLI:** Stop the running server, then launch the latest release with
   `pnpm dlx factory-factory@latest serve`. If you installed globally, update
   `factory-factory@latest` using the same package manager you used to install
@@ -221,11 +212,11 @@ is a loopback one (the default, and every local launch mode), its own page is
 always an allowed origin: an `http:` loopback origin (`localhost`, `127.x.x.x`
 or `[::1]`) on the port the server actually bound. When the requested port is
 taken and the server falls back to the next free one (for example a second
-desktop instance while `ff serve` holds 3001), the app on that port keeps
-working without listing it in `CORS_ALLOWED_ORIGINS`. Loopback pages on other,
-unconfigured ports are still rejected. A server bound beyond loopback, or
-configured with a public origin (`ff tailscale`, a reverse proxy), allows only
-the configured origins.
+`ff serve` while another holds 3001), the app on that port keeps working without
+listing it in `CORS_ALLOWED_ORIGINS`. Loopback pages on other, unconfigured
+ports are still rejected. A server bound beyond loopback, or configured with a
+public origin (`ff tailscale`, a reverse proxy), allows only the configured
+origins.
 
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
@@ -246,10 +237,10 @@ because Prisma Studio cannot preserve their location; use a local drive path.
 
 ### Database upgrades
 
-Every launch (`ff serve`, `ff proxy`, `ff tailscale`, and the desktop app)
-applies pending database migrations before starting. An older version refuses to
-start on a database a newer version has migrated, naming the migrations it does
-not know; upgrade Factory Factory and start it again. The `ff` commands accept
+Every launch (`ff serve`, `ff proxy` and `ff tailscale`) applies pending
+database migrations before starting. An older version refuses to start on a
+database a newer version has migrated, naming the migrations it does not know;
+upgrade Factory Factory and start it again. The `ff` commands accept
 `FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a warning, at the risk of
 errors from the mismatched schema. Development mode (`ff serve --dev`) always
 warns and continues instead of refusing.

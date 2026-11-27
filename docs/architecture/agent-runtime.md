@@ -480,72 +480,10 @@ limit is checked when a session is created, not when it resumes, so continuing
 the conversation in a finished review can briefly put the workspace over the
 limit until that turn ends.
 
-`prompts/` is copied into `dist/` on build and packaged alongside the unpacked
-Electron backend, so a new prompt file ships without a code change.
+`prompts/` is copied into `dist/` on build, so a new prompt file ships without a
+code change.
 
-## Desktop backend process
-
-The desktop app runs the backend in an Electron utility process, not in Electron
-main, so synchronous SQLite work, agent streams and terminals cannot freeze the
-window or menus. `electron/main/server-manager.ts` forks
-`src/backend/electron-utility-entry.ts` and passes the database, migrations,
-frontend and log paths through the child environment. The child backs up the
-database when migrations are pending, runs them, starts the server, and posts
-`ready` with its URL or `error` over `process.parentPort`; startup that takes
-longer than two minutes is killed.
-
-Electron main opens the window as soon as the app is ready, showing a
-self-contained loading page (`electron/main/loading-page.ts`, a `data:` URL with
-no scripts or remote resources) while the backend starts, then loads the app
-URL. A failed start destroys the loading window before the startup error dialog
-and quit; closing it during startup stops the backend like closing any last
-window, and the app URL is never loaded into a closed window.
-
-The app window never opens child windows. `target="_blank"` links and
-`window.open` calls open in the system browser or mail client, even for app
-URLs, because a child window would inherit the preload bridge. Top-level
-navigation and redirects that leave the loaded app's origin are cancelled and
-opened externally. Only `http`, `https` and `mailto` URLs reach
-`shell.openExternal`; other schemes are blocked
-(`electron/main/external-links.ts`).
-
-The native app menu exposes Settings, New workspace, Search and Toggle sidebar
-through the renderer shortcut registry, preserving the same actions as keyboard
-and command search. Commands wait for the trusted renderer subscription, so
-opening a window or starting the backend does not lose the first menu action.
-Standard editing and window controls remain available; Reload and DevTools are
-development-only menu items.
-
-The desktop shell (`electron/main/desktop-shell.ts`) saves normal window bounds
-and maximization in `window-state.json` under Electron's userData directory on
-close. It validates restored JSON and clamps bounds to the current display work
-area, so removed monitors do not strand the window. Missing or corrupt optional
-preferences do not block startup. The minimum window size is 640 × 480 (bounded
-by the display work area). The loading window uses system appearance until the
-renderer syncs the selected application's background, including theme presets
-and custom overrides; trusted IPC accepts only an opaque hex color.
-
-On macOS a utility process runs from the Electron Helper binary, so Electron
-main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
-provider CLIs and the child-workspace MCP server launch with
-`configService.getNodeExecPath()` and `ELECTRON_RUN_AS_NODE=1`; outside Electron
-it is `process.execPath`.
-
-Electron main stops the backend before quitting (`before-quit`) and when the
-last window closes. Stopping sends `shutdown`, waits 25 seconds for a graceful
-exit, then sends `SIGKILL`. A stop during startup cancels the start the same way
-instead of waiting for the backend to become ready; the start then rejects even
-if `ready` crosses the shutdown request, and the cancellation is not reported as
-a startup error. Once quitting begins, activating the app does not start a new
-backend. If a started backend exits on its own, the app offers to restart it,
-reloading the window at the new URL, or to quit.
-
-Electron fatal-error handlers await backend shutdown before quitting. Concurrent
-fatal errors share one shutdown attempt. Cleanup failures and a 30-second
-shutdown deadline are logged before the application exits, so a stalled startup
-cannot hold the fatal-error path open indefinitely.
-
-### Targeted interruption
+## Targeted interruption
 
 Expanded background-process rows in chat and controllable sub-agent rows in the
 Subagents panel expose an icon-only Stop action. Each action has its own

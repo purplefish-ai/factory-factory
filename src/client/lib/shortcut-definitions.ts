@@ -42,7 +42,7 @@ export const SHORTCUTS = [
     id: 'nav.newWorkspace',
     scope: 'navigation',
     description: 'New workspace',
-    chords: [{ key: 'n', mod: true, runtime: 'electron' }],
+    chords: [],
     context: 'anywhere',
     command: { label: 'New workspace', section: 'Actions', keywords: ['create', 'start'] },
   },
@@ -78,7 +78,7 @@ export const SHORTCUTS = [
     id: 'nav.settings',
     scope: 'navigation',
     description: 'Go to Settings',
-    chords: [{ key: ',', mod: true, runtime: 'electron' }],
+    chords: [],
     context: 'anywhere',
     command: { label: 'Settings', section: 'Go to', keywords: ['preferences', 'admin'] },
   },
@@ -124,7 +124,7 @@ export const SHORTCUTS = [
     id: 'chat.previous',
     scope: 'workspace',
     description: 'Previous chat',
-    chords: [alt('[', 'BracketLeft'), { key: 'Tab', ctrl: true, shift: true, runtime: 'electron' }],
+    chords: [alt('[', 'BracketLeft')],
     context: 'anywhere',
     allowRepeat: true,
     command: { label: 'Previous chat', section: 'Go to', keywords: ['session', 'tab'] },
@@ -133,7 +133,7 @@ export const SHORTCUTS = [
     id: 'chat.next',
     scope: 'workspace',
     description: 'Next chat',
-    chords: [alt(']', 'BracketRight'), { key: 'Tab', ctrl: true, runtime: 'electron' }],
+    chords: [alt(']', 'BracketRight')],
     context: 'anywhere',
     allowRepeat: true,
     command: { label: 'Next chat', section: 'Go to', keywords: ['session', 'tab'] },
@@ -205,36 +205,26 @@ export const SHORTCUTS = [
     context: 'element',
   },
   // ⌘⇧P/T/A collide with browser keys (Firefox private window, Chrome reopen
-  // tab and tab search), so the browser gets Alt chords and the desktop app
-  // keeps the original keys as well.
+  // tab and tab search), so these use Alt chords.
   {
     id: 'composer.togglePlanMode',
     scope: 'composer',
     description: 'Toggle planning mode',
-    chords: [
-      alt('P', 'KeyP', { shift: true }),
-      { key: 'p', mod: true, shift: true, runtime: 'electron' },
-    ],
+    chords: [alt('P', 'KeyP', { shift: true })],
     context: 'element',
   },
   {
     id: 'composer.toggleThinking',
     scope: 'composer',
     description: 'Toggle extended thinking',
-    chords: [
-      alt('E', 'KeyE', { shift: true }),
-      { key: 't', mod: true, shift: true, runtime: 'electron' },
-    ],
+    chords: [alt('E', 'KeyE', { shift: true })],
     context: 'element',
   },
   {
     id: 'composer.quickActions',
     scope: 'composer',
     description: 'Open quick actions',
-    chords: [
-      alt('Q', 'KeyQ', { shift: true }),
-      { key: 'a', mod: true, shift: true, runtime: 'electron' },
-    ],
+    chords: [alt('Q', 'KeyQ', { shift: true })],
     context: 'element',
   },
   {

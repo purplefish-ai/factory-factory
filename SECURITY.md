@@ -40,11 +40,11 @@ Factory Factory runs locally on your machine and interacts with:
 2. **Review Claude Code permissions**: Factory Factory inherits Claude Code's
    access
 3. **Protect your database**: The SQLite database contains session history
-4. **Network exposure**: By default, the server listens on loopback only. The
-   desktop app and a backend started without `BACKEND_HOST` bind `127.0.0.1`
-   and, where IPv6 is available, `::1`; `ff serve` binds its `--host` (default
-   `localhost`). Binding another address, such as `ff serve --host 0.0.0.0`,
-   exposes the server to that network.
+4. **Network exposure**: By default, the server listens on loopback only. A
+   backend started without `BACKEND_HOST` binds `127.0.0.1` and, where IPv6 is
+   available, `::1`; `ff serve` binds its `--host` (default `localhost`).
+   Binding another address, such as `ff serve --host 0.0.0.0`, exposes the
+   server to that network.
 5. **Browser access**: Every WebSocket connection, and every tRPC API request
    that carries an `Origin` header, must come from `CORS_ALLOWED_ORIGINS` (by
    default the local app origins). While the server listens on loopback, tRPC

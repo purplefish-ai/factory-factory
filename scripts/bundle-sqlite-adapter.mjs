@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 // The upstream adapter requires better-sqlite3 v12. Bundle its JavaScript so npm
-// consumers and Electron resolve the same external v13 driver as migrations.
+// consumers resolve the same external v13 driver as migrations.
 const output = 'dist/src/backend/lib/sqlite-adapter.js';
 await build({
   entryPoints: ['src/backend/lib/sqlite-adapter.ts'],

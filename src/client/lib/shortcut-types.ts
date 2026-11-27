@@ -5,12 +5,9 @@
  */
 
 export type ShortcutPlatform = 'mac' | 'other';
-/** `electron` is the desktop app; `browser` includes installed PWAs, which keep browser keys. */
-type ShortcutRuntime = 'electron' | 'browser';
 
 export interface ShortcutEnvironment {
   platform: ShortcutPlatform;
-  runtime: ShortcutRuntime;
 }
 
 /**
@@ -32,8 +29,6 @@ export interface KeyChord {
   alt?: boolean;
   /** `'any'` for characters such as `?` that need Shift on some layouts only. */
   shift?: boolean | 'any';
-  /** Restricts the chord to one runtime, for keys a browser reserves. */
-  runtime?: ShortcutRuntime;
   /** Restricts the chord to one platform, such as ⌫ on Mac keyboards without ⌦. */
   platform?: ShortcutPlatform;
 }
@@ -65,7 +60,7 @@ export interface ShortcutDefinition {
   id: string;
   scope: ShortcutScope;
   description: string;
-  /** Empty for ⌘K-only commands. The first chord available in a runtime is the one shown. */
+  /** Empty for ⌘K-only commands. The first chord available on a platform is the one shown. */
   chords: readonly KeyChord[];
   context: ShortcutContext;
   /** Fires while a modal dialog has focus (the ⌘K toggle closes its own dialog). */

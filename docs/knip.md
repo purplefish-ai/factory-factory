@@ -44,7 +44,6 @@ when upgrading Knip; do not infer production behavior from the normal scan.
 
 - Backend standalone bootstrap (`src/backend/index.ts`), server and migration.
 - `ff` CLI (`src/cli/index.ts`).
-- Electron main, preload and backend utility-process entry.
 - Workspace MCP server, which is spawned separately from the backend graph.
 - Browser bootstrap (`src/client/main.tsx`) and diff highlighting Web Worker.
 

@@ -39,14 +39,6 @@ function rememberCompletion(seen: Set<string>, request: NotificationRequest): bo
   return true;
 }
 
-function focusApp(): void {
-  window.focus();
-  const focus = window.electronAPI?.focusWindow?.();
-  if (focus) {
-    runInBackground(focus, "Couldn't focus the app window.");
-  }
-}
-
 function showDesktopNotification(request: NotificationRequest, onOpen: () => Promise<void>): void {
   if (!readBrowserNotificationsEnabled() || readNotificationPermission() !== 'granted') {
     return;
@@ -64,7 +56,7 @@ function showDesktopNotification(request: NotificationRequest, onOpen: () => Pro
     notification.onclick = () => {
       // Keep focus inside the OS/browser click gesture, ahead of network reads.
       notification.close();
-      focusApp();
+      window.focus();
       runInBackground(onOpen(), "Couldn't open the workspace.");
     };
   } catch {

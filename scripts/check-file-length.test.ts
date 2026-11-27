@@ -96,11 +96,11 @@ describe('isFileLengthCandidate', () => {
   test.each([
     'src/a.ts',
     'src/a.test.tsx',
-    'electron/main.mts',
+    'scripts/main.mts',
     'scripts/check.mjs',
     'src/script.js',
     'src/component.jsx',
-    'electron/main.cjs',
+    'lint-rules/main.cjs',
     'scripts/check.cts',
     'lint-rules/rules/a-rule.mjs',
   ])('includes %s', (file) => expect(isFileLengthCandidate(file)).toBe(true));

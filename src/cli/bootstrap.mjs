@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Do not import application code here: unsupported Node must reach setup first.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,24 +22,6 @@ async function main() {
 
   const source = existsSync(join(directory, 'index.ts'));
   const args = process.argv.slice(2);
-  const serve =
-    args[0] === 'serve' && !args.some((arg) => ['--help', '-h', '--version', '-V'].includes(arg));
-  if (source && serve) {
-    const native = spawnSync(
-      process.execPath,
-      [join(root, 'scripts', 'ensure-native-modules.mjs'), 'node'],
-      {
-        stdio: 'inherit',
-      }
-    );
-    if (native.error) {
-      throw native.error;
-    }
-    if (native.status !== 0) {
-      process.exitCode = native.status ?? 1;
-      return;
-    }
-  }
   // Listen before spawning: a signal that lands after the child starts but
   // before the listener exists would kill this process and orphan the child.
   // Listeners run on the event loop, so none runs before `child` is assigned.

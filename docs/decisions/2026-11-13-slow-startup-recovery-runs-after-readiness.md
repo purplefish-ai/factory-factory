@@ -9,8 +9,8 @@ Startup used to finish every recovery before the backend reported ready. Two of
 them can take minutes: resuming archives left in ARCHIVING, whose Git worktree
 cleanup can be slow, and initializing NEW workspaces a previous process left
 behind, which means worktree creation, the startup script and the default agent
-session. A single slow setup script could exceed Electron's 120-second start
-deadline and the CLI's 30-second server startup deadline.
+session. A single slow setup script could exceed the CLI's 30-second server
+startup deadline.
 
 ## Decision
 
@@ -33,7 +33,6 @@ worktree or setup script.
 - HTTP, WebSocket and the CLI startup signal are available while affected
   workspaces still show ARCHIVING or NEW.
 - Shutdown waits for archive recovery, before it closes the session, run-script,
-  cache and database dependencies, and for one in-flight initialization, up to
-  the desktop app's 25-second stop timeout, after which the backend is killed.
+  cache and database dependencies, and for one in-flight initialization.
 - If shutdown begins during essential reconciliation, startup aborts before it
   launches these passes or starts background services.

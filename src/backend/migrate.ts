@@ -1,5 +1,5 @@
 /**
- * Simple migration runner for Electron.
+ * Simple migration runner.
  * Uses better-sqlite3 directly to avoid Prisma CLI complexity.
  *
  * Can be used in two ways:

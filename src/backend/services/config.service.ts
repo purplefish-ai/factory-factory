@@ -259,15 +259,6 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
   };
 }
 
-/**
- * The desktop backend runs in an Electron utility process, whose execPath is
- * the Electron Helper on macOS. Electron main passes its own executable so
- * Node entrypoints keep launching with the main app binary.
- */
-function resolveNodeExecPath(env: ConfigEnv): string {
-  return env.FF_NODE_EXEC_PATH ?? process.execPath;
-}
-
 function resolveShellPath(env: ConfigEnv): string {
   return env.SHELL ?? (process.platform === 'win32' ? 'cmd.exe' : '/bin/bash');
 }
@@ -311,7 +302,7 @@ function loadSystemConfig(): SystemConfig {
       env.CODEX_SESSIONS_DIR ?? join(env.CODEX_HOME ?? join(homedir(), '.codex'), 'sessions'),
     wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
     frontendStaticPath: env.FRONTEND_STATIC_PATH,
-    nodeExecPath: resolveNodeExecPath(env),
+    nodeExecPath: process.execPath,
 
     // Server settings
     backendPort: env.BACKEND_PORT,
@@ -604,8 +595,7 @@ class ConfigService {
   }
 
   /**
-   * Get the executable that runs bundled Node entrypoints (with
-   * ELECTRON_RUN_AS_NODE=1 under Electron)
+   * Get the executable that runs bundled Node entrypoints
    */
   getNodeExecPath(): string {
     return this.config.nodeExecPath;

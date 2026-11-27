@@ -231,8 +231,6 @@ function GeneralMobileBaselinePage() {
             error=""
             repoPath={repoPath}
             setRepoPath={setRepoPath}
-            isElectron={false}
-            handleBrowse={async () => undefined}
             factoryConfigExists
             helperText="Path to a git repository on your local machine."
             scriptType={scriptType}

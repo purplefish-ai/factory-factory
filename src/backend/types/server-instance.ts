@@ -10,6 +10,6 @@ export interface ServerInstance {
   stop(): Promise<void>;
   /** Get the actual port the server is listening on */
   getPort(): number;
-  /** Get the HTTP server instance (for Electron to monitor) */
+  /** Get the HTTP server instance */
   getHttpServer(): HttpServer;
 }

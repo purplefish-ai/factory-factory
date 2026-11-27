@@ -17,7 +17,7 @@ function key(options: KeyboardEventInit) {
   return event;
 }
 it('routes keyboard and command palette through the same current handler and restores previous owners', () => {
-  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'other' });
   const outer = vi.fn();
   const inner = vi.fn();
   cleanups.push(registerShortcutHandler('app.search', outer));
