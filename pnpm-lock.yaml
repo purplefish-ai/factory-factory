@@ -83,8 +83,8 @@ importers:
         specifier: 7.10.1
         version: 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@13.2.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
       '@slack/socket-mode':
-        specifier: 3.1.1
-        version: 3.1.1(undici@7.30.1)
+        specifier: 3.2.0
+        version: 3.2.0(undici@7.30.1)
       '@trpc/server':
         specifier: ^11.22.1
         version: 11.22.1(@typescript/typescript6@6.0.2)
@@ -2680,8 +2680,8 @@ packages:
     resolution: {integrity: sha512-VGXhmmgsAo9shdQYh4tFDndd+7nsgp0Y5h0UPDaUp8K359pBasI6YdkMqFW3mCOxLQkq09qj7o7cq6f3DuXcJQ==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
-  '@slack/socket-mode@3.1.1':
-    resolution: {integrity: sha512-PtPzxkKTGWw7RWZVlQziNHt8ktSctjpzaVyC30K8AvMwGWwCNT+M/vLAI3AQko6d8X9eWo+hA8eNO4k6j8Qrfw==}
+  '@slack/socket-mode@3.2.0':
+    resolution: {integrity: sha512-G5cp8+C1tNmQy7f3RC+ZgXbUcGmSch4bKcwcv7bYVZF9JDLbQZH9mvBhSKIi2lnhFRF6WwMFubsMM8QwUyVATA==}
     engines: {node: '>=20', npm: '>=9.6.4'}
     peerDependencies:
       undici: 7.30.1
@@ -8102,7 +8102,7 @@ snapshots:
     dependencies:
       '@types/node': 26.6.6
 
-  '@slack/socket-mode@3.1.1(undici@7.30.1)':
+  '@slack/socket-mode@3.2.0(undici@7.30.1)':
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/web-api': 8.3.0
