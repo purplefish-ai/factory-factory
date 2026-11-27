@@ -1,22 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  chmodSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
+import { verifyDownloadedPackage } from './tag-npm-releases';
 
 const roots: string[] = [];
-afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }));
+});
 const repository = 'purplefish-ai/factory-factory';
 const commit = 'a'.repeat(40);
 
@@ -149,46 +145,19 @@ describe('published npm release identity', () => {
       'git+https://github.com/other/repository@refs/heads/main';
     expect(item.run().status).not.toBe(0);
   });
-  it('passes the staged identity through the actual finalization workflow step', () => {
+  it('verifies each version through the scheduled tagging script', () => {
     const item = fixture();
+    // run() writes the registry responses the fixture's curl serves.
     expect(item.run().status).toBe(0);
-    const schema = z.object({
-      jobs: z.object({
-        'finalize-release': z.object({
-          steps: z.array(z.object({ name: z.string().optional(), run: z.string().optional() })),
-        }),
-      }),
+    vi.stubEnv('FIXTURE_ROOT', item.root);
+    vi.stubEnv('PATH', `${join(item.root, 'bin')}:${process.env.PATH}`);
+    const verify = (runId: string) =>
+      verifyDownloadedPackage(resolve('.'), item.artifact, '1.2.3', commit, runId, repository);
+    expect(verify('123')).toEqual({ ok: true });
+    expect(verify('124')).toEqual({
+      ok: false,
+      reason: 'Published npm provenance does not match the staged commit, workflow, run and bytes',
     });
-    const workflow = schema.parse(
-      parse(readFileSync(resolve('.github/workflows/npm-publish.yml'), 'utf8'))
-    );
-    const command = workflow.jobs['finalize-release'].steps.find(
-      (step) => step.name === 'Verify package is published on npm'
-    )?.run;
-    expect(command).toBeDefined();
-    mkdirSync(join(item.root, 'scripts'));
-    symlinkSync(
-      resolve('scripts/verify-npm-release.sh'),
-      join(item.root, 'scripts/verify-npm-release.sh')
-    );
-    symlinkSync(item.artifact, join(item.root, 'npm-package'));
-    writeFileSync(join(item.root, 'package.json'), JSON.stringify({ version: '1.2.3' }));
-    const output = join(item.root, 'output');
-    const result = spawnSync('bash', ['-c', command!], {
-      cwd: item.root,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        STAGED_COMMIT: commit,
-        STAGING_RUN_ID: '123',
-        RELEASE_REPOSITORY: repository,
-        GITHUB_OUTPUT: output,
-        FIXTURE_ROOT: item.root,
-        PATH: `${join(item.root, 'bin')}:${process.env.PATH}`,
-      },
-    });
-    expect(result.status, result.stderr).toBe(0);
-    expect(readFileSync(output, 'utf8')).toBe('version=1.2.3\n');
   });
   it('rejects provenance for another commit', () => {
     const item = fixture();
@@ -292,36 +261,5 @@ describe('release source ancestry', () => {
     git('checkout', '-b', 'untrusted', release);
     git('commit', '--allow-empty', '-m', 'off main');
     expect(run(git('rev-parse', 'HEAD')).status).not.toBe(0);
-    const finalizerSchema = z.object({
-      jobs: z.object({
-        'finalize-release': z.object({
-          steps: z.array(
-            z.object({
-              name: z.string().optional(),
-              run: z.string().optional(),
-              with: z.object({ 'fetch-depth': z.number().optional() }).passthrough().optional(),
-            })
-          ),
-        }),
-      }),
-    });
-    const finalizer = finalizerSchema.parse(
-      parse(readFileSync(resolve('.github/workflows/npm-publish.yml'), 'utf8'))
-    ).jobs['finalize-release'];
-    const finalizerCommand = finalizer.steps.find(
-      (step) => step.name === 'Verify staged commit remains on main'
-    )?.run;
-    expect(finalizerCommand).toBeDefined();
-    expect(
-      finalizer.steps.find((step) => step.name === 'Checkout staged commit')?.with?.['fetch-depth']
-    ).toBe(0);
-    const finalize = (sha: string) =>
-      spawnSync('bash', ['-c', finalizerCommand!], {
-        cwd: root,
-        encoding: 'utf8',
-        env: { ...process.env, STAGED_COMMIT: sha },
-      });
-    expect(finalize(release).status).toBe(0);
-    expect(finalize(git('rev-parse', 'HEAD')).status).not.toBe(0);
   });
 });

@@ -12,24 +12,30 @@ branches, because they cannot stage or publish artifacts. The separate staging
 job has OIDC permission and stages the tested tarball without checking out or
 installing application code.
 
-After a maintainer approves the staged package on npm, finalization downloads
-the original staging artifact and checks:
+Approval happens on npm, outside GitHub, so the publish workflow cannot tag. The
+scheduled Tag npm releases workflow (`.github/workflows/release-tags.yml`) finds
+every stable published version without a `v<version>` tag. Published versions
+carry no `gitHead`, so `scripts/tag-npm-releases.ts` reads the commit and
+staging run from the version's npm-hosted SLSA provenance and checks:
 
-- Exactly one tarball exists, containing the expected package name and a stable
-  semantic version.
-- The npm registry reports the same version and SHA-512 integrity as those
-  bytes.
-- npm-hosted SLSA provenance identifies the same package digest, repository,
-  `main` workflow, commit, and staging run.
-- The version matches the checked-out staging commit, which must still belong to
-  current `main` history. Existing release tags must resolve to that same
-  commit.
+- Exactly one provenance statement names the version, built by `npm-publish.yml`
+  on `main` of this repository, with one source commit and a staging run in this
+  repository.
+- The commit exists in this repository, is reachable from current `main`, and
+  its `package.json` declares that version.
+- `scripts/verify-npm-release.sh` accepts the published tarball: the registry
+  reports its SHA-512 integrity, and the provenance names the same package
+  digest, repository, `main` workflow, commit and staging run.
 
-Missing or mismatched metadata fails finalization before tags or releases are
-created. These checks authenticate registry responses through HTTPS and compare
-provenance identity; they do not independently validate Sigstore signatures or
-establish that the source code is safe. Provenance complements code review,
-dependency review, and npm's staged approval.
+Only then does it create the tag at that commit and the GitHub Release, oldest
+version first, marking the npm `latest` version as the latest release. A version
+that fails a check is reported in the job summary and skipped, and the run
+fails; tag it by hand once its commit is known. The job writes with the workflow
+token, so the releases it creates start no other workflow. These checks
+authenticate registry responses through HTTPS and compare provenance identity;
+they do not independently validate Sigstore signatures or establish that the
+source code is safe. Provenance complements code review, dependency review, and
+npm's staged approval.
 
 ## Account controls
 
