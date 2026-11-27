@@ -1,16 +1,32 @@
 // Crash points (src/backend/services/crash-point.ts): which ones server code declares, and arming
 // one in a running sandbox. The declared set is read from the source, so it cannot drift from the
-// calls: every `crashAt('<name>')` outside tests under src/backend, with a literal name.
+// calls: every `crashAt('<name>')` call outside tests under src/backend, with a literal name.
 import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative } from 'node:path';
+import ts from 'typescript';
 import { REPO_ROOT } from './paths.mjs';
 
 /** A crash point's name, which is also its file name in the sandbox's crash point directory. */
 export const CRASH_POINT_NAME = /^[A-Za-z0-9_-]+$/;
 
-/** The module that defines `crashAt`; its own text mentions the call without declaring a point. */
-const DEFINITION = ['src', 'backend', 'services', 'crash-point.ts'].join(sep);
 const NOT_PRODUCTION = /\.(test|test-helpers|integration\.test)\.tsx?$/;
+
+/** The `crashAt(...)` calls in `source`, parsed: comments and strings that mention one are not. */
+function crashAtCalls(file, source) {
+  const calls = [];
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'crashAt'
+    ) {
+      calls.push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true));
+  return calls;
+}
 
 /**
  * The names declared by `crashAt('<name>')` calls in non-test TypeScript under `root/src/backend`,
@@ -24,17 +40,24 @@ export function declaredCrashPoints(root = REPO_ROOT) {
   const declared = new Map();
   for (const entry of readdirSync(backend, { recursive: true })) {
     const file = String(entry);
-    const path = join(backend, file);
-    if (!/\.tsx?$/.test(file) || NOT_PRODUCTION.test(file) || relative(root, path) === DEFINITION) {
+    if (!/\.tsx?$/.test(file) || NOT_PRODUCTION.test(file)) {
       continue;
     }
+    const path = join(backend, file);
     const source = readFileSync(path, 'utf8');
-    for (const call of source.matchAll(/\bcrashAt\(([^)]*)\)/g)) {
-      const where = relative(root, path);
-      const name = /^\s*'([^']*)'\s*$/.exec(call[1])?.[1];
+    if (!source.includes('crashAt')) {
+      continue;
+    }
+    const where = relative(root, path);
+    for (const call of crashAtCalls(path, source)) {
+      const [argument] = call.arguments;
+      const name =
+        call.arguments.length === 1 && argument && ts.isStringLiteral(argument)
+          ? argument.text
+          : null;
       if (!(name && CRASH_POINT_NAME.test(name))) {
         throw new Error(
-          `${where}: ${call[0]} must name its crash point with a literal of letters, digits, "_" or "-".`
+          `${where}: ${call.getText()} must name its crash point with a literal of letters, digits, "_" or "-".`
         );
       }
       if (declared.has(name)) {

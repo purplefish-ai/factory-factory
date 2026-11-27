@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test';
 import {
   armCrashPoint,
   backendStatus,
-  disarmCrashPoint,
   ensureBackendRunning,
   isCrashPointArmed,
   readServerOutput,
@@ -16,7 +15,6 @@ import { launchWorkspace, openBoard, readSandbox, reply } from './sandbox';
 // crash-point.ts), as a crash there would. One that no code declares cannot be armed.
 
 test.afterEach(async () => {
-  disarmCrashPoint('after-message-queued');
   await ensureBackendRunning();
 });
 

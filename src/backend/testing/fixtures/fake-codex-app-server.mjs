@@ -42,7 +42,7 @@ function uuidV7(timeMs) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// Every thread this process knows: { id, cwd, ephemeral, rollout (a path, or null) }.
+// Every thread this process started or resumed: { id, cwd, ephemeral, rollout (a path, or null) }.
 const threads = new Map();
 
 function rolloutPath(id, timeMs) {
@@ -64,8 +64,11 @@ function addThread(id, cwd, ephemeral = false) {
   return record;
 }
 
-/** A thread from this process, or one an earlier process wrote a rollout for. */
-function findThread(id) {
+/**
+ * A thread from this process, or one an earlier process wrote a rollout for. Only `load` (a
+ * resume) makes the latter a thread of this process: reading one does not, as in Codex.
+ */
+function findThread(id, { load = false } = {}) {
   const known = threads.get(id);
   if (known || !codexHome || !existsSync(join(codexHome, 'sessions'))) {
     return known ?? null;
@@ -80,7 +83,9 @@ function findThread(id) {
   const rollout = join(sessions, file);
   const meta = JSON.parse(readFileSync(rollout, 'utf8').split('\n')[0]);
   const record = { id, cwd: meta.payload.cwd, ephemeral: false, rollout };
-  threads.set(id, record);
+  if (load) {
+    threads.set(id, record);
+  }
   return record;
 }
 
@@ -553,7 +558,7 @@ appServerInput?.on('line', (line) => {
     }
     case 'thread/resume': {
       // As Codex: a thread resumes from its rollout, so one that was never prompted cannot.
-      const thread = findThread(request.params.threadId);
+      const thread = findThread(request.params.threadId, { load: true });
       if (!(thread?.rollout && existsSync(thread.rollout))) {
         const message = `no rollout found for thread id ${request.params.threadId}`;
         send({ id: request.id, error: { code: -32_600, message } });

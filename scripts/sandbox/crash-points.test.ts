@@ -22,11 +22,19 @@ describe('declared crash points', () => {
     expect(declaredCrashPoints()).toContain('after-message-queued');
   });
 
-  it('are the literal names of crashAt calls outside tests and the definition', () => {
+  it('are the literal names of crashAt calls, not of comments, strings or tests', () => {
     const root = repository({
-      'src/backend/services/crash-point.ts': 'export function crashAt(name: string) {}',
-      'src/backend/a.ts': "crashAt('second-point');\ncrashAt( 'first_point' );",
-      'src/backend/deep/b.ts': "crashAt('third-point');",
+      'src/backend/services/crash-point.ts': [
+        "/** Declare one as `crashAt('<name>')`. */",
+        'export function crashAt(name: string) {}',
+      ].join('\n'),
+      'src/backend/a.ts': [
+        "crashAt('second-point');",
+        "crashAt( 'first_point' );",
+        "// crashAt('in-a-comment'), crashAt(name)",
+        'const text = "crashAt(\'in-a-string\')";',
+      ].join('\n'),
+      'src/backend/deep/b.ts': "if (ready) { crashAt('third-point'); }",
       'src/backend/a.test.ts': "crashAt('only-in-a-test');",
     });
     expect(declaredCrashPoints(root)).toEqual(['first_point', 'second-point', 'third-point']);
@@ -35,6 +43,7 @@ describe('declared crash points', () => {
   it.each([
     ['a computed name', 'crashAt(name);', /must name its crash point with a literal/],
     ['a name with a dot', "crashAt('a.b');", /must name its crash point with a literal/],
+    ['a template literal', 'crashAt(`a-${b}`);', /must name its crash point with a literal/],
     ['a name declared twice', "crashAt('twice');\ncrashAt('twice');", /declared twice/],
   ])('refuse %s', (_case, source, error) => {
     const root = repository({ 'src/backend/a.ts': source });

@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
   armCrashPoint as arm,
+  CRASH_POINT_NAME,
   declaredCrashPoints,
   disarmCrashPoint as disarm,
 } from '../../scripts/sandbox/crash-points.mjs';
@@ -16,8 +17,9 @@ import { readSandbox } from '../sandbox/sandbox';
 // HTTP on 127.0.0.1, at the URL and with the bearer token it writes to
 // `<baseDir>/backend-control.json` (mode 0600). It signals only that child, through its handle.
 //
-// The rule for every spec that kills or stops the backend: end with `ensureBackendRunning()` in an
-// `afterEach` (or `finally`), pass or fail, because every later spec shares this backend.
+// The rule for every spec that kills or stops the backend, or arms a crash point: end with
+// `ensureBackendRunning()` in an `afterEach`, pass or fail, because every later spec shares this
+// backend. It also disarms any crash point the spec left armed.
 //
 // Crash points are armed by a file, which the server reads at `crashAt('<name>')` (see
 // src/backend/services/crash-point.ts); names are checked against the source.
@@ -115,10 +117,15 @@ export async function waitForBackendExit(timeoutMs = 60_000) {
 }
 
 /**
- * Leaves the backend running and healthy whatever state a spec left it in: continued if stopped,
- * restarted if exited. Call it from `afterEach` in every spec that kills or stops the backend.
+ * Leaves the backend unarmed, running and healthy whatever state a spec left it in: every crash
+ * point disarmed, continued if stopped, restarted if exited. Call it from `afterEach` in every spec
+ * that kills or stops the backend or arms a crash point.
  */
 export async function ensureBackendRunning() {
+  const { crashPointDir } = paths();
+  for (const armed of readdirSync(crashPointDir)) {
+    rmSync(join(crashPointDir, armed), { force: true });
+  }
   let status = await backendStatus();
   if (status.state === 'paused') {
     status = await killBackend('SIGCONT');
@@ -143,6 +150,9 @@ export function disarmCrashPoint(name: string) {
 
 /** Whether `name` is armed: false once the server has crashed there. */
 export function isCrashPointArmed(name: string) {
+  if (!CRASH_POINT_NAME.test(name)) {
+    throw new Error(`Crash point name ${JSON.stringify(name)} must match ${CRASH_POINT_NAME}.`);
+  }
   return existsSync(join(paths().crashPointDir, name));
 }
 

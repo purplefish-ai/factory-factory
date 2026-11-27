@@ -84,6 +84,23 @@ describe('process identity', () => {
     }
   }, 30_000);
 
+  it('does not take an argument for the environment', async () => {
+    const entry = 'BASE_DIR=/tmp/ff-sandbox/sb-argument';
+    // The entry is this process's argument, not its environment.
+    const bystander = spawn(
+      process.execPath,
+      ['-e', `process.send('ready'); setTimeout(() => {}, ${HELPER_LIFETIME_MS})`, entry],
+      { env: { PATH: process.env.PATH }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] }
+    );
+    try {
+      await once(bystander, 'message');
+      expect(realSystem.processesWithEnvironment(entry, [bystander.pid ?? 0])).toEqual([]);
+      expect(realSystem.processesWithEnvironment(entry, null)).toEqual([]);
+    } finally {
+      bystander.kill('SIGKILL');
+    }
+  }, 30_000);
+
   it('parses pid, parent, group, state and start time', () => {
     const table = parseProcessTable(
       [`   10     1    10 Ss   ${T1}`, `   14    10    10 Z    ${T2}`, 'garbage', ''].join('\n')
@@ -290,6 +307,21 @@ describe('stopping what a killed backend left behind', () => {
       30, 31,
     ]);
     expect(events).toEqual(['SIGTERM 30', 'SIGTERM 31', 'SIGKILL 31']);
+  });
+
+  it('finds a process forked during the grace period before it kills', async () => {
+    const child: Entry = { pid: 32, ppid: 31, pgid: 31, zombie: false, startedAt: LATER };
+    const forking = (processes: Entry[], target: number, signal: string) => {
+      if (signal === 'SIGKILL') {
+        return processes.filter((p) => p.pid !== target);
+      }
+      return target === 31 ? [...processes.filter((p) => p.pid !== 32), child] : processes;
+    };
+    const { system, events } = fakeSystem(orphans, forking, { ...environments, 32: [entry] });
+    await expect(stopProcessesWithEnvironment(entry, { system, exclude: [50] })).resolves.toEqual([
+      30, 31, 32,
+    ]);
+    expect(events).toEqual(['SIGTERM 30', 'SIGTERM 31', 'SIGKILL 30', 'SIGKILL 31', 'SIGKILL 32']);
   });
 
   it('signals nothing once a tracked pid belongs to another process', async () => {

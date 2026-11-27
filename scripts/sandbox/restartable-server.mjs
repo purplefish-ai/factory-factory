@@ -256,7 +256,13 @@ export async function runRestartableServer({
   });
 
   const handleSignal = async (body) => {
-    const parsed = signalRequestSchema.safeParse(JSON.parse(body || '{}'));
+    let request;
+    try {
+      request = JSON.parse(body || '{}');
+    } catch {
+      request = null;
+    }
+    const parsed = signalRequestSchema.safeParse(request);
     if (!parsed.success) {
       return [400, { error: `Send one of ${SIGNALS.join(', ')}.` }];
     }

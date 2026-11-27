@@ -34,7 +34,10 @@ const statusSchema = z.object({
 });
 
 /** One request; resolves with the status code and the parsed body. */
-function call(url: string, options: { method?: string; token?: string; body?: object } = {}) {
+function call(
+  url: string,
+  options: { method?: string; token?: string; body?: object; raw?: string } = {}
+) {
   return new Promise<{ status: number; body: unknown }>((resolve, reject) => {
     const outgoing = request(
       url,
@@ -54,7 +57,7 @@ function call(url: string, options: { method?: string; token?: string; body?: ob
       }
     );
     outgoing.on('error', reject);
-    outgoing.end(options.body ? JSON.stringify(options.body) : undefined);
+    outgoing.end(options.raw ?? (options.body ? JSON.stringify(options.body) : undefined));
   });
 }
 
@@ -110,6 +113,8 @@ async function started() {
     control,
     status,
     backendPid,
+    frontendPid: async () => Number((await call(`http://localhost:${ports.frontend}/`)).body),
+    token,
     stop: () => stopSignal?.(),
   };
 }
@@ -124,14 +129,14 @@ describe('the restartable server', () => {
       expect(first).toMatchObject({ state: 'running', generation: 1, lastExit: null });
       // A connection to the killed backend leaves the port in TIME_WAIT.
       expect(await server.backendPid()).toBe(first.pid);
+      const frontendPid = await server.frontendPid();
 
       expect(await server.control('POST', '/signal', { signal: 'SIGKILL' })).toMatchObject({
         status: 200,
         body: { state: 'exited', lastExit: { code: null, signal: 'SIGKILL' } },
       });
-      expect(await call(`http://localhost:${server.ports.frontend}/`)).toMatchObject({
-        status: 200,
-      });
+      // The same frontend process, not a new one.
+      expect(await server.frontendPid()).toBe(frontendPid);
       expect(await server.control('POST', '/signal', { signal: 'SIGSTOP' })).toMatchObject({
         status: 409,
       });
@@ -149,7 +154,7 @@ describe('the restartable server', () => {
     }
     expect(await server.done).toBe(0);
     expect(existsSync(server.paths.backendControl)).toBe(false);
-  });
+  }, 60_000);
 
   it('pauses and continues the backend, and continues it to stop', async () => {
     const server = await started();
@@ -170,7 +175,7 @@ describe('the restartable server', () => {
       server.stop();
     }
     expect(await server.done).toBe(0);
-  });
+  }, 60_000);
 
   it('refuses requests without its token, and signals it does not know', async () => {
     const server = await started();
@@ -180,12 +185,15 @@ describe('the restartable server', () => {
       expect(await server.control('POST', '/signal', { signal: 'SIGUSR1' })).toMatchObject({
         status: 400,
       });
+      expect(
+        await call(`${server.url}/signal`, { method: 'POST', token: server.token, raw: '{oops' })
+      ).toMatchObject({ status: 400 });
       expect(await server.status()).toMatchObject({ state: 'running', generation: 1 });
     } finally {
       server.stop();
     }
     expect(await server.done).toBe(0);
-  });
+  }, 60_000);
 });
 
 describe('the restartable server commands', () => {

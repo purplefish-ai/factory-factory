@@ -22,13 +22,20 @@ export async function expectNoReload(page: Page, marker: string) {
 }
 
 /**
- * Counts the WebSockets the page opens from now on, by URL path (`/snapshots`, `/chat`, …), to
- * tell a recovery on the same socket from one through a new connection.
+ * Counts the WebSockets the page opens from now on, by URL path (`/snapshots`, `/chat`, …), and
+ * the frames they receive, to tell a recovery on the same socket from one through a new
+ * connection, and to know a socket is live (the server's first frame arrived).
  */
 export function trackSockets(page: Page) {
   const opened: string[] = [];
-  page.on('websocket', (socket) => opened.push(new URL(socket.url()).pathname));
+  const received = new Map<string, number>();
+  page.on('websocket', (socket) => {
+    const path = new URL(socket.url()).pathname;
+    opened.push(path);
+    socket.on('framereceived', () => received.set(path, (received.get(path) ?? 0) + 1));
+  });
   return {
     opened: (path: string) => opened.filter((pathname) => pathname === path).length,
+    received: (path: string) => received.get(path) ?? 0,
   };
 }

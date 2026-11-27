@@ -607,7 +607,12 @@ describe('fake Codex threads and rollout files', () => {
     expect(await call(second, 1, 'turn/start', { threadId: thread, cwd, input })).toMatchObject({
       error: { message: `thread not found: ${thread}` },
     });
-    await call(second, 2, 'thread/resume', { threadId: thread });
+    // Reading a thread's history does not load it either.
+    await call(second, 2, 'thread/read', { threadId: thread, includeTurns: true });
+    expect(await call(second, 3, 'turn/start', { threadId: thread, cwd, input })).toMatchObject({
+      error: { message: `thread not found: ${thread}` },
+    });
+    await call(second, 4, 'thread/resume', { threadId: thread });
     const echo = await playPrompt(second, { thread, text: 'After the restart' });
     expect(echo.at(-1)).toMatchObject({ method: 'turn/completed' });
   });
