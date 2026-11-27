@@ -92,44 +92,51 @@ export function cpuPercentBetween(previous: CpuTimes, current: CpuTimes): number
   return clampPercent((busy / total) * 100);
 }
 
-/**
- * Parses `sysctl -n kern.memorystatus_level`: the percentage of memory macOS
- * considers available, the figure behind Activity Monitor's memory pressure.
- */
-export function parseMemoryStatusLevel(stdout: string): number | null {
-  const level = Number.parseInt(stdout.trim(), 10);
-  if (!Number.isFinite(level) || level < 0 || level > 100) {
+/** Estimate Activity Monitor's Memory Used from physical page counts. */
+function parseMacUsedMemoryBytes(stdout: string): number | null {
+  const pageSize = Number(
+    /^Mach Virtual Memory Statistics: \(page size of (\d+) bytes\)/m.exec(stdout)?.[1]
+  );
+  const anonymous = Number(/^Anonymous pages:[ \t]*(\d+)\.$/m.exec(stdout)?.[1]);
+  const purgeable = Number(/^Pages purgeable:[ \t]*(\d+)\.$/m.exec(stdout)?.[1]);
+  const wired = Number(/^Pages wired down:[ \t]*(\d+)\.$/m.exec(stdout)?.[1]);
+  const compressed = Number(/^Pages occupied by compressor:[ \t]*(\d+)\.$/m.exec(stdout)?.[1]);
+  if (
+    pageSize <= 0 ||
+    ![pageSize, anonymous, purgeable, wired, compressed].every(Number.isSafeInteger)
+  ) {
     return null;
   }
-  return 100 - level;
+  // Anonymous pages exclude the file cache. Deduct purgeable pages and use
+  // the compressor's physical size to account for RAM occupied by compressed data.
+  return (anonymous - purgeable + wired + compressed) * pageSize;
 }
 
 function freeMemoryPercent(): number {
   return clampPercent((1 - os.freemem() / os.totalmem()) * 100);
 }
 
-async function readMemoryStatusLevel(): Promise<string> {
-  const { stdout } = await execFileAsync('sysctl', ['-n', 'kern.memorystatus_level'], {
+async function readMacVmStat(): Promise<string> {
+  const { stdout } = await execFileAsync('vm_stat', [], {
     encoding: 'utf8',
     timeout: 1000,
   });
   return stdout;
 }
 
-/**
- * Linux and Windows report reclaimable memory as free. macOS counts only
- * untouched pages, so a healthy Mac with a large file cache looks nearly full;
- * ask the kernel's memory-pressure level instead.
- */
+/** Use macOS page counts to exclude reclaimable cache from the RAM reading. */
 export async function readMemoryPercent(
   platform: NodeJS.Platform = process.platform,
-  readStatusLevel: () => Promise<string> = readMemoryStatusLevel
+  readVmStat: () => Promise<string> = readMacVmStat
 ): Promise<number> {
   if (platform !== 'darwin') {
     return freeMemoryPercent();
   }
   try {
-    return parseMemoryStatusLevel(await readStatusLevel()) ?? freeMemoryPercent();
+    const usedBytes = parseMacUsedMemoryBytes(await readVmStat());
+    return usedBytes === null
+      ? freeMemoryPercent()
+      : clampPercent((usedBytes / os.totalmem()) * 100);
   } catch {
     return freeMemoryPercent();
   }
