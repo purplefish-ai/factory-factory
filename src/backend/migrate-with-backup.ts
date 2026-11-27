@@ -3,6 +3,7 @@ import { chmod, mkdir, open, readdir, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path';
 import { snapshotSqliteDatabase } from './lib/sqlite-snapshot';
 import { inspectMigrations, type MigrationOptions, runMigrations } from './migrate';
+import { configService } from './services/config.service';
 
 /** Pre-migration snapshots kept per database; older ones are deleted after a new one succeeds. */
 export const PRE_MIGRATION_BACKUPS_TO_KEEP = 3;
@@ -17,6 +18,22 @@ export interface MigrateWithBackupOptions extends Omit<MigrationOptions, 'backup
 /** `db-backups` beside the database, so the snapshots live on the same volume as the data. */
 export function getPreMigrationBackupDirectory(databasePath: string): string {
   return join(dirname(databasePath), 'db-backups');
+}
+
+/** Set to `1` to migrate anyway when the pre-migration backup cannot be taken. */
+export const ALLOW_MIGRATION_WITHOUT_BACKUP_ENV = 'FF_ALLOW_MIGRATION_WITHOUT_BACKUP';
+
+/** The backup before pending migrations failed, so no migration was applied. */
+export class MigrationBackupError extends Error {
+  constructor(reason: string) {
+    super(
+      `Could not back up the database before migrating: ${reason}. No migration was applied ` +
+        'and the database is unchanged. Fix the cause (for example free disk space or make ' +
+        'the db-backups directory beside the database writable) and start again, or set ' +
+        `${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1 to migrate without a backup.`
+    );
+    this.name = 'MigrationBackupError';
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -135,7 +152,9 @@ async function backupBeforeMigrating(
 /**
  * Run migrations after snapshotting the database when any are pending. Fresh
  * databases, up-to-date databases and refused downgrades are not copied. A
- * failed backup is a warning: the database still starts, without a backup.
+ * failed backup stops before any migration runs, because a migration cannot be
+ * undone by an older version; `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1` migrates
+ * anyway, with a warning.
  */
 export async function runMigrationsWithBackup(options: MigrateWithBackupOptions): Promise<void> {
   const warn = options.warn ?? ((msg: string) => process.stderr.write(`${msg}\n`));
@@ -143,23 +162,26 @@ export async function runMigrationsWithBackup(options: MigrateWithBackupOptions)
   const backupDirectory =
     options.backupDirectory ?? getPreMigrationBackupDirectory(options.databasePath);
   let backupPath: string | undefined;
-  try {
-    const inspection = inspectMigrations(options);
-    const refused =
-      (options.unknownMigrations ?? 'refuse') === 'refuse' &&
-      inspection.unknownAppliedMigrations.length > 0;
-    if (inspection.hasAppliedMigrations && inspection.pendingMigrations.length > 0 && !refused) {
+  const inspection = inspectMigrations(options);
+  const refused =
+    (options.unknownMigrations ?? 'refuse') === 'refuse' &&
+    inspection.unknownAppliedMigrations.length > 0;
+  if (inspection.hasAppliedMigrations && inspection.pendingMigrations.length > 0 && !refused) {
+    try {
       backupPath = await backupBeforeMigrating({ ...options, backupDirectory }, warn);
       log(
         `[migrate] Backed up the database to ${backupPath} before applying ` +
           `${inspection.pendingMigrations.length} migration(s)`
       );
+    } catch (error) {
+      if (!configService.getAllowMigrationWithoutBackup()) {
+        throw new MigrationBackupError(errorMessage(error));
+      }
+      warn(
+        `[migrate] Warning: could not back up the database before migrating: ${errorMessage(error)}. ` +
+          `Continuing without a backup because ${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1.`
+      );
     }
-  } catch (error) {
-    warn(
-      `[migrate] Warning: could not back up the database before migrating: ${errorMessage(error)}. ` +
-        'Continuing without a backup.'
-    );
   }
   runMigrations({ ...options, log, warn, backupPath });
 }

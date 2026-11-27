@@ -387,6 +387,11 @@ function loadReleaseCheckConfig(): ReleaseCheckConfig {
   return { enabled: env.FF_UPDATE_CHECKS_ENABLED, registryUrl: env.FF_NPM_REGISTRY_URL };
 }
 
+/** `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`: migrate even when the pre-migration backup fails. */
+function loadAllowMigrationWithoutBackup(): boolean {
+  return ConfigEnvSchema.parse(process.env).FF_ALLOW_MIGRATION_WITHOUT_BACKUP;
+}
+
 /** `FF_PROJECT_ROOT`: when set, new projects must live inside it (the dev sandbox sets it). */
 function loadProjectRoot(): string | null {
   return ConfigEnvSchema.parse(process.env).FF_PROJECT_ROOT ?? null;
@@ -702,6 +707,12 @@ class ConfigService {
   /** Whether, and where, application and provider release checks reach the npm registry. */
   getReleaseCheckConfig(): ReleaseCheckConfig {
     return { ...this.releaseCheck };
+  }
+
+  /** Whether a failed pre-migration backup may be skipped (`FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`). */
+  getAllowMigrationWithoutBackup(): boolean {
+    // Read at the call, not cached: `ff` loads `.env` after its static imports.
+    return loadAllowMigrationWithoutBackup();
   }
 
   /** The directory new projects must live in, or null when they may live anywhere. */

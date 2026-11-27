@@ -20,7 +20,8 @@ not own:
   [application update guide](../backend/services/application-update/AGENTS.md).
 - Which release is advertised: `src/backend/services/application-update/`.
 - Running migrations, and the bounded `db-backups/` copy taken before pending
-  migrations by `serve`, `db:migrate`, `proxy` and `tailscale`:
+  migrations by `serve`, `db:migrate`, `proxy` and `tailscale` (a failed copy
+  stops the migration unless `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`):
   `src/backend/migrate-with-backup.ts`.
 - The IPC messages and update status schema:
   `src/shared/application-updates.ts`.
@@ -42,6 +43,10 @@ not own:
   `update-ready`; it stops the backend only after preparation succeeds, and
   snapshots the database only after the backend stops and before the package
   moves or migrations run. `application-update-supervisor.test.ts`,
+  `supervised-serve-session.test.ts`.
+- The update's `db:migrate` runs with `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`
+  because the supervisor's own snapshot is its backup; that snapshot failing
+  still ends the update before the package moves.
   `supervised-serve-session.test.ts`.
 - The previous package and the database snapshot are kept until the replacement
   sends `update-backend-ready`; a failed migration or a failed replacement start

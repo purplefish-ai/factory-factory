@@ -538,6 +538,27 @@ describe('release check configuration', () => {
   });
 });
 
+describe('migration backup configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it.each([
+    [undefined, false],
+    ['1', true],
+    ['0', false],
+    ['true', false],
+    ['', false],
+  ])('reads FF_ALLOW_MIGRATION_WITHOUT_BACKUP=%j as %s', (value, allowed) => {
+    Reflect.deleteProperty(process.env, 'FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
+    if (value !== undefined) {
+      process.env.FF_ALLOW_MIGRATION_WITHOUT_BACKUP = value;
+    }
+    configService.reload();
+    expect(configService.getAllowMigrationWithoutBackup()).toBe(allowed);
+  });
+});
+
 describe('project root configuration', () => {
   afterEach(() => {
     process.env = { ...ORIGINAL_ENV };

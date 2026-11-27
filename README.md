@@ -257,10 +257,14 @@ Before applying pending migrations to an existing database, every launch (and
 database, for example
 `~/factory-factory/db-backups/data.db-pre-migration-<UTC time>.db`. The three
 newest backups per database are kept. No backup is taken when nothing is
-pending. If the backup cannot be written, startup warns and migrates anyway.
-When the backup succeeds, a failed migration's error names it; to restore it,
-stop Factory Factory, copy the backup over the database file and delete its
-`-wal` and `-shm` files.
+pending. If the backup cannot be written (a full disk, a read-only directory),
+startup stops before applying any migration and says why, because an older
+version cannot open a migrated database. Set
+`FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1` to warn and migrate without a backup;
+every launch and `ff db:migrate` honours it. The in-app update takes its own
+snapshot and sets it for its `db:migrate`. When the backup succeeds, a failed
+migration's error names it; to restore it, stop Factory Factory, copy the backup
+over the database file and delete its `-wal` and `-shm` files.
 
 Startup warns, without failing, when an applied migration's file has changed
 since it was applied, or when a migration that disabled foreign keys left rows

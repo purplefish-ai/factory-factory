@@ -1,4 +1,5 @@
 import { UnknownAppliedMigrationsError, type UnknownMigrationPolicy } from '@/backend/migrate';
+import { MigrationBackupError } from '@/backend/migrate-with-backup';
 
 /** Set to `1` to start an `ff` command on a database with migrations this build does not ship. */
 export const ALLOW_UNKNOWN_MIGRATIONS_ENV = 'FF_ALLOW_UNKNOWN_MIGRATIONS';
@@ -31,6 +32,9 @@ export function describeMigrationFailure(
       '  If these migrations came from a development branch that shares this database, ' +
       `${choices} to start anyway.`
     );
+  }
+  if (error instanceof MigrationBackupError) {
+    return error.message;
   }
   return `Migration failed: ${error instanceof Error ? error.message : String(error)}`;
 }

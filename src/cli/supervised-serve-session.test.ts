@@ -1,5 +1,5 @@
 import { ChildProcess, execFile, type Serializable } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -262,9 +262,13 @@ describe('production serve update integration', () => {
     expect(vi.mocked(execFile)).toHaveBeenCalledWith(
       process.execPath,
       [join(packageRoot, 'dist/src/cli/index.js'), 'db:migrate', '--database-path', databasePath],
-      expect.objectContaining({ env: original.options.env }),
+      // The supervisor's own snapshot is the backup, so the migration need not fail closed twice.
+      expect.objectContaining({
+        env: { ...original.options.env, FF_ALLOW_MIGRATION_WITHOUT_BACKUP: '1' },
+      }),
       expect.any(Function)
     );
+    expect(original.options.env).not.toHaveProperty('FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
     expect(replacement.options).toMatchObject({
       projectRoot: packageRoot,
       databasePath,
@@ -285,6 +289,21 @@ describe('production serve update integration', () => {
     });
     expect(await readdir(directory)).not.toContain('database-backup');
     expect(databaseValue()).toBe('before update');
+  });
+
+  it('stops the update when its own database snapshot fails, without the override rescuing it', async () => {
+    await mkdir(join(directory, 'database-backup'));
+    await requestUpdate();
+    const recovered = await backend(1);
+    expect(mocks.migrate).not.toHaveBeenCalled();
+    expect(prepared.activate).not.toHaveBeenCalled();
+    expect(await readFile(versionFile, 'utf8')).toBe('0.5.3');
+    expect(databaseValue()).toBe('before update');
+    recovered.child.emit('message', { type: 'update-hello' });
+    expect(recovered.messages).toContainEqual({
+      type: 'update-status',
+      status: expect.objectContaining({ phase: 'failed', targetVersion: '0.5.4' }),
+    });
   });
 
   it('restores the database and old installation after migration fails and publishes the failure on reconnect', async () => {

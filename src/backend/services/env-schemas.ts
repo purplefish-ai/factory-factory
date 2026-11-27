@@ -97,6 +97,7 @@ export const ConfigEnvSchema = z.object({
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
   FF_EMIT_BACKEND_PORT: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  FF_ALLOW_MIGRATION_WITHOUT_BACKUP: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
   FF_UPDATE_CHECKS_ENABLED: z.preprocess(parseSwitch, z.boolean()).catch(true),
   FF_NPM_REGISTRY_URL: z.preprocess(toHttpUrl, z.string()).catch('https://registry.npmjs.org'),
   FF_TAILSCALE_ORIGIN: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
