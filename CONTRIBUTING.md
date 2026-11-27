@@ -104,10 +104,18 @@ in `e2e/sandbox/` against it with the scripted Codex provider in the installed
 Playwright Chromium, and stops the sandbox. Claude runs the released adapter on
 the fake Claude CLI (`CLAUDE_CODE_EXECUTABLE`), which logs every Claude launch
 to `claude-calls.log`. A spec chooses the provider's behavior by its prompt text
-(see `e2e/sandbox/sandbox.ts`). CI runs it as a job that is not required. The
-sandbox runs in restart mode (`--restartable`), so a spec can kill, stop and
-restart the backend through `e2e/support/backend-process.ts`, and arm a crash
-point with `armCrashPoint('<name>')` there; server code declares each point with
+(see `e2e/sandbox/sandbox.ts`). CI splits the specs into two parallel shards by
+Playwright project (`playwright.sandbox.config.ts`), each with its own sandbox:
+`restart` runs `restart-*.spec.ts` and `crash-points.spec.ts`, `general` every
+other spec, a new file included. A test in `scripts/ci-workflow.test.ts` fails
+if a spec file runs in no shard or in both.
+`pnpm test:e2e:sandbox --project=<name>` runs one shard locally. Run one at a
+time in a checkout: concurrent runs share `test-results/`, including the
+launcher log the global setup reads its sandbox from. The `Smoke` check joins
+the shards and is not yet required. The sandbox runs in restart mode
+(`--restartable`), so a spec can kill, stop and restart the backend through
+`e2e/support/backend-process.ts`, and arm a crash point with
+`armCrashPoint('<name>')` there; server code declares each point with
 `crashAt('<name>')`. Specs share the backend: one that kills or stops it, or
 arms a crash point, calls `ensureBackendRunning()` in `afterEach`, which also
 disarms every crash point.
@@ -224,12 +232,14 @@ all work. Main and merge-queue runs always run everything. The existing required
 `Build`, `Storybook Build`, `Storybook Tests` and `Test` checks remain present:
 their gates require either successful selected work or an explicit irrelevant
 change decision. Failed selection, missing outputs, unexpected skips and failed
-workers fail the gates.
+workers fail the gates. The `Smoke` gate over the sandbox shards works the same
+way and is not yet required.
 
-New pushes to each PR cancel older revisions of that PR in CI and CodeQL; new
-pushes to `main` cancel older main-push runs. Cancellation groups include the
-workflow and PR number, while merge-queue and scheduled runs stay independent.
-npm publishing workflows are excluded from this cancellation policy.
+New pushes to each PR cancel older revisions of that PR in CI and CodeQL; pushes
+to `main` are never cancelled, so each commit on `main` gets a verdict.
+Cancellation groups include the workflow and PR number, while main-push,
+merge-queue and scheduled runs stay independent. npm publishing workflows are
+excluded from this cancellation policy.
 
 ### Repository checks
 
