@@ -101,7 +101,7 @@ function stepRunner() {
 }
 
 async function send(page: Page, text: string, button: 'Send message' | 'Queue message') {
-  await page.getByRole('textbox', { name: 'Message' }).fill(text);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(text);
   await page.getByRole('button', { name: button }).click();
 }
 
@@ -359,7 +359,7 @@ test('work in flight when the server is killed, and what the restarted server ma
         expect.objectContaining({ status: 'IDLE', providerSessionId: null }),
       ]);
     });
-    await expect(page.getByRole('textbox', { name: 'Message' })).toHaveAttribute(
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveAttribute(
       'placeholder',
       'Type a message to start the agent…'
     );
