@@ -239,14 +239,15 @@ describe('runMigrationsWithBackup', () => {
   describe('when the backup cannot be written', () => {
     let blocked: string;
 
-    beforeEach(() => {
+    beforeEach(async () => {
+      Reflect.deleteProperty(process.env, 'FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
+      configService.reload();
       addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
-      return migrate().then(() => {
-        addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
-        // A file where the backup directory should be: the real failure, not a stub.
-        blocked = join(tempDir, 'not-a-directory');
-        writeFileSync(blocked, '');
-      });
+      await migrate();
+      addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+      // A file where the backup directory should be: the real failure, not a stub.
+      blocked = join(tempDir, 'not-a-directory');
+      writeFileSync(blocked, '');
     });
 
     afterEach(() => {

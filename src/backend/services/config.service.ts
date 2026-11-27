@@ -442,7 +442,6 @@ class ConfigService {
   private agentRuntimeLimits = loadAgentRuntimeLimits();
   private releaseCheck = loadReleaseCheckConfig();
   private projectRoot = loadProjectRoot();
-  private allowMigrationWithoutBackup = loadAllowMigrationWithoutBackup();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -712,7 +711,8 @@ class ConfigService {
 
   /** Whether a failed pre-migration backup may be skipped (`FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`). */
   getAllowMigrationWithoutBackup(): boolean {
-    return this.allowMigrationWithoutBackup;
+    // Read at the call, not cached: `ff` loads `.env` after its static imports.
+    return loadAllowMigrationWithoutBackup();
   }
 
   /** The directory new projects must live in, or null when they may live anywhere. */
@@ -780,7 +780,6 @@ class ConfigService {
     this.agentRuntimeLimits = loadAgentRuntimeLimits();
     this.releaseCheck = loadReleaseCheckConfig();
     this.projectRoot = loadProjectRoot();
-    this.allowMigrationWithoutBackup = loadAllowMigrationWithoutBackup();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }
