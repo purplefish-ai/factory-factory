@@ -6,7 +6,8 @@
 // can resolve a different one when an adapter asks for a range.
 import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve } from 'node:path';
+import { resolve } from 'node:path';
+import { runtimeManifestPath } from './runtime-manifest-path.mjs';
 
 const PROVIDERS = {
   claude: ['@agentclientprotocol/claude-agent-acp', '@anthropic-ai/claude-agent-sdk'],
@@ -15,31 +16,6 @@ const PROVIDERS = {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
-}
-
-// Mirrors scripts/prepare-runtime-metadata.mjs, which cannot be imported
-// because it rewrites package.json when loaded.
-function runtimeManifestPath(fromAdapter, runtime) {
-  try {
-    return fromAdapter.resolve(`${runtime}/package.json`);
-  } catch {
-    let directory = dirname(fromAdapter.resolve(runtime));
-    while (true) {
-      const path = join(directory, 'package.json');
-      try {
-        if (readJson(path).name === runtime) {
-          return path;
-        }
-      } catch {
-        /* The exported entrypoint may be nested inside its package. */
-      }
-      const parent = dirname(directory);
-      if (parent === directory) {
-        throw new Error(`Unable to locate ${runtime} package metadata`);
-      }
-      directory = parent;
-    }
-  }
 }
 
 const directory = process.argv[2];
