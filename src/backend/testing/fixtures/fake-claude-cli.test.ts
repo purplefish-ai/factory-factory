@@ -194,17 +194,10 @@ describe('the command line', () => {
     expect(existsSync(join(homedir(), 'claude-calls.log'))).toBe(false);
   });
 
-  it('fails other command lines, an unknown scenario and a resume at once', async () => {
+  it('fails other command lines and a resume at once', async () => {
     const { env } = sandboxEnv();
     await expect(run(process.execPath, [fakePath, '-p', 'hello'], { env })).rejects.toMatchObject({
       code: 2,
-    });
-    await expect(
-      run(process.execPath, [fakePath, '--version'], {
-        env: { ...env, FF_SANDBOX_SCENARIO: 'nope' },
-      })
-    ).rejects.toMatchObject({
-      stderr: expect.stringContaining('Valid scenarios: echo, permission-request'),
     });
     await expect(
       run(process.execPath, [fakePath, ...streamArgs, `--resume=${sessionId}`], { env })
@@ -328,13 +321,21 @@ describe('a stream-json session', () => {
     expect(await result).toMatchObject({ subtype: 'error_during_execution', is_error: true });
   });
 
-  it('fails a turn that names an unknown scenario', async () => {
+  it('fails a turn that names an unknown scenario, in its prompt or the sandbox', async () => {
+    const failure = (name: string) => ({
+      is_error: true,
+      result: `Unknown scenario "${name}". Valid scenarios: echo, permission-request`,
+    });
     const session = startSession(sandboxEnv().env);
     await session.control('initialize', { hooks: {} });
-    expect(await session.prompt('ff-scenario:nope')).toMatchObject({
-      is_error: true,
-      result: 'Unknown scenario "nope". Valid scenarios: echo, permission-request',
-    });
+    expect(await session.prompt('ff-scenario:nope')).toMatchObject(failure('nope'));
+    // The sandbox's scenario is Codex's too: one Claude lacks fails only the turns that play it.
+    const env = sandboxEnv({ FF_SANDBOX_SCENARIO: 'gated-stream' }).env;
+    const version = await run(process.execPath, [fakePath, '--version'], { env });
+    expect(version.stdout).toBe('2.1.312 (Claude Code)\n');
+    const sandboxed = startSession(env);
+    await sandboxed.control('initialize', { hooks: {} });
+    expect(await sandboxed.prompt('Hello')).toMatchObject(failure('gated-stream'));
   });
 
   it('answers a JSON schema session with structured output', async () => {

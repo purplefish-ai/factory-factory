@@ -14,8 +14,9 @@
 // Choosing a scenario (see `scenarios`). As in fake-codex-app-server.mjs: a prompt containing
 // `ff-scenario:<name>` or `ff-scenario:<name>:<argument>` plays that scenario; a prompt without
 // the token plays FF_SANDBOX_SCENARIO (the sandbox sets `echo`); with neither, the fake replies
-// `Synthetic response`. An unknown name in a prompt fails that turn, naming the valid ones; an
-// unknown FF_SANDBOX_SCENARIO stops the process. A session started with a JSON schema (the
+// `Synthetic response`. An unknown name fails the turn that would play it, naming the valid
+// ones. FF_SANDBOX_SCENARIO is the sandbox's Codex scenario too, so an unknown one does not stop
+// the process: discovery and health checks still work. A session started with a JSON schema (the
 // application's disposable inference) always answers with structured output instead.
 //
 // Isolation. The fake refuses to start unless CLAUDE_CONFIG_DIR is set inside the OS temporary
@@ -178,17 +179,13 @@ const scenarios = {
   },
 };
 const scenarioName = process.env.FF_SANDBOX_SCENARIO;
-if (scenarioName !== undefined && !Object.hasOwn(scenarios, scenarioName)) {
-  refuse(
-    `Unknown FF_SANDBOX_SCENARIO "${scenarioName}". Valid scenarios: ${Object.keys(scenarios).join(', ')}`
-  );
-}
 
 /** A prompt's own token, else FF_SANDBOX_SCENARIO, else null for the contract reply. */
 function chooseScenario(text) {
-  const [, name, argument] = scenarioToken.exec(text) ?? [];
+  const [, token, argument] = scenarioToken.exec(text) ?? [];
+  const name = token ?? scenarioName;
   if (name === undefined) {
-    return scenarioName === undefined ? null : { play: scenarios[scenarioName] };
+    return null;
   }
   if (!Object.hasOwn(scenarios, name)) {
     const valid = Object.keys(scenarios).join(', ');
