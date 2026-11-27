@@ -49,7 +49,7 @@ does not own:
   because the supervisor's own snapshot is its backup; that snapshot failing
   still ends the update before the package moves. A failed `db:migrate` is
   logged in full; the failed update's message puts its last standard error line
-  first and is capped at 4 KiB, because the journal is persisted.
+  first and is capped at 4,096 characters, because the journal is persisted.
 - The snapshot is deleted after a completed update only if a new
   `<database>-pre-migration-*.db` appeared in `db-backups/` while `db:migrate`
   ran; the child's wording decides nothing. Otherwise it is hard-linked (no

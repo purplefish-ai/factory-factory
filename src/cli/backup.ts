@@ -185,10 +185,10 @@ async function isInterruptedRename(directory: string, building: string): Promise
 
 function describeInterruptedRename(directory: string, building: string): string {
   return (
-    `${directory} is an empty directory a backup left when it was interrupted while ` +
-    `finishing. If ${building} contains ${BACKUP_MANIFEST_FILE}, that backup is complete: ` +
-    `remove the empty ${directory} and rename ${building} to it. Otherwise delete both and ` +
-    'run `ff backup` again.'
+    `${directory} is an empty directory beside ${building}: a backup was interrupted while ` +
+    'finishing, or is finishing now. First make sure no `ff backup` is running. Then, if ' +
+    `${building} contains ${BACKUP_MANIFEST_FILE}, that backup is complete: remove the empty ` +
+    `${directory} and rename ${building} to it. Otherwise delete both and run \`ff backup\` again.`
   );
 }
 
@@ -421,9 +421,9 @@ function describeLeftover(path: string): string {
   }
   return (
     `Found ${path}, left by a backup that was interrupted (or is still running). It is not ` +
-    `usable under that name. If it contains ${BACKUP_MANIFEST_FILE}, the backup finished but ` +
-    `was not renamed: rename it without ${BACKUP_PARTIAL_SUFFIX}. Otherwise delete it once ` +
-    'no backup is running.'
+    'usable under that name. First make sure no `ff backup` is running. Then, if it ' +
+    `contains ${BACKUP_MANIFEST_FILE}, the backup finished but was not renamed: rename it ` +
+    `without ${BACKUP_PARTIAL_SUFFIX}. Otherwise delete it.`
   );
 }
 

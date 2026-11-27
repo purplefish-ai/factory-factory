@@ -1,7 +1,7 @@
 import { execFile, type ChildProcess, type Serializable } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
-import { copyFile, link, mkdir, readFile, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { chmod, copyFile, link, mkdir, readFile, rm } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import chalk from 'chalk';
 import { z } from 'zod';
@@ -11,6 +11,7 @@ import {
   getPreMigrationBackupDirectory,
   listPreMigrationBackups,
   preMigrationBackupName,
+  prunePreMigrationBackupsKeeping,
 } from '@/backend/migrate-with-backup';
 import {
   applicationUpdateStatusSchema,
@@ -132,11 +133,23 @@ async function keepPreUpdateSnapshot(
   let kept: string | undefined;
   try {
     await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+    // mkdir leaves an existing directory's mode alone; others must not unlink the only copy.
+    await chmod(backupDirectory, 0o700);
     kept = await linkUnderUnusedName(snapshot, backupDirectory, (attempt) =>
       preMigrationBackupName(databasePath, new Date(now + attempt))
     );
   } catch (error) {
     failures.push(`${backupDirectory} (${String(error)})`);
+  }
+  if (kept && dirname(kept) === backupDirectory) {
+    // The same retention as the migration's own backups; the link just made always stays.
+    await prunePreMigrationBackupsKeeping(databasePath, backupDirectory, basename(kept)).catch(
+      (error: unknown) => {
+        console.warn(
+          chalk.yellow(`  [update] Could not prune old database backups: ${String(error)}`)
+        );
+      }
+    );
   }
   if (!kept) {
     const stamp = new Date(now).toISOString().replace(/[-:.]/g, '');

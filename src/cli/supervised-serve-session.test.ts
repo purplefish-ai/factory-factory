@@ -387,6 +387,36 @@ describe('production serve update integration', () => {
     expect(logged).toContain(keptPath);
   });
 
+  it('prunes db-backups like the migration does, never the link it just made, and makes it owner-only', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const backupDirectory = join(directory, 'db-backups');
+    await mkdir(backupDirectory, { mode: 0o777 });
+    await chmod(backupDirectory, 0o777);
+    // Three older backups, and one dated in the future that sorts after the new link.
+    const existing = [
+      'data.db-pre-migration-20200101T000000000Z.db',
+      'data.db-pre-migration-20200102T000000000Z.db',
+      'data.db-pre-migration-20200103T000000000Z.db',
+      'data.db-pre-migration-29990101T000000000Z.db',
+    ];
+    for (const name of existing) {
+      await writeFile(join(backupDirectory, name), name);
+    }
+    await requestUpdate();
+    await ready(await backend(1));
+
+    const remaining = await preMigrationBackups();
+    expect(remaining).toHaveLength(3);
+    const linked = remaining.filter((name) => !existing.includes(name));
+    expect(linked).toHaveLength(1);
+    expect(valueIn(join(backupDirectory, linked[0] ?? ''))).toBe('before update');
+    expect(remaining).toContain('data.db-pre-migration-29990101T000000000Z.db');
+    expect(remaining).toContain('data.db-pre-migration-20200103T000000000Z.db');
+    if (process.platform !== 'win32') {
+      expect((await stat(backupDirectory)).mode & 0o777).toBe(0o700);
+    }
+  });
+
   it('lets its snapshot go when the migration left a new backup in db-backups', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const childBackup = 'data.db-pre-migration-20300101T000000000Z.db';

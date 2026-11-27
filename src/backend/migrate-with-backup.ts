@@ -89,6 +89,23 @@ export async function listPreMigrationBackups(
     .sort();
 }
 
+/**
+ * Apply the per-database retention to finished backups after `added` was put
+ * in `directory` by other means: `added` always stays, and with it the newest
+ * others up to {@link PRE_MIGRATION_BACKUPS_TO_KEEP} in all.
+ */
+export async function prunePreMigrationBackupsKeeping(
+  databasePath: string,
+  directory: string,
+  added: string
+): Promise<void> {
+  const surplus = (await listPreMigrationBackups(databasePath, directory))
+    .filter((name) => name !== added)
+    .reverse()
+    .slice(PRE_MIGRATION_BACKUPS_TO_KEEP - 1);
+  await Promise.all(surplus.map((name) => rm(join(directory, name), { force: true })));
+}
+
 function retainedCount(requested: number | undefined): number {
   return requested !== undefined && Number.isFinite(requested)
     ? Math.max(1, Math.floor(requested))
