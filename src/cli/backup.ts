@@ -8,6 +8,7 @@ import {
   realpath,
   rename,
   rm,
+  rmdir,
   writeFile,
 } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -202,6 +203,36 @@ async function reserveDirectory(
   }
 }
 
+/**
+ * Rename the finished `.partial` directory to its final name without ever
+ * replacing something another process put there. POSIX `rename` replaces an
+ * empty directory, so the final name is first claimed with `mkdir` (which
+ * fails if it exists) and only that empty directory of ours is replaced;
+ * Windows `rename` never replaces a directory.
+ */
+async function finishBackup(building: string, directory: string, isDefault: boolean) {
+  const claim = process.platform !== 'win32';
+  if (claim) {
+    try {
+      await mkdir(directory, { mode: 0o700 });
+    } catch (error) {
+      if (isAlreadyExists(error)) {
+        throw new Error(describeExistingDestination(directory, isDefault));
+      }
+      throw error;
+    }
+  }
+  try {
+    await rename(building, directory);
+  } catch (error) {
+    if (claim) {
+      // Only our claim, and only while it is still empty.
+      await rmdir(directory).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
 const DEFAULT_PARTIAL_NAME = /^backup-\d{8}T\d{9}Z\.partial$/;
 
 /** Unfinished default backups other than this run's, left by an interrupted (or a running) backup. */
@@ -274,7 +305,9 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
   }
   // Compared by real path, so a link cannot place the backup inside what it copies.
   const accounts = await realPathAllowingMissing(join(baseDir, 'codex-accounts'));
-  if (isInside(await realPathAllowingMissing(directory), accounts)) {
+  const realDirectory = await realPathAllowingMissing(directory);
+  // Equal counts too: a backup created as an absent codex-accounts/ would become the account source.
+  if (realDirectory === accounts || isInside(realDirectory, accounts)) {
     throw new Error(`${directory} is inside the Codex accounts directory it would copy.`);
   }
 
@@ -300,11 +333,7 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
       `${JSON.stringify(manifest, null, 2)}\n`,
       { mode: 0o600 }
     );
-    // Checked again just before the rename, which would replace an empty directory.
-    if (await lstatIfExists(directory)) {
-      throw new Error(describeExistingDestination(directory, isDefault));
-    }
-    await rename(building, directory);
+    await finishBackup(building, directory, isDefault);
     return { directory, manifest, skipped, leftovers };
   } catch (error) {
     await rm(building, { recursive: true, force: true });

@@ -126,8 +126,8 @@ export async function readBackup(directory: string): Promise<ValidatedBackup> {
   // Checked first: an interrupted run may have written the manifest before its rename.
   if (basename(resolve(directory)).endsWith(BACKUP_PARTIAL_SUFFIX)) {
     throw new Error(
-      `${directory} is an unfinished backup: ff backup was interrupted before it finished ` +
-        `(its name still ends in ${BACKUP_PARTIAL_SUFFIX}), so it cannot be restored.`
+      `${directory} is an unfinished backup (its name still ends in ${BACKUP_PARTIAL_SUFFIX}): ` +
+        'ff backup was interrupted, or is still writing it, so it cannot be restored.'
     );
   }
   const manifest = parseManifest(await readManifestText(directory), directory);

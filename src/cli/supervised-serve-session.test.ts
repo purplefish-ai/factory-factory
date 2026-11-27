@@ -372,6 +372,28 @@ describe('production serve update integration', () => {
     expect(logged).toContain(keptPath);
   });
 
+  it('never overwrites an earlier kept snapshot with the same name', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-27T10:15:00.123Z') });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const earlier = join(directory, '.factory-factory-database-backup-20261127T101500123Z.db');
+    await writeFile(earlier, 'earlier snapshot');
+    mocks.migrateStderr =
+      '[migrate] Warning: migrating without a backup: could not back up the database to ' +
+      '/data/db-backups: EACCES: permission denied. Continuing because ' +
+      'FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1.\n';
+    try {
+      await requestUpdate();
+      await ready(await backend(1));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(await readFile(earlier, 'utf8')).toBe('earlier snapshot');
+    expect(await readdir(directory)).toContain(
+      '.factory-factory-database-backup-20261127T101500123Z-1.db'
+    );
+  });
+
   it('keeps no extra snapshot when the replacement fails and the update is rolled back', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mocks.migrateStderr =

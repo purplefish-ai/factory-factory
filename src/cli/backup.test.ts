@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import {
   chmod,
   mkdir,
@@ -198,6 +198,39 @@ describe('ff backup', () => {
     expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
   });
 
+  it('refuses to create the backup as an absent codex-accounts directory', async () => {
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'codex-accounts'),
+      })
+    ).rejects.toThrow('Codex accounts');
+    expect(existsSync(join(baseDir, 'codex-accounts'))).toBe(false);
+  });
+
+  it('never replaces a directory another process creates at the final name', async () => {
+    const destination = join(root, 'out');
+    // Someone creates the (empty) final directory while the backup is being built.
+    const intruder = () => {
+      if (existsSync(`${destination}.partial`) && !existsSync(destination)) {
+        mkdirSync(destination);
+        return;
+      }
+      setImmediate(intruder);
+    };
+    setImmediate(intruder);
+
+    await expect(
+      createBackup({ databasePath, baseDir, applicationVersion: '1.2.3', destination })
+    ).rejects.toThrow('already exists');
+
+    // Theirs is left as it was: still there, still empty, not replaced by the backup.
+    expect(await readdir(destination)).toEqual([]);
+    expect(existsSync(`${destination}.partial`)).toBe(false);
+  });
+
   it('builds the backup under a .partial name and renames it only when complete', async () => {
     const destination = join(root, 'out');
     // What the destination's parent holds at each event-loop turn while the backup runs.
@@ -224,9 +257,6 @@ describe('ff backup', () => {
     }
 
     expect(observed).toContainEqual(['base', 'out.partial']);
-    expect(observed.some((names) => names.includes('out') && names.includes('out.partial'))).toBe(
-      false
-    );
     expect(result.directory).toBe(destination);
     expect((await readdir(root)).sort()).toEqual(['base', 'out']);
     await expect(

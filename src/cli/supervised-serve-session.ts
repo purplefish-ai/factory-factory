@@ -82,13 +82,25 @@ async function keepSnapshotOfMigrationWithoutBackup(
   projectRoot: string,
   migrationOutput: string
 ): Promise<void> {
-  const kept = join(
+  const stem = join(
     dirname(projectRoot),
-    `.factory-factory-database-backup-${new Date().toISOString().replace(/[-:.]/g, '')}.db`
+    `.factory-factory-database-backup-${new Date().toISOString().replace(/[-:.]/g, '')}`
   );
+  let kept = `${stem}.db`;
   let outcome: string;
   try {
-    await copyFile(snapshot, kept, constants.COPYFILE_EXCL);
+    // Never overwrite an earlier kept snapshot; a name clash takes the next suffix.
+    for (let suffix = 1; ; suffix += 1) {
+      try {
+        await copyFile(snapshot, kept, constants.COPYFILE_EXCL);
+        break;
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) {
+          throw error;
+        }
+        kept = `${stem}-${suffix}.db`;
+      }
+    }
     await chmod(kept, 0o600);
     outcome = `The database as it was before the update is kept at ${kept}.`;
   } catch (error) {

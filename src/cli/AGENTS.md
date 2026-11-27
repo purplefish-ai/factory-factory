@@ -48,10 +48,11 @@ does not own:
 - The update's `db:migrate` runs with `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`
   because the supervisor's own snapshot is its backup; that snapshot failing
   still ends the update before the package moves. A failed `db:migrate` is
-  logged and its standard error, not the command line, becomes the failed
-  update's message. When its output carries the warning that
-  `reportsMigrationWithoutBackup` recognises (no `db-backups/` copy was made),
-  the supervisor logs it and copies its snapshot out of the update stage to
+  logged and its standard error becomes the failed update's message (Node's
+  error, which starts with the command line, only when it wrote nothing there).
+  When its output carries the warning that `reportsMigrationWithoutBackup`
+  recognises (no `db-backups/` copy was made), the supervisor logs it and copies
+  its snapshot out of the update stage to
   `.factory-factory-database-backup-<UTC time>.db` beside the package before the
   stage is deleted. The supervisor is the previously installed version, so that
   warning text is a contract between versions.
