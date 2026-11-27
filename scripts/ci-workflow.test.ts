@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { selectJobs } from '../.github/scripts/select-ci.mjs';
@@ -34,6 +34,7 @@ const workflowSchema = z.object({
             .object({
               os: z.array(z.string()).optional(),
               'node-version': z.array(z.string()).optional(),
+              shard: z.array(z.union([z.string(), z.number()])).optional(),
               include: z.array(z.record(z.string(), z.string())).optional(),
             })
             .optional(),
@@ -55,6 +56,49 @@ function runGate(selected: string, work: string, selection = 'success') {
     env: { SELECTION_RESULT: selection, SELECTED: selected, WORK_RESULT: work },
     encoding: 'utf8',
   }).status;
+}
+
+interface ListedSuite {
+  file: string;
+  specs: { tests: { projectName: string }[] }[];
+  suites?: ListedSuite[];
+}
+const listedSuiteSchema: z.ZodType<ListedSuite> = z.lazy(() =>
+  z.object({
+    file: z.string(),
+    specs: z.array(z.object({ tests: z.array(z.object({ projectName: z.string() })) })),
+    suites: z.array(listedSuiteSchema).optional(),
+  })
+);
+
+/**
+ * The sandbox projects and which spec file each test runs in, as Playwright itself selects them
+ * from the config. List mode loads the specs without the global setup, so no sandbox starts.
+ */
+function listSandboxSpecs() {
+  const result = spawnSync(
+    resolve('node_modules/.bin/playwright'),
+    ['test', '--config=playwright.sandbox.config.ts', '--list', '--reporter=json'],
+    { encoding: 'utf8' }
+  );
+  if (result.status !== 0) {
+    throw new Error(`playwright --list failed: ${result.stderr}${result.stdout}`);
+  }
+  const report = z
+    .object({
+      config: z.object({ projects: z.array(z.object({ name: z.string() })) }),
+      suites: z.array(listedSuiteSchema),
+    })
+    .parse(JSON.parse(result.stdout));
+  const tests: [file: string, project: string][] = [];
+  const visit = (suite: ListedSuite) => {
+    for (const spec of suite.specs) {
+      tests.push(...spec.tests.map((test): [string, string] => [suite.file, test.projectName]));
+    }
+    suite.suites?.forEach(visit);
+  };
+  report.suites.forEach(visit);
+  return { projects: report.config.projects.map((project) => project.name), tests };
 }
 
 describe('conservative CI selection', () => {
@@ -229,6 +273,11 @@ describe('conservative CI selection', () => {
 });
 
 describe('sandbox smoke test', () => {
+  let sandboxListing: ReturnType<typeof listSandboxSpecs>;
+  beforeAll(() => {
+    sandboxListing = listSandboxSpecs();
+  }, 60_000);
+
   it.each([
     'scripts/dev-sandbox.mjs',
     'scripts/sandbox/launch.mjs',
@@ -242,29 +291,77 @@ describe('sandbox smoke test', () => {
     expect(selectJobs('pull_request', ['docs/testing.md', file]).sandbox).toBe(true);
   });
 
-  it('runs beside the required jobs and never gates them', () => {
+  it('runs the shards in parallel beside the required jobs, joined only by Smoke', () => {
     expect(ci.jobs.changes?.outputs?.sandbox).toBe('${{ steps.select.outputs.sandbox }}');
-    const job = ci.jobs['sandbox-smoke'];
+    const job = ci.jobs['smoke-shards'];
     expect(job?.needs).toBe('changes');
     expect(job?.if).toBe("needs.changes.outputs.sandbox == 'true'");
-    // Promotion to required comes after 50 consecutive green runs on main.
+    expect(job?.strategy?.['fail-fast']).toBe(false);
+    expect(job?.strategy?.matrix?.shard).toEqual(sandboxListing.projects);
     for (const [name, other] of Object.entries(ci.jobs)) {
       const needs = [other.needs ?? []].flat();
-      expect(needs, name).not.toContain('sandbox-smoke');
+      if (name !== 'require-smoke') {
+        expect(needs, name).not.toContain('smoke-shards');
+      }
+      expect(needs, name).not.toContain('require-smoke');
     }
   });
 
-  it('runs the spec and keeps its evidence on failure', () => {
+  it('aggregates the shards as Smoke the way Build and Test aggregate their work', () => {
+    const gate = ci.jobs['require-smoke'];
+    expect(gate?.name).toBe('Smoke');
+    expect(gate?.if).toBe('always()');
+    expect(gate?.needs).toEqual(['changes', 'smoke-shards']);
+    expect(gate?.steps).toHaveLength(1);
+    expect(gate?.steps?.[0]?.run).toBe(gateCommand);
+    expect(gate?.steps?.[0]?.env).toEqual({
+      SELECTION_RESULT: '${{ needs.changes.result }}',
+      SELECTED: '${{ needs.changes.outputs.sandbox }}',
+      WORK_RESULT: '${{ needs.smoke-shards.result }}',
+    });
+  });
+
+  it('runs every sandbox spec file in exactly one shard: restart and crash specs apart', () => {
+    const assigned = new Map<string, Set<string>>();
+    for (const [file, project] of sandboxListing.tests) {
+      assigned.set(file, (assigned.get(file) ?? new Set()).add(project));
+    }
+    // Any file named like a spec counts, so a misnamed one shows up here as running nowhere.
+    const files = readdirSync('e2e/sandbox').filter((name) => name.includes('.spec.'));
+    expect(files.length).toBeGreaterThan(0);
+    expect(
+      Object.fromEntries(files.map((file) => [file, [...(assigned.get(file) ?? [])].toSorted()]))
+    ).toEqual(
+      Object.fromEntries(
+        files.map((file) => [
+          file,
+          [/^(?:restart-.*|crash-points)\.spec\.ts$/.test(file) ? 'restart' : 'general'],
+        ])
+      )
+    );
+  });
+
+  it('runs each shard with its own sandbox, a cached browser and its own evidence', () => {
     const scripts = z
       .object({ scripts: z.record(z.string(), z.string()) })
       .parse(JSON.parse(readFileSync('package.json', 'utf8'))).scripts;
+    // Locally one command still runs every project against one sandbox.
     expect(scripts['test:e2e:sandbox']).toBe(
       'playwright test --config=playwright.sandbox.config.ts'
     );
-    const steps = ci.jobs['sandbox-smoke']?.steps ?? [];
-    expect(steps.map((step) => step.run).filter(Boolean)).toContain('pnpm test:e2e:sandbox');
+    const steps = ci.jobs['smoke-shards']?.steps ?? [];
+    expect(steps.map((step) => step.run).filter(Boolean)).toContain(
+      'pnpm test:e2e:sandbox --project=${{ matrix.shard }}'
+    );
+    const cache = steps.find((step) => step.uses?.startsWith('actions/cache@'));
+    expect(cache?.with?.path).toBe('~/.cache/ms-playwright');
+    expect(cache?.with?.key).toContain('${{ steps.playwright.outputs.version }}');
+    expect(steps.find((step) => step.name === 'Read the Playwright version')?.run).toBe(
+      `echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"`
+    );
     const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
     expect(upload?.if).toBe('failure()');
+    expect(upload?.with?.name).toBe('sandbox-smoke-evidence-${{ matrix.shard }}');
     expect(String(upload?.with?.path).trim().split('\n')).toEqual([
       'test-results/sandbox/',
       'test-results/sandbox-logs/',

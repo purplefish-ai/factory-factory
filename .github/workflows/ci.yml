@@ -278,15 +278,20 @@ jobs:
       - name: Test stories
         run: pnpm test:storybook
 
-  # Not required: promote it to a required check only after 50 consecutive
-  # green runs on main. Nothing waits for it, so it adds no time to the
-  # required path.
-  sandbox-smoke:
-    name: Sandbox smoke test
+  # The browser-driven sandbox specs, split by Playwright project
+  # (playwright.sandbox.config.ts): `restart` runs the restart and crash specs,
+  # `general` every other spec, a new file included. Each shard starts its own
+  # sandbox. `Smoke` joins them. Nothing else waits for them.
+  smoke-shards:
+    name: Smoke shard (${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.sandbox == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [general, restart]
     permissions:
       contents: read
     env:
@@ -309,18 +314,30 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # The browser download is cached; the install below then only adds the
+      # operating system packages, which live outside the cache.
+      - name: Cache Playwright Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ff-playwright-chromium-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps --only-shell chromium
 
-      # Starts the sandbox, runs the spec and stops it.
-      - name: Run sandbox smoke test
-        run: pnpm test:e2e:sandbox
+      # Starts the shard's sandbox, runs its specs and stops it.
+      - name: Run sandbox specs
+        run: pnpm test:e2e:sandbox --project=${{ matrix.shard }}
 
       - name: Upload trace, screenshot and sandbox logs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: sandbox-smoke-evidence
+          name: sandbox-smoke-evidence-${{ matrix.shard }}
           path: |
             test-results/sandbox/
             test-results/sandbox-logs/
@@ -534,6 +551,29 @@ jobs:
           SELECTION_RESULT: ${{ needs.changes.result }}
           SELECTED: ${{ needs.changes.outputs.app }}
           WORK_RESULT: ${{ needs.test.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac
+
+  # Not yet a required check. The bar for requiring it: 20 consecutive
+  # completed runs of `Smoke` on main, counted from the merge that added this
+  # job. Runs dispatched by hand on the head of main count; cancelled runs count
+  # neither way.
+  require-smoke:
+    name: Smoke
+    if: always()
+    needs: [changes, smoke-shards]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful work or an explicit irrelevant-change decision
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.sandbox }}
+          WORK_RESULT: ${{ needs.smoke-shards.result }}
         run: |
           test "$SELECTION_RESULT" = success
           case "$SELECTED:$WORK_RESULT" in
