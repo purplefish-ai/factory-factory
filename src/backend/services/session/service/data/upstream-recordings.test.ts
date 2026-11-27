@@ -36,7 +36,8 @@ type Rewrite = (row: ComparableRow) => ComparableRow | null | undefined;
  * the history file are allowed to differ. Each side's rewrite returns the row
  * in a form both sides share, `null` to drop it, or `undefined` when it does
  * not apply. Every entry must still apply to its recordings, so a fixed
- * difference fails here until it is removed.
+ * difference fails here until it is removed. A defect that a difference
+ * stands for is named with `KNOWN GAP: <issue>`.
  */
 type KnownDifference = {
   provider: 'CLAUDE' | 'CODEX';
@@ -44,10 +45,15 @@ type KnownDifference = {
   versions?: string[];
   difference: string;
   reason: string;
-  /** Set when the difference looks like a parser defect rather than a property of the tool. */
+  /** Set when the difference is a parser defect rather than a property of the tool. */
   defect?: string;
   live?: Rewrite;
   reloaded?: Rewrite;
+  /**
+   * Tool call ids differ by construction: each side's ids are numbered by
+   * first appearance, so every call and its result must still pair.
+   */
+  numberToolIds?: boolean;
 };
 
 const usageRowsAreLiveOnly = (provider: 'CLAUDE' | 'CODEX'): KnownDifference => ({
@@ -58,10 +64,10 @@ const usageRowsAreLiveOnly = (provider: 'CLAUDE' | 'CODEX'): KnownDifference => 
   live: (row) => (row.kind === 'usage' ? null : undefined),
 });
 
-// The call id and the tool name differ by construction between Codex's two
-// records of one command (exec item id and title live, model call id and
-// `exec` in the rollout); the command and its output are compared.
-const CODE_MODE_CALL = '<exec call>';
+// Codex 0.166 runs commands through its code-mode exec tool. Live, ACP names
+// the call by its title; the rollout calls it `exec`. The command and its
+// output are compared.
+const CODE_MODE_TOOL = '<code-mode exec>';
 const EXEC_COMMAND = /tools\.exec_command\(\{cmd:"((?:[^"\\]|\\.)*)"/;
 const ExecOutputSchema = z.array(z.object({ type: z.string(), text: z.string() }));
 const ExecChunkSchema = z.looseObject({ output: z.string() });
@@ -106,7 +112,7 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
     reason:
       'The CLI writes the interrupted turn’s thinking block with empty text and only a signature; the adapter sends no thought chunk for it.',
     defect:
-      'The Claude loader projects the empty thinking block into a thinking row the live view never had.',
+      'KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3368 — the Claude loader projects the empty thinking block into a thinking row the live view never had.',
     reloaded: (row) => (row.kind === 'thinking' && row.text === '' ? null : undefined),
   },
   {
@@ -123,27 +129,30 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
     versions: ['0.166.0'],
     difference: 'prompts missing after reload',
     reason:
-      'Recording artefact: content_item_kinds was scrubbed to "<string>", and the loader keeps a user input_text only when its kind is user.text. policies.mjs keeps the kinds from the next recording.',
+      'Very probably a recording artefact: content_item_kinds was scrubbed to "<string>", and on Codex 0.166 a prompt reloads only through the loader’s content_item_kinds === "user.text" check (the rollout has no user_message event). So this test compares no Codex prompts. policies.mjs keeps the kinds from the next recording, where this difference must disappear; if it does not, prompts do not reload on 0.166.',
     live: (row) => (row.kind === 'prompt' ? null : undefined),
   },
   {
     provider: 'CODEX',
+    versions: ['0.166.0'],
+    difference: 'tool call ids',
+    reason: 'Live, ACP names a command by its exec item id; the rollout by the model’s call id.',
+    numberToolIds: true,
+  },
+  {
+    provider: 'CODEX',
+    versions: ['0.166.0'],
     difference: 'code-mode exec call',
     reason:
-      'Codex runs the command through its code-mode exec tool: live, ACP names the exec item and its command; the rollout keeps the model’s call id and the JavaScript it wrote.',
+      'Live, ACP names the call by its title and gives the command; the rollout keeps the exec tool and the JavaScript the model wrote.',
     defect:
-      'The Codex loader reloads the call as tool "exec" with the JavaScript as rawArguments, so the command is not shown as one.',
+      'KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3369 — the Codex loader reloads the call as tool "exec" with the JavaScript as rawArguments.',
     live: (row) => {
       const input = z
         .looseObject({ command: z.string() })
-        .safeParse(row.kind === 'tool_use' && row.input);
-      return input.success
-        ? {
-            kind: 'tool_use',
-            id: CODE_MODE_CALL,
-            name: CODE_MODE_CALL,
-            input: { command: input.data.command },
-          }
+        .safeParse(row.kind === 'tool_use' && row.id.startsWith('exec-') && row.input);
+      return row.kind === 'tool_use' && input.success
+        ? { ...row, name: CODE_MODE_TOOL, input: { command: input.data.command } }
         : undefined;
     },
     reloaded: (row) => {
@@ -151,32 +160,28 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
         .looseObject({ rawArguments: z.string() })
         .safeParse(row.kind === 'tool_use' && row.name === 'exec' && row.input);
       const command = input.success ? EXEC_COMMAND.exec(input.data.rawArguments)?.[1] : undefined;
-      return command === undefined
-        ? undefined
-        : {
-            kind: 'tool_use',
-            id: CODE_MODE_CALL,
-            name: CODE_MODE_CALL,
+      return row.kind === 'tool_use' && command !== undefined
+        ? {
+            ...row,
+            name: CODE_MODE_TOOL,
             input: { command: z.string().parse(JSON.parse(`"${command}"`)) },
-          };
+          }
+        : undefined;
     },
   },
   {
     provider: 'CODEX',
+    versions: ['0.166.0'],
     difference: 'code-mode exec output',
     reason:
       'Live, the result is the terminal output; the rollout keeps the exec tool’s output items, a status line and a JSON chunk holding the output.',
     defect:
-      'The Codex loader serialises the output items to a JSON string, so the reloaded result shows that JSON instead of the output.',
-    live: (row) =>
-      row.kind === 'tool_result'
-        ? { kind: 'tool_result', toolUseId: CODE_MODE_CALL, content: row.content }
-        : undefined,
+      'KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3370 — the Codex loader serialises the output items to a JSON string.',
     reloaded: (row) => {
       const output = row.kind === 'tool_result' ? codeModeOutput(row.content) : undefined;
-      return output === undefined
-        ? undefined
-        : { kind: 'tool_result', toolUseId: CODE_MODE_CALL, content: output };
+      return row.kind === 'tool_result' && output !== undefined
+        ? { ...row, content: output }
+        : undefined;
     },
   },
 ];
@@ -190,7 +195,8 @@ const KNOWN_HISTORY_WARNINGS: {
   {
     provider: 'CODEX',
     message: 'Codex function call arguments are not valid JSON',
-    reason: 'The code-mode exec call’s input is JavaScript (see "code-mode exec call").',
+    reason:
+      'KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3369 — the code-mode exec call’s input is JavaScript.',
   },
 ];
 
@@ -210,6 +216,23 @@ function applyDifferences(
       }
     }
     return row ? [row] : [];
+  });
+}
+
+/** Tool call ids replaced by their order of first appearance, keeping calls paired with results. */
+function numberToolIds(rows: ComparableRow[]): ComparableRow[] {
+  const numbers = new Map<string, string>();
+  const number = (id: string) => {
+    if (!numbers.has(id)) {
+      numbers.set(id, `<tool call ${numbers.size + 1}>`);
+    }
+    return numbers.get(id) ?? id;
+  };
+  return rows.map((row) => {
+    if (row.kind === 'tool_use') {
+      return { ...row, id: number(row.id) };
+    }
+    return row.kind === 'tool_result' ? { ...row, toolUseId: number(row.toolUseId) } : row;
   });
 }
 
@@ -284,18 +307,28 @@ describe('upstream recordings', () => {
             (difference.versions?.includes(recording.version) ?? true)
         );
         const applied = new Set<KnownDifference>();
-        const live = applyDifferences(
+        let live = applyDifferences(
           comparableTranscript((await replayLiveStream(recording)).transcript),
           'live',
           differences,
           applied
         );
-        const reloaded = applyDifferences(
+        let reloaded = applyDifferences(
           comparableTranscript(await reloadFromHistory(recording)),
           'reloaded',
           differences,
           applied
         );
+        const numbering = differences.find((difference) => difference.numberToolIds);
+        if (numbering) {
+          const ids = (rows: ComparableRow[]) =>
+            rows.flatMap((row) => (row.kind === 'tool_use' ? [row.id] : []));
+          if (JSON.stringify(ids(live)) !== JSON.stringify(ids(reloaded))) {
+            applied.add(numbering);
+          }
+          live = numberToolIds(live);
+          reloaded = numberToolIds(reloaded);
+        }
         expect(reloaded).toEqual(live);
         expect(
           differences.filter((difference) => !applied.has(difference)).map((d) => d.difference),
