@@ -42,9 +42,6 @@ pnpm dev
 # Web app (development)
 pnpm dev
 
-# Electron app (development)
-pnpm dev:electron
-
 # The app in an isolated sandbox; see `node scripts/dev-sandbox.mjs --help`
 pnpm dev:sandbox
 
@@ -176,12 +173,6 @@ they have a stale baseline entry; files over the cap are reported only as
 violations. Before growing one, split it by responsibility; do not compress it
 by dropping blank lines or comments.
 
-CI caches the Node native-module binaries by operating system, Ubuntu release,
-architecture, Node ABI, dependency lockfile and native-module setup script. It
-restores only the binary cache directory, so the setup script still copies those
-binaries into the fresh installation before tests; the active-runtime marker is
-never restored from CI cache.
-
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
 migration drift, relative imports, dependencies, unused files and dependencies
 (Knip), and unused code. CI also runs coverage, production and Storybook builds,
@@ -221,8 +212,7 @@ workers fail the gates.
 New pushes to each PR cancel older revisions of that PR in CI and CodeQL; new
 pushes to `main` cancel older main-push runs. Cancellation groups include the
 workflow and PR number, while merge-queue and scheduled runs stay independent.
-npm publishing and Electron release workflows are excluded from this
-cancellation policy.
+npm publishing workflows are excluded from this cancellation policy.
 
 ## Pull Request Process
 
@@ -278,7 +268,6 @@ src/
 ├── cli/              # Command-line interface
 └── components/       # shadcn/ui design system only
 
-electron/             # Electron main process
 prisma/               # Database schema and migrations
 ```
 

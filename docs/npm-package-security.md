@@ -2,8 +2,8 @@
 
 The browser UI is compiled into `dist/client` by Vite. Its source dependencies
 belong in `devDependencies`; npm users consume the built assets. Keep packages
-needed by backend, CLI, shared runtime modules, or Electron in `dependencies`.
-Do not move a package solely because a source scan misses a dynamic import.
+needed by backend, CLI or shared runtime modules in `dependencies`. Do not move
+a package solely because a source scan misses a dynamic import.
 
 The production browser build omits the mobile baseline and transcript scroll
 fixture modules. Their lazy imports are created only when their routes are

@@ -15,8 +15,7 @@ Commands share handlers with keyboard shortcuts.
   open quick actions when those controls are available.
 
 The browser keeps `Mod+Shift+P`, `Mod+Shift+T`, `Mod+Shift+A` and `Ctrl+Tab`
-(`Mod` means Command on macOS and Ctrl elsewhere). The desktop app additionally
-retains its original composer shortcuts and uses `Ctrl+Tab` for chat switching.
+(`Mod` means Command on macOS and Ctrl elsewhere).
 
 Tab bars have one Tab stop. Left/Right and Home/End move focus; Enter/Space
 select the focused tab. Delete (the Mac Backspace key) closes a focused tab when

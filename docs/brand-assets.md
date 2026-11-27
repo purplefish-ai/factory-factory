@@ -46,7 +46,6 @@ pnpm brand:generate
 - `public/logo.sips.png`: legacy 80-pixel export.
 - `public/icons/app-192.png`: Android installation icon, 192 pixels.
 - `public/icons/apple-touch-icon.png`: Apple touch icon, 180 pixels.
-- `build-resources/icon.{svg,png,ico,icns}`: desktop packaging icons.
 
 The README selects `logo-full-dark.svg` (white lettering) for dark mode and
 `logo-full.svg` (black lettering) for light mode using GitHub's
@@ -59,7 +58,7 @@ Markdown renderers may display both logos.
 The SVG wordmark exports contain outlines generated directly from the bundled
 Jost font using OpenType.js. They retain the font's letterforms and spacing
 without depending on font loading in image viewers or on GitHub. The gear-only
-favicon, PWA, and desktop icons share the original gear source.
+favicon and PWA icons share the original gear source.
 
 The web app manifest uses `icons/app-192.png` and `logo.png`, and the HTML links
 `icons/apple-touch-icon.png` for iOS. All three installation icons are generated

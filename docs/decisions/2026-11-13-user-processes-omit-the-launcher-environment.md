@@ -4,11 +4,11 @@ Originally decided on 2026-11-02 in #2805.
 
 ## Context
 
-`ff serve` and the desktop app launch the backend with variables meant for
-Factory Factory itself: `NODE_ENV=production`, `DATABASE_PATH`, `BACKEND_PORT`
-and others. Workspace terminals and the setup, run, postRun and cleanup scripts
-run the user's own commands, which inherited them. With `NODE_ENV=production`,
-`npm install` skips devDependencies and dev servers start in production mode.
+`ff serve` launches the backend with variables meant for Factory Factory itself:
+`NODE_ENV=production`, `DATABASE_PATH`, `BACKEND_PORT` and others. Workspace
+terminals and the setup, run, postRun and cleanup scripts run the user's own
+commands, which inherited them. With `NODE_ENV=production`, `npm install` skips
+devDependencies and dev servers start in production mode.
 
 ## Decision
 

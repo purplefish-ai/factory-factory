@@ -65,15 +65,15 @@ assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
 ## Compression
 
 Remote clients (`tailscale serve`, `ff proxy`, the mobile web app) receive the
-static client compressed; loopback and Electron get the same bytes, which costs
-them nothing. Peer addresses cannot identify remote clients because the tunnels
+static client compressed; loopback clients get the same bytes, which costs them
+nothing. Peer addresses cannot identify remote clients because the tunnels
 connect from loopback, so the server keys only on `Accept-Encoding`.
 
 - `vite build` runs `scripts/precompress-assets.ts`, which writes `.br`
   (quality 11) and `.gz` (level 9) siblings beside every output file with an
   allowlisted extension (text formats plus uncompressed `.ttf`, `.otf` and
   `.wasm`) of at least 1 KiB that compresses by 10% or more. Images, woff2 and
-  audio are skipped. The siblings ship in the npm package and the desktop app.
+  audio are skipped. The siblings ship in the npm package.
 - `createPrecompressedStatic` in `src/backend/middleware/` lists the siblings
   once at startup and serves one when the client accepts it, preferring Brotli,
   with the original content type and cache headers, `Content-Encoding`, and

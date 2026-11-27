@@ -38,18 +38,16 @@ entry with the same evidence; an age exception does not waive the trust check.
 Do not use organization-wide patterns or turn off either policy to unblock an
 update. No release-age exceptions are currently configured.
 
-The initial trust-policy rollout retains three exact-version exceptions, owned
-by the dependency maintainers and due for re-review by December 5, 2026:
+The initial trust-policy rollout retains two exact-version exceptions, owned by
+the dependency maintainers and due for re-review by December 5, 2026:
 
-- `semver@5.7.2` and `semver@6.3.1` are July 10, 2023 legacy-major backports
-  published after Semver 7 gained provenance. The registry identifies
-  `lukekarrys` as publisher, the official `npm/node-semver` repository and
-  corresponding git heads; the upstream `v5.7.2` and `v6.3.1` tags exist.
-  Electron-builder's tiny-async-pool requires version 5; Babel and the older
-  Electron downloader require version 6. Registry SHA-512 integrity matches both
-  existing lockfile entries. Remove each exception when its consumers no longer
-  require that major or migrate to a verified release with stronger publishing
-  evidence.
+- `semver@6.3.1` is a July 10, 2023 legacy-major backport published after Semver
+  7 gained provenance. The registry identifies `lukekarrys` as publisher, the
+  official `npm/node-semver` repository and corresponding git head; the upstream
+  `v6.3.1` tag exists. Babel requires version 6. Registry SHA-512 integrity
+  matches the existing lockfile entry. Remove the exception when its consumers
+  no longer require that major or migrate to a verified release with stronger
+  publishing evidence.
 - `prisma@7.10.1` was published October 15, 2026 by `prismabot`, without the
   OIDC/provenance evidence present on 7.9.1. The registry identifies the
   official `prisma/orm` CLI package, its SHA-512 integrity matches the existing
@@ -115,9 +113,9 @@ dashboard severity/blocking policy has not been independently verified. Review
 that policy separately before claiming specific alert types block merging.
 
 For each reviewed finding, record its package/version, alert type and severity,
-direct or transitive path, and whether it ships in npm or desktop artifacts.
-Assign an owner and classify it as remediation, investigated expected behavior,
-or unresolved. For an exception, preserve the reviewed evidence, bounded scope,
+direct or transitive path, and whether it ships in npm artifacts. Assign an
+owner and classify it as remediation, investigated expected behavior, or
+unresolved. For an exception, preserve the reviewed evidence, bounded scope,
 expiry, and recheck condition. Do not interpret a capability flag alone as
 confirmed malware, or suppress it for every dependency. The dependency
 maintainers own the unresolved items below; the baseline remains incomplete
@@ -175,8 +173,8 @@ The November 6, 2026 source review established these bounded dispositions:
   terminals. Minified browser assets are expected build output. New publisher,
   ownership, deprecated-package and license alerts still need package-specific
   evidence. Moving frontend dependencies out of the npm runtime graph does not
-  remove that code from browser or desktop bundles or resolve its license
-  alerts. For example, the installed `dompurify@3.4.17` manifest declares
+  remove that code from browser bundles or resolve its license alerts. For
+  example, the installed `dompurify@3.4.17` manifest declares
   `(MPL-2.0 OR Apache-2.0)` and ships both license files; `vscode-jsonrpc@9.0.3`
   declares MIT and ships an MIT `License.txt`, while its generic
   `thirdpartynotices.txt` mentions LGPL rights without naming a component. The
@@ -213,15 +211,11 @@ The November 5, 2026 hardening work is split into independently reviewed PRs:
    Compare registry integrity with the tested tarball and verify provenance's
    source/workflow. Verify trusted-publisher stage-only permissions, maintainer
    access, and the npm-publish environment's branch restrictions externally.
-4. Configure signed desktop release artifacts and macOS notarization with
-   verification. Signing credentials and account configuration must be
-   provisioned separately; workflow changes alone do not prove a signed or
-   notarized release, so that acceptance remains unverified until exercised.
 
 Each PR requires the repository checks, valid review-comment resolution, and
-green CI before merge. Publish no new package or desktop release as part of this
-maintenance work. Re-scan the next approved release to compare its actual alerts
-and shipped dependency graph with the baseline.
+green CI before merge. Publish no new package as part of this maintenance work.
+Re-scan the next approved release to compare its actual alerts and shipped
+dependency graph with the baseline.
 
 ## Dependabot coverage
 
@@ -314,19 +308,19 @@ Prisma 7 release. The Prisma CLI's `latest` registry tag currently points to an
 The TypeScript 6 compatibility API alias is intentional; compilation uses the
 TypeScript 7 native compiler.
 
-Prisma 7's SQLite adapter still requests better-sqlite3 12, whose native V8
-bindings do not build against Electron 45. Its targeted override uses the same
-better-sqlite3 13 driver as the application. Version 13 uses N-API across Node
-and Electron. Validate the real Prisma database tests and Electron native
-rebuilds together before changing this override. The runtime switcher caches
-only ABI-specific modules; it leaves the installed N-API SQLite binary untouched
-when switching between Node and Electron.
+Prisma 7's SQLite adapter still requests better-sqlite3 12. Its targeted
+override uses the same better-sqlite3 13 driver as the application: two SQLite
+builds in one process release each other's POSIX locks on the database file, and
+version 12 needs an install-time native build that `allowBuilds` does not
+permit, while version 13 ships N-API prebuilds. Validate the real Prisma
+database tests and the packed-consumer checks together before changing this
+override.
 
-Undici security overrides follow each consumer's requested major: Node-gyp uses
-6, Electron's downloader uses 7, and jsdom uses 8. Keep these selectors separate
-when updating patched releases; a global override silently forces tools onto a
-different major than they support. Verify native rebuilds, Electron downloads,
-and browser-environment tests after changes.
+Undici security overrides follow each consumer's requested major: the Slack
+socket client uses 7 and jsdom uses 8. Keep these selectors separate when
+updating patched releases; a global override silently forces tools onto a
+different major than they support. Verify Slack connections and
+browser-environment tests after changes.
 
 Some maintained parent packages still require older dependency APIs. Storybook's
 React doc generator uses Babel 7 and its companion packages. `tsc-alias` uses
@@ -337,13 +331,8 @@ maintenance or security posture warrants the migration; a newer transitive major
 alone does not establish that replacing Storybook or the build tool is worth the
 compatibility cost.
 
-Electron-builder's CommonJS plist consumers use plist 4 with xmldom 0.9. Plist 3
-omits the MIME type required by xmldom 0.9, while plist 5's import-only exports
-cannot be resolved by those consumers. Test actual macOS packaging when changing
-either parser; a successful application build does not exercise that path.
-
 For transitive major overrides, verify the actual consumer: Ajv's relative
 schema references for fast-uri, application and MCP routes for path-to-regexp,
-Electron-builder configuration and packaging for js-yaml, and the released ACP
-adapter contracts for Anthropic's SDK. Package installation and peer dependency
-resolution are necessary checks but do not establish runtime compatibility.
+and the released ACP adapter contracts for Anthropic's SDK. Package installation
+and peer dependency resolution are necessary checks but do not establish runtime
+compatibility.

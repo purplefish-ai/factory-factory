@@ -157,15 +157,15 @@ Unsupported browsers keep the switch disabled. Turning it off stops desktop
 alerts without changing completion sounds.
 
 Selecting a completion notification closes it, focuses the app, and opens the
-workspace using its current project. The desktop app also restores a minimized
-window. Deleted workspaces show an error instead of navigating to a stale link.
-Notification tags use workspace IDs, so workspaces sharing a name remain
-separate. With Web Locks and browser storage available, one tab claims each
-completion before playing its sound or showing its alert. The browser remembers
-the latest 1,000 completion identities; an older completion can alert again
-after it is evicted. Each tab still receives its attention indicator. If Web
-Locks or storage is unavailable, alerts fall back to per-tab delivery and recent
-in-memory deduplication, so separate tabs may each alert.
+workspace using its current project. Deleted workspaces show an error instead of
+navigating to a stale link. Notification tags use workspace IDs, so workspaces
+sharing a name remain separate. With Web Locks and browser storage available,
+one tab claims each completion before playing its sound or showing its alert.
+The browser remembers the latest 1,000 completion identities; an older
+completion can alert again after it is evicted. Each tab still receives its
+attention indicator. If Web Locks or storage is unavailable, alerts fall back to
+per-tab delivery and recent in-memory deduplication, so separate tabs may each
+alert.
 
 **Play completion sound** saves to the server and applies across devices. Voice
 mode suppresses the completion chime while microphone capture is active,

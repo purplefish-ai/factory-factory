@@ -1,10 +1,10 @@
 # Factory Factory — Agent Guide
 
 TypeScript workspace manager for Claude Code/Codex: Express + tRPC, React +
-Vite, Prisma/SQLite, Electron, and the `ff` CLI.
+Vite, Prisma/SQLite, and the `ff` CLI.
 
 Use Node pinned in `.node-version` and pnpm pinned in `package.json`; never npm
-or yarn. Electron uses its bundled runtime.
+or yarn.
 
 ## Working approach
 
@@ -57,7 +57,7 @@ Read the matching note before changing these areas:
   monitoring, `WorkspacePR`, `gh` coordination.
 - [Workspace state](docs/architecture/workspace-state.md): Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
-  workspaces, quick actions, the desktop backend utility process.
+  workspaces, quick actions.
 - [Integrations](src/backend/services/agent-definition/AGENTS.md): event
   automations and Slack. GitHub, Linear and scheduled automations have guides in
   their capsules under `src/backend/services/`.
