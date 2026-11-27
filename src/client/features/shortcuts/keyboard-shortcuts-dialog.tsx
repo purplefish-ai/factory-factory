@@ -22,7 +22,7 @@ const SCOPE_ORDER: ShortcutScope[] = ['general', 'navigation', 'workspace', 'com
 export interface KeyboardShortcutsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Defaults to the detected platform and runtime; stories pin one. */
+  /** Defaults to the detected platform; stories pin one. */
   environment?: ShortcutEnvironment;
 }
 

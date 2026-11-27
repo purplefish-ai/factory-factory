@@ -552,7 +552,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
   // Firefox opens a private window on Ctrl+Shift+P; Chrome reopens a tab on
   // Ctrl+Shift+T and searches tabs on ⌘⇧A. The browser keeps those keys.
   it.each(['p', 't', 'a'])('leaves Mod+Shift+%s to the browser', (key) => {
-    setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+    setShortcutEnvironmentForTesting({ platform: 'other' });
     const onSettingsChange = vi.fn();
     const onOpenQuickActions = vi.fn();
     const { root, container, textarea } = renderHarness({
@@ -564,31 +564,6 @@ describe('useChatInputActions keyboard shortcuts', () => {
       expect(dispatchModShiftShortcut(textarea, key).defaultPrevented).toBe(false);
       expect(onSettingsChange).not.toHaveBeenCalled();
       expect(onOpenQuickActions).not.toHaveBeenCalled();
-    } finally {
-      setShortcutEnvironmentForTesting(null);
-      flushSync(() => root.unmount());
-      container.remove();
-    }
-  });
-
-  it('keeps the original Mod+Shift keys in the desktop app', () => {
-    setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'electron' });
-    const onSettingsChange = vi.fn();
-    const onOpenQuickActions = vi.fn();
-    const { root, container, textarea } = renderHarness({
-      capabilities: claudeChatBarCapabilities(),
-      onSettingsChange,
-      onOpenQuickActions,
-      settingsPlanEnabled: false,
-      settingsThinkingEnabled: false,
-    });
-    try {
-      dispatchModShiftShortcut(textarea, 'p');
-      dispatchModShiftShortcut(textarea, 't');
-      dispatchModShiftShortcut(textarea, 'a');
-      expect(onSettingsChange).toHaveBeenCalledWith({ planModeEnabled: true });
-      expect(onSettingsChange).toHaveBeenCalledWith({ thinkingEnabled: true });
-      expect(onOpenQuickActions).toHaveBeenCalledTimes(1);
     } finally {
       setShortcutEnvironmentForTesting(null);
       flushSync(() => root.unmount());

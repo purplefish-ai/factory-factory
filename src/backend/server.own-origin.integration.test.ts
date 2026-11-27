@@ -170,7 +170,7 @@ function upgrade({ address, port }: Target, origin: string): Promise<'open' | nu
 
 describe('server own origin on a fallback port', () => {
   it.each([
-    ['unset (desktop app)', undefined],
+    ['unset (pnpm dev:backend)', undefined],
     ['localhost (ff serve)', 'localhost'],
     ['127.0.0.1 (ff proxy)', '127.0.0.1'],
   ])('allows its own loopback origin when BACKEND_HOST is %s', async (_label, backendHost) => {

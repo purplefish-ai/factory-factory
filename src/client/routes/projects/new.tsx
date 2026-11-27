@@ -27,9 +27,7 @@ type ProjectSource = 'local' | 'github';
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
-  const [source, setSource] = useState<ProjectSource>(() =>
-    window.electronAPI?.isElectron ? 'local' : 'github'
-  );
+  const [source, setSource] = useState<ProjectSource>('github');
   const {
     selectedProjectSlug,
     projects,
@@ -52,8 +50,6 @@ export default function NewProjectPage() {
   const [githubStartupScript, setGithubStartupScript] = useState('');
   const [githubScriptType, setGithubScriptType] = useState<ScriptType>('command');
   const [terminalOpen, setTerminalOpen] = useState(false);
-
-  const isElectron = Boolean(window.electronAPI?.isElectron);
 
   const parsedRepo = useMemo(() => {
     const trimmed = githubUrl.trim();
@@ -80,23 +76,6 @@ export default function NewProjectPage() {
   } = trpc.project.checkGithubAuth.useQuery(undefined, {
     enabled: source === 'github',
   });
-
-  const handleBrowse = async () => {
-    if (!window.electronAPI?.showOpenDialog) {
-      return;
-    }
-    try {
-      const result = await window.electronAPI.showOpenDialog({
-        title: 'Select Repository',
-        properties: ['openDirectory', 'showHiddenFiles'],
-      });
-      if (!result.canceled && result.filePaths.length > 0) {
-        setRepoPath(result.filePaths[0] as string);
-      }
-    } catch {
-      // Silently handle dialog failure
-    }
-  };
 
   const hasExistingProjects = projects && projects.length > 0;
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
@@ -181,8 +160,6 @@ export default function NewProjectPage() {
     error,
     repoPath,
     setRepoPath,
-    isElectron,
-    handleBrowse,
     factoryConfigExists: factoryConfig?.exists === true,
     scriptType,
     setScriptType,

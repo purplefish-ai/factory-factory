@@ -12,7 +12,7 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'other' });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -125,7 +125,7 @@ it('closes the focused terminal with Delete and keeps focus in the tab bar', asy
 });
 
 it('closes the focused terminal with Backspace on macOS and keeps focus in the tab bar', async () => {
-  setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'mac' });
   await act(() => root.render(<Panel onSelect={() => undefined} />));
   const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs[2]?.getAttribute('aria-keyshortcuts')).toBe('Backspace');

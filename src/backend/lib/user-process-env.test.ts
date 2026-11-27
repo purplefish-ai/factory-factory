@@ -23,7 +23,6 @@ describe('buildUserProcessEnv', () => {
       FF_EMIT_BACKEND_PORT: '1',
       FF_TAILSCALE_ORIGIN: 'https://mac.tail123.ts.net',
       FF_TAILSCALE_HTTPS_PORT: '443',
-      FF_NODE_EXEC_PATH: '/Applications/Factory Factory.app/Contents/MacOS/Factory Factory',
     });
 
     expect(env).toEqual({ PATH: '/usr/bin', HOME: '/Users/me' });

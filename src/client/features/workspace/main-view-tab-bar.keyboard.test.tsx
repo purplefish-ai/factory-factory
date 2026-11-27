@@ -13,7 +13,7 @@ import { WorkspacePanelProvider } from './workspace-panel-context';
 
 it('navigates chat tabs without nesting close controls or claiming browser Ctrl+Tab', async () => {
   setupSubagentTabTestEnvironment();
-  setShortcutEnvironmentForTesting({ platform: 'other', runtime: 'browser' });
+  setShortcutEnvironmentForTesting({ platform: 'other' });
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);

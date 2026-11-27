@@ -368,17 +368,4 @@ describe('NewProjectPage source defaults', () => {
     expect(container.querySelector('[data-source]')?.getAttribute('data-source')).toBe('github');
     root.unmount();
   });
-  it('defaults to Local Path in Electron', () => {
-    Object.defineProperty(window, 'electronAPI', {
-      configurable: true,
-      value: { isElectron: true },
-    });
-    try {
-      const { container, root } = renderPage({ projects: [] });
-      expect(container.querySelector('[data-source]')?.getAttribute('data-source')).toBe('local');
-      root.unmount();
-    } finally {
-      Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined });
-    }
-  });
 });

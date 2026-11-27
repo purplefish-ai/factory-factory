@@ -164,7 +164,7 @@ describe('browser origin gate on public procedures', () => {
 });
 
 describe('browser origin gate per launch mode', () => {
-  it('desktop app: the window origin is the backend localhost URL', async () => {
+  it('BACKEND_HOST unset: the backend localhost URL is its own origin', async () => {
     const { app, state } = createApp();
     const headers = { origin: 'http://localhost:3001', host: 'localhost:3001' };
 
@@ -173,7 +173,7 @@ describe('browser origin gate per launch mode', () => {
     expect(state).toMatchObject({ writes: 1, privileged: 1 });
   });
 
-  it('desktop app on a fallback port: its own origin is allowed without configuration', async () => {
+  it('BACKEND_HOST unset on a fallback port: its own origin is allowed without configuration', async () => {
     const { app, state } = createApp();
     const server = await listen(app);
     try {
@@ -239,14 +239,6 @@ describe('browser origin gate per launch mode', () => {
   it('pnpm dev: Vite on 3000 proxies with changeOrigin to localhost:3001', async () => {
     const { app, state } = createApp({ backendHost: 'localhost' });
     const headers = { origin: 'http://localhost:3000', host: 'localhost:3001' };
-
-    expect((await write(app, headers)).status).toBe(200);
-    expect(state.writes).toBe(1);
-  });
-
-  it('pnpm dev:electron: the Vite origin on 5173 is configured by the script', async () => {
-    const { app, state } = createApp({ cors: { allowedOrigins: ['http://localhost:5173'] } });
-    const headers = { origin: 'http://localhost:5173', host: 'localhost:3001' };
 
     expect((await write(app, headers)).status).toBe(200);
     expect(state.writes).toBe(1);

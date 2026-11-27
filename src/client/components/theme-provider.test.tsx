@@ -51,15 +51,6 @@ async function addOverlay(slot = 'dialog-overlay') {
 }
 
 describe('ThemeProvider browser chrome', () => {
-  it('syncs actual app background to Electron when the selected theme changes', async () => {
-    const setBackgroundColor = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('electronAPI', { setBackgroundColor });
-    await act(() => document.documentElement.style.setProperty('--background', '#123456'));
-    expect(setBackgroundColor).toHaveBeenLastCalledWith('#123456');
-    await act(() => document.documentElement.style.setProperty('--background', '#abcdef'));
-    expect(setBackgroundColor).toHaveBeenLastCalledWith('#abcdef');
-  });
-
   it.each(['dialog-overlay', 'alert-dialog-overlay', 'sheet-overlay'])(
     'dims the native background for %s and restores it on removal',
     async (slot) => {

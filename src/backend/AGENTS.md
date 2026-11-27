@@ -10,9 +10,8 @@ It owns composition, the HTTP and WebSocket server, startup order, the one
 teardown plan both shutdown paths run, and fatal-error handling. It does not own
 a job's lifecycle (`src/backend/services/job-runner.service.ts`), what a run
 does when its signal aborts (the code that registers it), the fatal log record
-(`src/backend/services/logger.service.ts`), startup recovery's drain
-(`src/backend/orchestration/workspace-lifecycle/`) or the desktop app's stop and
-kill budget (`electron/main/`).
+(`src/backend/services/logger.service.ts`) or startup recovery's drain
+(`src/backend/orchestration/workspace-lifecycle/`).
 
 ## Public surface
 
@@ -64,6 +63,5 @@ moving one. Why:
   `performCleanup`, which adds transport and timer work to the plan through two
   hooks. `application-shutdown.ts`: the plan's jobs, steps and runner.
 - `index.ts`, `shutdown-signal-handlers.ts`, `fatal-error-handlers.ts`: the
-  standalone entry and its handlers; `electron-utility-entry.ts` and
-  `electron-utility-backend.ts`: the desktop app's utility process.
+  standalone entry and its handlers.
 - `migrate.ts`, `migrate-with-backup.ts`, `db.ts`: migrations, Prisma client.

@@ -1,8 +1,6 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
-import { FolderOpenIcon } from '@phosphor-icons/react/dist/csr/FolderOpen';
 import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
-import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +9,6 @@ export interface ProjectRepoFormProps {
   error: string;
   repoPath: string;
   setRepoPath: (value: string) => void;
-  isElectron: boolean;
-  handleBrowse: () => Promise<void>;
   factoryConfigExists: boolean;
   helperText: string;
   scriptType: ScriptType;
@@ -32,8 +28,6 @@ export function ProjectRepoForm({
   error,
   repoPath,
   setRepoPath,
-  isElectron,
-  handleBrowse,
   factoryConfigExists,
   helperText,
   scriptType,
@@ -68,18 +62,6 @@ export function ProjectRepoForm({
             placeholder="/Users/you/code/my-project"
             autoFocus
           />
-          {isElectron && (
-            <Button
-              type="button"
-              aria-label="Browse project directories"
-              variant="outline"
-              onClick={() => {
-                runInBackground(handleBrowse(), "Couldn't browse project directories.");
-              }}
-            >
-              <FolderOpenIcon />
-            </Button>
-          )}
         </div>
         {factoryConfigExists && repoPath.trim() && (
           <div className="flex items-center gap-2 text-sm text-success">

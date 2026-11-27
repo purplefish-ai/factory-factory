@@ -264,7 +264,7 @@ export const ManualFocus: Story = {
 
 export const MacWordNavigation: Story = {
   beforeEach: () => {
-    setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'browser' });
+    setShortcutEnvironmentForTesting({ platform: 'mac' });
     return () => setShortcutEnvironmentForTesting(null);
   },
   args: { onData: fn(), output: new TerminalOutputStream('$ ') },

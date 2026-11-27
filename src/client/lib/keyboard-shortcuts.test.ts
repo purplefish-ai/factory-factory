@@ -10,8 +10,8 @@ import {
   type ShortcutEnvironment,
 } from './keyboard-shortcuts';
 
-const browser: ShortcutEnvironment = { platform: 'other', runtime: 'browser' };
-const desktop: ShortcutEnvironment = { platform: 'mac', runtime: 'electron' };
+const browser: ShortcutEnvironment = { platform: 'other' };
+const mac: ShortcutEnvironment = { platform: 'mac' };
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -27,14 +27,10 @@ describe('shortcut definitions', () => {
     ['p', 'composer.togglePlanMode'],
     ['t', 'composer.toggleThinking'],
     ['a', 'composer.quickActions'],
-  ] as const)(
-    'leaves browser Mod+Shift+%s available while preserving desktop bindings',
-    (key, id) => {
-      const event = new KeyboardEvent('keydown', { key, ctrlKey: true, shiftKey: true });
-      expect(matchesShortcut(event, id, browser)).toBe(false);
-      expect(matchesShortcut(event, id, desktop)).toBe(true);
-    }
-  );
+  ] as const)('leaves browser Mod+Shift+%s available', (key, id) => {
+    const event = new KeyboardEvent('keydown', { key, ctrlKey: true, shiftKey: true });
+    expect(matchesShortcut(event, id, browser)).toBe(false);
+  });
   it('recognizes physical Alt chords when macOS changes the typed character', () => {
     const event = new KeyboardEvent('keydown', {
       key: '∏',
@@ -43,7 +39,7 @@ describe('shortcut definitions', () => {
       shiftKey: true,
     });
     expect(matchesShortcut(event, 'composer.togglePlanMode', browser)).toBe(true);
-    expect(formatShortcut('composer.togglePlanMode', desktop)).toBe('⌥⇧P');
+    expect(formatShortcut('composer.togglePlanMode', mac)).toBe('⌥⇧P');
     expect(getAriaKeyShortcuts('composer.togglePlanMode', browser)).toBe('Alt+Shift+P');
   });
   it('requires Shift to approve and rejects command-modified review letters', () => {
@@ -68,7 +64,6 @@ describe('shortcut definitions', () => {
   it('does not consume browser tab switching', () => {
     const event = new KeyboardEvent('keydown', { key: 'Tab', ctrlKey: true });
     expect(matchesShortcut(event, 'chat.next', browser)).toBe(false);
-    expect(matchesShortcut(event, 'chat.next', desktop)).toBe(true);
   });
 });
 
@@ -151,17 +146,11 @@ it.each([
   ).toBe(blocked);
 });
 
-it('preserves Alt-bracket text entry while retaining desktop Control+Tab chat switching', () => {
+it('preserves Alt-bracket text entry', () => {
   expect(
     isShortcutBlocked(
       dispatch('<textarea />', { key: '“', code: 'BracketLeft', altKey: true }),
       getShortcut('chat.previous')
     )
   ).toBe(true);
-  expect(
-    isShortcutBlocked(
-      dispatch('<textarea />', { key: 'Tab', ctrlKey: true }),
-      getShortcut('chat.next')
-    )
-  ).toBe(false);
 });

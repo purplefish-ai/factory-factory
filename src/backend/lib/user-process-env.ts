@@ -1,7 +1,7 @@
 /**
- * Variables Factory Factory's launchers (`ff serve`, `ff proxy`/`ff tailscale`
- * and the desktop app) set to configure its own backend. They describe the
- * Factory Factory server, not the user's project.
+ * Variables Factory Factory's launchers (`ff serve` and `ff proxy`/
+ * `ff tailscale`) set to configure its own backend. They describe the Factory
+ * Factory server, not the user's project.
  */
 const FACTORY_RUNTIME_ENV_KEYS = [
   // NODE_ENV=production makes npm/yarn omit devDependencies and runs dev
@@ -23,7 +23,6 @@ const FACTORY_RUNTIME_ENV_KEYS = [
   'FF_EMIT_BACKEND_PORT',
   'FF_TAILSCALE_ORIGIN',
   'FF_TAILSCALE_HTTPS_PORT',
-  'FF_NODE_EXEC_PATH',
 ] as const;
 
 /**

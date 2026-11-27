@@ -40,31 +40,6 @@ export const BrowserOnboarding: Story = {
     await expect(canvasElement.querySelector('[data-slot="sidebar"]')).toBeNull();
   },
 };
-export const DesktopOnboarding: Story = {
-  beforeEach: () => {
-    const original = Object.getOwnPropertyDescriptor(window, 'electronAPI');
-    Object.defineProperty(window, 'electronAPI', {
-      configurable: true,
-      value: { isElectron: true },
-    });
-    return () => {
-      if (original) {
-        Object.defineProperty(window, 'electronAPI', original);
-      } else {
-        Reflect.deleteProperty(window, 'electronAPI');
-      }
-    };
-  },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('tab', { name: 'Local Path' })).toHaveAttribute(
-      'aria-selected',
-      'true'
-    );
-    await expect(canvas.getByLabelText('Repository Path')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
-  },
-};
 export const PhoneOnboarding: Story = {
   ...BrowserOnboarding,
   globals: { viewport: { value: 'phone', isRotated: false } },

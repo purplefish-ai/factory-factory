@@ -341,11 +341,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     admission: applicationUpdateAdmission,
     jobs: jobRunner,
     supervisor: createProcessUpdateSupervisor(),
-    manualCommand: process.versions.electron
-      ? 'Download the latest Factory Factory desktop release.'
-      : existsSync(join(applicationReleaseService.getPackageRoot(), 'src/cli/index.ts'))
-        ? 'Update this checkout with git pull and pnpm install, then restart Factory Factory.'
-        : 'npm install -g factory-factory@latest',
+    manualCommand: existsSync(join(applicationReleaseService.getPackageRoot(), 'src/cli/index.ts'))
+      ? 'Update this checkout with git pull and pnpm install, then restart Factory Factory.'
+      : 'npm install -g factory-factory@latest',
     hasWork: () =>
       services.sessionDomainService.hasPendingUpdateWork() ||
       [...services.acpRuntimeManager.getAllClients()].some(([id]) =>

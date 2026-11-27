@@ -87,8 +87,8 @@ here directly.
   request to the agent, for runtimes and probes alike. It uses the SDK's
   `/unstable` entrypoint, which keeps elicitation and native subagents.
 - `acp-runtime-spawn.ts`: the adapter command (the package entrypoint run with
-  the host Node, Electron's included), working directory validation, deadlines
-  and catalog process termination.
+  the host Node), working directory validation, deadlines and catalog process
+  termination.
 - `acp-client-factory.ts`: spawn, handshake, session creation, load or resume,
   and the startup model (`acp-model-selection.ts`).
 - `acp-runtime-manager.ts`, `acp-runtime-supervisor.ts`: the runtime per

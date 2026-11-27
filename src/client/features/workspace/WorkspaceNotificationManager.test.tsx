@@ -164,19 +164,6 @@ it.each([false, true])(
   }
 );
 
-it('invokes the desktop focus bridge before resolving notification navigation', async () => {
-  const focusWindow = vi.fn().mockResolvedValue(undefined);
-  vi.stubGlobal('electronAPI', { isElectron: true, focusWindow });
-  localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
-  await emit();
-  await act(async () => {
-    notices[0]?.onclick?.();
-    expect(focusWindow).toHaveBeenCalledOnce();
-    await Promise.resolve();
-  });
-  expect(mocks.navigate).toHaveBeenCalledOnce();
-});
-
 it('claims one completion across manager instances before sound and desktop delivery', async () => {
   let tail = Promise.resolve();
   const request = vi.fn((_name: string, callback: () => boolean) => {

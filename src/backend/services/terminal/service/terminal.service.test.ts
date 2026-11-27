@@ -173,10 +173,10 @@ describe('TerminalService', () => {
       }
     });
 
-    // `ff serve` and the desktop app launch the backend with NODE_ENV=production
-    // and their own DATABASE_PATH/BACKEND_PORT. A user's terminal must not
-    // inherit them: `npm install` would skip devDependencies and the project's
-    // dev server would bind Factory Factory's port or open its database.
+    // `ff serve` launches the backend with NODE_ENV=production and its own
+    // DATABASE_PATH/BACKEND_PORT. A user's terminal must not inherit them:
+    // `npm install` would skip devDependencies and the project's dev server
+    // would bind Factory Factory's port or open its database.
     it("does not leak Factory Factory's own runtime env into the user's shell", async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('DATABASE_PATH', '/Users/me/factory-factory/data.db');

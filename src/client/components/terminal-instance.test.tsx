@@ -98,7 +98,7 @@ describe('TerminalInstance', () => {
   });
 
   it.each(['mac', 'other'] as const)('handles Option-arrows on %s clients', (platform) => {
-    setShortcutEnvironmentForTesting({ platform, runtime: 'browser' });
+    setShortcutEnvironmentForTesting({ platform });
     const root = createRoot(document.createElement('div'));
     try {
       flushSync(() =>
