@@ -43,18 +43,24 @@ the following with that version in place of `0.5.14`:
 
 ```sh
 node scripts/update-last-release-migrations.mjs 0.5.14
-pnpm exec tsx scripts/generate-upgrade-seed.ts
 ```
 
-The first command downloads the published tarball (a read-only registry request)
-and rewrites `src/backend/testing/fixtures/upgrade/last-release.json` with its
-migration list, the SHA-256 of each migration's SQL, and its Prisma enums; it
+The command downloads the published tarball (a read-only registry request) and
+rewrites `src/backend/testing/fixtures/upgrade/last-release.json` with its
+migration list, the SHA-256 of each migration's SQL, and its Prisma enums. It
 refuses a checkout whose `prisma/migrations` lacks a shipped migration or holds
-one whose SQL differs from the published bytes. The second regenerates
-`last-release-seed.sql` and fails if the rows no longer cover every table and
-enum value. Commit both files, and the seed rows in
-`src/backend/testing/upgrade/` when the generator asks for them. CI never runs
-either script; a stale pin only makes the check start from an older release.
+one whose SQL differs from the published bytes. It then regenerates
+`last-release-seed.sql` from the rows in `src/backend/testing/upgrade/`, which
+fails if they no longer cover every table and every enum value (string-typed
+columns with a closed set of values are listed in `string-enum-columns.json`),
+and records the seed's digest in `last-release.json`. Commit both files. CI
+never runs the command; a stale pin only makes the check start from an older
+release.
+
+A failing upgrade check means the code broke upgrades from the pinned release:
+fix the code. The seed is the baseline an upgrade must cope with, so it changes
+only through this command, when re-pinning or adding rows for a new table or
+value, and the check refuses a seed whose digest the pin does not record.
 
 ## Account controls
 

@@ -98,6 +98,8 @@ describe('update-last-release-migrations', () => {
         '20260101000000_first': checksumOf(fakeSql['20260101000000_first']),
         '20260102000000_second': checksumOf(fakeSql['20260102000000_second']),
       },
+      // Filled in once the seed is regenerated for this release.
+      seedDigest: '',
       enums: { Color: ['RED', 'GREEN'], Size: ['SMALL', 'LARGE'], Phase: ['pending', 'DONE'] },
       enumColumns: { 'Paint.color': 'Color', 'Paint.size': 'Size', 'brushes.shade_color': 'Color' },
     });

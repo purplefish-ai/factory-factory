@@ -2,8 +2,10 @@
  * Writes the upgrade check's SQL seed from the rows in
  * src/backend/testing/upgrade/seed-rows.ts, after loading it into a throwaway
  * database migrated to the last release to prove it is complete: a row in every
- * table and every enum value in use. Run it whenever the rows change and after
- * `node scripts/update-last-release-migrations.mjs <version>`.
+ * table and every enum value in use. Do not run it by hand: the re-pin step,
+ * `node scripts/update-last-release-migrations.mjs <version>`, runs it and
+ * records the seed's digest, which the check compares. The seed changes only
+ * when re-pinning or adding rows for a new table or value.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +20,8 @@ import {
 import { seedTables } from '@/backend/testing/upgrade/seed-rows';
 import { renderSeedSql } from '@/backend/testing/upgrade/seed-sql';
 
-const lastRelease = readLastRelease();
+// During a re-pin the digest is still empty; the re-pin step records it after this run.
+const lastRelease = readLastRelease({ seedPending: true });
 const sql = renderSeedSql(seedTables);
 const directory = mkdtempSync(join(tmpdir(), 'ff-upgrade-seed-'));
 try {

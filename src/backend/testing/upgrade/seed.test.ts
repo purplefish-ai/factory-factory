@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   findEditedMigrations,
+  describeSeedDrift,
   findMissingMigrations,
   loadSeed,
   type LastRelease,
@@ -72,7 +73,24 @@ describe('the pinned migrations', () => {
   });
 });
 
+/**
+ * A failure in this file or in the upgrade check means the code broke upgrades
+ * from the pinned release. Fix the code. The seed changes only when re-pinning
+ * or adding rows for a new table or value, with
+ * `scripts/update-last-release-migrations.mjs`, which records the seed's digest.
+ */
 describe('the seed', () => {
+  it('is the seed the pin recorded, so it cannot be rewritten to satisfy a break', () => {
+    expect(describeSeedDrift(readLastRelease(), readLastReleaseSeedSql())).toBeUndefined();
+    const message = describeSeedDrift(
+      readLastRelease(),
+      `${readLastReleaseSeedSql()}-- loosened\n`
+    );
+    expect(message).toContain(`fix the code, not the seed`);
+    expect(message).toContain(`upgrades from ${readLastRelease().version}`);
+    expect(message).toContain('scripts/update-last-release-migrations.mjs');
+  });
+
   it('is exactly what the generator writes from the rows, so it cannot rot unnoticed', () => {
     expect(readLastReleaseSeedSql()).toBe(renderSeedSql(seedTables));
   });
@@ -96,6 +114,8 @@ describe('the seed', () => {
     const db = new Database(databasePath);
     try {
       db.exec('DELETE FROM "SessionLifecycleEvent"');
+      db.exec('DELETE FROM "WorkspacePREvent" WHERE "batchId" = \'seed-delivery-blocked\'');
+      db.exec('DELETE FROM "WorkspacePRDelivery" WHERE "id" = \'seed-delivery-blocked\'');
       db.exec('DELETE FROM "TerminalSession" WHERE "status" = \'FAILED\'');
     } finally {
       db.close();
@@ -104,6 +124,8 @@ describe('the seed', () => {
     expect(coverage.emptyTables).toEqual(['SessionLifecycleEvent']);
     expect(coverage.missingEnumValues).toContain('TerminalSession.status=FAILED');
     expect(coverage.missingEnumValues).toContain('SessionLifecycleEvent.reason=USER_STOP');
+    // A string-typed column with a closed set of values is checked the same way.
+    expect(coverage.missingEnumValues).toContain('WorkspacePRDelivery.state=BLOCKED');
   });
 
   it('writes values the way SQLite stores them', () => {

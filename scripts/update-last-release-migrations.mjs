@@ -21,6 +21,10 @@ export const LAST_RELEASE_PATH = join(
   repositoryRoot,
   'src/backend/testing/fixtures/upgrade/last-release.json'
 );
+const SEED_PATH = join(
+  repositoryRoot,
+  'src/backend/testing/fixtures/upgrade/last-release-seed.sql'
+);
 
 /** Migration directory names that ship a migration.sql, sorted as the migrator applies them. */
 export function listPackedMigrations(files) {
@@ -109,7 +113,15 @@ export function buildLastRelease({ version, files, schema, migrationSql }) {
       return [name, checksumOf(sql)];
     })
   );
-  return { version, migrations, checksums, enums, enumColumns: parseEnumColumns(schema, enums) };
+  // The seed digest is filled in once the seed is regenerated for this release.
+  return {
+    version,
+    migrations,
+    checksums,
+    seedDigest: '',
+    enums,
+    enumColumns: parseEnumColumns(schema, enums),
+  };
 }
 
 export function formatLastRelease(lastRelease) {
@@ -169,6 +181,28 @@ function assertRepositoryHasPublishedMigrations({ migrations, checksums }) {
   }
 }
 
+function writeLastRelease(lastRelease) {
+  writeFileSync(LAST_RELEASE_PATH, formatLastRelease(lastRelease));
+  // Keep the committed layout: the repository formatter, not JSON.stringify, owns it.
+  execFileSync('pnpm', ['exec', 'oxfmt', '--write', LAST_RELEASE_PATH], {
+    cwd: repositoryRoot,
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+}
+
+/** The generator opens only throwaway databases; keep the owner's settings out of it anyway. */
+function regenerateSeed() {
+  const env = { ...process.env };
+  for (const name of ['DATABASE_PATH', 'BASE_DIR', 'NODE_ENV', 'BACKEND_PORT']) {
+    delete env[name];
+  }
+  execFileSync('pnpm', ['exec', 'tsx', 'scripts/generate-upgrade-seed.ts'], {
+    cwd: repositoryRoot,
+    env,
+    stdio: ['ignore', 'inherit', 'inherit'],
+  });
+}
+
 function main(argv) {
   const [version, ...rest] = argv;
   if (!(version && SEMVER.test(version)) || rest.length > 0) {
@@ -179,17 +213,15 @@ function main(argv) {
   try {
     const lastRelease = buildLastRelease({ version, ...readPublishedPackage(version, directory) });
     assertRepositoryHasPublishedMigrations(lastRelease);
-    writeFileSync(LAST_RELEASE_PATH, formatLastRelease(lastRelease));
-    // Keep the committed layout: the repository formatter, not JSON.stringify, owns it.
-    execFileSync('pnpm', ['exec', 'oxfmt', '--write', LAST_RELEASE_PATH], {
-      cwd: repositoryRoot,
-      stdio: ['ignore', 'ignore', 'inherit'],
-    });
+    writeLastRelease(lastRelease);
+    regenerateSeed();
+    // The digest is what lets the check refuse a seed edited outside a re-pin.
+    writeLastRelease({ ...lastRelease, seedDigest: checksumOf(readFileSync(SEED_PATH)) });
     process.stdout.write(
       `Pinned ${PACKAGE_NAME}@${version}: ${lastRelease.migrations.length} migrations, ` +
         `${Object.keys(lastRelease.enums).length} enums, ` +
         `${Object.keys(lastRelease.enumColumns).length} enum columns.\n` +
-        'Regenerate the seed next: pnpm exec tsx scripts/generate-upgrade-seed.ts\n'
+        'Seed regenerated and its digest recorded; commit last-release.json and last-release-seed.sql.\n'
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });

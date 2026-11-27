@@ -265,6 +265,25 @@ export const agentTriggers: SeedRow[] = [
     createdAt: stamp(73),
     updatedAt: stamp(73),
   },
+  ...(['SOURCE_ERROR', 'SOURCE_RECOVERY_REQUIRED'] as const).map((pausedReasonCode): SeedRow => ({
+    id: `seed-trigger-paused-${pausedReasonCode.toLowerCase().replaceAll('_', '-')}`,
+    agentDefinitionId: DEFINITION_LEGACY,
+    type: 'GITHUB_ISSUE',
+    connectionId: CONNECTION_GITHUB,
+    description: githubTrigger.description,
+    config: githubTrigger.config,
+    filterInstructions: null,
+    isEnabled: false,
+    isConfigured: null,
+    triggerRevision: 1,
+    activationGeneration: 1,
+    activationState: 'PAUSED',
+    activationBoundary: null,
+    pendingActivation: null,
+    pausedReasonCode,
+    createdAt: stamp(73),
+    updatedAt: stamp(74),
+  })),
 ];
 
 const specification = {
@@ -419,6 +438,19 @@ export const agentSourcePages: SeedRow[] = [
     epoch: 0,
     createdAt: stamp(90),
   },
+  ...(['CAPTURE', 'VERIFY'] as const).map((phase, ordinal): SeedRow => ({
+    id: `seed-source-page-${phase.toLowerCase()}`,
+    connectionId: CONNECTION_GITHUB,
+    scanId: 'seed-scan-2',
+    ordinal,
+    phase,
+    requestPage: ordinal + 1,
+    nextPage: ordinal + 2,
+    sourceOrder: null,
+    evidence: { ids: [], entries: [] },
+    epoch: 0,
+    createdAt: stamp(92 + ordinal),
+  })),
 ];
 
 export const agentSourceCheckpoints: SeedRow[] = [
@@ -448,6 +480,23 @@ export const agentSourceCheckpoints: SeedRow[] = [
     },
     epoch: 0,
   },
+  ...(['BUILDING', 'INDEXED', 'INVALID'] as const).map((status, index): SeedRow => ({
+    connectionId: CONNECTION_GITHUB,
+    scanId: `seed-scan-${index + 2}`,
+    status,
+    nextOrdinal: 0,
+    entryCount: 0,
+    executableCount: 0,
+    verifiedCount: 0,
+    verification: null,
+    headEventId: null,
+    boundaryKnown: false,
+    previousBoundaryEventId: null,
+    initialSourceOrder: null,
+    sourceOrder: null,
+    validationCursor: null,
+    epoch: 0,
+  })),
 ];
 
 export const agentSourceHeads: SeedRow[] = [

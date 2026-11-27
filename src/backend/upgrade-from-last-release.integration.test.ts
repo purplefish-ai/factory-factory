@@ -11,12 +11,17 @@
  * real application graph then reads what the board, the sidebar and the
  * automations page read.
  *
- * Pinning a newer release is a script run, not an edit here; see
- * docs/npm-release-security.md.
+ * A failure here means the code broke upgrades from the pinned release: fix the
+ * code. Do not edit the seed or the expectations below to make it pass; the seed
+ * changes only when re-pinning or adding rows for a new table or value, with
+ * `scripts/update-last-release-migrations.mjs` (docs/npm-release-security.md).
+ * The expectations are what the application derives from the seeded rows; a
+ * migration that changes one of them changes what users see after upgrading.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { Application, disposeApplication } from '@/backend/app-context';
 import { inspectMigrations } from '@/backend/migrate';
@@ -39,11 +44,12 @@ import {
 } from '@/backend/testing/upgrade/last-release';
 import { DEFINITION_DIGEST, DEFINITION_TRIAGE } from '@/backend/testing/upgrade/seed-agent-rows';
 import { seedTables } from '@/backend/testing/upgrade/seed-rows';
-import { PROJECT_GITHUB, PROJECT_LINEAR } from '@/backend/testing/upgrade/seed-values';
+import { PROJECT_GITHUB, PROJECT_LINEAR, UNUSED_PID } from '@/backend/testing/upgrade/seed-values';
 import {
   SESSION_CODEX_RUNNING,
   WORKSPACE_CHILD,
   WORKSPACE_EVENT,
+  WORKSPACE_ISSUE,
   WORKSPACE_MANUAL,
 } from '@/backend/testing/upgrade/seed-workspace-rows';
 import type { appRouter } from '@/backend/trpc';
@@ -89,6 +95,258 @@ const seededSessions = z
   .array(z.object({ id: z.string(), workspaceId: z.string() }))
   .parse(seedTables.AgentSession);
 
+/** What the application derives for each seeded workspace, reviewed against the derivation code. */
+interface DerivedWorkspace {
+  kanbanColumn: 'WORKING' | 'WAITING' | null;
+  sidebarStatus: { activityState: string; ciState: string };
+  flowPhase: string;
+  ciObservation: string;
+  statusReason: string;
+  ratchetButtonAnimated: boolean;
+  /** The pull request summary the board and snapshot carry; every active PR collapses to OPEN. */
+  prState: string;
+  prCiStatus: string;
+  ratchetState: string;
+}
+const DERIVED_WORKSPACES: Record<string, DerivedWorkspace> = {
+  // READY, a monitored OPEN PR with passing CI and an update queued for the main session.
+  'seed-workspace-manual': {
+    kanbanColumn: 'WAITING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'PASSING' },
+    flowPhase: 'READY',
+    ciObservation: 'CHECKS_PASSED',
+    statusReason: 'PR_UPDATE_QUEUED',
+    ratchetButtonAnimated: false,
+    prState: 'OPEN',
+    prCiStatus: 'SUCCESS',
+    ratchetState: 'READY',
+  },
+  // READY, a monitored DRAFT PR with pending CI, monitoring paused after a failed session.
+  'seed-workspace-resume': {
+    kanbanColumn: 'WAITING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'RUNNING' },
+    flowPhase: 'CI_WAIT',
+    ciObservation: 'CHECKS_PENDING',
+    statusReason: 'PR_UPDATES_PAUSED',
+    ratchetButtonAnimated: true,
+    prState: 'OPEN',
+    prCiStatus: 'PENDING',
+    ratchetState: 'CI_RUNNING',
+  },
+  // PROVISIONING, with a PR attached that GitHub has not been asked about yet.
+  'seed-workspace-issue': {
+    kanbanColumn: 'WORKING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'UNKNOWN' },
+    flowPhase: 'CI_WAIT',
+    ciObservation: 'NOT_FETCHED',
+    statusReason: 'SETTING_UP',
+    ratchetButtonAnimated: false,
+    prState: 'OPEN',
+    prCiStatus: 'UNKNOWN',
+    ratchetState: 'IDLE',
+  },
+  // FAILED setup; monitoring is off, so a failing, conflicted PR still reads as READY for a person.
+  'seed-workspace-linear': {
+    kanbanColumn: 'WAITING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'FAILING' },
+    flowPhase: 'READY',
+    ciObservation: 'CHECKS_FAILED',
+    statusReason: 'SETUP_FAILED',
+    ratchetButtonAnimated: false,
+    prState: 'OPEN',
+    prCiStatus: 'FAILURE',
+    ratchetState: 'IDLE',
+  },
+  // READY, an APPROVED PR with passing CI.
+  'seed-workspace-event': {
+    kanbanColumn: 'WAITING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'PASSING' },
+    flowPhase: 'READY',
+    ciObservation: 'CHECKS_PASSED',
+    statusReason: 'READY_TO_MERGE',
+    ratchetButtonAnimated: false,
+    prState: 'OPEN',
+    prCiStatus: 'SUCCESS',
+    ratchetState: 'IDLE',
+  },
+  // NEW, no PR.
+  'seed-workspace-periodic': {
+    kanbanColumn: 'WORKING',
+    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
+    flowPhase: 'NO_PR',
+    ciObservation: 'NOT_FETCHED',
+    statusReason: 'SETTING_UP',
+    ratchetButtonAnimated: false,
+    prState: 'NONE',
+    prCiStatus: 'UNKNOWN',
+    ratchetState: 'IDLE',
+  },
+  // ARCHIVING and ARCHIVED leave the board.
+  'seed-workspace-child': {
+    kanbanColumn: null,
+    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
+    flowPhase: 'NO_PR',
+    ciObservation: 'NOT_FETCHED',
+    statusReason: 'ARCHIVING',
+    ratchetButtonAnimated: false,
+    prState: 'NONE',
+    prCiStatus: 'UNKNOWN',
+    ratchetState: 'IDLE',
+  },
+  'seed-workspace-archived': {
+    kanbanColumn: null,
+    sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
+    flowPhase: 'NO_PR',
+    ciObservation: 'NOT_FETCHED',
+    statusReason: 'ARCHIVED',
+    ratchetButtonAnimated: false,
+    prState: 'NONE',
+    prCiStatus: 'UNKNOWN',
+    ratchetState: 'IDLE',
+  },
+};
+
+/**
+ * Each seeded session as the workspace read summarises it: the stored status is
+ * kept, but no runtime is attached after a restart, so none is working. A stale
+ * RUNNING row must not read as busy.
+ */
+const DERIVED_SESSIONS: Record<
+  string,
+  { provider: string; persistedStatus: string; model: string; codexAccountId: string | null }
+> = {
+  'seed-session-claude-idle': {
+    provider: 'CLAUDE',
+    persistedStatus: 'IDLE',
+    model: 'sonnet',
+    codexAccountId: null,
+  },
+  'seed-session-codex-running': {
+    provider: 'CODEX',
+    persistedStatus: 'RUNNING',
+    model: 'gpt-5.4',
+    codexAccountId: 'seed-codex-managed',
+  },
+  'seed-session-claude-paused': {
+    provider: 'CLAUDE',
+    persistedStatus: 'PAUSED',
+    model: 'opus',
+    codexAccountId: null,
+  },
+  'seed-session-codex-completed': {
+    provider: 'CODEX',
+    persistedStatus: 'COMPLETED',
+    model: 'gpt-5.4',
+    codexAccountId: 'codex-native-default',
+  },
+  'seed-session-claude-failed': {
+    provider: 'CLAUDE',
+    persistedStatus: 'FAILED',
+    model: 'sonnet',
+    codexAccountId: null,
+  },
+  'seed-session-event': {
+    provider: 'CLAUDE',
+    persistedStatus: 'IDLE',
+    model: 'sonnet',
+    codexAccountId: null,
+  },
+};
+
+/** Each seeded event-agent run as the history read reports it. */
+const DERIVED_RUNS: Record<
+  string,
+  {
+    status: string;
+    launchPhase: string;
+    delivery: string | null;
+    workspaceState: string;
+    reasonCode: string | null;
+    context: string;
+  }
+> = {
+  'seed-run-queued': {
+    status: 'QUEUED',
+    launchPhase: 'RESERVED',
+    delivery: null,
+    workspaceState: 'UNRESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-provisioning': {
+    status: 'RUNNING',
+    launchPhase: 'PROVISIONING',
+    delivery: null,
+    workspaceState: 'RESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-ready': {
+    status: 'RUNNING',
+    launchPhase: 'READY',
+    delivery: 'PENDING',
+    workspaceState: 'RESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-dispatching': {
+    status: 'RUNNING',
+    launchPhase: 'DISPATCHING',
+    delivery: 'SENDING',
+    workspaceState: 'RESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-active': {
+    status: 'RUNNING',
+    launchPhase: 'ACTIVE',
+    delivery: 'ACCEPTED',
+    workspaceState: 'LIVE',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-attention': {
+    status: 'FAILED',
+    launchPhase: 'NEEDS_ATTENTION',
+    delivery: 'AMBIGUOUS',
+    workspaceState: 'RESERVED',
+    reasonCode: 'DELIVERY_AMBIGUOUS',
+    context: 'RETAINED',
+  },
+  'seed-run-completed': {
+    status: 'COMPLETED',
+    launchPhase: 'FINISHED',
+    delivery: 'FINISHED',
+    workspaceState: 'RESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-pr-created': {
+    status: 'PR_CREATED',
+    launchPhase: 'FINISHED',
+    delivery: null,
+    workspaceState: 'RESERVED',
+    reasonCode: null,
+    context: 'RETAINED',
+  },
+  'seed-run-cancelled': {
+    status: 'CANCELLED',
+    launchPhase: 'FINISHED',
+    delivery: null,
+    workspaceState: 'RESERVED',
+    reasonCode: 'SOURCE_RESET',
+    context: 'EXPIRED',
+  },
+};
+
+/** Trigger id to [activation state, capability reason, source health, paused reason]. */
+const DERIVED_TRIGGERS: Record<string, [string, string, string | null, string | null]> = {
+  'seed-trigger-github': ['ACTIVE', 'SUPPORTED', 'READY', null],
+  'seed-trigger-slack': ['STARTING', 'SLACK_INTAKE_UNAVAILABLE', 'CATCHING_UP', null],
+  // Schedules run as periodic tasks, so an event automation reports them unsupported.
+  'seed-trigger-schedule': ['PAUSED', 'UNSUPPORTED_SCHEDULE', null, 'ACTIVATION_EXPIRED'],
+};
+
 let db: IntegrationDatabase;
 let application: Application;
 let dispose: typeof disposeApplication;
@@ -96,6 +354,43 @@ let trpc: ReturnType<typeof appRouter.createCaller>;
 let seeded: SeedCoverage;
 let pendingBeforeUpgrade: string[];
 let backupsTaken: boolean;
+let factory: typeof import('@/backend/services/session/service/acp/acp-client-factory');
+/** Every signal the code under test tried to send, whatever the guard answered. */
+const signalAttempts: Array<{ pid: number; signal: string | number | undefined }> = [];
+
+/**
+ * Nothing in this check may start a provider or signal a process. The global
+ * `afterEach` in `setup.ts` restores every spy, so the guards are installed
+ * before each test, not once in `beforeAll`.
+ */
+function installGuards(): void {
+  vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(() => {
+    throw new Error('Unexpected provider creation');
+  });
+  // Liveness probes (signal 0) find no process; any real signal is recorded and refused.
+  vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    signalAttempts.push({ pid, signal });
+    if (signal === 0) {
+      throw Object.assign(new Error(`kill ESRCH ${pid}`), { code: 'ESRCH' });
+    }
+    throw new Error(`Unexpected host signal ${String(signal)} to ${pid}`);
+  });
+}
+
+function expectGuardsActive(): void {
+  expect(vi.isMockFunction(process.kill)).toBe(true);
+  expect(vi.isMockFunction(factory.AcpClientFactory.prototype.createClient)).toBe(true);
+}
+
+beforeEach(() => {
+  signalAttempts.length = 0;
+  installGuards();
+});
+
+afterEach(() => {
+  expectGuardsActive();
+  expect(signalAttempts.filter(({ signal }) => signal !== 0)).toEqual([]);
+});
 
 beforeAll(async () => {
   db = await createIntegrationDatabase({
@@ -131,19 +426,10 @@ beforeAll(async () => {
   vi.spyOn(runScript.RunScriptService.prototype, 'registerShutdownHandlers').mockImplementation(
     () => undefined
   );
-  const factory = await vi.importActual<
+  factory = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-client-factory')
   >('@/backend/services/session/service/acp/acp-client-factory');
-  vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(() => {
-    throw new Error('Unexpected provider creation');
-  });
-  // Liveness probes (signal 0) find no process; any real signal fails this check.
-  vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-    if (signal === 0) {
-      throw Object.assign(new Error(`kill ESRCH ${pid}`), { code: 'ESRCH' });
-    }
-    throw new Error(`Unexpected host signal ${String(signal)} to ${pid}`);
-  });
+  installGuards();
 
   const app =
     await vi.importActual<typeof import('@/backend/app-context')>('@/backend/app-context');
@@ -157,6 +443,9 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  if (factory) {
+    installGuards();
+  }
   try {
     if (application) {
       await dispose(application);
@@ -217,12 +506,46 @@ describe('upgrading from the last published release', () => {
     );
     const manual = lists[0]?.workspaces.find(({ id }) => id === WORKSPACE_MANUAL);
     expect(manual?.prs).toHaveLength(2);
+    for (const workspace of lists.flatMap((list) => list.workspaces)) {
+      const expected = DERIVED_WORKSPACES[workspace.id];
+      expect(workspace, workspace.id).toMatchObject({
+        kanbanColumn: expected?.kanbanColumn,
+        sidebarStatus: expected?.sidebarStatus,
+        flowPhase: expected?.flowPhase,
+        ciObservation: expected?.ciObservation,
+        statusReason: { code: expected?.statusReason },
+        ratchetButtonAnimated: expected?.ratchetButtonAnimated,
+        prState: expected?.prState,
+        prCiStatus: expected?.prCiStatus,
+        ratchetState: expected?.ratchetState,
+        isWorking: false,
+      });
+    }
   });
 
   it('reads each workspace, its sessions, terminals and closed sessions', async () => {
     for (const { id, status } of seededWorkspaces) {
       const detail = await trpc.workspace.get({ id });
       expect(detail.status).toBe(status);
+      const expected = DERIVED_WORKSPACES[id];
+      expect(detail, id).toMatchObject({
+        kanbanColumn: expected?.kanbanColumn,
+        sidebarStatus: expected?.sidebarStatus,
+        flowPhase: expected?.flowPhase,
+        ciObservation: expected?.ciObservation,
+        statusReason: { code: expected?.statusReason },
+        ratchetButtonAnimated: expected?.ratchetButtonAnimated,
+        pendingRequestType: null,
+      });
+      for (const summary of detail.sessionSummaries) {
+        expect(summary, summary.sessionId).toMatchObject({
+          ...DERIVED_SESSIONS[summary.sessionId],
+          runtimePhase: 'idle',
+          processState: 'stopped',
+          activity: 'IDLE',
+          pendingRequestType: null,
+        });
+      }
       const sessions = await trpc.session.listSessions({ workspaceId: id });
       expect(sessions.map((session) => session.id).sort()).toEqual(
         seededSessions
@@ -232,6 +555,11 @@ describe('upgrading from the last published release', () => {
       );
       for (const session of sessions) {
         expect((await trpc.session.getSession({ id: session.id })).workspaceId).toBe(id);
+        expect(session.isWorking, session.id).toBe(false);
+        expect(session, session.id).toMatchObject({
+          provider: DERIVED_SESSIONS[session.id]?.provider,
+          status: DERIVED_SESSIONS[session.id]?.persistedStatus,
+        });
       }
       await trpc.session.listTerminalSessions({ workspaceId: id });
       await trpc.closedSessions.list({ workspaceId: id });
@@ -282,7 +610,30 @@ describe('upgrading from the last published release', () => {
     expect(result.workspacesReconciled).toBe(result.workspacesScanned);
     const store = application.services.workspaceSnapshotStore;
     for (const { id, status } of seededWorkspaces) {
-      expect(store.getByWorkspaceId(id) !== undefined, id).toBe(status !== 'ARCHIVED');
+      const entry = store.getByWorkspaceId(id);
+      expect(entry !== undefined, id).toBe(status !== 'ARCHIVED');
+      const expected = DERIVED_WORKSPACES[id];
+      if (entry && expected) {
+        expect(entry, id).toMatchObject({
+          status,
+          kanbanColumn: expected.kanbanColumn,
+          sidebarStatus: expected.sidebarStatus,
+          flowPhase: expected.flowPhase,
+          ciObservation: expected.ciObservation,
+          statusReason: { code: expected.statusReason },
+          prState: expected.prState,
+          prCiStatus: expected.prCiStatus,
+          ratchetState: expected.ratchetState,
+          isWorking: false,
+        });
+        for (const summary of entry.sessionSummaries) {
+          expect(summary, summary.sessionId).toMatchObject({
+            provider: DERIVED_SESSIONS[summary.sessionId]?.provider,
+            persistedStatus: DERIVED_SESSIONS[summary.sessionId]?.persistedStatus,
+            activity: 'IDLE',
+          });
+        }
+      }
     }
   });
 
@@ -290,9 +641,21 @@ describe('upgrading from the last published release', () => {
     const { prisma } = db;
     const { reconciliationService, runScriptStateMachine, sessionLifecycleService } =
       application.services;
+    // Provisioning recovery asks git about the project's repository, so point the
+    // seeded project at a real, empty one inside the temp directory.
+    const repoPath = join(db.tempDir, 'repo');
+    execFileSync('git', ['init', '-q', repoPath]);
+    await prisma.project.update({
+      where: { id: PROJECT_GITHUB },
+      data: { repoPath, worktreeBasePath: join(db.tempDir, 'worktrees') },
+    });
     expect(
       (await prisma.agentSession.findUniqueOrThrow({ where: { id: SESSION_CODEX_RUNNING } })).status
     ).toBe('RUNNING');
+    expect(
+      (await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })).status
+    ).toBe('PROVISIONING');
+    expectGuardsActive();
     await reconciliationService.cleanupOrphans();
     await sessionLifecycleService.recoverStaleRunningSessions();
     await reconciliationService.recoverStaleProvisioningWorkspaces();
@@ -303,12 +666,24 @@ describe('upgrading from the last published release', () => {
         where: { status: { in: ['STARTING', 'STOPPING'] } },
       })
     ).toEqual([]);
+    expect(
+      await prisma.workspace.findUniqueOrThrow({ where: { id: WORKSPACE_ISSUE } })
+    ).toMatchObject({
+      status: 'FAILED',
+      initErrorMessage: expect.stringContaining('Provisioning timed out'),
+    });
+    // The only process question recovery asks is a liveness probe of the seeded pid.
+    expect(signalAttempts).toEqual([{ pid: UNUSED_PID, signal: 0 }]);
   });
 
   it('reads periodic tasks and their executions', async () => {
     const tasks = await trpc.periodicTask.list({ projectId: PROJECT_GITHUB });
     expect(tasks).toHaveLength(5);
-    await trpc.periodicTask.navigationSummary({ projectId: PROJECT_GITHUB });
+    // The latest finished execution of the daily task is the failed one.
+    expect(await trpc.periodicTask.navigationSummary({ projectId: PROJECT_GITHUB })).toEqual({
+      totalCount: 5,
+      failedCount: 1,
+    });
     const executions = await Promise.all(
       tasks.map(async ({ id }) => {
         await trpc.periodicTask.get({ id });
@@ -323,50 +698,72 @@ describe('upgrading from the last published release', () => {
     const projectId = PROJECT_GITHUB;
     const list = await trpc.automation.list({ projectId });
     expect(list.items).toHaveLength(3);
-    const triage = await trpc.automation.get({ projectId, agentId: DEFINITION_TRIAGE });
-    expect(
-      triage.configuredTriggers.map((trigger) => [trigger.activationState, trigger.capability])
-    ).toEqual([
-      ['ACTIVE', { status: 'SUPPORTED', reasonCode: 'SUPPORTED', explanation: expect.any(String) }],
-    ]);
-    expect(triage.configuredTriggers[0]?.sourceHealth?.state).toBe('READY');
-    const digest = await trpc.automation.get({ projectId, agentId: DEFINITION_DIGEST });
-    const digestTriggers = [...digest.configuredTriggers, ...digest.retainedTriggers];
-    expect(digestTriggers.map((trigger) => trigger.activationState).sort()).toEqual([
-      'PAUSED',
-      'STARTING',
-    ]);
-    expect(digestTriggers.map((trigger) => trigger.capability.reasonCode)).not.toContain(
-      'INVALID_STORED_DATA'
+    const triggers = Object.fromEntries(
+      (
+        await Promise.all(
+          [DEFINITION_TRIAGE, DEFINITION_DIGEST].map((agentId) =>
+            trpc.automation.get({ projectId, agentId })
+          )
+        )
+      ).flatMap((agent) =>
+        [...agent.configuredTriggers, ...agent.retainedTriggers].map((trigger) => [
+          trigger.id,
+          [
+            trigger.activationState,
+            trigger.capability.reasonCode,
+            trigger.sourceHealth?.state ?? null,
+            trigger.pausedReasonCode,
+          ],
+        ])
+      )
     );
+    expect(triggers).toEqual(DERIVED_TRIGGERS);
+    const digest = await trpc.automation.get({ projectId, agentId: DEFINITION_DIGEST });
     expect(
-      digestTriggers.find((trigger) => trigger.pendingVerification)?.pendingVerification
+      [...digest.configuredTriggers, ...digest.retainedTriggers].find(
+        (trigger) => trigger.pendingVerification
+      )?.pendingVerification
     ).toMatchObject({ message: expect.stringContaining('abcd-efgh-jkmn') });
 
-    const triageRuns = await trpc.automation.runs({ projectId, agentId: DEFINITION_TRIAGE });
-    expect(triageRuns.items.map((run) => run.status).sort()).toEqual(
-      [
-        'CANCELLED',
-        'COMPLETED',
-        'FAILED',
-        'PR_CREATED',
-        'QUEUED',
-        'RUNNING',
-        'RUNNING',
-        'RUNNING',
-      ].sort()
+    const runs = (
+      await Promise.all(
+        [DEFINITION_TRIAGE, DEFINITION_DIGEST].map((agentId) =>
+          trpc.automation.runs({ projectId, agentId })
+        )
+      )
+    ).flatMap((page) => page.items);
+    expect(
+      Object.fromEntries(
+        runs.map((run) => [
+          run.id,
+          {
+            status: run.status,
+            launchPhase: run.launchPhase,
+            delivery: run.delivery?.state ?? null,
+            workspaceState: run.workspaceState,
+            reasonCode: run.reasonCode,
+            context: run.context.state,
+          },
+        ])
+      )
+    ).toEqual(DERIVED_RUNS);
+    const evaluations = await Promise.all(
+      [DEFINITION_TRIAGE, DEFINITION_DIGEST].map((agentId) =>
+        trpc.automation.evaluations({ projectId, agentId })
+      )
     );
-    expect(triageRuns.items.find((run) => run.status === 'CANCELLED')?.context.state).toBe(
-      'EXPIRED'
-    );
-    const matched = await trpc.automation.evaluations({ projectId, agentId: DEFINITION_TRIAGE });
-    expect(matched.items.map((evaluation) => evaluation.status)).toEqual(['MATCHED']);
-    const others = await trpc.automation.evaluations({ projectId, agentId: DEFINITION_DIGEST });
-    expect(others.items.map((evaluation) => evaluation.status).sort()).toEqual([
-      'ERROR',
-      'SKIPPED',
+    expect(
+      evaluations.flatMap((page) =>
+        page.items.map((item) => [item.id, item.status, item.reasonCode, item.runId])
+      )
+    ).toEqual([
+      ['seed-evaluation-matched', 'MATCHED', 'MATCHED', 'seed-run-queued'],
+      ['seed-evaluation-skipped', 'SKIPPED', 'NOT_MATCHED', null],
+      ['seed-evaluation-error', 'ERROR', 'INVALID_STORED_DATA', null],
     ]);
-    expect(await trpc.automation.navigationSummary({ projectId })).toMatchObject({
+    // The latest finished run of each agent decides this count, and that is a cancellation.
+    expect(await trpc.automation.navigationSummary({ projectId })).toEqual({
+      totalCount: 3,
       failedCount: 0,
     });
     const origin = await trpc.automation.workspaceOrigin({

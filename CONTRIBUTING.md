@@ -70,7 +70,9 @@ normal suite (`src/backend/upgrade-from-last-release.integration.test.ts`)
 therefore starts from a database the last published release left, with seeded
 rows in every table, runs the current migrations and reads what the board and
 automations pages read; a migration that cannot cope with real rows fails there.
-Maintainers re-pin it after each release
+A failure means the code broke upgrades from that release: fix the code. The
+seed changes only when re-pinning or adding rows for a new table or value, and
+its digest is checked. Maintainers re-pin it after each release
 ([npm release security](docs/npm-release-security.md#after-a-release-is-published)).
 
 ## Verification
