@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test';
 import { ensureBackendRunning, killBackend, restartBackend } from '../support/backend-process';
 import { expectNoReload, markPage, trackSockets } from '../support/no-reload';
+import { sendMessage } from './conversation';
 import { launchWorkspace, openBoard, readSandbox, releaseGate } from './sandbox';
 
 // The server crashes and stays down: the open page says it is reconnecting and keeps trying, and
@@ -41,10 +42,7 @@ test('the page waits out a crashed server and recovers when it restarts', async 
   // The chat sends a turn and shows it streaming; the board shows the workspace at work, then
   // waiting again once the turn ends. Both arrive over the reconnected sockets.
   const gate = 'bannerwren';
-  await page
-    .getByRole('textbox', { name: 'Message' })
-    .fill(`Bannerwren is back ff-scenario:gated-stream:${gate}`);
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await sendMessage(page, `Bannerwren is back ff-scenario:gated-stream:${gate}`);
   await expect(conversation.getByText(`Waiting at gate ${gate}.`)).toBeVisible({ timeout: 60_000 });
   await expect(sidebarCard(page, 'Working')).toBeVisible({ timeout: 30_000 });
   releaseGate(sandbox, gate);

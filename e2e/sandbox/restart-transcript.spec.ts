@@ -6,6 +6,7 @@ import {
   restartBackend,
 } from '../support/backend-process';
 import { expectNoReload, markPage, trackSockets } from '../support/no-reload';
+import { sendMessage } from './conversation';
 import { launchWorkspace, openBoard, readSandbox, reply, rolloutHolding } from './sandbox';
 
 // A crash after a finished turn: the server dies with SIGKILL and starts again on the same port.
@@ -50,8 +51,7 @@ test('a finished conversation survives a server crash and restart', async ({ pag
 
   // The conversation goes on in the resumed Codex thread, with its history shown once.
   const message = 'Restartfinch after the restart';
-  await page.getByRole('textbox', { name: 'Message' }).fill(message);
-  await page.getByRole('button', { name: 'Send message' }).click();
+  await sendMessage(page, message);
   await expect(reply(conversation, message)).toBeVisible({ timeout: 120_000 });
   // Each message once, and the agent's echo of each once: a replay over the loaded history, or a
   // turn the resumed thread lost, would change a count.
