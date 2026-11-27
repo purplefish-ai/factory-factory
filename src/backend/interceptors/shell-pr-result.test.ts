@@ -45,6 +45,14 @@ describe('shell PR creation results', () => {
   });
 
   it.each([
+    'gh \\\n  pr \\\n create',
+    'gh p\\\nr create',
+    '(gh pr create)',
+    '(cd other && (gh pr create))',
+  ])('recognizes shell grouping and line continuations in %s', (command) => {
+    expect(detect(command, first)).toEqual([first]);
+  });
+  it.each([
     'rg "gh pr create" log',
     "echo 'x; gh pr create'",
     "cat <<'EOF'\ngh pr create\nEOF",
@@ -52,5 +60,6 @@ describe('shell PR creation results', () => {
     'gh api repos/org/repo/pulls/1/comments -f body=x',
     'gh api --jq repos/org/repo/pulls -f title=x',
     'echo noop # gh pr create',
+    'args=(gh pr create)',
   ])('ignores non-creates in %s', (command) => expect(detect(command, first)).toEqual([]));
 });

@@ -27,3 +27,16 @@ it('ignores links in prose returned by failed create operations', () => {
     getGithubMcpCreatedPrUrl({ ...event, output: { isError: true, content: url } })
   ).toBeNull();
 });
+
+it('reads structured results from the completion aggregated output', () => {
+  expect(
+    getGithubMcpCreatedPrUrl({
+      ...event,
+      output: undefined,
+      input: {
+        ...event.input,
+        aggregatedOutput: JSON.stringify({ result }),
+      },
+    })
+  ).toBe(url);
+});

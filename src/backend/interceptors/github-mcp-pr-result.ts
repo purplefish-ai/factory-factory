@@ -67,5 +67,9 @@ export function getGithubMcpCreatedPrUrl(event: ToolEvent): string | null {
   if (event.output?.isError || !recognized) {
     return null;
   }
-  return readResult(event.input.rawOutput) ?? readResult(event.output?.content);
+  return (
+    readResult(event.input.rawOutput) ??
+    readResult(event.input.aggregatedOutput) ??
+    readResult(event.output?.content)
+  );
 }

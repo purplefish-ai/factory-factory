@@ -10,7 +10,7 @@ function literalWord(raw: string): string {
   return raw.replace(
     /'([^']*)'|"((?:\\[\s\S]|[^"\\])*)"|\\([\s\S])/g,
     (_, single: string | undefined, double: string | undefined, escaped: string) =>
-      single ?? double?.replace(/\\(["\\$`\n])/g, '$1') ?? escaped
+      single ?? double?.replace(/\\(["\\$`\n])/g, '$1') ?? (escaped === '\n' ? '' : escaped)
   );
 }
 
@@ -98,7 +98,7 @@ function skipHeredocs(script: string, start: number, delimiters: string[]): numb
 
 function nextToken(script: string, cursor: number): string | undefined {
   // Comments and whitespace are recognized only at token boundaries.
-  const trivia = /#[^\n]*|[^\S\n]+/y;
+  const trivia = /\\\n|#[^\n]*|[^\S\n]+/y;
   for (const pattern of [trivia, shellOperator, shellWord]) {
     pattern.lastIndex = cursor;
     const token = pattern.exec(script)?.[0];
@@ -107,6 +107,16 @@ function nextToken(script: string, cursor: number): string | undefined {
     }
   }
   return undefined;
+}
+
+function isShellTrivia(token: string): boolean {
+  return token === '\\\n' || /^(?:#|\s)/.test(token);
+}
+
+function isCommandBoundary(token: string, words: string[]): boolean {
+  // A subshell starts in command position. An array assignment's parenthesis
+  // follows a word and leaves its elements in argument position.
+  return (token === '(' && words.length === 0) || [';', '&&', '||', '|', '&', ')'].includes(token);
 }
 
 function readCommandWords(script: string): string[][] {
@@ -126,7 +136,7 @@ function readCommandWords(script: string): string[][] {
       return [];
     }
     cursor += token.length;
-    if (/^(?:#|\s)/.test(token)) {
+    if (isShellTrivia(token)) {
       continue;
     }
     if (expectingDelimiter) {
@@ -134,7 +144,7 @@ function readCommandWords(script: string): string[][] {
       expectingDelimiter = false;
     } else if (token === '<<' || token === '<<-') {
       expectingDelimiter = true;
-    } else if ([';', '&&', '||', '|', '&'].includes(token)) {
+    } else if (isCommandBoundary(token, words)) {
       commands.push(words);
       words = [];
     } else {
