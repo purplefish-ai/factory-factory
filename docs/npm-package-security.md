@@ -17,12 +17,15 @@ counts describe the locked checkout graph on that platform, not every possible
 npm consumer resolution. Prisma still brings some browser-related dependencies
 transitively through its CLI.
 
-The npm release workflow runs the tarball through `npm exec` from a temporary
-directory with its own npm cache, then exercises CLI startup, database
-migration, SQLite queries and a real PTY spawn. These npm commands validate
-Linux customer compatibility on the Ubuntu release runner; they do not cover
-Windows or macOS npm installs. Local macOS arm64 validation used a separate pnpm
-consumer project and exercised the packed hook, SQLite and PTY spawn. Repository
+CI and the npm release workflow run the tarball through `npm exec` from a
+temporary directory with its own npm cache, then exercise CLI startup, database
+migration, SQLite queries, a real PTY spawn and one workspace: a project on a
+temporary repository, a workspace whose first prompt the scripted fake Codex
+app-server answers, and its Git worktree. The fake is copied from the checkout;
+the package does not ship it. Pull requests run this on Ubuntu for each
+supported Node floor and on macOS for the oldest; the release workflow runs it
+on Ubuntu, macOS and Windows for four Node versions. Windows skips the workspace
+turn, because it cannot start a Node script as the Codex executable. Repository
 dependency maintenance continues to use the pinned pnpm version.
 
 ## Production artifacts

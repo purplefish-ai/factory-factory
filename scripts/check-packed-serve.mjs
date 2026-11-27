@@ -1,12 +1,23 @@
 // Run via npm exec in an isolated consumer directory, with the tarball on PATH.
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { verifySetupTerminal } from './packed-setup-terminal.mjs';
+import { driveWorkspace } from './packed-workspace.mjs';
 import { stopProcessGroup } from './sandbox/process-group.mjs';
 
 const [cachePath, phase = 'cold'] = process.argv.slice(2);
@@ -68,6 +79,52 @@ function stopWindowsTree(pid) {
 const consumerHome = resolve('home');
 mkdirSync(consumerHome, { recursive: true });
 const baseDir = resolve('data');
+
+// The workspace turn runs the scripted fake Codex app-server from the checkout (test code the
+// package does not ship) through the packed Codex ACP adapter, which starts CODEX_PATH. Windows
+// cannot start a Node script as an executable, so the turn runs on Linux and macOS only.
+const drivesWorkspace = !windows;
+const fakeCodex = resolve('fake-codex', 'codex');
+const gitEnv = { PATH: process.env.PATH, HOME: consumerHome, GIT_CONFIG_NOSYSTEM: '1' };
+let projectRepo;
+if (drivesWorkspace) {
+  mkdirSync(dirname(fakeCodex), { recursive: true });
+  copyFileSync(
+    fileURLToPath(
+      new URL('../src/backend/testing/fixtures/fake-codex-app-server.mjs', import.meta.url)
+    ),
+    fakeCodex
+  );
+  chmodSync(fakeCodex, 0o755);
+  // The server reads this identity too: its HOME is the consumer's.
+  writeFileSync(
+    join(consumerHome, '.gitconfig'),
+    '[user]\n\tname = Packed Check\n\temail = packed-check@factory-factory.invalid\n' +
+      '[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n'
+  );
+  // A new repository each run: the npm release workflow reuses this consumer directory.
+  mkdirSync(resolve('projects'), { recursive: true });
+  projectRepo = mkdtempSync(join(resolve('projects'), 'repo-'));
+  const git = (...args) => execFileSync('git', args, { cwd: projectRepo, env: gitEnv });
+  writeFileSync(join(projectRepo, 'README.md'), '# Packed check project\n');
+  git('init', '--quiet');
+  git('add', 'README.md');
+  git('commit', '--quiet', '-m', 'Initial commit');
+}
+
+async function verifyWorkspace(origin) {
+  await driveWorkspace({
+    origin,
+    repoPath: projectRepo,
+    z,
+    fetch,
+    openSocket: (url) => new WebSocket(url, { origin }),
+    git: (args) => execFileSync('git', args, { cwd: projectRepo, env: gitEnv, encoding: 'utf8' }),
+    realpath: realpathSync,
+    log: (line) => console.log(line),
+  });
+}
+
 const serveArgs = ['serve', '--no-open', '--host', '127.0.0.1'];
 const child = spawn(
   windows ? 'cmd.exe' : join(bin, executable),
@@ -85,6 +142,14 @@ const child = spawn(
       BASE_DIR: baseDir,
       FF_EMIT_BACKEND_PORT: '1',
       DATABASE_PATH: resolve('data', 'test.db'),
+      ...(drivesWorkspace
+        ? {
+            CODEX_PATH: fakeCodex,
+            CODEX_HOME: resolve('codex-home'),
+            // The fake's reply to a prompt without a scenario token is the prompt itself.
+            FF_SANDBOX_SCENARIO: 'echo',
+          }
+        : {}),
       ...(windows
         ? {
             USERPROFILE: consumerHome,
@@ -130,6 +195,9 @@ async function verifyServer() {
         throw new Error('Missing packed UI');
       }
       await verifyTerminal(origin);
+      if (drivesWorkspace) {
+        await verifyWorkspace(origin);
+      }
       return;
     }
     await delay(500);
@@ -171,4 +239,8 @@ try {
   }
 }
 cancellation.signal.throwIfAborted();
-console.log(`Packed UI, database and setup terminal passed on Node ${process.version}`);
+console.log(
+  drivesWorkspace
+    ? `Packed UI, database, setup terminal and a workspace turn passed on Node ${process.version}`
+    : `Packed UI, database and setup terminal passed on Node ${process.version}`
+);
