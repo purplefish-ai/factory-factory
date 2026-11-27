@@ -58,11 +58,14 @@ const TOKENS = [
   'cache_creation.ephemeral_1h_input_tokens',
 ];
 const under = (prefix, names) => names.map((name) => `${prefix}.${name}`);
-// Every JSON Schema `type` in a tool's input schema, through nested properties
-// and array items. Only string values survive, so a property named `type`,
-// whose value is a schema, is still walked rather than kept.
+// Each JSON Schema `type` in a tool's input schema, through nested properties
+// and array items, down to SCHEMA_DEPTH keys below the schema (the recorded
+// tools nest eight). Only string values survive, so a property named `type`,
+// whose value is a schema, is still walked rather than kept. Paths are
+// patterns, which cannot recurse, so a deeper `type` becomes "<string>".
+const SCHEMA_DEPTH = 16;
 const schemaTypes = (root) =>
-  Array.from({ length: 10 }, (_, depth) => `${root}${'.*'.repeat(depth)}.type`);
+  Array.from({ length: SCHEMA_DEPTH + 1 }, (_, depth) => `${root}${'.*'.repeat(depth)}.type`);
 const ACP_USAGE = [
   'inputTokens',
   'outputTokens',
