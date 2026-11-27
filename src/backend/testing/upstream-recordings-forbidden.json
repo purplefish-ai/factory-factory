@@ -1,0 +1,17 @@
+{
+  "description": "Data for upstream-recordings-leak.test.ts. Terms match case-insensitively as substrings; patterns are JavaScript regular expressions (flags i). Extend either list when a new kind of private value is found.",
+  "terms": ["martin", "macbook", "purplefish", ".ts.net", "tailscale", "/Users/", "/home/"],
+  "patterns": [
+    {
+      "name": "email address",
+      "source": "[\\w.+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}"
+    },
+    { "name": "API key", "source": "\\bsk-[A-Za-z0-9_-]{8,}" },
+    { "name": "bearer token", "source": "\\bBearer\\s" },
+    { "name": "JWT", "source": "eyJ[\\w-]{5,}\\.[\\w-]{5,}\\.[\\w-]{5,}" },
+    { "name": "long base64 run", "source": "[A-Za-z0-9+/]{40,}" },
+    { "name": "long hex run", "source": "[0-9a-f]{32,}" },
+    { "name": "macOS temp directory", "source": "/var/folders/" },
+    { "name": "private temp directory", "source": "/private/(?:tmp|var)/" }
+  ]
+}

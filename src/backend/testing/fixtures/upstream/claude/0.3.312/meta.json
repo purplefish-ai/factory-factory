@@ -1,0 +1,32 @@
+{
+  "tool": "claude",
+  "runtime": {
+    "package": "@anthropic-ai/claude-agent-sdk",
+    "version": "0.3.312"
+  },
+  "adapter": {
+    "package": "@agentclientprotocol/claude-agent-acp",
+    "version": "0.99.1"
+  },
+  "cliVersion": "2.1.312",
+  "recordedOn": "2026-11-27",
+  "platform": "darwin-arm64",
+  "scenarios": ["plain-reply", "approved-command", "interrupted-reply"],
+  "repository": {
+    "README.md": "# Lighthouse Notes\n\nAn invented project used only to record a synthetic agent session.\nIt keeps short notes about imaginary lighthouses.\n",
+    "notes.txt": "Cape Example lighthouse: red and white stripes.\nPoint Sample lighthouse: a green lamp.\n",
+    "count-words.sh": "#!/bin/sh\n# Prints the word count of the two text files.\nwc -w README.md notes.txt\n"
+  },
+  "files": {
+    "acp.jsonl": "Every ACP JSON-RPC message between client and adapter, in order.",
+    "cli-stdio.jsonl": "stream-json lines between the Claude Agent SDK and the Claude Code CLI.",
+    "history.jsonl": "The history file the CLI wrote for the session, line by line.",
+    "prompts.json": "The prompts sent, one per turn."
+  },
+  "notes": [
+    "session/new carries _meta.claudeCode.options {settingSources: [], strictMcpConfig: true}, which Factory Factory does not send, to keep the recording account's user settings, hooks and MCP servers out of the session.",
+    "ENABLE_CLAUDEAI_MCP_SERVERS=false keeps claude.ai connectors out of the session.",
+    "The adapter also runs `claude auth status --json` through CLAUDE_CODE_EXECUTABLE. Each run is an argv record; its multi-line output is joined into one cli->sdk message, which can interleave with the session stream."
+  ],
+  "scrubbing": "Allowlist per stream (scripts/record-upstream/scrub.mjs): unlisted strings are \"<string>\", unlisted numbers 0, ids and timestamps are fixed fakes; the repository is /workspace."
+}

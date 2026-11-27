@@ -1,0 +1,16 @@
+[
+  {
+    "scenario": "plain-reply",
+    "text": "Without using any tools, reply with two short sentences about why a README file is useful."
+  },
+  {
+    "scenario": "approved-command",
+    "text": "Use the Bash tool to run exactly `sh count-words.sh` in this repository, then tell me its output in one sentence.",
+    "action": "The permission request is answered with the allow_once option."
+  },
+  {
+    "scenario": "interrupted-reply",
+    "text": "Without using any tools, count from one to one hundred in words, one number per line.",
+    "action": "session/cancel is sent after the third agent_message_chunk."
+  }
+]

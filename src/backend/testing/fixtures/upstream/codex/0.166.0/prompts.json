@@ -1,0 +1,11 @@
+[
+  {
+    "scenario": "plain-reply",
+    "text": "Without using any tools, reply with two short sentences about why a README file is useful."
+  },
+  {
+    "scenario": "approved-command",
+    "text": "Run exactly `sh count-words.sh` in this repository. Request escalated permissions for that command so that I am asked to approve it, then tell me its output in one sentence.",
+    "action": "The session is in read-only mode; the permission request is answered with allow_once."
+  }
+]
