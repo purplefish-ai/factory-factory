@@ -255,20 +255,26 @@ startup stops before applying any migration and says why, because an older
 version cannot open a migrated database. Set
 `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1` to warn and migrate without a backup;
 every launch and `ff db:migrate` honours it. The in-app update takes its own
-snapshot and sets it for its `db:migrate`. If that `db:migrate` left no new
-backup in `db-backups/`, the update keeps its snapshot of the database as it was
-before the update and logs, as an error, where it is. It is kept in the first of
-these places that works: `db-backups/` as an ordinary
-`data.db-pre-migration-<UTC time>.db`, counted among the three kept and pruned
-like the others; beside the installed package (the directory holding the
-`factory-factory` package, for example `/usr/local/lib/node_modules/`) as
+snapshot and sets it for its `db:migrate`. If the new version had migrations to
+apply and its `db:migrate` left no new backup in `db-backups/`, the update keeps
+its snapshot of the database as it was before the update and logs, as an error,
+where it is; an update with nothing to migrate keeps nothing extra and leaves
+`db-backups/` untouched. It is kept in the first of these places that works:
+`db-backups/` as an ordinary `data.db-pre-migration-<UTC time>.db`, counted
+among the three kept and pruned like the others; beside the installed package
+(the directory holding the `factory-factory` package, for example
+`/usr/local/lib/node_modules/`) as
 `.factory-factory-database-backup-<UTC time>.db`; or, if neither could be made,
 inside the update's `.factory-factory-update-*` directory there, as
-`database-backup`. You can delete one beside the package once the updated
-version works and you no longer want to go back to the database from before the
-update. When the backup succeeds, a failed migration's error names it; to
-restore it, stop Factory Factory, copy the backup over the database file and
-delete its `-wal` and `-shm` files.
+`database-backup`. Nothing deletes the last two: a kept
+`.factory-factory-update-*` directory, in the same directory as the package,
+also holds the previous installation, and the next update does not reuse it.
+Once the updated version works and you no longer want to go back to the database
+from before the update, delete the `.factory-factory-database-backup-*` file, or
+the whole `.factory-factory-update-*` directory while no update is running. When
+the backup succeeds, a failed migration's error names it; to restore it, stop
+Factory Factory, copy the backup over the database file and delete its `-wal`
+and `-shm` files.
 
 To take a complete backup yourself, run `ff backup`. It is safe while Factory
 Factory is running: it takes a SQLite online backup, so the server is neither

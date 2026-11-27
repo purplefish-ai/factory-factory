@@ -101,6 +101,21 @@ function valueIn(path: string) {
   }
 }
 
+/** The new package ships 001 and 002; the database has applied 001, so 002 is pending. */
+async function makeMigrationPending() {
+  const migrations = join(packageRoot, 'prisma', 'migrations');
+  for (const name of ['001_init', '002_next']) {
+    await mkdir(join(migrations, name), { recursive: true });
+    await writeFile(join(migrations, name, 'migration.sql'), 'SELECT 1;');
+  }
+  const database = new Database(databasePath);
+  database.exec(
+    'CREATE TABLE _prisma_migrations (id TEXT PRIMARY KEY, checksum TEXT, migration_name TEXT, finished_at TEXT);' +
+      "INSERT INTO _prisma_migrations VALUES ('1', '', '001_init', CURRENT_TIMESTAMP);"
+  );
+  database.close();
+}
+
 async function preMigrationBackups() {
   const names = await readdir(join(directory, 'db-backups')).catch(() => []);
   return names.filter((name) => name.startsWith('data.db-pre-migration-')).sort();
@@ -159,6 +174,8 @@ beforeEach(async () => {
   versionFile = join(directory, 'installed-version');
   databasePath = join(directory, 'data.db');
   await writeFile(versionFile, '0.5.3');
+  // The new package's migrations: none pending unless a test adds them.
+  await mkdir(join(packageRoot, 'prisma', 'migrations'), { recursive: true });
   const database = new Database(databasePath);
   database.exec(
     "CREATE TABLE test_data(value TEXT); INSERT INTO test_data VALUES ('before update');"
@@ -318,6 +335,13 @@ describe('production serve update integration', () => {
     });
     expect(await readdir(directory)).not.toContain('database-backup');
     expect(databaseValue()).toBe('before update');
+    // Nothing was pending, so there was no backup to miss: the snapshot went with the stage.
+    expect(await preMigrationBackups()).toEqual([]);
+    expect(
+      (await readdir(directory)).filter((name) =>
+        name.startsWith('.factory-factory-database-backup-')
+      )
+    ).toEqual([]);
   });
 
   it('stops the update when its own database snapshot fails, without the override rescuing it', async () => {
@@ -371,6 +395,7 @@ describe('production serve update integration', () => {
       database.close();
       return Promise.resolve();
     });
+    await makeMigrationPending();
     await requestUpdate();
     await ready(await backend(1));
 
@@ -402,6 +427,7 @@ describe('production serve update integration', () => {
     for (const name of existing) {
       await writeFile(join(backupDirectory, name), name);
     }
+    await makeMigrationPending();
     await requestUpdate();
     await ready(await backend(1));
 
@@ -417,6 +443,39 @@ describe('production serve update integration', () => {
     }
   });
 
+  it('lets its snapshot go, and leaves db-backups alone, when nothing was pending to migrate', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const backupDirectory = join(directory, 'db-backups');
+    await mkdir(backupDirectory);
+    const existing = [
+      'data.db-pre-migration-20200101T000000000Z.db',
+      'data.db-pre-migration-20200102T000000000Z.db',
+      'data.db-pre-migration-20200103T000000000Z.db',
+    ];
+    for (const name of existing) {
+      await writeFile(join(backupDirectory, name), name);
+    }
+    await requestUpdate();
+    await ready(await backend(1));
+
+    // The backup taken before the last real migration survives updates without one.
+    expect(await preMigrationBackups()).toEqual(existing);
+    expect(await readdir(directory)).not.toContain('database-backup');
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('keeps its snapshot when it cannot tell whether migrations are pending', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await rm(join(packageRoot, 'prisma'), { recursive: true });
+    await requestUpdate();
+    await ready(await backend(1));
+
+    expect(await preMigrationBackups()).toHaveLength(1);
+    const warned = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(warned).toContain('Could not tell whether migrations are pending');
+  });
+
   it('lets its snapshot go when the migration left a new backup in db-backups', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const childBackup = 'data.db-pre-migration-20300101T000000000Z.db';
@@ -424,6 +483,7 @@ describe('production serve update integration', () => {
       await mkdir(join(directory, 'db-backups'), { recursive: true });
       await writeFile(join(directory, 'db-backups', childBackup), 'the child backup');
     });
+    await makeMigrationPending();
     await requestUpdate();
     await ready(await backend(1));
 
@@ -435,6 +495,7 @@ describe('production serve update integration', () => {
   it('links its snapshot beside the package when db-backups cannot be used', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await writeFile(join(directory, 'db-backups'), 'a file where the directory should be');
+    await makeMigrationPending();
     await requestUpdate();
     await ready(await backend(1));
 
@@ -466,6 +527,7 @@ describe('production serve update integration', () => {
       });
       prepared = { ...prepared, recoveryPath: join(stage, 'previous'), dispose };
       await writeFile(join(directory, 'db-backups'), 'a file where the directory should be');
+      await makeMigrationPending();
       await requestUpdate();
       const replacement = await backend(1);
       // Neither db-backups nor the package's directory accepts a link now.
@@ -492,6 +554,7 @@ describe('production serve update integration', () => {
     const earlier = join(directory, 'db-backups', 'data.db-pre-migration-20261127T101500123Z.db');
     await writeFile(earlier, 'earlier backup');
     try {
+      await makeMigrationPending();
       await requestUpdate();
       await ready(await backend(1));
     } finally {
@@ -557,6 +620,34 @@ describe('production serve update integration', () => {
     const logged = error.mock.calls.map((call) => String(call[0])).join('\n');
     expect(logged).toContain(reason);
     expect(logged).toContain(warning);
+  });
+
+  it.each([
+    {
+      case: 'an uncaught crash, whose output ends with a stack and the Node.js version',
+      stderr:
+        'file:///pkg/dist/src/cli/index.js:10\n    throw error;\n    ^\n\n' +
+        "TypeError: Cannot read properties of undefined (reading 'path')\n" +
+        '    at main (file:///pkg/dist/src/cli/index.js:10:5)\n\nNode.js v24.0.0\n',
+      cause: "TypeError: Cannot read properties of undefined (reading 'path')",
+    },
+    {
+      case: 'unknown applied migrations, whose output ends with advice',
+      stderr:
+        'The database at /data/data.db was updated by a newer version of Factory Factory.\n' +
+        '  If these migrations came from a development branch that shares this database, ' +
+        'set FF_ALLOW_UNKNOWN_MIGRATIONS=1 to start anyway.\n',
+      cause: 'The database at /data/data.db was updated by a newer version of Factory Factory.',
+    },
+  ])('leads the failed update with the cause for $case', async ({ stderr, cause }) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.migrateStderr = stderr;
+    mocks.migrate.mockRejectedValue(new Error('Command failed'));
+    await requestUpdate();
+
+    expect(failedUpdateError(await backend(1)).split('\n')[0]).toBe(
+      `Could not update Factory Factory. The database migration failed: ${cause}`
+    );
   });
 
   it('stores a bounded failure message however long the child output, and logs all of it', async () => {

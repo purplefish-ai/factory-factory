@@ -6,6 +6,7 @@ import { stripVTControlCharacters } from 'node:util';
 import chalk from 'chalk';
 import { z } from 'zod';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
+import { inspectMigrations } from '@/backend/migrate';
 import {
   ALLOW_MIGRATION_WITHOUT_BACKUP_ENV,
   getPreMigrationBackupDirectory,
@@ -50,18 +51,35 @@ async function readPreviousStatus(
   return { phase: 'idle' };
 }
 
+/** A line naming the failure: `TypeError:`, `MigrationBackupError:`, `Error [CODE]:`, `Migration failed:`. */
+const CAUSE_LINE = /\b\w*Error\b(?: \[[^\]]*\])?:|^Migration failed:/;
+/** Node's version footer after an uncaught exception, and advice printed after a failure. */
+const NOT_A_CAUSE = /^Node\.js v\d|^If /;
+
 /**
- * A failed child's output with its last line, the failure itself, first: an
- * earlier warning would otherwise fill the start of the message the update
- * banner shows.
+ * A failed child's output with the line naming the failure first: an earlier
+ * warning would otherwise fill the start of the message the update banner
+ * shows. That line is the last one naming an error; failing that, the last one
+ * that is neither Node's version footer nor advice; failing that, the last.
  */
 function describeChildFailure(output: string, fallback: string): string {
   const lines = output
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-  const last = lines.pop();
-  return last ? [last, ...lines].join('\n') : fallback;
+  if (lines.length === 0) {
+    return fallback;
+  }
+  const lastIndexOf = (test: (line: string) => boolean) =>
+    lines.findLastIndex((line) => test(line));
+  let index = lastIndexOf((line) => CAUSE_LINE.test(line));
+  if (index < 0) {
+    index = lastIndexOf((line) => !NOT_A_CAUSE.test(line));
+  }
+  if (index < 0) {
+    index = lines.length - 1;
+  }
+  return [lines[index], ...lines.filter((_line, other) => other !== index)].join('\n');
 }
 
 /**
@@ -87,6 +105,29 @@ function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<stri
       }
     );
   });
+}
+
+/**
+ * Whether the new package's `db:migrate` will migrate, judged as it judges:
+ * only an existing database with pending migrations gets a backup. When the
+ * inspection fails the answer is yes, which keeps the snapshot.
+ */
+function migrationsPending(projectRoot: string, databasePath: string): boolean {
+  try {
+    const inspection = inspectMigrations({
+      databasePath,
+      migrationsPath: join(projectRoot, 'prisma', 'migrations'),
+    });
+    return inspection.hasAppliedMigrations && inspection.pendingMigrations.length > 0;
+  } catch (error) {
+    console.warn(
+      chalk.yellow(
+        `  [update] Could not tell whether migrations are pending (${String(error)}); ` +
+          'the database snapshot will be kept unless the migration makes its own backup.'
+      )
+    );
+    return true;
+  }
 }
 
 function isAlreadyExists(error: unknown): boolean {
@@ -271,8 +312,9 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       };
     },
     migrate: async () => {
-      // Fails safe: only a new backup file seen on disk lets the snapshot go.
+      // Fails safe: only nothing to migrate, or a new backup file seen on disk, lets the snapshot go.
       snapshotIsOnlyBackup = true;
+      const pending = migrationsPending(options.projectRoot, options.databasePath);
       const before = await listPreMigrationBackups(options.databasePath).catch(() => undefined);
       const output = await runMigrationChild(
         [
@@ -289,7 +331,7 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       }
       const after = await listPreMigrationBackups(options.databasePath).catch(() => []);
       const childMadeBackup = !!before && after.some((name) => !before.includes(name));
-      snapshotIsOnlyBackup = !childMadeBackup;
+      snapshotIsOnlyBackup = pending && !childMadeBackup;
     },
   });
   if (automaticUpdate) {

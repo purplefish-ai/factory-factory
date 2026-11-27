@@ -48,13 +48,13 @@ does not own:
 - The update's `db:migrate` runs with `FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1`
   because the supervisor's own snapshot is its backup; that snapshot failing
   still ends the update before the package moves. A failed `db:migrate` is
-  logged in full; the failed update's message puts its last standard error line
+  logged in full; the failed update's message puts the line naming the error
   first and is capped at 4,096 characters, because the journal is persisted.
-- The snapshot is deleted after a completed update only if a new
-  `<database>-pre-migration-*.db` appeared in `db-backups/` while `db:migrate`
-  ran; the child's wording decides nothing. Otherwise it is hard-linked (no
-  space, never replaces) into `db-backups/` under that pre-migration name, else
-  beside the package as `.factory-factory-database-backup-<UTC time>.db`, else
+- A completed update keeps the snapshot only if the new package had pending
+  migrations (a failed inspection counts as pending) and no new
+  `<database>-pre-migration-*.db` appeared in `db-backups/` during `db:migrate`;
+  wording decides nothing. It is hard-linked into `db-backups/` under that name,
+  else beside the package as `.factory-factory-database-backup-<UTC>.db`, else
   left in the stage (`dispose({ keep })`); the error-level log says where.
   `supervised-serve-session.test.ts`, `application-update-installer.test.ts`.
 - The previous package and the database snapshot are kept until the replacement
