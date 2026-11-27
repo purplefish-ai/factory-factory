@@ -654,6 +654,69 @@ describe('the Codex rollout policy', () => {
     expect(developer.payload.content[0].text).toBe(PLACEHOLDER_STRING);
   });
 
+  it('keeps the role, block types and content item kinds a history loader reads', () => {
+    const shared = context();
+    const message = (role: string) => ({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role,
+        content: [{ type: 'input_text', text: 'secret rules' }],
+        internal_chat_message_metadata_passthrough: {
+          content_item_kinds: ['user.text'],
+          content_item_metadata: [{ provenance: { type: 'harness' } }],
+        },
+      },
+    });
+    for (const role of ['user', 'developer']) {
+      const { payload } = scrubRecord(message(role), POLICIES.codexRollout, shared);
+      expect(payload.role).toBe(role);
+      expect(payload.content[0].type).toBe('input_text');
+      expect(payload.internal_chat_message_metadata_passthrough).toEqual({
+        content_item_kinds: ['user.text'],
+        content_item_metadata: [{ provenance: { type: 'harness' } }],
+      });
+    }
+  });
+
+  it('keeps the JSON Schema types of extra tools, not their names or descriptions', () => {
+    const { payload } = scrubRecord(
+      {
+        type: 'response_item',
+        payload: {
+          type: 'additional_tools',
+          role: 'developer',
+          tools: [
+            {
+              type: 'namespace',
+              name: 'private_namespace',
+              tools: [
+                {
+                  type: 'function',
+                  name: 'private_tool',
+                  description: 'private description',
+                  parameters: {
+                    type: 'object',
+                    properties: { private_field: { type: 'array', items: { type: 'string' } } },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      POLICIES.codexRollout,
+      context()
+    );
+    expect(payload.role).toBe('developer');
+    expect(payload.tools[0].type).toBe('namespace');
+    expect(payload.tools[0].tools[0].parameters).toEqual({
+      type: 'object',
+      properties: { '<key>': { type: 'array', items: { type: 'string' } } },
+    });
+    expect(JSON.stringify(payload)).not.toContain('private');
+  });
+
   it('treats world state as opaque and session instructions as unlisted', () => {
     const shared = context();
     const world = scrubRecord(
