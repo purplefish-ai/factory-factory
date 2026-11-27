@@ -28,8 +28,6 @@ interface TerminalTabsSnapshot {
 /** Terminal tabs and their socket, owned by the panel that renders the tab bar. */
 export interface TerminalTabs extends TerminalTabsSnapshot {
   connected: boolean;
-  gaveUp: boolean;
-  reconnect: () => void;
   selectTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   newTab: () => void;
@@ -300,8 +298,6 @@ export function useTerminalTabs({
     tabs,
     activeTabId,
     connected,
-    gaveUp: socket.gaveUp,
-    reconnect: socket.reconnect,
     selectTab,
     closeTab,
     newTab,

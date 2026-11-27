@@ -58,9 +58,6 @@ interface UseTerminalWebSocketOptions {
 
 interface UseTerminalWebSocketReturn {
   connected: boolean;
-  /** True when automatic reconnection has stopped; call reconnect() to retry. */
-  gaveUp: boolean;
-  reconnect: () => void;
   create: (requestId: string, cols?: number, rows?: number) => void;
   sendInput: (terminalId: string, data: string) => void;
   resize: (terminalId: string, cols: number, rows: number) => void;
@@ -136,7 +133,7 @@ export function useTerminalWebSocket({
     [onOutput, onCreated, onExit, onError, onTerminalList]
   );
 
-  const { connected, gaveUp, send, reconnect } = useWebSocketChannel({
+  const { connected, send } = useWebSocketChannel({
     url,
     schema: TerminalMessageSchema,
     onMessage: handleMessage,
@@ -180,8 +177,6 @@ export function useTerminalWebSocket({
 
   return {
     connected,
-    gaveUp,
-    reconnect,
     create,
     sendInput,
     resize,

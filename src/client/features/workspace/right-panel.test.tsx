@@ -155,8 +155,6 @@ vi.mock('./use-terminal-websocket', () => ({
     mocks.terminalOptions = options;
     return {
       connected: true,
-      gaveUp: false,
-      reconnect: vi.fn(),
       create: mocks.createTerminal,
       sendInput: vi.fn(),
       resize: vi.fn(),

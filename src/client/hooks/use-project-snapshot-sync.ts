@@ -553,5 +553,6 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     onConnected,
     onDisconnected,
     queuePolicy: 'drop',
+    announceConnectionLoss: true,
   });
 }

@@ -41,7 +41,11 @@ async function startUpstream(): Promise<Upstream> {
     disableCorsChecks: false,
     allowOwnLoopbackOrigin: shouldAllowOwnLoopbackOrigin('127.0.0.1', allowedOrigins),
   };
-  const configService = { getCorsConfig: () => corsConfig, getBackendHost: () => '127.0.0.1' };
+  const configService = {
+    getCorsConfig: () => corsConfig,
+    getBackendHost: () => '127.0.0.1',
+    getAppVersion: () => 'test-version',
+  };
   const upstream: Upstream = {
     server: createServer(),
     port: 0,

@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { z } from 'zod';
 import { clientModuleManifest } from './scripts/client-module-manifest.ts';
 import { phosphorIconWeights } from './scripts/phosphor-icon-weights.ts';
 import { precompressAssets } from './scripts/precompress-assets.ts';
@@ -11,6 +13,11 @@ import {
   phosphorWeightAllowlist,
   phosphorWeights,
 } from './src/lib/phosphor-icon-weights.ts';
+
+// The connection banner compares this with the version the server reports.
+const appVersion = z
+  .object({ version: z.string() })
+  .parse(JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8'))).version;
 
 // Backend URL is set by the CLI when running in development mode
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
@@ -65,6 +72,7 @@ export default defineConfig({
   envPrefix: 'VITE_',
   define: {
     'import.meta.env.DEBUG_CHAT_WS': JSON.stringify(process.env.DEBUG_CHAT_WS ?? ''),
+    'import.meta.env.FF_APP_VERSION': JSON.stringify(appVersion),
   },
   resolve: {
     alias: {

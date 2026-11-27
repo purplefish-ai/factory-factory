@@ -16,10 +16,6 @@ const RECONNECT_NOTE = '\r\n\x1b[33m[Connection lost — starting a new shell]\x
 export interface UseSetupTerminalResult {
   /** Whether the WebSocket is currently connected. */
   connected: boolean;
-  /** Whether automatic reconnection has stopped; call reconnect() to retry. */
-  gaveUp: boolean;
-  /** Manually restart the connection after automatic retries gave up. */
-  reconnect: () => void;
   /**
    * Whether the terminal should be rendered. Stays true across transient
    * disconnects (unlike `connected`) so the terminal doesn't vanish while
@@ -41,8 +37,8 @@ export interface UseSetupTerminalResult {
 /**
  * Connection logic for the setup terminal modal.
  *
- * Built on useWebSocketChannel, so a dropped connection reconnects with
- * exponential backoff. The server-side PTY dies with each connection, so
+ * Built on useWebSocketChannel, so a dropped connection keeps reconnecting
+ * with capped exponential backoff. The server-side PTY dies with each connection, so
  * every (re)connect sends a fresh `create`; a note is appended to the output
  * on reconnects so users know the shell restarted.
  */
@@ -84,7 +80,7 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
     [output]
   );
 
-  const { connected, gaveUp, send, reconnect } = useWebSocketChannel({
+  const { connected, send } = useWebSocketChannel({
     url: open ? buildWebSocketUrl('/setup-terminal', {}) : null,
     schema: SetupTerminalMessageSchema,
     onMessage: handleMessage,
@@ -158,8 +154,6 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
 
   return {
     connected,
-    gaveUp,
-    reconnect,
     showTerminal,
     output,
     authenticate,

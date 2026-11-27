@@ -16,7 +16,7 @@ let capturedOptions: UseWebSocketTransportOptions | null = null;
 vi.mock('@/hooks/use-websocket-transport', () => ({
   useWebSocketTransport: (opts: UseWebSocketTransportOptions) => {
     capturedOptions = opts;
-    return { connected: true, gaveUp: false, send: vi.fn(), reconnect: vi.fn() };
+    return { connected: true, send: vi.fn() };
   },
 }));
 
