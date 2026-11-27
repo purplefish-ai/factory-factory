@@ -13,6 +13,7 @@ import {
   cancelSetupHold,
   holdNextSetup,
   launchWithoutWaiting,
+  processRole,
   readBackendTree,
   readProcessTable,
   reportProcesses,
@@ -42,6 +43,9 @@ const GATES = {
 };
 
 let tree: BackendTree | null = null;
+
+/** Observed, not explained by this spec: see the terminal links in its process reports. */
+const shellsOutliveTheServer = process.platform === 'linux';
 
 const gateFile = (gate: string) => join(sandboxPaths(readSandbox().baseDir).gateDir, gate);
 
@@ -160,11 +164,22 @@ test('work in flight when the server is killed, and what the restarted server ma
   await killBackend('SIGKILL');
   await reportProcesses('Still alive at once after the kill', survivorsOf(killed));
   // Each Codex ACP adapter outlives the backend briefly (it interrupts its turn on the way out);
-  // the shells and Codex app-servers end with it. What stays is not owned by anyone.
+  // the Codex app-servers end with it. What stays after that is not owned by anyone.
+  const agents = new Set(['codex ACP adapter', 'codex app-server']);
   await expect
-    .poll(() => rolesByWorkspace(survivorsOf(killed), worktrees), { timeout: 30_000 })
-    .toEqual({ heron: ['run script'], plover: [], curlew: ['setup script'] });
+    .poll(() => survivorsOf(killed).some((row) => agents.has(processRole(row))), {
+      timeout: 30_000,
+    })
+    .toBe(false);
   await reportProcesses('Still alive once the adapters have exited', survivorsOf(killed));
+  // The terminal shells end with the backend on macOS, and outlive it on Linux (the report above
+  // shows which processes hold their terminals open there).
+  const shell = shellsOutliveTheServer ? ['shell'] : [];
+  expect(rolesByWorkspace(survivorsOf(killed), worktrees)).toEqual({
+    heron: ['run script', ...shell],
+    plover: shell,
+    curlew: ['setup script', ...shell],
+  });
 
   await restartBackend();
 
@@ -220,16 +235,16 @@ test('work in flight when the server is killed, and what the restarted server ma
 
   await test.step('a terminal', async () => {
     // KNOWN GAP: https://github.com/purplefish-ai/factory-factory/issues/3361
-    // The shell ends with the server (it was not among the survivors above) and its output is lost:
-    // the restarted server clears the old row's pid and the page opens a new, empty shell as
-    // "Terminal 1".
+    // The page opens a new, empty shell as "Terminal 1", and the old one's output is lost. On
+    // macOS the old shell ended with the server and the restarted server clears its row's pid; on
+    // Linux it lives on, orphaned, and its row keeps the pid.
     await page.getByRole('tab', { name: 'Terminal 1', exact: true }).click();
     await expect(page.locator('.xterm')).toBeVisible();
     await expect(page.locator('.xterm')).not.toContainText('recoverheron-42');
     await expect
       .poll(() => terminalRows(sandbox, heron), { timeout: 30_000 })
       .toEqual([
-        { status: 'IDLE', pid: null },
+        { status: 'IDLE', pid: shellsOutliveTheServer ? heronTerminal?.pid : null },
         { status: 'IDLE', pid: expect.any(Number) },
       ]);
   });

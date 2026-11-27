@@ -26,6 +26,9 @@ import { escapeRegExp, launchWorkspace, openBoard, readSandbox } from './sandbox
 // the server crashes after the archive has snapshotted the worktree and before it removes it,
 // which a kill at an arbitrary moment cannot reach, since an archive takes about a second.
 
+/** Under the archive lease's two minutes, with room for the checks that follow. */
+const LEASE_FRESH_MS = 100_000;
+
 let tree: BackendTree | null = null;
 
 test.afterEach(async () => {
@@ -53,6 +56,7 @@ test('an archive in flight when the server crashes', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Archive workspace' }).click();
   await page.getByRole('button', { name: 'Archive', exact: true }).click();
   expect(await waitForBackendExit()).toEqual({ code: null, signal: 'SIGKILL' });
+  const crashedAt = Date.now();
   expect(readServerOutput()).toContain('crash point archive-before-worktree-removal reached');
   expect(isCrashPointArmed('archive-before-worktree-removal')).toBe(false);
 
@@ -90,7 +94,19 @@ test('an archive in flight when the server crashes', async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/projects/${escapeRegExp(project)}/workspaces$`), {
     timeout: 60_000,
   });
-  expect(workspaceRow(sandbox, stint).status).toBe('ARCHIVING');
-  expect(hasSnapshotRef()).toBe(true);
-  expect(existsSync(worktree)).toBe(true);
+  if (Date.now() - crashedAt < LEASE_FRESH_MS) {
+    expect(workspaceRow(sandbox, stint).status).toBe('ARCHIVING');
+    expect(hasSnapshotRef()).toBe(true);
+    expect(existsSync(worktree)).toBe(true);
+  } else {
+    // A restart this slow (a machine at very high load) let the lease go stale: recovery may
+    // already have taken the row over, so only where it ends is certain.
+    test.info().annotations.push({
+      type: 'slow restart',
+      description: `${Date.now() - crashedAt} ms after the crash; the lease may be stale`,
+    });
+    await expect
+      .poll(() => workspaceRow(sandbox, stint).status, { timeout: 240_000 })
+      .toBe('ARCHIVED');
+  }
 });

@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, type Page, test } from '@playwright/test';
@@ -120,11 +127,42 @@ export async function reportProcesses(title: string, rows: ProcessRow[]) {
       : [
           `${title}:`,
           ...rows.map(
-            (row) => `  ${row.pid} (parent ${row.ppid}) ${processRole(row)}: ${row.command}`
+            (row) =>
+              `  ${row.pid} (parent ${row.ppid}) ${processRole(row)}${terminalLinks(row.pid)}: ${row.command}`
           ),
         ].join('\n');
   process.stdout.write(`${text}\n`);
   await test.info().attach(title, { body: text, contentType: 'text/plain' });
+}
+
+/**
+ * Linux only: the pseudo-terminal a process reads from, and the terminal masters (by index) it
+ * holds open. A shell lives while any process holds its master, so this shows who keeps one alive.
+ */
+function terminalLinks(pid: number): string {
+  if (process.platform !== 'linux') {
+    return '';
+  }
+  const links: string[] = [];
+  try {
+    const input = readlinkSync(`/proc/${pid}/fd/0`);
+    if (input.startsWith('/dev/pts/')) {
+      links.push(`reads ${input}`);
+    }
+    const masters = readdirSync(`/proc/${pid}/fd`).flatMap((fd) => {
+      if (readlinkSync(`/proc/${pid}/fd/${fd}`) !== '/dev/ptmx') {
+        return [];
+      }
+      const index = /^tty-index:\s*(\d+)/m.exec(readFileSync(`/proc/${pid}/fdinfo/${fd}`, 'utf8'));
+      return [index?.[1] ?? '?'];
+    });
+    if (masters.length > 0) {
+      links.push(`holds masters of pts ${masters.join(', ')}`);
+    }
+  } catch {
+    // Gone, or not readable.
+  }
+  return links.length > 0 ? ` [${links.join('; ')}]` : '';
 }
 
 /** The working directory of each of `pids` that still runs (real paths). */

@@ -100,9 +100,11 @@ describe('the seed repository', () => {
       JSON.parse(readFileSync(join(paths.repoPath, 'factory-factory.json'), 'utf8'))
     );
     writeFileSync(join(paths.gateDir, HOLD_SETUP_FILE), 'setup-gate');
+    // Its own group, so that a failure below stops the setup whether or not `sh` exec'd it.
     const held = spawn('sh', ['-c', config.scripts.setup ?? 'false'], {
       cwd: paths.repoPath,
       env,
+      detached: true,
     });
     const exited = once(held, 'exit');
     try {
@@ -125,8 +127,9 @@ describe('the seed repository', () => {
       expect((await exited)[0]).toBe(0);
       expect(existsSync(join(paths.gateDir, 'setup-gate'))).toBe(false);
     } finally {
-      if (held.exitCode === null && held.signalCode === null) {
-        held.kill('SIGKILL');
+      if (held.pid && held.exitCode === null && held.signalCode === null) {
+        process.kill(-held.pid, 'SIGKILL');
+        await exited;
       }
     }
   });
