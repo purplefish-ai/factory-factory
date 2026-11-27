@@ -7,10 +7,12 @@ on:
   merge_group:
     types: [checks_requested]
 
-# Supersede older revisions of each PR and main; merge-queue runs stay independent.
+# Supersede older revisions of each PR only. Every other run (push to main, merge
+# queue) has its own group and is never cancelled, so each commit on main gets a
+# verdict.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
