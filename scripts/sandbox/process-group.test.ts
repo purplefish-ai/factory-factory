@@ -7,6 +7,7 @@ import {
   isSameProcess,
   parseProcessTable,
   realSystem,
+  stopProcessesWithEnvironment,
   stopProcessGroup,
 } from './process-group.mjs';
 import { HELPER_LIFETIME_MS } from './test-support';
@@ -266,5 +267,40 @@ describe('stopping a process group', () => {
       })
     ).resolves.toEqual({ owned: false });
     expect(theirs.events).toEqual([]);
+  });
+});
+
+describe('stopping what a killed backend left behind', () => {
+  const entry = 'BASE_DIR=/tmp/ff-sandbox/sb-1';
+  const orphans: Entry[] = [
+    // A provider reparented to init, and a run script that ignores SIGTERM.
+    { pid: 30, ppid: 1, pgid: 30, zombie: false, startedAt: T1 },
+    { pid: 31, ppid: 1, pgid: 31, zombie: false, startedAt: T2 },
+    // A stranger, and the launcher itself, which must never be signalled.
+    { pid: 40, ppid: 1, pgid: 40, zombie: false, startedAt: T1 },
+    { pid: 50, ppid: 1, pgid: 50, zombie: false, startedAt: T1 },
+  ];
+  const environments = { 30: [entry], 31: [entry], 40: ['BASE_DIR=/elsewhere'], 50: [entry] };
+
+  it('stops each process with the sandbox in its environment, then kills those that stay', async () => {
+    const stubborn = (processes: Entry[], target: number, signal: string) =>
+      signal === 'SIGKILL' || target === 30 ? processes.filter((p) => p.pid !== target) : processes;
+    const { system, events } = fakeSystem(orphans, stubborn, environments);
+    await expect(stopProcessesWithEnvironment(entry, { system, exclude: [50] })).resolves.toEqual([
+      30, 31,
+    ]);
+    expect(events).toEqual(['SIGTERM 30', 'SIGTERM 31', 'SIGKILL 31']);
+  });
+
+  it('signals nothing once a tracked pid belongs to another process', async () => {
+    const { system, events } = fakeSystem(orphans, (processes) => processes, environments);
+    const listings = [orphans, orphans.map((p) => (p.pid === 30 ? { ...p, startedAt: LATER } : p))];
+    const reused = {
+      ...system,
+      listProcesses: () => listings.shift() ?? listings.at(-1) ?? [],
+      processesWithEnvironment: (_entry: string) => [30],
+    };
+    await expect(stopProcessesWithEnvironment(entry, { system: reused })).resolves.toEqual([30]);
+    expect(events).toEqual([]);
   });
 });

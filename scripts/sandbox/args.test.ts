@@ -7,13 +7,15 @@ describe('command line', () => {
       mode: 'run',
       scenario: 'echo',
       keep: false,
+      restartable: false,
       ownerPid: null,
       ttlMinutes: 120,
     });
-    expect(parseArgs(['--scenario', 'slow-turn', '--keep'])).toEqual({
+    expect(parseArgs(['--scenario', 'slow-turn', '--keep', '--restartable'])).toEqual({
       mode: 'run',
       scenario: 'slow-turn',
       keep: true,
+      restartable: true,
       ownerPid: null,
       ttlMinutes: 120,
     });
@@ -22,6 +24,7 @@ describe('command line', () => {
     expect(() => parseArgs(['--scenario'])).toThrow();
     expect(() => parseArgs(['--scenario', '../x'])).toThrow();
     expect(() => parseArgs(['--clean', '--keep'])).toThrow();
+    expect(() => parseArgs(['--clean', '--restartable'])).toThrow();
     expect(() => parseArgs(['--port'])).toThrow();
   });
 

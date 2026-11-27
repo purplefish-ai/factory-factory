@@ -1,5 +1,6 @@
-// The sandbox's `ff serve --dev` process: start it in its own process group,
-// follow its output, and wait until it reports the ports it actually uses.
+// The sandbox's server process (`ff serve --dev`, or restartable-server.mjs in
+// restart mode): start it in its own process group, follow its output, and
+// wait until it reports the ports it actually uses.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,20 +22,37 @@ export const STARTUP_TIMEOUT_MS = 180_000;
  * @param {(code: number | null, signal: string | null) => void} options.onExit
  * @param {(error: Error) => void} options.onError
  * @param {(command: string, args: string[], options: object) => any} [options.spawnImpl]
+ * @param {boolean} [options.restartable] run restartable-server.mjs instead of `ff serve --dev`
  */
-export function startServer({ paths, env, ports, onExit, onError, spawnImpl = spawn }) {
+export function startServer({
+  paths,
+  env,
+  ports,
+  onExit,
+  onError,
+  spawnImpl = spawn,
+  restartable = false,
+}) {
   const child = spawnImpl(
     process.execPath,
-    [
-      join(REPO_ROOT, 'src', 'cli', 'bootstrap.mjs'),
-      'serve',
-      '--dev',
-      '--no-open',
-      '--port',
-      String(ports.frontend),
-      '--backend-port',
-      String(ports.backend),
-    ],
+    restartable
+      ? [
+          join(REPO_ROOT, 'scripts', 'sandbox', 'restartable-server.mjs'),
+          '--frontend-port',
+          String(ports.frontend),
+          '--backend-port',
+          String(ports.backend),
+        ]
+      : [
+          join(REPO_ROOT, 'src', 'cli', 'bootstrap.mjs'),
+          'serve',
+          '--dev',
+          '--no-open',
+          '--port',
+          String(ports.frontend),
+          '--backend-port',
+          String(ports.backend),
+        ],
     // cwd is the sandbox, so `ff serve` writes its port file there and loads no .env.
     { cwd: paths.baseDir, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }
   );

@@ -183,6 +183,68 @@ export function isOwnGroup(processes, pgid, { leaderStartedAt, baseDir }, system
 }
 
 /**
+ * Stops every live process whose environment holds `entry` exactly (a sandbox's
+ * `BASE_DIR=…`), other than those in `exclude`: SIGTERM, then SIGKILL after
+ * `graceMs`. A backend killed in restart mode leaves its children running
+ * outside the server's process group, reparented, so only their environment
+ * still ties them to the sandbox. Each is tracked by pid and start time from
+ * the first listing; only those still matching are signalled or waited for.
+ * Resolves with the pids it stopped; rejects if any survives SIGKILL.
+ *
+ * @param {string} entry
+ * @param {{ system?: ProcessSystem, exclude?: number[], graceMs?: number, killGraceMs?: number, pollMs?: number }} [options]
+ * @returns {Promise<number[]>}
+ */
+export async function stopProcessesWithEnvironment(
+  entry,
+  {
+    system = realSystem,
+    exclude = [process.pid],
+    graceMs = STOP_GRACE_MS,
+    killGraceMs = 5000,
+    pollMs = 200,
+  } = {}
+) {
+  const listed = system.listProcesses();
+  const tracked = new Map();
+  for (const pid of system.processesWithEnvironment(entry, null)) {
+    const found = findProcess(listed, pid);
+    if (found && !exclude.includes(pid)) {
+      tracked.set(pid, found.startedAt);
+    }
+  }
+  const stopped = [...tracked.keys()];
+  const remaining = () => {
+    const processes = system.listProcesses();
+    for (const [pid, startedAt] of tracked) {
+      if (!isSameProcess(processes, { pid, startedAt })) {
+        tracked.delete(pid);
+      }
+    }
+    return [...tracked.keys()];
+  };
+  const waitForExit = async (timeoutMs) => {
+    const deadline = system.now() + timeoutMs;
+    while (remaining().length > 0) {
+      if (system.now() >= deadline) {
+        return false;
+      }
+      await system.sleep(pollMs);
+    }
+    return true;
+  };
+  for (const signal of ['SIGTERM', 'SIGKILL']) {
+    for (const pid of remaining()) {
+      system.signal(pid, signal);
+    }
+    if (await waitForExit(signal === 'SIGTERM' ? graceMs : killGraceMs)) {
+      return stopped;
+    }
+  }
+  throw new Error(`Processes still running after SIGKILL: ${remaining().join(', ')}`);
+}
+
+/**
  * Stops every process in `pgid` and its descendants: SIGTERM, then SIGKILL
  * after `graceMs`. Ownership is `isOwnGroup` (the leader's start time, or
  * `baseDir` in a member's environment), checked on every listing while the

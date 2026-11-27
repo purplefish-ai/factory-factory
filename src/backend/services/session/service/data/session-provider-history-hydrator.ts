@@ -229,7 +229,9 @@ function handleLoadedProviderHistory(
     historySource: 'jsonl',
     ...(loadResult.file ? { historyFile: loadResult.file } : {}),
   });
-  logger.debug('Hydrated provider transcript from JSONL history', {
+  // Info, once per hydration: the sandbox's restart scenarios read it to tell this path from
+  // the adapter's replay fallback.
+  logger.info('Hydrated provider transcript from JSONL history', {
     sessionId,
     provider: dbSession.provider,
     providerSessionId,

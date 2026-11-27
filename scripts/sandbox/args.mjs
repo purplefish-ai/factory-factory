@@ -1,7 +1,7 @@
 // Command-line interface of `pnpm dev:sandbox`.
 
 export const USAGE = `Usage: pnpm dev:sandbox [--scenario <name>] [--keep] [--owner-pid <pid>]
-                        [--ttl-minutes <n>]
+                        [--ttl-minutes <n>] [--restartable]
        pnpm dev:sandbox --clean
 
 Starts the real app (serve --dev) in a new directory under <os tmpdir>/ff-sandbox/
@@ -42,6 +42,12 @@ directory, says so and exits non-zero; run --clean once ps works.
   --owner-pid <pid>    Stop when this process exits (for example, the agent or
                        test run that started the sandbox).
   --ttl-minutes <n>    Stop after n minutes (default: 120; 0 never stops).
+  --restartable        Restart mode, for tests that kill the server: runs the
+                       backend directly (no tsx watch, so no reload on a file
+                       change) and Vite, keeps both the directory and Vite when
+                       the backend exits, and restarts the backend on the same
+                       port on request (scripts/sandbox/restartable-server.mjs).
+                       On stop it also stops processes a killed backend left.
   --clean              Stop and delete sandboxes whose launcher is no longer running.
 
 macOS and Linux only.
@@ -62,7 +68,7 @@ export function parseArgs(argv) {
   let scenario = null;
   let ownerPid = null;
   let ttlMinutes = null;
-  const options = { mode: 'run', keep: false };
+  const options = { mode: 'run', keep: false, restartable: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
@@ -73,6 +79,8 @@ export function parseArgs(argv) {
       options.mode = 'clean';
     } else if (arg === '--keep') {
       options.keep = true;
+    } else if (arg === '--restartable') {
+      options.restartable = true;
     } else if (arg === '--scenario') {
       const name = argv[index + 1];
       if (!(name && /^[A-Za-z0-9._-]+$/.test(name))) {
@@ -92,7 +100,7 @@ export function parseArgs(argv) {
   }
   if (
     options.mode === 'clean' &&
-    (options.keep || scenario || ownerPid !== null || ttlMinutes !== null)
+    (options.keep || options.restartable || scenario || ownerPid !== null || ttlMinutes !== null)
   ) {
     throw new Error('--clean takes no other options.');
   }

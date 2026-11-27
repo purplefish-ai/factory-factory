@@ -558,3 +558,31 @@ describe('project root configuration', () => {
     expect(configService.getProjectRoot()).toBe('/tmp/ff-sandbox/sb-1');
   });
 });
+
+describe('sandbox crash point configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it.each([
+    [
+      'only in the sandbox',
+      'echo',
+      '/tmp/ff-sandbox/sb-1/crash-points',
+      '/tmp/ff-sandbox/sb-1/crash-points',
+    ],
+    ['never outside it, even when the directory is set', undefined, '/tmp/crash-points', null],
+    ['never without a directory', 'echo', undefined, null],
+  ])('arms crash points %s', (_case, scenario, dir, expected) => {
+    Reflect.deleteProperty(process.env, 'FF_SANDBOX_SCENARIO');
+    Reflect.deleteProperty(process.env, 'FF_SANDBOX_CRASH_POINT_DIR');
+    if (scenario !== undefined) {
+      process.env.FF_SANDBOX_SCENARIO = scenario;
+    }
+    if (dir !== undefined) {
+      process.env.FF_SANDBOX_CRASH_POINT_DIR = dir;
+    }
+    configService.reload();
+    expect(configService.getSandboxCrashPointDir()).toBe(expected);
+  });
+});

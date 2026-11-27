@@ -1,3 +1,4 @@
+import { crashAt } from '@/backend/services/crash-point';
 import { createLogger } from '@/backend/services/logger.service';
 import { validateAttachment } from '@/backend/services/session/service/attachments/attachment-processing';
 import {
@@ -179,6 +180,8 @@ export function createQueueMessageHandler(
       sessionId,
       buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
     );
+    // Accepted and announced, not yet dispatched: the message lives only in the queue.
+    crashAt('after-message-queued');
 
     void deps.backgroundDelivery.userResume(sessionId, isCurrent).catch((error) => {
       logger.warn('Failed to resume PR delivery after queued human input', { sessionId, error });

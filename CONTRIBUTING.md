@@ -103,7 +103,11 @@ Vitest suite does not require a browser installation.
 in `e2e/sandbox/` against it with the scripted Codex provider in the installed
 Playwright Chromium, and stops the sandbox. A spec chooses the provider's
 behavior by its prompt text (see `e2e/sandbox/sandbox.ts`). CI runs it as a job
-that is not required.
+that is not required. The sandbox runs in restart mode (`--restartable`), so a
+spec can kill, stop and restart the backend, and arm crash points
+(`crashAt('<name>')` in server code), through `e2e/support/backend-process.ts`.
+Specs share the backend: one that kills or stops it calls
+`ensureBackendRunning()` in `afterEach`.
 
 Test processes never write the real server log. When `NODE_ENV` is `test` or the
 process runs under Vitest (including children that inherit its environment), the

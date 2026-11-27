@@ -1,0 +1,34 @@
+import { randomUUID } from 'node:crypto';
+import { expect, type Page } from '@playwright/test';
+
+// Proving that the page recovered without a reload: a value set on `window` survives only while
+// the same document stays loaded. Any reload or full navigation (the page's own, Vite's after a
+// lost connection, a user's) drops it.
+
+const MARKER = '__ffNoReloadMarker';
+
+/** Marks the current document; pass the result to `expectNoReload` after the event. */
+export async function markPage(page: Page): Promise<string> {
+  const marker = randomUUID();
+  await page.evaluate(([key, value]) => Reflect.set(window, key, value), [MARKER, marker] as const);
+  return marker;
+}
+
+export async function expectNoReload(page: Page, marker: string) {
+  expect(
+    await page.evaluate((key) => Reflect.get(window, key), MARKER),
+    'the page reloaded: the marker set before the event is gone'
+  ).toBe(marker);
+}
+
+/**
+ * Counts the WebSockets the page opens from now on, by URL path (`/snapshots`, `/chat`, …), to
+ * tell a recovery on the same socket from one through a new connection.
+ */
+export function trackSockets(page: Page) {
+  const opened: string[] = [];
+  page.on('websocket', (socket) => opened.push(new URL(socket.url()).pathname));
+  return {
+    opened: (path: string) => opened.filter((pathname) => pathname === path).length,
+  };
+}

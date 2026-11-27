@@ -17,7 +17,8 @@
 // History. Each thread/start issues a new UUIDv7 thread id. With CODEX_HOME set, a conversation is
 // appended, from its first prompt as Codex does, to
 // `CODEX_HOME/sessions/YYYY/MM/DD/rollout-<UTC time>-<thread id>.jsonl`, and thread/resume and
-// thread/read find it there after a restart. The line shapes are copied from the fixtures in
+// thread/read find it there after a restart. A turn on a thread this process neither started nor
+// resumed fails, as in Codex; without CODEX_HOME such a thread is adopted. The line shapes are copied from the fixtures in
 // codex-session-history-loader.service.test.ts until a recorded Codex session replaces them.
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -600,9 +601,19 @@ appServerInput?.on('line', (line) => {
     case 'turn/start': {
       const turn = { id: `turn-${request.id}`, status: 'inProgress', items: [], error: null };
       const threadId = request.params.threadId;
-      // A thread this process did not start (the tests send turn/start alone) is adopted.
-      const thread =
-        findThread(threadId) ?? addThread(threadId, request.params.cwd ?? process.cwd());
+      // As Codex: with a history (CODEX_HOME), a turn needs a thread this process started or
+      // resumed, so a restart that skipped thread/resume fails here. Without one, a thread this
+      // process does not know (the tests send turn/start alone) is adopted.
+      const thread = codexHome
+        ? threads.get(threadId)
+        : (threads.get(threadId) ?? addThread(threadId, request.params.cwd ?? process.cwd()));
+      if (!thread) {
+        send({
+          id: request.id,
+          error: { code: -32_600, message: `thread not found: ${threadId}` },
+        });
+        return;
+      }
       send({ id: request.id, result: { turn } });
       const text = promptText(request.params.input);
       // Request ids, and so turn ids, start again in each process: the rollout's carry this

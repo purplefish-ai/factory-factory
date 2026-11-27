@@ -12,16 +12,18 @@ import {
   statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 
-// Starts one sandbox (`pnpm dev:sandbox`) for the run and stops it afterwards. Every spec in this
-// directory shares it, and finds its sandbox.json through FF_SANDBOX_JSON (see `./sandbox.ts`).
+// Starts one sandbox (`pnpm dev:sandbox --restartable`) for the run and stops it afterwards. Every
+// spec in this directory shares it, and finds its sandbox.json through FF_SANDBOX_JSON (see
+// `./sandbox.ts`). Restart mode lets a spec kill and restart the backend (e2e/support/
+// backend-process.ts); a spec that does must leave it running for the next.
 
 const repoRoot = resolve(import.meta.dirname, '..', '..');
 // Uploaded by CI when the run fails; emptied at the start of each run.
 const evidenceDir = join(repoRoot, 'test-results', 'sandbox-logs');
-const evidenceFiles = ['server-output.log', 'egress-calls.log', 'gh-calls.log'];
+const evidenceFiles = ['server-output.log', 'logs/server.log', 'egress-calls.log', 'gh-calls.log'];
 // The launcher writes here directly, not through a pipe to this runner: if the runner dies,
 // the launcher can still log while it stops the sandbox.
 const launcherLog = join(evidenceDir, 'launcher.log');
@@ -45,7 +47,8 @@ const healthSchema = z.object({ sessionRuntimeCombinations: z.record(z.string(),
 
 /**
  * Prints the sandbox server's session runtime combination counts to the job output, for the
- * runtime state redesign decision. Best effort: any failure prints a note and the run goes on.
+ * runtime state redesign decision. Best effort: any failure (a backend a spec left down, for one)
+ * prints a note and the run goes on. Counts start again at each backend restart.
  */
 async function printRuntimeCombinations(sandboxJson: string) {
   try {
@@ -183,6 +186,7 @@ export default async function globalSetup() {
       String(process.pid),
       '--ttl-minutes',
       String(TTL_MINUTES),
+      '--restartable',
     ],
     { cwd: repoRoot, stdio: ['ignore', log, log] }
   );
@@ -206,7 +210,7 @@ export default async function globalSetup() {
       // Copied while the sandbox still exists: stopping deletes its directory.
       for (const file of evidenceFiles) {
         if (existsSync(join(sandboxDir, file))) {
-          copyFileSync(join(sandboxDir, file), join(evidenceDir, file));
+          copyFileSync(join(sandboxDir, file), join(evidenceDir, basename(file)));
         }
       }
     } finally {
