@@ -106,7 +106,10 @@ export default {
         };
         const isRepositoryInstance = (init) => {
           const expression = unwrapExpression(init);
-          return expression?.type === 'NewExpression' && isRepositoryClass(expression.callee);
+          return (
+            expression?.type === 'NewExpression' &&
+            isRepositoryClass(unwrapExpression(expression.callee))
+          );
         };
 
         // Module-level `const x = new X()`, exported where it is declared or by name.

@@ -107,6 +107,10 @@ describeRuleFixtures('no-service-singleton', {
       'default-parenthesized',
       "import { FooService } from './foo.service';\nconst fooService = new FooService();\nexport default (fooService);"
     ),
+    backend(
+      'cast-callee',
+      "import { FooService } from './foo.service';\nexport const fooService = new (FooService as typeof FooService)();"
+    ),
     // One report per instance, even when it is exported twice.
     backend(
       'exported-twice',

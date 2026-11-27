@@ -6,7 +6,7 @@
 //
 // What the rule matches: `===`, `!==`, `==` and `!=` with either operand a
 // string literal (or an expression-free template) 'CLAUDE' or 'CODEX', also inside
-// parentheses or a TypeScript `as`, `satisfies` or `!`, and
+// parentheses or a TypeScript `as`, `satisfies`, `!` or `<T>` wrapper, and
 // `case 'CLAUDE':` or `case 'CODEX':` in a `switch`. The literals as values (an
 // argument, an object property, a type union, a Zod enum, a Prisma enum member)
 // are not branching and are allowed.
