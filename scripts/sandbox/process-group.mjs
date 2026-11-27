@@ -64,7 +64,7 @@ export function collectGroupProcesses(processes, pgid) {
  * @typedef {{ pid: number, ppid: number, pgid: number, zombie: boolean, startedAt: string }} ProcessEntry
  * @typedef {object} ProcessSystem
  * @property {() => ProcessEntry[]} listProcesses
- * @property {(target: number, signal: string) => void} signal
+ * @property {(target: number, signal: string) => boolean | void} signal false when the target was already gone
  * @property {(ms: number) => Promise<unknown>} sleep
  * @property {() => number} now
  * @property {(entry: string, pids: number[] | null) => number[]} processesWithEnvironment
@@ -158,10 +158,12 @@ export const realSystem = {
   signal: (target, signal) => {
     try {
       process.kill(target, signal);
+      return true;
     } catch (error) {
       if (error?.code !== 'ESRCH') {
         throw error;
       }
+      return false;
     }
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -267,8 +269,9 @@ export async function stopProcessesWithEnvironment(
   for (const signal of ['SIGTERM', 'SIGKILL']) {
     scan();
     for (const pid of remaining()) {
-      system.signal(pid, signal);
-      stopped.add(pid);
+      if (system.signal(pid, signal) !== false) {
+        stopped.add(pid);
+      }
     }
     if (await waitForExit(signal === 'SIGTERM' ? graceMs : killGraceMs)) {
       return [...stopped];
