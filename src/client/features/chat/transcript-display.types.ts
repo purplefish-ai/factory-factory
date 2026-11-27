@@ -35,7 +35,6 @@ export interface TranscriptDisplayProps {
   onRemoveQueuedMessage?: (id: string) => void;
   /** Send a queued human message into the active turn. */
   onSteerQueuedMessage?: (id: string) => void;
-  /** Whether context compaction is in progress */
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   /** Init banner for showing workspace initialization status */
