@@ -273,20 +273,22 @@ recording the format, application version and the database and data directory it
 came from. The command prints both paths. Manual backups are never pruned. The
 backup is written under a `.partial` name and renamed when complete, so a
 directory still ending in `.partial` was left by an interrupted run, or belongs
-to one still running: it is not a usable backup, the next run that writes to the
-default `db-backups/` reports it, and you can delete it once no backup is
-running. Symbolic links under `codex-accounts/` are not followed or copied; the
-command lists each one it skips, so read its output when you verify a backup. If
-`encryption.key` or `codex-accounts/` itself is a symbolic link, the backup
-fails rather than follow it; replace the link with the real file or directory
-first. The key and accounts are copied just after the database snapshot, so
-account sign-ins can be slightly newer than the database if they change while
-the backup runs. **The backup contains credentials** (the encryption key that
-protects stored secrets and the Codex account sign-ins): it is readable only by
-you, so keep it that way and store it somewhere you trust. The database and the
-data directory are chosen separately (`DATABASE_PATH` or `--database-path`, and
-`BASE_DIR`); the command warns when the database is outside the data directory,
-because the key must belong to the same installation as the database.
+to one still running: it is not a usable backup, and you can delete it once no
+backup is running. The next run that writes to the default `db-backups/` reports
+leftover `backup-<UTC time>.partial` directories there; one left beside a
+`--output` path is reported only when you retry that path. Symbolic links under
+`codex-accounts/` are not followed or copied; the command lists each one it
+skips, so read its output when you verify a backup. If `encryption.key` or
+`codex-accounts/` itself is a symbolic link, the backup fails rather than follow
+it; replace the link with the real file or directory first. The key and accounts
+are copied just after the database snapshot, so account sign-ins can be slightly
+newer than the database if they change while the backup runs. **The backup
+contains credentials** (the encryption key that protects stored secrets and the
+Codex account sign-ins): it is readable only by you, so keep it that way and
+store it somewhere you trust. The database and the data directory are chosen
+separately (`DATABASE_PATH` or `--database-path`, and `BASE_DIR`); the command
+warns when the database is outside the data directory, because the key must
+belong to the same installation as the database.
 
 Startup warns, without failing, when an applied migration's file has changed
 since it was applied, or when a migration that disabled foreign keys left rows

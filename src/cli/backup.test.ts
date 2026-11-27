@@ -213,7 +213,11 @@ describe('ff backup', () => {
   it('never replaces a directory another process creates at the final name', async () => {
     const destination = join(root, 'out');
     // Someone creates the (empty) final directory while the backup is being built.
+    let watching = true;
     const intruder = () => {
+      if (!watching) {
+        return;
+      }
       if (existsSync(`${destination}.partial`) && !existsSync(destination)) {
         mkdirSync(destination);
         return;
@@ -222,9 +226,13 @@ describe('ff backup', () => {
     };
     setImmediate(intruder);
 
-    await expect(
-      createBackup({ databasePath, baseDir, applicationVersion: '1.2.3', destination })
-    ).rejects.toThrow('already exists');
+    try {
+      await expect(
+        createBackup({ databasePath, baseDir, applicationVersion: '1.2.3', destination })
+      ).rejects.toThrow('already exists');
+    } finally {
+      watching = false;
+    }
 
     // Theirs is left as it was: still there, still empty, not replaced by the backup.
     expect(await readdir(destination)).toEqual([]);
