@@ -7,7 +7,8 @@ in #3100 (one plan for both teardown paths).
 
 Server shutdown stopped most background jobs one after another near the end of
 teardown, so it waited for the sum of their in-flight runs, and until then a job
-could start new work while sessions were already closing, which is why #2870
+could start new work while sessions were already closing. Shutdown must finish
+within the backend's stop budget, which also covers session teardown, so #2870
 changed the sum to the slowest drain. `disposeApplication`, which tears down a
 graph no server took ownership of, kept its own list, and the two had drifted:
 server shutdown neither cancelled in-flight Codex logins nor called

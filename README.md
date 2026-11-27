@@ -35,7 +35,7 @@ terminals, issues, and pull request status together in one place.
 ## Quick start
 
 The desktop app is no longer provided. Factory Factory runs from the npm package
-(`npx factory-factory@latest`), which supports macOS and Linux.
+(`npx factory-factory@latest serve`), which supports macOS and Linux.
 
 ### Command line
 
