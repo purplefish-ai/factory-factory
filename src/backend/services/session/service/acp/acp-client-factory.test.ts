@@ -1,6 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AcpClientFactory,
@@ -16,6 +15,7 @@ import {
 } from '@/backend/services/session/service/acp/acp-client-factory.test-harness';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
+import type { RequestPermissionRequest } from '@/shared/acp-protocol/sdk-types';
 import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpClientCallbacks } from './acp-connection';

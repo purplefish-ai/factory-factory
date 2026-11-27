@@ -1,10 +1,10 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { NATIVE_DEFAULT_CODEX_ACCOUNT_ID } from '@/shared/codex-accounts';
 import type { SessionLaunchOptions } from '@/shared/session-launch';

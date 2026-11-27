@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import {
@@ -6,6 +5,7 @@ import {
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { DEFAULT_THINKING_BUDGET, type SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 

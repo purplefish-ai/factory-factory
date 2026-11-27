@@ -1,9 +1,9 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import { assertReadOnlyReviewConfigOption } from '@/backend/services/session/service/config/session-permission-policy';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';

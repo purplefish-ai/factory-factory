@@ -1,4 +1,3 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createQueueMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/handlers/queue-message.handler';
 import {
@@ -28,6 +27,7 @@ import {
   type QueuedMessage,
 } from '@/shared/acp-protocol';
 import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { withAutoStubs } from '@/test-utils/auto-stub';
 
 const sid = 'session';

@@ -300,7 +300,7 @@ module.exports = {
       name: 'acp-no-external-imports',
       severity: 'error',
       comment:
-        'ACP internals must stay isolated from app code; only ACP internals, the logger service, question/sub-agent wire contracts, the shared model-selection and runtime-observation contracts, the pure Codex usage normalizer, owned native Codex launch/cleanup and process-group helpers, the configured Node exec path, and the shared session-update translator are allowed.',
+        'ACP internals must stay isolated from app code; only ACP internals, the logger service, question/sub-agent wire contracts, the shared model-selection and runtime-observation contracts, the pure Codex usage normalizer, owned native Codex launch/cleanup and process-group helpers, the configured Node exec path, the shared session-update translator, and the SDK types module are allowed.',
       from: {
         path: '^src/backend/services/session/service/acp/',
         pathNot: '^src/backend/services/session/service/acp/.*\\.test\\.ts$',
@@ -308,8 +308,27 @@ module.exports = {
       to: {
         path: '^src/',
         pathNot:
-          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/backend/lib/codex-usage-normalizer\\.ts$|^src/backend/lib/owned-codex-command\\.ts$|^src/backend/lib/node-runtime\\.ts$|^src/backend/lib/owned-process-cleanup\\.ts$|^src/backend/lib/owned-process-group\\.ts$|^src/shared/acp-protocol/subagents.ts$|^src/shared/acp-protocol/question-input\\.ts$|^src/shared/acp-protocol/runtime-observation\\.ts$|^src/shared/acp-protocol/model-selection\\.ts$|^src/shared/acp-protocol/session-update-translator\\.ts$',
+          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$|^src/backend/lib/codex-usage-normalizer\\.ts$|^src/backend/lib/owned-codex-command\\.ts$|^src/backend/lib/node-runtime\\.ts$|^src/backend/lib/owned-process-cleanup\\.ts$|^src/backend/lib/owned-process-group\\.ts$|^src/shared/acp-protocol/subagents.ts$|^src/shared/acp-protocol/question-input\\.ts$|^src/shared/acp-protocol/runtime-observation\\.ts$|^src/shared/acp-protocol/model-selection\\.ts$|^src/shared/acp-protocol/session-update-translator\\.ts$|^src/shared/acp-protocol/sdk-types\\.ts$',
       },
+    },
+    {
+      name: 'sdk-entrypoints-have-two-import-sites',
+      severity: 'error',
+      comment:
+        'Every entrypoint of @agentclientprotocol/sdk is imported by two modules only: src/shared/acp-protocol/sdk-types.ts (types, no runtime) and src/backend/services/session/service/acp/acp-sdk-values.ts (runtime values). Re-export what other code needs there, by name.',
+      from: {
+        pathNot:
+          '^src/shared/acp-protocol/sdk-types\\.ts$|^src/backend/services/session/service/acp/acp-sdk-values\\.ts$',
+      },
+      to: { path: '(^|/)node_modules/@agentclientprotocol/sdk(/|$)' },
+    },
+    {
+      name: 'sdk-types-module-has-no-runtime-import',
+      severity: 'error',
+      comment:
+        'src/shared/acp-protocol/sdk-types.ts reaches the browser; it may only re-export SDK types, never load the SDK.',
+      from: { path: '^src/shared/acp-protocol/sdk-types\\.ts$' },
+      to: { dependencyTypesNot: ['type-only'] },
     },
     {
       name: 'no-shared-importing-app-layers',

@@ -40,7 +40,7 @@ vi.mock('node:child_process', async (importOriginal) => ({
 }));
 
 vi.mock('@agentclientprotocol/sdk/unstable', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agentclientprotocol/sdk/unstable')>()),
+  ...(await importOriginal<typeof import('./acp-sdk-values')>()),
   ndJsonStream: mocks.ndJsonStream,
 }));
 

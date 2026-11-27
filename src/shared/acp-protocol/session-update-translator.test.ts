@@ -1,5 +1,5 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { AcpEventTranslator } from './session-update-translator';
 
 function createMockLogger() {

@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { AcpRuntimeConfigController } from './acp-runtime-config-controller';
 import { createTestProcessHandle, defaultConfigOptions } from './acp-runtime-manager.test-helpers';
 

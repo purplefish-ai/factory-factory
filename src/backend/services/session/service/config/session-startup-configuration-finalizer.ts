@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import {
   matchesSessionStartupIntent,
@@ -6,6 +5,7 @@ import {
   type SessionStartupIntent,
 } from '@/backend/services/session/service/data/session-startup-intent';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type {
   AcceptedConfigCommit,
   SessionConfigCommitAuthority,

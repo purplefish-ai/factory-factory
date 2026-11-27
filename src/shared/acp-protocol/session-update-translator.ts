@@ -1,5 +1,5 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { z } from 'zod';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { PendingToolOutput } from './pending-tool-output';
 import type { SessionDeltaEvent, ToolResultContentValue } from './protocol';
 import { ProviderSessionNoticeSchema } from './protocol/provider-session-notice';

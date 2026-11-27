@@ -1,4 +1,4 @@
-import type { SessionConfigSelectOption } from '@agentclientprotocol/sdk/unstable';
+import type { SessionConfigSelectOption } from '@/shared/acp-protocol/sdk-types';
 
 type ClaudeModelOptionLabelInput = Pick<
   SessionConfigSelectOption,

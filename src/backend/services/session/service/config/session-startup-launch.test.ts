@@ -1,9 +1,9 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: { get: vi.fn() } }));

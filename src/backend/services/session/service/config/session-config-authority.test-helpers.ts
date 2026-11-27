@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { vi } from 'vitest';
 import type {
   AgentSessionRecord,
@@ -11,6 +10,7 @@ import {
   createTestProcessHandle,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 

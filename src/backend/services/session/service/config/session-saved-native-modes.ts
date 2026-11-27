@@ -1,6 +1,6 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { parseAcpConfigSnapshot, resolveSavedConfigIdentity } from './acp-config-snapshot';
 import { getConfigOptionValues } from './session-config-option-helpers';
 import { isAppliedAccessMode } from './session-permission-policy';

@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import type {
   CreateElicitationRequest,
   CreateElicitationResponse,
   RequestPermissionRequest,
   RequestPermissionResponse,
-} from '@agentclientprotocol/sdk/unstable';
-import { z } from 'zod';
+} from '@/shared/acp-protocol/sdk-types';
 import { type AcpElicitationForm, createAcpElicitationForm } from './acp-elicitation-form';
 
 const responseAnswersSchema = z.object({

@@ -1,7 +1,7 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { withConfiguredAcpHandle } from '@/backend/services/session/service/acp/acp-configured-handle';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 
 /** Native RPC, durable state, and configuration publication share one per-session transaction. */
 export class SessionConfigMutationQueue {

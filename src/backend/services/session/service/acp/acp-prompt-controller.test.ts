@@ -1,5 +1,5 @@
-import type { ContentBlock } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ContentBlock } from '@/shared/acp-protocol/sdk-types';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpPromptController, type AcpPromptRuntimePort } from './acp-prompt-controller';
 import { PromptTimeoutError } from './acp-runtime-errors';

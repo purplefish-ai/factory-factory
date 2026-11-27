@@ -1,8 +1,8 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { SessionLoadService } from '@/backend/services/session/service/chat/session-load.service';
 import { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { ResolvedSessionConfigProjection } from './session-config-projection';
 import { SessionConfigService } from './session.config.service';

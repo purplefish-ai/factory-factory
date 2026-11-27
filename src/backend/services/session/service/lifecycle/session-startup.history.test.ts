@@ -1,4 +1,3 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { AcpRuntimeEventHandlers } from '@/backend/services/session/service/acp';
 import {
@@ -16,6 +15,7 @@ import {
 } from '@/backend/services/session/service/store/session-lifecycle-transcript';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { HistoryMessage } from '@/shared/acp-protocol';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import {

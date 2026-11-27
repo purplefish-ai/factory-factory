@@ -3,7 +3,6 @@ import type { IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
@@ -14,6 +13,7 @@ import {
   sessionCommandFactories,
 } from '@/backend/services/session';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { deferred } from '@/test-utils/deferred';
 import {

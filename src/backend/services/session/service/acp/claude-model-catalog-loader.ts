@@ -2,12 +2,8 @@ import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { Readable, Writable } from 'node:stream';
 import type { NewSessionMeta } from '@agentclientprotocol/claude-agent-acp';
-import {
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionConfigSelectOption,
-} from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import type { SessionConfigSelectOption } from '@/shared/acp-protocol/sdk-types';
 import { createAcpConnection, type AcpClientCallbacks } from './acp-connection';
 import {
   createAcpSpawnError,
@@ -15,6 +11,7 @@ import {
   terminateCatalogProcess,
   withTimeout,
 } from './acp-runtime-spawn';
+import { ndJsonStream, PROTOCOL_VERSION } from './acp-sdk-values';
 import { formatClaudeModelOptionName } from './claude-model-options';
 
 export type ClaudeModelCatalogEntry = {

@@ -3,13 +3,9 @@ import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
-import {
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionUpdate,
-} from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it } from 'vitest';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol/protocol';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { AcpEventTranslator } from '@/shared/acp-protocol/session-update-translator';
 import { createAcpConnection } from './acp-connection';
 import {
@@ -17,6 +13,7 @@ import {
   terminateCatalogProcess,
   withTimeout,
 } from './acp-runtime-spawn';
+import { ndJsonStream, PROTOCOL_VERSION } from './acp-sdk-values';
 import { terminateDisposableProcessTree } from './disposable-process-cleanup';
 
 // Explicit opt-in: three small live requests per provider, including native /compact.

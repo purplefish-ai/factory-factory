@@ -1,13 +1,11 @@
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { Readable, Writable } from 'node:stream';
-import {
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type SessionConfigOption,
-  type SessionConfigSelectOption,
-} from '@agentclientprotocol/sdk/unstable';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
+import type {
+  SessionConfigOption,
+  SessionConfigSelectOption,
+} from '@/shared/acp-protocol/sdk-types';
 import {
   isNativeModeConfigOption,
   isReasoningConfigOption,
@@ -20,6 +18,7 @@ import {
   terminateCatalogProcess,
   withTimeout,
 } from './acp-runtime-spawn';
+import { ndJsonStream, PROTOCOL_VERSION } from './acp-sdk-values';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { timeLaunchDiscovery } from './launch-discovery-timing';
 

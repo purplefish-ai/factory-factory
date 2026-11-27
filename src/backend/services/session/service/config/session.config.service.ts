@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { configService } from '@/backend/services/config.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -15,6 +14,7 @@ import {
 } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 import type { SessionPermissionPreset } from '@prisma-gen/client';

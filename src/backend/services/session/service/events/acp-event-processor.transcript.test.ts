@@ -1,9 +1,9 @@
-import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { selectTranscriptPage } from '@/backend/services/session/service/store/session-transcript-page';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionDeltaEventSchema } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
+import type { SessionUpdate } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { AcpEventProcessor, type AcpEventProcessorDependencies } from './acp-event-processor';
 

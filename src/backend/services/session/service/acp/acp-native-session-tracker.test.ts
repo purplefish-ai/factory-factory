@@ -1,8 +1,8 @@
+import { describe, expect, it, vi } from 'vitest';
 import type {
   CreateElicitationRequest,
   RequestPermissionRequest,
-} from '@agentclientprotocol/sdk/unstable';
-import { describe, expect, it, vi } from 'vitest';
+} from '@/shared/acp-protocol/sdk-types';
 import { AcpNativeSessionTracker } from './acp-native-session-tracker';
 import { createNormalizedAcpReadableStream } from './acp-stream-normalizer';
 

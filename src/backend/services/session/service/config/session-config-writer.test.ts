@@ -1,7 +1,7 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { expect, it, vi } from 'vitest';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { SessionDeltaEventSchema } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigWriter } from './session-config-writer';
 it('re-persists a repeated confirmed effort after the earlier best-effort snapshot write failed', async () => {

@@ -1,6 +1,6 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import {
   findModeValue,
   getConfigOptionValues,

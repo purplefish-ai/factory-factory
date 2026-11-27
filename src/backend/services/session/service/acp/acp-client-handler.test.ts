@@ -1,5 +1,5 @@
-import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RequestPermissionRequest } from '@/shared/acp-protocol/sdk-types';
 import { SUBAGENTS_CHANGED_METHOD } from '@/shared/acp-protocol/subagents';
 import { AcpClientHandler, type AcpEventCallback, type AcpLogCallback } from './acp-client-handler';
 import { AcpPermissionBridge } from './acp-permission-bridge';

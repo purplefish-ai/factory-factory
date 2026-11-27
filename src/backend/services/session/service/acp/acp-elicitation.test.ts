@@ -1,9 +1,6 @@
-import type {
-  CreateElicitationRequest,
-  ElicitationSchema,
-} from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
 import { getAskUserQuestions } from '@/shared/acp-protocol/question-input';
+import type { CreateElicitationRequest, ElicitationSchema } from '@/shared/acp-protocol/sdk-types';
 import { AcpClientHandler } from './acp-client-handler';
 import { createAcpElicitationForm } from './acp-elicitation-form';
 import { AcpPermissionBridge } from './acp-permission-bridge';

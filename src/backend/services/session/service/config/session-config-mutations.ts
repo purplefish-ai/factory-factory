@@ -1,4 +1,3 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import {
@@ -10,6 +9,7 @@ import { normalizeSessionConfigOptions } from '@/backend/services/session/servic
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { QueuedMessage } from '@/shared/acp-protocol';
+import type { SessionConfigOption } from '@/shared/acp-protocol/sdk-types';
 import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { SessionConfigMutationQueue } from './session-config-mutation-queue';
 import { getConfigOptionValues, type SessionProvider } from './session-config-option-helpers';
