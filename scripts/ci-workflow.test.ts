@@ -559,16 +559,32 @@ describe('npm release tagging workflow', () => {
     }
   });
 
-  it.each([
-    ['true', ['--repository', 'owner/name', '--dry-run']],
-    ['false', ['--repository', 'owner/name']],
-    ['', ['--repository', 'owner/name']],
-  ])('passes the dry_run input %j to the script', (dryRun, expected) => {
+  it('declares the dry_run input and a backlog choice that defaults to leaving it alone', () => {
     // Without the declared input, a requested manual dry run would run for real.
     expect(workflow.on.workflow_dispatch).toMatchObject({
-      inputs: { dry_run: { required: false, default: false, type: 'boolean' } },
+      inputs: {
+        dry_run: { required: false, default: false, type: 'boolean' },
+        backlog: {
+          required: false,
+          default: 'none',
+          type: 'choice',
+          options: ['none', 'tags', 'releases'],
+        },
+      },
     });
     expect(tagStep?.env?.DRY_RUN).toBe('${{ inputs.dry_run }}');
+    expect(tagStep?.env?.BACKLOG).toBe('${{ inputs.backlog }}');
+  });
+
+  const base = ['--repository', 'owner/name', '--backlog'];
+  it.each([
+    // A scheduled run has no inputs.
+    ['', '', [...base, 'none']],
+    ['none', 'false', [...base, 'none']],
+    ['none', 'true', [...base, 'none', '--dry-run']],
+    ['tags', 'true', [...base, 'tags', '--dry-run']],
+    ['releases', 'false', [...base, 'releases']],
+  ])('passes backlog %j and dry_run %j to the script', (backlog, dryRun, expected) => {
     const directory = mkdtempSync(join(tmpdir(), 'ff-release-tags-'));
     try {
       // A stand-in pnpm prints the script arguments, one per line.
@@ -581,6 +597,7 @@ describe('npm release tagging workflow', () => {
         env: {
           PATH: `${directory}:${process.env.PATH}`,
           DRY_RUN: dryRun,
+          BACKLOG: backlog,
           GITHUB_REPOSITORY: 'owner/name',
           GITHUB_STEP_SUMMARY: summary,
         },

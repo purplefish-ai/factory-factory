@@ -14,9 +14,10 @@ installing application code.
 
 Approval happens on npm, outside GitHub, so the publish workflow cannot tag. The
 scheduled Tag npm releases workflow (`.github/workflows/release-tags.yml`) finds
-every stable published version without a `v<version>` tag. Published versions
-carry no `gitHead`, so `scripts/tag-npm-releases.ts` reads the commit and
-staging run from the version's npm-hosted SLSA provenance and checks:
+every stable published version newer than `BACKLOG_CUTOFF` (0.5.14, in
+`scripts/tag-npm-releases.ts`) without a `v<version>` tag. Published versions
+carry no `gitHead`, so the script reads the commit and staging run from the
+version's npm-hosted SLSA provenance and checks:
 
 - Exactly one provenance statement names the version, built by `npm-publish.yml`
   on `main` of this repository, with one source commit and a staging run in this
@@ -38,6 +39,22 @@ responses through HTTPS and compare provenance identity; they do not
 independently validate Sigstore signatures or establish that the source code is
 safe. Provenance complements code review, dependency review, and npm's staged
 approval.
+
+Versions up to and including 0.5.14 are the backlog: they were published before
+tagging was automatic. Every GitHub Release notifies everyone watching the
+repository, so the repository owner decides whether and when the backlog is
+released. A scheduled run only lists untagged backlog versions and does not fail
+for them. To handle them, run the workflow by hand from `main`, first with
+`dry_run` to see the plan:
+
+- `backlog: tags` creates only the verified tags, which notify nobody.
+- `backlog: releases` creates a Release for every backlog version that has none,
+  oldest first, creating the tag when it is missing. An existing tag gets its
+  Release only when it points at the verified commit; otherwise the version is
+  skipped. A `tags` run followed later by a `releases` run is safe.
+
+The same checks apply in every mode, and newer versions are always tagged and
+released together.
 
 ## Account controls
 

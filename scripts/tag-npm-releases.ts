@@ -1,15 +1,20 @@
 /**
- * Tags and releases every npm version of factory-factory that has no `v<version>` tag.
+ * Tags and releases npm versions of factory-factory.
  *
  * Publishing is `npm stage publish` followed by a maintainer's approval on npm, outside
- * GitHub, so the publish workflow cannot tag. This runs on a schedule instead. Published
- * versions carry no `gitHead`; the commit each was built from is read from its npm
- * provenance attestation, which must name this repository's publish workflow on `main`.
- * The commit must exist here, be reachable from `main` and declare that version, and
- * `scripts/verify-npm-release.sh` must accept the published tarball, before a tag and a
- * release are created. Anything else is reported and skipped, never guessed.
+ * GitHub, so the publish workflow cannot tag. This runs on a schedule instead: every
+ * version newer than BACKLOG_CUTOFF without a `v<version>` tag gets the tag and a GitHub
+ * Release. Older versions are the backlog, handled only when a maintainer asks with
+ * `--backlog tags` (tags alone, which notify nobody) or `--backlog releases`.
  *
- * Usage: tsx scripts/tag-npm-releases.ts --repository <owner/name> [--dry-run]
+ * Published versions carry no `gitHead`; the commit each was built from is read from its
+ * npm provenance attestation, which must name this repository's publish workflow on
+ * `main`. The commit must exist here, be reachable from `main` and declare that version,
+ * and `scripts/verify-npm-release.sh` must accept the published tarball, before anything
+ * is created. Anything else is reported and skipped, never guessed.
+ *
+ * Usage: tsx scripts/tag-npm-releases.ts --repository <owner/name>
+ *          [--backlog none|tags|releases] [--dry-run]
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -28,6 +33,18 @@ const COMMIT = /^[0-9a-f]{40}$/;
 // GitHub's secondary rate limit allows 80 content-creating requests a minute.
 const PAUSE_BETWEEN_RELEASES_MS = 2000;
 
+/**
+ * The npm `latest` version when this workflow was added. It and every older version are
+ * the backlog: published before tags were automatic, and tagged or released only when a
+ * maintainer runs the workflow with `backlog` set, because each Release notifies everyone
+ * watching the repository. Every newer version is released automatically. This never
+ * needs to move.
+ */
+export const BACKLOG_CUTOFF = '0.5.14';
+
+export const BACKLOG_MODES = ['none', 'tags', 'releases'] as const;
+export type Backlog = (typeof BACKLOG_MODES)[number];
+
 export type Outcome = { ok: true } | { ok: false; reason: string };
 export type Source = { ok: true; commit: string; runId: string } | { ok: false; reason: string };
 
@@ -44,13 +61,19 @@ export interface ReleaseEnvironment {
   packument(): Promise<unknown>;
   /** The attestations document for a version, or null when npm has none. */
   attestations(version: string): Promise<unknown>;
-  remoteTags(): Set<string>;
+  /** Each tag on `origin` and the commit it points at. */
+  remoteTags(): Map<string, string>;
+  /** The tags that have a GitHub Release. */
+  releasedTags(): Set<string>;
   mainHead(): string;
   commitExists(commit: string): boolean;
   isAncestor(commit: string, head: string): boolean;
   /** `package.json` at a commit, or null when it has none. */
   packageJsonAt(commit: string): string | null;
   verifyPublished(version: string, commit: string, runId: string): Promise<Outcome>;
+  /** Creates a tag alone; a tag notifies nobody. */
+  createTag(tag: string, commit: string): void;
+  /** Creates a Release, and its tag at the commit when the tag does not exist. */
   createRelease(release: ReleaseRequest): void;
   pause(milliseconds: number): Promise<void>;
   changelog: string;
@@ -230,36 +253,104 @@ function checkCommit(
   return { ok: true };
 }
 
+/** A verified version and what to create for it: its tag alone, or a Release. */
+interface Creation {
+  kind: 'tag' | 'release';
+  release: ReleaseRequest;
+  /** The tag already exists at the verified commit; only the Release is missing. */
+  existingTag: boolean;
+}
+
+interface Options {
+  repository: string;
+  dryRun: boolean;
+  backlog: Backlog;
+}
+
+/**
+ * What each version needs. A version newer than the cutoff without a tag gets its tag and
+ * Release together. A backlog version is only listed, unless the run asks to tag it or to
+ * release it.
+ */
+function wanted(
+  environment: ReleaseEnvironment,
+  tags: Map<string, string>,
+  versions: string[],
+  backlog: Backlog,
+  lines: string[]
+): { version: string; kind: Creation['kind'] }[] {
+  const released = backlog === 'releases' ? environment.releasedTags() : new Set<string>();
+  return versions.flatMap((version) => {
+    const kind = wantedKind(version, backlog, tags, released);
+    if (kind === 'listed') {
+      lines.push(`backlog v${version}: not released automatically`);
+    }
+    return kind === 'listed' || kind === null ? [] : [{ version, kind }];
+  });
+}
+
+function wantedKind(
+  version: string,
+  backlog: Backlog,
+  tags: Map<string, string>,
+  released: Set<string>
+): Creation['kind'] | 'listed' | null {
+  const tag = `v${version}`;
+  if (compareVersions(version, BACKLOG_CUTOFF) > 0) {
+    return tags.has(tag) ? null : 'release';
+  }
+  if (backlog === 'releases') {
+    return released.has(tag) ? null : 'release';
+  }
+  if (tags.has(tag)) {
+    return null;
+  }
+  return backlog === 'tags' ? 'tag' : 'listed';
+}
+
 export async function tagPublishedVersions(
   environment: ReleaseEnvironment,
-  options: { repository: string; dryRun: boolean }
+  options: Options
 ): Promise<{ exitCode: number; lines: string[] }> {
   const { versions, latest } = publishedVersions(await environment.packument());
+  const lines = [`mode: backlog ${options.backlog}${options.dryRun ? ', dry run' : ''}`];
   const tags = environment.remoteTags();
-  const untagged = versions.filter((version) => !tags.has(`v${version}`));
-  if (untagged.length === 0) {
-    return { exitCode: 0, lines: ['every published version is tagged'] };
+  const candidates = wanted(environment, tags, versions, options.backlog, lines);
+  if (candidates.length === 0) {
+    lines.push('nothing to create');
+    return { exitCode: 0, lines };
   }
   const head = environment.mainHead();
-  const lines: string[] = [];
-  const releases: ReleaseRequest[] = [];
+  const creations: Creation[] = [];
+  let skipped = 0;
   // One version at a time keeps registry requests sequential.
-  for (const version of untagged) {
-    const source = await verifiedSource(environment, version, head, options.repository);
+  for (const { version, kind } of candidates) {
+    const tag = `v${version}`;
+    const existing = tags.get(tag);
+    const verified = await verifiedSource(environment, version, head, options.repository);
+    // A Release is added to an existing tag only when the tag is at the verified commit.
+    const source: Source =
+      verified.ok && existing !== undefined && existing !== verified.commit
+        ? { ok: false, reason: `tag ${tag} points at ${existing}, not ${verified.commit}` }
+        : verified;
     if (!source.ok) {
-      lines.push(`skipped v${version}: ${source.reason}`);
+      lines.push(`skipped ${tag}: ${source.reason}`);
+      skipped += 1;
       continue;
     }
-    releases.push({
-      tag: `v${version}`,
-      commit: source.commit,
-      name: `v${version}`,
-      body: releaseBody(environment.changelog, version, source.commit),
-      latest: version === latest,
+    creations.push({
+      kind,
+      existingTag: existing !== undefined,
+      release: {
+        tag,
+        commit: source.commit,
+        name: tag,
+        body: releaseBody(environment.changelog, version, source.commit),
+        latest: version === latest,
+      },
     });
   }
-  const skipped = lines.length;
-  const created = await createReleases(environment, releases, options.dryRun, lines);
+  const created = await createAll(environment, creations, options.dryRun, lines);
   return { exitCode: skipped === 0 && created ? 0 : 1, lines };
 }
 
@@ -300,32 +391,44 @@ async function checkVersion(
   return verified.ok ? source : verified;
 }
 
-/** Creates the releases in order, pausing between them; false after the first failure. */
-async function createReleases(
+function summarize({ kind, release, existingTag }: Creation): string {
+  const suffix =
+    kind === 'tag'
+      ? ''
+      : `${existingTag ? ' (existing tag)' : ''}${release.latest ? ' (latest)' : ''}`;
+  return `${release.tag} at ${release.commit}${suffix}`;
+}
+
+/** Creates everything oldest first, pausing between; false after the first failure. */
+async function createAll(
   environment: ReleaseEnvironment,
-  releases: ReleaseRequest[],
+  creations: Creation[],
   dryRun: boolean,
   lines: string[]
 ): Promise<boolean> {
-  for (const [index, release] of releases.entries()) {
-    const described = `${release.tag} at ${release.commit}${release.latest ? ' (latest)' : ''}`;
+  for (const [index, creation] of creations.entries()) {
+    const verb = creation.kind === 'tag' ? 'tag' : 'release';
     if (dryRun) {
-      lines.push(`would release ${described}`);
+      lines.push(`would ${verb} ${summarize(creation)}`);
       continue;
     }
     if (index > 0) {
       await environment.pause(PAUSE_BETWEEN_RELEASES_MS);
     }
     try {
-      environment.createRelease(release);
+      if (creation.kind === 'tag') {
+        environment.createTag(creation.release.tag, creation.release.commit);
+      } else {
+        environment.createRelease(creation.release);
+      }
     } catch (error) {
-      // Stop rather than release later versions ahead of this one.
+      // Stop rather than create later versions ahead of this one.
       lines.push(
-        `failed to release ${release.tag}: ${error instanceof Error ? error.message : String(error)}`
+        `failed to ${verb} ${creation.release.tag}: ${error instanceof Error ? error.message : String(error)}`
       );
       return false;
     }
-    lines.push(`released ${described}`);
+    lines.push(`${verb === 'tag' ? 'tagged' : 'released'} ${summarize(creation)}`);
   }
   return true;
 }
@@ -350,18 +453,24 @@ export function gitEnvironment(
   'remoteTags' | 'mainHead' | 'commitExists' | 'isAncestor' | 'packageJsonAt'
 > {
   return {
-    remoteTags: () =>
-      new Set(
-        git(root, ['ls-remote', '--tags', 'origin'])
-          .split('\n')
-          .map((line) =>
-            line
-              .split('\t')[1]
-              ?.replace(/^refs\/tags\//, '')
-              .replace(/\^\{\}$/, '')
-          )
-          .filter((tag): tag is string => tag !== undefined && tag !== '')
-      ),
+    remoteTags: () => {
+      // An annotated tag is listed twice; its peeled `^{}` line names the commit.
+      const tags = new Map<string, string>();
+      const peeled = new Map<string, string>();
+      for (const line of git(root, ['ls-remote', '--tags', 'origin']).split('\n')) {
+        const [object, ref] = line.split('\t');
+        const name = ref?.replace(/^refs\/tags\//, '');
+        if (object === undefined || name === undefined || name === '') {
+          continue;
+        }
+        if (name.endsWith('^{}')) {
+          peeled.set(name.slice(0, -3), object);
+        } else {
+          tags.set(name, object);
+        }
+      }
+      return new Map([...tags].map(([name, object]) => [name, peeled.get(name) ?? object]));
+    },
     mainHead: () => {
       git(root, ['fetch', '--quiet', '--no-tags', 'origin', 'main']);
       return git(root, ['rev-parse', 'FETCH_HEAD']).trim();
@@ -436,8 +545,40 @@ function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
         rmSync(directory, { recursive: true, force: true });
       }
     },
-    // A release created with the workflow token triggers no other workflow, so neither
-    // npm publishing nor any `release` listener runs for these.
+    releasedTags: () =>
+      new Set(
+        execFileSync(
+          'gh',
+          [
+            'api',
+            '--paginate',
+            `repos/${repository}/releases?per_page=100`,
+            '--jq',
+            '.[].tag_name',
+          ],
+          { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+        )
+          .split('\n')
+          .filter(Boolean)
+      ),
+    createTag: (tag, commit) => {
+      execFileSync(
+        'gh',
+        [
+          'api',
+          '--method',
+          'POST',
+          `repos/${repository}/git/refs`,
+          '-f',
+          `ref=refs/tags/${tag}`,
+          '-f',
+          `sha=${commit}`,
+        ],
+        { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] }
+      );
+    },
+    // A release or tag created with the workflow token triggers no other workflow, so
+    // neither npm publishing nor any `release` listener runs for these.
     createRelease: (release) => {
       execFileSync(
         'gh',
@@ -446,7 +587,8 @@ function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
           cwd: root,
           input: JSON.stringify({
             tag_name: release.tag,
-            // GitHub creates the missing tag at this commit.
+            // GitHub creates a missing tag at this commit; an existing tag is used as is,
+            // and was checked to point at this commit.
             target_commitish: release.commit,
             name: release.name,
             body: release.body,
@@ -465,16 +607,22 @@ function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
 
 async function main(): Promise<number> {
   const { values } = parseArgs({
-    options: { repository: { type: 'string' }, 'dry-run': { type: 'boolean', default: false } },
+    options: {
+      repository: { type: 'string' },
+      backlog: { type: 'string', default: 'none' },
+      'dry-run': { type: 'boolean', default: false },
+    },
   });
   const repository = z
     .string()
     .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
     .parse(values.repository);
+  const backlog = z.enum(BACKLOG_MODES).parse(values.backlog);
   const root = git(process.cwd(), ['rev-parse', '--show-toplevel']).trim();
   const report = await tagPublishedVersions(liveEnvironment(root, repository), {
     repository,
     dryRun: values['dry-run'],
+    backlog,
   });
   // A Markdown list, so the job summary keeps one line per version.
   process.stdout.write(report.lines.map((line) => `- ${line}\n`).join(''));

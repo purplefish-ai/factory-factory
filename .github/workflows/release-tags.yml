@@ -2,14 +2,25 @@ name: Tag npm releases
 
 # Publishing stages a package that a maintainer approves on npm, outside GitHub,
 # so the publish workflow cannot tag it. This finds every published version
-# without a `v<version>` tag and, once its npm provenance, commit and tarball
-# check out, creates the tag and the GitHub Release. See
+# newer than BACKLOG_CUTOFF (0.5.14) without a `v<version>` tag and, once its
+# npm provenance, commit and tarball check out, creates the tag and the GitHub
+# Release. Versions up to the cutoff are the backlog: a scheduled run only
+# lists them, and a maintainer decides by running this with `backlog` set. See
 # scripts/tag-npm-releases.ts.
 on:
   schedule:
     - cron: '41 */6 * * *'
   workflow_dispatch:
     inputs:
+      backlog:
+        description: 'Versions up to 0.5.14: none lists them, tags creates only tags (no notifications), releases creates tags and Releases'
+        required: false
+        default: none
+        type: choice
+        options:
+          - none
+          - tags
+          - releases
       dry_run:
         description: 'Print what would be tagged and released, and create nothing'
         required: false
@@ -58,7 +69,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run }}
+          BACKLOG: ${{ inputs.backlog }}
         run: |
           set -euo pipefail
-          if [ "$DRY_RUN" = 'true' ]; then set -- --dry-run; fi
+          # A scheduled run has no inputs, so it leaves the backlog alone.
+          set -- --backlog "${BACKLOG:-none}"
+          if [ "$DRY_RUN" = 'true' ]; then set -- "$@" --dry-run; fi
           pnpm exec tsx scripts/tag-npm-releases.ts --repository "$GITHUB_REPOSITORY" "$@" | tee -a "$GITHUB_STEP_SUMMARY"

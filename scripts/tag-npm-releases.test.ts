@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  BACKLOG_CUTOFF,
+  type Backlog,
   gitEnvironment,
   provenanceSource,
   publishedVersions,
@@ -226,7 +228,8 @@ describe('release body', () => {
 
 function fakeEnvironment(options: {
   versions: string[];
-  tags: string[];
+  tags?: Record<string, string>;
+  released?: string[];
   withoutAttestation?: string[];
   offMain?: string[];
   missing?: string[];
@@ -235,9 +238,11 @@ function fakeEnvironment(options: {
   latest?: string;
 }) {
   const created: ReleaseRequest[] = [];
+  const tagged: [string, string][] = [];
   const pauses: number[] = [];
   const verified: [string, string, string][] = [];
-  const tags = new Set(options.tags);
+  const tags = new Map(Object.entries(options.tags ?? {}));
+  const released = new Set(options.released);
   const latest = options.latest ?? options.versions.at(-1);
   const environment: ReleaseEnvironment = {
     packument: () =>
@@ -249,7 +254,8 @@ function fakeEnvironment(options: {
       Promise.resolve(
         options.withoutAttestation?.includes(version) ? null : attestations(statement(version))
       ),
-    remoteTags: () => new Set(tags),
+    remoteTags: () => new Map(tags),
+    releasedTags: () => new Set(released),
     mainHead: () => 'f'.repeat(40),
     commitExists: (commit) => !options.missing?.some((version) => commitFor(version) === commit),
     isAncestor: (commit) => !options.offMain?.some((version) => commitFor(version) === commit),
@@ -269,9 +275,16 @@ function fakeEnvironment(options: {
           : { ok: true }
       );
     },
+    createTag: (tag, commit) => {
+      tagged.push([tag, commit]);
+      tags.set(tag, commit);
+    },
     createRelease: (release) => {
       created.push(release);
-      tags.add(release.tag);
+      released.add(release.tag);
+      if (!tags.has(release.tag)) {
+        tags.set(release.tag, release.commit);
+      }
     },
     pause: (milliseconds) => {
       pauses.push(milliseconds);
@@ -279,16 +292,19 @@ function fakeEnvironment(options: {
     },
     changelog: '## [1.0.2] - 2026-11-01\n\n- Two\n',
   };
-  return { environment, created, pauses, verified };
+  return { environment, created, tagged, pauses, verified };
 }
 
+const run = (environment: ReleaseEnvironment, backlog: Backlog = 'none', dryRun = false) =>
+  tagPublishedVersions(environment, { repository, dryRun, backlog });
+
 describe('tagging published versions', () => {
-  it('releases the backlog oldest first and marks only the npm latest version as latest', async () => {
+  it('releases new versions oldest first and marks only the npm latest version as latest', async () => {
     const { environment, created, pauses, verified } = fakeEnvironment({
       versions: ['1.0.0', '1.0.1', '1.0.2', '1.0.10'],
-      tags: ['v1.0.0'],
+      tags: { 'v1.0.0': commitFor('1.0.0') },
     });
-    const report = await tagPublishedVersions(environment, { repository, dryRun: false });
+    const report = await run(environment);
     expect(created.map(({ tag, commit, latest }) => [tag, commit, latest])).toEqual([
       ['v1.0.1', commitFor('1.0.1'), false],
       ['v1.0.2', commitFor('1.0.2'), false],
@@ -311,10 +327,9 @@ describe('tagging published versions', () => {
   it('follows the npm latest dist-tag rather than the highest version', async () => {
     const { environment, created } = fakeEnvironment({
       versions: ['1.0.0', '1.0.1', '1.1.0'],
-      tags: [],
       latest: '1.0.1',
     });
-    await tagPublishedVersions(environment, { repository, dryRun: false });
+    await run(environment);
     expect(created.map(({ tag, latest }) => [tag, latest])).toEqual([
       ['v1.0.0', false],
       ['v1.0.1', true],
@@ -323,33 +338,34 @@ describe('tagging published versions', () => {
   });
 
   it('skips a version whose registry request fails and still releases the others', async () => {
-    const { environment, created } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'], tags: [] });
+    const { environment, created } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'] });
     const attestationsFor = environment.attestations;
     environment.attestations = (version) =>
       version === '1.0.0' ? Promise.reject(new Error('HTTP 503')) : attestationsFor(version);
-    const report = await tagPublishedVersions(environment, { repository, dryRun: false });
+    const report = await run(environment);
     expect(created.map((release) => release.tag)).toEqual(['v1.0.1']);
     expect(report.exitCode).toBe(1);
-    expect(report.lines[0]).toBe('skipped v1.0.0: could not check: HTTP 503');
+    expect(report.lines[1]).toBe('skipped v1.0.0: could not check: HTTP 503');
   });
 
   it('creates nothing on a second run', async () => {
     const { environment, created } = fakeEnvironment({
       versions: ['1.0.0', '1.0.1'],
-      tags: ['v1.0.0'],
+      tags: { 'v1.0.0': commitFor('1.0.0') },
     });
-    await tagPublishedVersions(environment, { repository, dryRun: false });
+    await run(environment);
     expect(created).toHaveLength(1);
-    const second = await tagPublishedVersions(environment, { repository, dryRun: false });
+    const second = await run(environment);
     expect(created).toHaveLength(1);
-    expect(second).toEqual({ exitCode: 0, lines: ['every published version is tagged'] });
+    expect(second).toEqual({ exitCode: 0, lines: ['mode: backlog none', 'nothing to create'] });
   });
 
-  it('prints what it would do in a dry run and creates nothing', async () => {
-    const { environment, created } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'], tags: [] });
-    const report = await tagPublishedVersions(environment, { repository, dryRun: true });
+  it('prints the mode and what it would do in a dry run, and creates nothing', async () => {
+    const { environment, created } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'] });
+    const report = await run(environment, 'none', true);
     expect(created).toEqual([]);
     expect(report.lines).toEqual([
+      'mode: backlog none, dry run',
       `would release v1.0.0 at ${commitFor('1.0.0')}`,
       `would release v1.0.1 at ${commitFor('1.0.1')} (latest)`,
     ]);
@@ -358,14 +374,13 @@ describe('tagging published versions', () => {
   it('reports and skips versions it cannot verify, releases the rest and fails the run', async () => {
     const { environment, created } = fakeEnvironment({
       versions: ['1.0.0', '1.0.1', '1.0.2', '1.0.3', '1.0.4', '1.0.5', '1.0.6'],
-      tags: [],
       withoutAttestation: ['1.0.0'],
       missing: ['1.0.1'],
       offMain: ['1.0.2'],
       manifestVersion: { '1.0.3': '1.0.2' },
       unverified: ['1.0.4'],
     });
-    const report = await tagPublishedVersions(environment, { repository, dryRun: false });
+    const report = await run(environment);
     expect(created.map((release) => release.tag)).toEqual(['v1.0.5', 'v1.0.6']);
     expect(report.exitCode).toBe(1);
     expect(report.lines.filter((line) => line.startsWith('skipped'))).toEqual([
@@ -378,16 +393,118 @@ describe('tagging published versions', () => {
   });
 
   it('stops at the first failed release so later versions are not released out of order', async () => {
-    const { environment } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'], tags: [] });
+    const { environment } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'] });
     const attempted: string[] = [];
     environment.createRelease = (release) => {
       attempted.push(release.tag);
       throw new Error('HTTP 403');
     };
-    const report = await tagPublishedVersions(environment, { repository, dryRun: false });
+    const report = await run(environment);
     expect(attempted).toEqual(['v1.0.0']);
     expect(report.exitCode).toBe(1);
     expect(report.lines.at(-1)).toBe('failed to release v1.0.0: HTTP 403');
+  });
+});
+
+describe('the backlog', () => {
+  // 0.5.14 is the cutoff; 0.5.15 is the first version released automatically.
+  const versions = ['0.5.12', '0.5.13', '0.5.14'];
+
+  it('is listed, not created, by a scheduled run, which succeeds', async () => {
+    const { environment, created, tagged, verified } = fakeEnvironment({
+      versions,
+      tags: { 'v0.5.12': commitFor('0.5.12') },
+    });
+    expect(BACKLOG_CUTOFF).toBe('0.5.14');
+    const report = await run(environment);
+    expect(report).toEqual({
+      exitCode: 0,
+      lines: [
+        'mode: backlog none',
+        'backlog v0.5.13: not released automatically',
+        'backlog v0.5.14: not released automatically',
+        'nothing to create',
+      ],
+    });
+    expect([created, tagged, verified]).toEqual([[], [], []]);
+  });
+
+  it('gets verified tags and no Releases in tags mode', async () => {
+    const { environment, created, tagged, verified } = fakeEnvironment({
+      versions,
+      tags: { 'v0.5.12': commitFor('0.5.12') },
+    });
+    const report = await run(environment, 'tags');
+    expect(tagged).toEqual([
+      ['v0.5.13', commitFor('0.5.13')],
+      ['v0.5.14', commitFor('0.5.14')],
+    ]);
+    expect(created).toEqual([]);
+    expect(verified.map(([version]) => version)).toEqual(['0.5.13', '0.5.14']);
+    expect(report.lines).toEqual([
+      'mode: backlog tags',
+      `tagged v0.5.13 at ${commitFor('0.5.13')}`,
+      `tagged v0.5.14 at ${commitFor('0.5.14')}`,
+    ]);
+  });
+
+  it('gets the missing Releases in releases mode after tags mode, without error', async () => {
+    const { environment, created, tagged } = fakeEnvironment({ versions });
+    await run(environment, 'tags');
+    expect(tagged).toHaveLength(3);
+    const report = await run(environment, 'releases');
+    expect(report.exitCode).toBe(0);
+    expect(created.map(({ tag, latest }) => [tag, latest])).toEqual([
+      ['v0.5.12', false],
+      ['v0.5.13', false],
+      ['v0.5.14', true],
+    ]);
+    expect(report.lines.at(-1)).toBe(
+      `released v0.5.14 at ${commitFor('0.5.14')} (existing tag) (latest)`
+    );
+    expect(await run(environment, 'releases')).toEqual({
+      exitCode: 0,
+      lines: ['mode: backlog releases', 'nothing to create'],
+    });
+  });
+
+  it('skips a Release for a tag that points at another commit', async () => {
+    const { environment, created } = fakeEnvironment({
+      versions,
+      tags: { 'v0.5.13': 'd'.repeat(40) },
+      released: ['v0.5.12'],
+    });
+    const report = await run(environment, 'releases');
+    expect(created.map((release) => release.tag)).toEqual(['v0.5.14']);
+    expect(report.exitCode).toBe(1);
+    expect(report.lines).toContain(
+      `skipped v0.5.13: tag v0.5.13 points at ${'d'.repeat(40)}, not ${commitFor('0.5.13')}`
+    );
+  });
+
+  it.each(['none', 'tags', 'releases'] as const)(
+    'does not hold back a version above the cutoff in %s mode',
+    async (backlog) => {
+      const { environment, created } = fakeEnvironment({
+        versions: ['0.5.14', '0.5.15'],
+        tags: { 'v0.5.14': commitFor('0.5.14') },
+        released: ['v0.5.14'],
+      });
+      const report = await run(environment, backlog);
+      expect(created.map(({ tag, latest }) => [tag, latest])).toEqual([['v0.5.15', true]]);
+      expect(report.exitCode).toBe(0);
+    }
+  );
+
+  it.each([
+    ['tags', 'would tag v0.5.14 at'],
+    ['releases', 'would release v0.5.14 at'],
+  ] as const)('names %s mode in a dry run', async (backlog, action) => {
+    const { environment, created, tagged } = fakeEnvironment({ versions: ['0.5.14'] });
+    const report = await run(environment, backlog, true);
+    expect(report.lines[0]).toBe(`mode: backlog ${backlog}, dry run`);
+    expect(report.lines[1]).toContain(action);
+    expect([created, tagged]).toEqual([[], []]);
   });
 });
 
@@ -424,7 +541,11 @@ describe('git checks', () => {
     git('remote', 'add', 'origin', root);
 
     const environment = gitEnvironment(root);
-    expect([...environment.remoteTags()].toSorted()).toEqual(['v1.2.1', 'v1.2.2']);
+    // The annotated tag resolves to its commit, not to the tag object.
+    expect(Object.fromEntries(environment.remoteTags())).toEqual({
+      'v1.2.1': release,
+      'v1.2.2': release,
+    });
     const head = environment.mainHead();
     expect(head).toBe(git('rev-parse', 'main'));
     expect(environment.isAncestor(release, head)).toBe(true);
