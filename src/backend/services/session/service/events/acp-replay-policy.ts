@@ -15,7 +15,7 @@ export function isReplayExemptSessionUpdate(update: AcpSessionUpdateEvent['updat
 /** Only omit events whose transcript or tool side effects the owner already suppresses. */
 export function isTranscriptReplayEvent(event: AcpRuntimeEvent): boolean {
   if (event.type !== 'acp_session_update') {
-    return event.type === 'acp_subagent_tool_update';
+    return false;
   }
   return [
     'user_message_chunk',

@@ -689,14 +689,19 @@ export class AcpEventProcessor {
     sid: string,
     event: Extract<AcpRuntimeEvent, { type: 'acp_subagent_tool_update' }>
   ): void {
-    // History replay must not repeat side effects of tool calls that already ran.
-    this.maybeLiftReplaySuppression(sid);
-    if (this.suppressAcpReplayForSession.has(sid)) {
+    // The native session tracker emits only live child tools, including while
+    // a resumed parent is idle and still suppresses its own transcript.
+    const toolEvent = this.subagentToolEvents.collect(sid, event);
+    if (!toolEvent) {
       return;
     }
-    const toolEvent = this.subagentToolEvents.collect(sid, event);
-    const context = toolEvent ? this.getInterceptorContext(sid) : null;
-    if (toolEvent && context) {
+    const context = this.getInterceptorContext(sid);
+    acpTraceLogger.log(sid, 'translated_delta', {
+      subagentId: event.subagentId,
+      toolCallId: toolEvent.toolUseId,
+      outcome: context ? 'forwarded_to_interceptors' : 'missing_session_context',
+    });
+    if (context) {
       interceptorRegistry.notifyToolComplete(toolEvent, {
         ...context,
         subagentId: event.subagentId,

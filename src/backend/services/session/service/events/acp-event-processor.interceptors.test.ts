@@ -199,19 +199,22 @@ describe('AcpEventProcessor tool interceptors', () => {
     );
   });
 
-  it('does not repeat sub-agent tool side effects during history replay', () => {
-    const { deps, processor, onAcpEvent } = makeProcessor();
-    vi.mocked(deps.runtimeManager.isSessionWorking).mockReturnValue(true);
+  it('forwards live child tools after resume while the parent still suppresses its transcript', () => {
+    const { processor, onAcpEvent } = makeProcessor();
     processor.setReplaySuppression('db-session-1', true);
+    const handler = processor.createRuntimeEventHandler('db-session-1');
 
-    for (const update of claudeBashUpdates('toolu_old', 'gh pr create --fill', `${PR_URL}\n`)) {
-      onAcpEvent('db-session-1', {
-        type: 'acp_subagent_tool_update',
+    for (const update of claudeBashUpdates('toolu_live', 'gh pr create --fill', PR_URL)) {
+      const event = {
+        type: 'acp_subagent_tool_update' as const,
         subagentId: 'child-1',
         update: update as never,
-      });
+      };
+      expect(handler.consumeReplayEvent?.('db-session-1', event)).toBe(false);
+      onAcpEvent('db-session-1', event);
     }
 
-    expect(interceptorRegistry.notifyToolComplete).not.toHaveBeenCalled();
+    expect(interceptorRegistry.notifyToolComplete).toHaveBeenCalledOnce();
+    expect(processor.suppressAcpReplayForSession.has('db-session-1')).toBe(true);
   });
 });
