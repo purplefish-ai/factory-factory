@@ -119,7 +119,7 @@ const textOf = (updates: SessionUpdate[], kind: 'agent_message_chunk' | 'user_me
 /**
  * Starts the adapter on the fake and sends `prompt`. A permission request is answered with
  * `optionId`; `stopAfterFirstChunk` cancels the prompt once the first reply chunk arrives, and
- * `onFirstChunk` runs then with the fake's home.
+ * `onFirstChunk` runs then with the fake's home and a count of the reply chunks so far.
  */
 async function playScenario(
   scenario: string | undefined,
@@ -138,7 +138,7 @@ async function playScenario(
     stopAfterRetry?: boolean;
     answers?: Record<string, string[]>;
     prompt?: string;
-    onFirstChunk?: (home: FakeHome) => void;
+    onFirstChunk?: (home: FakeHome, chunkCount: () => number) => void;
   } = {}
 ) {
   const home = await fakeHome();
@@ -174,7 +174,14 @@ async function playScenario(
           stop = undefined;
         }
         if (update.sessionUpdate === 'agent_message_chunk') {
-          firstChunk?.(home);
+          firstChunk?.(
+            home,
+            () =>
+              events.filter(
+                (sent) =>
+                  sent.type === 'update' && sent.update.sessionUpdate === 'agent_message_chunk'
+              ).length
+          );
           firstChunk = undefined;
         }
       } else if (event.type === 'acp_permission_request') {
@@ -238,14 +245,20 @@ it('a prompt chooses its scenario with no FF_SANDBOX_SCENARIO', async () => {
   expect(played.chunks).toEqual(['I ran cat README.md; it printed one line of scripted text.']);
 }, 20_000);
 
-it('gated-stream finishes its reply once the client creates the gate file', async () => {
+it('gated-stream holds its reply until the client creates the gate file', async () => {
+  let chunksBeforeRelease = 0;
   const played = await playScenario(undefined, {
     prompt: 'ff-scenario:gated-stream:client-gate',
-    onFirstChunk: ({ dir }) => {
-      mkdirSync(join(dir, 'gates'), { recursive: true });
-      writeFileSync(join(dir, 'gates', 'client-gate'), '');
+    onFirstChunk: ({ dir }, chunkCount) => {
+      // Several polls of the gate pass with no file: the reply must still be held.
+      setTimeout(() => {
+        chunksBeforeRelease = chunkCount();
+        mkdirSync(join(dir, 'gates'), { recursive: true });
+        writeFileSync(join(dir, 'gates', 'client-gate'), '');
+      }, 400);
     },
   });
+  expect(chunksBeforeRelease).toBe(1);
   expect(played.response.stopReason).toBe('end_turn');
   expect(played.chunks).toEqual(['Waiting at gate client-gate. ', 'Gate client-gate released.']);
 }, 20_000);
@@ -291,6 +304,31 @@ it.each([
   },
   20_000
 );
+
+it('a restarted client replays a recorded command with its output', async () => {
+  const played = await playScenario('tool-call');
+  handles.splice(handles.indexOf(played.handle), 1);
+  await stopClient(played.handle);
+  const replayed: SessionUpdate[] = [];
+  await startClient(played.home, {
+    resumeProviderSessionId: played.handle.providerSessionId,
+    onAcpEvent: (event) => {
+      if (event.type === 'acp_session_update') {
+        replayed.push(event.update);
+      }
+    },
+  });
+  expect(replayed).toContainEqual(
+    expect.objectContaining({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'tool-call-command',
+      title: 'cat README.md',
+    })
+  );
+  expect(textOf(replayed, 'agent_message_chunk')).toEqual([
+    'I ran cat README.md; it printed one line of scripted text.',
+  ]);
+}, 30_000);
 
 it('a restarted client resumes the conversation from its rollout file and continues it', async () => {
   const played = await playScenario('echo', { prompt: 'Before the restart' });

@@ -90,7 +90,8 @@ async function playPrompt(
       onMessage?.(message, messages);
       if (!interrupted && message.method !== undefined && message.method === interruptOn) {
         interrupted = true;
-        const interrupt = { id: 8, method: 'turn/interrupt', params: { threadId, turnId } };
+        const params = { threadId: thread, turnId };
+        const interrupt = { id: 8, method: 'turn/interrupt', params };
         child.stdin.write(`${JSON.stringify(interrupt)}\n`);
       } else if (message.method !== undefined && message.id !== undefined) {
         child.stdin.write(`${JSON.stringify({ id: message.id, result: { decision } })}\n`);
@@ -520,6 +521,35 @@ describe('fake Codex threads and rollout files', () => {
     thread: z.object({ id: z.string(), turns: z.array(z.unknown()) }),
   });
   const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('replays a recorded command with its output in a new process', async () => {
+    const env = { CODEX_HOME: temporary() };
+    const first = startFake(undefined, env);
+    const started = await call(first, 1, 'thread/start', { cwd });
+    const thread = threadSchema.parse(started.result).thread.id;
+    await playPrompt(first, { thread, text: 'ff-scenario:tool-call' });
+    const read = await call(startFake(undefined, env), 1, 'thread/read', {
+      threadId: thread,
+      includeTurns: true,
+    });
+    expect(threadSchema.parse(read.result).thread.turns).toMatchObject([
+      {
+        items: [
+          { type: 'userMessage' },
+          {
+            type: 'commandExecution',
+            id: 'tool-call-command',
+            command: 'cat README.md',
+            cwd,
+            status: 'completed',
+            aggregatedOutput: 'Scripted README.md contents from the fake provider.\n',
+            exitCode: 0,
+          },
+          { type: 'agentMessage' },
+        ],
+      },
+    ]);
+  });
 
   it('issues a UUIDv7 id per thread and records a prompted one, which a new process resumes', async () => {
     const codexHome = temporary();

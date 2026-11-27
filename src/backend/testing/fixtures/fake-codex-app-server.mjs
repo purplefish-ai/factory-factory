@@ -109,7 +109,26 @@ const turnShape = (id) => ({
   durationMs: null,
 });
 
-/** The recorded turns, with their prompts and replies, for thread/read with includeTurns. */
+/** A commandExecution item that ran `command` to `output`, as the scenarios run one. */
+function commandItem(id, command, cwd, output) {
+  return {
+    type: 'commandExecution',
+    id,
+    command,
+    cwd,
+    commandActions: [{ type: 'unknown', command }],
+    processId: null,
+    source: 'agent',
+    pluginId: null,
+    scriptPath: null,
+    status: 'completed',
+    aggregatedOutput: output,
+    exitCode: 0,
+    durationMs: 1,
+  };
+}
+
+/** The recorded turns (prompts, replies, commands) for thread/read with includeTurns. */
 function readTurns(thread) {
   if (!(thread.rollout && existsSync(thread.rollout))) {
     return [];
@@ -117,24 +136,30 @@ function readTurns(thread) {
   const turns = [];
   for (const line of readFileSync(thread.rollout, 'utf8').split('\n')) {
     const { type, payload } = line ? JSON.parse(line) : {};
-    if (type !== 'event_msg') {
-      continue;
-    }
-    if (payload.type === 'task_started') {
+    if (type === 'event_msg' && payload.type === 'task_started') {
+      // The rollout records no turn ending, and a turn replayed after a restart has ended.
       const done = { status: 'completed', completedAt: 0, durationMs: 0 };
       turns.push({ ...turnShape(payload.turn_id), ...done, itemsView: 'full' });
     }
     const turn = turns.at(-1);
-    if (!turn) {
+    if (!(turn && payload)) {
       continue;
     }
     const id = `${turn.id}-item-${turn.items.length + 1}`;
-    if (payload.type === 'user_message') {
+    if (type === 'event_msg' && payload.type === 'user_message') {
       const content = [{ type: 'text', text: payload.message, text_elements: [] }];
       turn.items.push({ type: 'userMessage', id, content });
-    } else if (payload.type === 'agent_message') {
+    } else if (type === 'event_msg' && payload.type === 'agent_message') {
       const message = { type: 'agentMessage', id, text: payload.message };
       turn.items.push({ ...message, phase: null, memoryCitation: null });
+    } else if (type === 'response_item' && payload.type === 'function_call') {
+      const { cmd } = JSON.parse(payload.arguments);
+      turn.items.push(commandItem(payload.call_id, cmd, thread.cwd, null));
+    } else if (type === 'response_item' && payload.type === 'function_call_output') {
+      const command = turn.items.find((item) => item.id === payload.call_id);
+      if (command) {
+        command.aggregatedOutput = payload.output;
+      }
     }
   }
   return turns;
@@ -202,7 +227,7 @@ const scenarios = {
   'tool-call': async (turn) => {
     const command = 'cat README.md';
     const output = 'Scripted README.md contents from the fake provider.\n';
-    turn.command('tool-call-command', command, [{ type: 'unknown', command }], output);
+    turn.command('tool-call-command', command, output);
     await turn.reply(['I ran cat README.md; it printed one line of scripted text.']);
   },
   'permission-request': async (turn) => {
@@ -221,7 +246,7 @@ const scenarios = {
       commandActions: actions,
     });
     if (decision === 'accept' || decision === 'acceptForSession') {
-      turn.command('approval-command', command, actions, 'Hello from the sandbox\n');
+      turn.command('approval-command', command, 'Hello from the sandbox\n');
       await turn.reply(['You approved the command, so I ran it.']);
     } else {
       await turn.reply(['You declined the command, so I did not run it.']);
@@ -455,30 +480,12 @@ async function playScenario(request, turnId, thread, scenario) {
       item('item/completed', { ...fields, text: sent.join('') });
       record(thread, 'event_msg', { type: 'agent_message', message: sent.join('') });
     },
-    command(id, command, commandActions, output) {
-      const base = { type: 'commandExecution', id, command, cwd, commandActions };
-      const fields = {
-        ...base,
-        processId: null,
-        source: 'agent',
-        pluginId: null,
-        scriptPath: null,
-      };
-      item('item/started', {
-        ...fields,
-        status: 'inProgress',
-        aggregatedOutput: null,
-        exitCode: null,
-        durationMs: null,
-      });
+    command(id, command, output) {
+      const completed = commandItem(id, command, cwd, output);
+      const running = { status: 'inProgress', aggregatedOutput: null, exitCode: null };
+      item('item/started', { ...completed, ...running, durationMs: null });
       notify('item/commandExecution/outputDelta', { threadId, turnId, itemId: id, delta: output });
-      item('item/completed', {
-        ...fields,
-        status: 'completed',
-        aggregatedOutput: output,
-        exitCode: 0,
-        durationMs: 1,
-      });
+      item('item/completed', completed);
       const call = {
         name: 'exec_command',
         call_id: id,

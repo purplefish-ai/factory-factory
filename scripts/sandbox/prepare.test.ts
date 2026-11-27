@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { afterAll, describe, expect, it } from 'vitest';
 import { FactoryConfigService } from '@/backend/services/run-script';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
@@ -69,12 +70,16 @@ describe('the seed repository', () => {
     );
     const exited = once(server, 'exit');
     try {
-      const [listening] = await once(server.stdout, 'data');
-      expect(String(listening)).toBe(`Sandbox run script listening on port ${port}\n`);
+      // Its first line, or the exit that came instead of it.
+      const listening = await Promise.race([
+        once(createInterface({ input: server.stdout }), 'line').then(([line]) => String(line)),
+        exited.then(([code]) => `exited with ${code} before listening`),
+      ]);
+      expect(listening).toBe(`Sandbox run script listening on port ${port}`);
       const page = await fetch(`http://127.0.0.1:${port}/`);
       expect(await page.text()).toBe('Sandbox run script\n');
     } finally {
-      if (server.pid) {
+      if (server.pid && server.exitCode === null && server.signalCode === null) {
         process.kill(-server.pid, 'SIGTERM');
         await exited;
       }
