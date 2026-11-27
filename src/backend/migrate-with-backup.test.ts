@@ -18,6 +18,8 @@ import {
   getPreMigrationBackupDirectory,
   type MigrateWithBackupOptions,
   MigrationBackupError,
+  listPreMigrationBackups,
+  preMigrationBackupName,
   runMigrationsWithBackup,
 } from './migrate-with-backup';
 import { configService } from './services/config.service';
@@ -145,6 +147,27 @@ describe('runMigrationsWithBackup', () => {
     expect(logs.some((msg) => msg.includes(backupPath) && msg.includes('1 migration'))).toBe(true);
   });
 
+  it('lists only finished backups of this database, by the name retention counts', async () => {
+    expect(await listPreMigrationBackups(databasePath)).toEqual([]);
+    addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+    await migrate();
+    addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+    await migrate();
+    writeFileSync(
+      join(backupDirectory, 'data.db-pre-migration-20000101T000000000Z.db.partial'),
+      ''
+    );
+    writeFileSync(join(backupDirectory, 'data.sqlite-pre-migration-20000101T000000000Z.db'), '');
+
+    expect(await listPreMigrationBackups(databasePath)).toEqual(
+      backups().filter((name) => /^data\.db-pre-migration-\d{8}T\d{9}Z\.db$/.test(name))
+    );
+    expect(await listPreMigrationBackups(databasePath)).toHaveLength(1);
+    expect(preMigrationBackupName(databasePath, new Date('2026-11-27T10:15:00.123Z'))).toBe(
+      'data.db-pre-migration-20261127T101500123Z.db'
+    );
+  });
+
   it('keeps a bounded number of backups and leaves unrelated files alone', async () => {
     addMigration('000_base', 'CREATE TABLE base (id INTEGER PRIMARY KEY);');
     await migrate();
@@ -261,6 +284,9 @@ describe('runMigrationsWithBackup', () => {
       await expect(failure).rejects.toBeInstanceOf(MigrationBackupError);
       await expect(failure).rejects.toThrow(/ENOTDIR|EEXIST|not a directory/i);
       await expect(failure).rejects.toThrow('FF_ALLOW_MIGRATION_WITHOUT_BACKUP=1');
+      // The directory it could not write, whatever the underlying reason says.
+      await expect(failure).rejects.toMatchObject({ backupDirectory: blocked });
+      await expect(failure).rejects.toThrow(`Could not back up the database to ${blocked}`);
       expect(tablesIn(databasePath)).not.toContain('posts');
       expect(appliedMigrations()).toEqual(['001_users']);
     });
@@ -275,6 +301,18 @@ describe('runMigrationsWithBackup', () => {
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('could not back up the database');
       expect(warnings[0]).toContain('FF_ALLOW_MIGRATION_WITHOUT_BACKUP');
+      expect(warnings[0]).toContain(blocked);
+    });
+
+    it('reports a database it cannot inspect as a migration failure, not a backup failure', async () => {
+      // Not a SQLite file: inspecting it fails before any backup is attempted.
+      writeFileSync(databasePath, 'this is not a database');
+
+      const failure = migrate({ backupDirectory: join(tempDir, 'ok-backups') });
+
+      await expect(failure).rejects.toThrow(/not a database/i);
+      await expect(failure).rejects.not.toBeInstanceOf(MigrationBackupError);
+      expect(existsSync(join(tempDir, 'ok-backups'))).toBe(false);
     });
 
     it('still starts a database with nothing to migrate', async () => {

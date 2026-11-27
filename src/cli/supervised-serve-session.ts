@@ -1,11 +1,19 @@
 import { execFile, type ChildProcess, type Serializable } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
-import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { promisify } from 'node:util';
+import { chmod, copyFile, link, mkdir, readFile, rm } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
+import chalk from 'chalk';
 import { z } from 'zod';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
-import { ALLOW_MIGRATION_WITHOUT_BACKUP_ENV } from '@/backend/migrate-with-backup';
+import { inspectMigrations } from '@/backend/migrate';
+import {
+  ALLOW_MIGRATION_WITHOUT_BACKUP_ENV,
+  getPreMigrationBackupDirectory,
+  listPreMigrationBackups,
+  preMigrationBackupName,
+  prunePreMigrationBackupsKeeping,
+} from '@/backend/migrate-with-backup';
 import {
   applicationUpdateStatusSchema,
   updateSupervisorMessageSchema,
@@ -19,7 +27,6 @@ import { stopBackendForUpdate } from './application-update-shutdown';
 import { ApplicationUpdateSupervisor } from './application-update-supervisor';
 import { runServeSession } from './serve-session';
 
-const exec = promisify(execFile);
 const savedStateSchema = z.object({ status: applicationUpdateStatusSchema });
 type ServeOptions = Parameters<typeof runServeSession>[0];
 
@@ -42,6 +49,171 @@ async function readPreviousStatus(
     /* First launch has no journal. */
   }
   return { phase: 'idle' };
+}
+
+/** A line naming the failure: `TypeError:`, `MigrationBackupError:`, `Error [CODE]:`, `Migration failed:`. */
+const CAUSE_LINE = /\b\w*Error\b(?: \[[^\]]*\])?:|^Migration failed:/;
+/** Node's version footer after an uncaught exception, and advice printed after a failure. */
+const NOT_A_CAUSE = /^Node\.js v\d|^If /;
+
+/**
+ * A failed child's output with the line naming the failure first: an earlier
+ * warning would otherwise fill the start of the message the update banner
+ * shows. That line is the last one naming an error; failing that, the last one
+ * that is neither Node's version footer nor advice; failing that, the last.
+ */
+function describeChildFailure(output: string, fallback: string): string {
+  const lines = output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return fallback;
+  }
+  const lastIndexOf = (test: (line: string) => boolean) =>
+    lines.findLastIndex((line) => test(line));
+  let index = lastIndexOf((line) => CAUSE_LINE.test(line));
+  if (index < 0) {
+    index = lastIndexOf((line) => !NOT_A_CAUSE.test(line));
+  }
+  if (index < 0) {
+    index = lines.length - 1;
+  }
+  return [lines[index], ...lines.filter((_line, other) => other !== index)].join('\n');
+}
+
+/**
+ * Run the new package's `db:migrate` and return what it wrote to standard
+ * error. A failure is logged in full and carries that output, failure first,
+ * rather than the command line Node puts first.
+ */
+function runMigrationChild(args: string[], env: NodeJS.ProcessEnv): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      process.execPath,
+      args,
+      { env, timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
+      (error, _stdout, stderr) => {
+        const output = stripVTControlCharacters(String(stderr)).trim();
+        if (!error) {
+          resolve(output);
+          return;
+        }
+        const reason = describeChildFailure(output, error.message);
+        console.error(chalk.red(`  [update] db:migrate failed: ${reason}`));
+        reject(new Error(`The database migration failed: ${reason}`, { cause: error }));
+      }
+    );
+  });
+}
+
+/**
+ * Whether the new package's `db:migrate` will migrate, judged as it judges:
+ * only an existing database with pending migrations gets a backup. When the
+ * inspection fails the answer is yes, which keeps the snapshot.
+ */
+function migrationsPending(projectRoot: string, databasePath: string): boolean {
+  try {
+    const inspection = inspectMigrations({
+      databasePath,
+      migrationsPath: join(projectRoot, 'prisma', 'migrations'),
+    });
+    return inspection.hasAppliedMigrations && inspection.pendingMigrations.length > 0;
+  } catch (error) {
+    console.warn(
+      chalk.yellow(
+        `  [update] Could not tell whether migrations are pending (${String(error)}); ` +
+          'the database snapshot will be kept unless the migration makes its own backup.'
+      )
+    );
+    return true;
+  }
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/** Hard-link `source` into `directory` under the first unused name; a link never replaces a file. */
+async function linkUnderUnusedName(
+  source: string,
+  directory: string,
+  name: (attempt: number) => string
+): Promise<string> {
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const target = join(directory, name(attempt));
+    try {
+      await link(source, target);
+      return target;
+    } catch (error) {
+      if (!isAlreadyExists(error)) {
+        throw error;
+      }
+    }
+  }
+  throw new Error(`No unused name in ${directory}`);
+}
+
+/**
+ * The update's `db:migrate` left no new backup in `db-backups/`, so the
+ * supervisor's snapshot is the only copy of the database from before the
+ * update. Keep it with a hard link, which needs no disk space (a full disk is
+ * the likeliest reason that backup failed) and is instant: into `db-backups/`
+ * under the pre-migration name retention counts, else beside the package. When
+ * no link can be made, the snapshot stays in the stage. Never throws: the new
+ * backend is already running. Returns the snapshot when the stage must keep it.
+ */
+async function keepPreUpdateSnapshot(
+  snapshot: string,
+  databasePath: string,
+  projectRoot: string
+): Promise<string | undefined> {
+  const now = Date.now();
+  const backupDirectory = getPreMigrationBackupDirectory(databasePath);
+  const failures: string[] = [];
+  let kept: string | undefined;
+  try {
+    await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
+    // mkdir leaves an existing directory's mode alone; others must not unlink the only copy.
+    await chmod(backupDirectory, 0o700);
+    kept = await linkUnderUnusedName(snapshot, backupDirectory, (attempt) =>
+      preMigrationBackupName(databasePath, new Date(now + attempt))
+    );
+  } catch (error) {
+    failures.push(`${backupDirectory} (${String(error)})`);
+  }
+  if (kept && dirname(kept) === backupDirectory) {
+    // The same retention as the migration's own backups; the link just made always stays.
+    await prunePreMigrationBackupsKeeping(databasePath, backupDirectory, basename(kept)).catch(
+      (error: unknown) => {
+        console.warn(
+          chalk.yellow(`  [update] Could not prune old database backups: ${String(error)}`)
+        );
+      }
+    );
+  }
+  if (!kept) {
+    const stamp = new Date(now).toISOString().replace(/[-:.]/g, '');
+    try {
+      kept = await linkUnderUnusedName(
+        snapshot,
+        dirname(projectRoot),
+        (attempt) => `.factory-factory-database-backup-${stamp}${attempt ? `-${attempt}` : ''}.db`
+      );
+    } catch (error) {
+      failures.push(`${dirname(projectRoot)} (${String(error)})`);
+    }
+  }
+  const linkFailures =
+    failures.length > 0 ? ` Could not link it into ${failures.join(' or ')}.` : '';
+  console.error(
+    chalk.red(
+      `  [update] The database migration made no lasting backup: no new pre-migration ` +
+        `backup appeared in ${backupDirectory}. The database as it was before the update ` +
+        `is kept at ${kept ?? snapshot}.${linkFailures}`
+    )
+  );
+  return kept ? undefined : snapshot;
 }
 
 /** Keeps the CLI alive while its production backend is gracefully replaced. */
@@ -79,6 +251,10 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
   let expectedExit = false;
   let gracefulExit: Promise<void> | undefined;
   let snapshotExists = false;
+  /** Set unless the update's `db:migrate` was seen to leave a new backup in `db-backups/`. */
+  let snapshotIsOnlyBackup = false;
+  /** A snapshot no link could keep, which the stage's disposal leaves in place. */
+  let snapshotLeftInStage: string | undefined;
   const publish = (message: Serializable) => {
     if (backend?.connected) {
       backend.send(message, () => {
@@ -88,7 +264,10 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
   };
   const supervisor = new ApplicationUpdateSupervisor({
     automaticUpdate,
-    prepare: (version, signal) => installer.prepare(version, signal),
+    prepare: async (version, signal) => {
+      const prepared = await installer.prepare(version, signal);
+      return { ...prepared, dispose: () => prepared.dispose({ keep: snapshotLeftInStage }) };
+    },
     publish: (status) => publish({ type: 'update-status', status }),
     persist: async (status) => {
       // Unsupported source/desktop launches do not write beside their package.
@@ -133,21 +312,26 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       };
     },
     migrate: async () => {
-      await exec(
-        process.execPath,
+      // Fails safe: only nothing to migrate, or a new backup file seen on disk, lets the snapshot go.
+      snapshotIsOnlyBackup = true;
+      const pending = migrationsPending(options.projectRoot, options.databasePath);
+      const before = await listPreMigrationBackups(options.databasePath).catch(() => undefined);
+      const output = await runMigrationChild(
         [
           join(options.projectRoot, 'dist/src/cli/index.js'),
           'db:migrate',
           '--database-path',
           options.databasePath,
         ],
-        {
-          // The supervisor's own snapshot, taken just before, is this update's backup.
-          env: { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' },
-          timeout: 120_000,
-          maxBuffer: 4 * 1024 * 1024,
-        }
+        // The supervisor's own snapshot, taken just before, is this update's backup.
+        { ...options.env, [ALLOW_MIGRATION_WITHOUT_BACKUP_ENV]: '1' }
       );
+      if (output) {
+        console.warn(chalk.yellow(`  [update] db:migrate: ${output}`));
+      }
+      const after = await listPreMigrationBackups(options.databasePath).catch(() => []);
+      const childMadeBackup = !!before && after.some((name) => !before.includes(name));
+      snapshotIsOnlyBackup = pending && !childMadeBackup;
     },
   });
   if (automaticUpdate) {
@@ -240,11 +424,28 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
         onReady: async () => {
           await backendStarted;
           clearTimeout(readyTimeout);
-          await supervisor.backendReady();
-          if (snapshotExists && backupPath) {
-            await rm(backupPath, { force: true });
-            snapshotExists = false;
+          const keepSnapshot = snapshotIsOnlyBackup;
+          snapshotIsOnlyBackup = false;
+          // Only for a completed update (a failed one restored the database from the
+          // snapshot), and before backendReady deletes the stage holding it.
+          if (
+            keepSnapshot &&
+            supervisor.status.phase === 'restarting' &&
+            snapshotExists &&
+            backupPath
+          ) {
+            snapshotLeftInStage = await keepPreUpdateSnapshot(
+              backupPath,
+              options.databasePath,
+              options.projectRoot
+            );
           }
+          await supervisor.backendReady();
+          if (snapshotExists && backupPath && !snapshotLeftInStage) {
+            await rm(backupPath, { force: true });
+          }
+          snapshotExists = false;
+          snapshotLeftInStage = undefined;
           if (firstReady) {
             firstReady = false;
             await options.onReady();

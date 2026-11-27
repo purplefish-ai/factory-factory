@@ -1,6 +1,17 @@
 import type { Stats } from 'node:fs';
-import { chmod, copyFile, lstat, mkdir, readdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  chmod,
+  copyFile,
+  lstat,
+  mkdir,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  writeFile,
+} from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
@@ -11,8 +22,10 @@ import {
   BACKUP_ENCRYPTION_KEY_FILE,
   BACKUP_FORMAT_VERSION,
   BACKUP_MANIFEST_FILE,
+  BACKUP_PARTIAL_SUFFIX,
   type BackupManifest,
   BackupManifestSchema,
+  isNotFound,
 } from './backup-manifest';
 import { getBaseDir, resolveDatabasePath } from './database-path';
 
@@ -31,10 +44,8 @@ export interface BackupResult {
   manifest: BackupManifest;
   /** Entries under `codex-accounts/` that are not regular files or directories and were not copied. */
   skipped: string[];
-}
-
-function isNotFound(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+  /** Unfinished `.partial` backups found beside a default backup, left by an interrupted run. */
+  leftovers: string[];
 }
 
 async function lstatIfExists(path: string): Promise<Stats | null> {
@@ -114,53 +125,197 @@ async function copyCodexAccounts(
   return true;
 }
 
-async function realpathIfExists(path: string): Promise<string> {
-  try {
-    return await realpath(path);
-  } catch (error) {
-    if (isNotFound(error)) {
-      return path;
+/**
+ * Where an absolute path really leads: the real path of its nearest existing
+ * ancestor with the missing rest appended, so a path not created yet still has
+ * the links on its way resolved.
+ */
+async function realPathAllowingMissing(path: string): Promise<string> {
+  const missing: string[] = [];
+  let current = path;
+  for (;;) {
+    try {
+      return join(await realpath(current), ...missing);
+    } catch (error) {
+      const parent = dirname(current);
+      if (!isNotFound(error) || parent === current) {
+        throw error;
+      }
+      missing.unshift(basename(current));
+      current = parent;
     }
-    throw error;
   }
 }
 
 function isInside(path: string, directory: string): boolean {
   const relation = relative(directory, path);
-  return relation !== '' && !relation.startsWith('..') && !isAbsolute(relation);
+  // `..foo` is a child named `..foo`; only `..` itself or `../...` leads out.
+  return (
+    relation !== '' &&
+    relation !== '..' &&
+    !relation.startsWith(`..${sep}`) &&
+    !isAbsolute(relation)
+  );
 }
 
 function isAlreadyExists(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'EEXIST';
 }
 
+function describeExistingDestination(directory: string, isDefault: boolean): string {
+  return isDefault
+    ? `${directory} already exists: another backup started at the same moment, or the ` +
+        'clock was set back. Run `ff backup` again, or choose a new directory with ' +
+        '`ff backup --output <path>`.'
+    : `${directory} already exists, and ff backup never writes into an existing path. ` +
+        'Run `ff backup --output <path>` with a path that does not exist yet.';
+}
+
 /**
- * Create the backup directory, failing if anything already exists at that path:
- * `mkdir` is the atomic claim, so two backups never share a directory. The
- * default parent is made owner-only even when it already existed with a wider
- * mode; a parent the user chose is left alone.
+ * A kill between claiming the final name and the rename leaves an empty
+ * `<directory>` beside its `.partial`.
  */
-async function reserveDirectory(directory: string, restrictParent: boolean): Promise<void> {
+async function isInterruptedRename(directory: string, building: string): Promise<boolean> {
+  try {
+    return (await readdir(directory)).length === 0 && !!(await lstatIfExists(building));
+  } catch {
+    return false;
+  }
+}
+
+function describeInterruptedRename(directory: string, building: string): string {
+  return (
+    `${directory} is an empty directory beside ${building}: a backup was interrupted while ` +
+    'finishing, or is finishing now. First make sure no `ff backup` is running. Then, if ' +
+    `${building} contains ${BACKUP_MANIFEST_FILE}, that backup is complete: remove the empty ` +
+    `${directory} and rename ${building} to it. Otherwise delete both and run \`ff backup\` again.`
+  );
+}
+
+/** The backup is complete but still under its `.partial` name, which must not be deleted. */
+class UnrenamedBackupError extends Error {}
+
+/**
+ * Claim `<directory>.partial`, where the backup is built, failing if it or the
+ * final directory already exists: `mkdir` is the atomic claim, so two backups
+ * never share a directory. The default parent is made owner-only even when it
+ * already existed with a wider mode; a parent the user chose is left alone.
+ */
+async function reserveDirectory(
+  directory: string,
+  building: string,
+  isDefault: boolean
+): Promise<void> {
   const parent = dirname(directory);
   await mkdir(parent, { recursive: true, mode: 0o700 });
-  if (restrictParent) {
+  if (isDefault) {
     await chmod(parent, 0o700);
   }
+  if (await lstatIfExists(directory)) {
+    if (await isInterruptedRename(directory, building)) {
+      throw new Error(describeInterruptedRename(directory, building));
+    }
+    throw new Error(describeExistingDestination(directory, isDefault));
+  }
   try {
-    await mkdir(directory, { mode: 0o700 });
+    await mkdir(building, { mode: 0o700 });
   } catch (error) {
     if (isAlreadyExists(error)) {
-      throw new Error(`${directory} already exists; choose a path that does not exist.`);
+      throw new Error(
+        `${building} already exists: an earlier backup to ${directory} was interrupted, or ` +
+          'one is still running. Delete it once no backup is running, then run `ff backup` again.'
+      );
     }
     throw error;
   }
 }
 
 /**
+ * Rename the finished `.partial` directory to its final name without ever
+ * replacing something another process put there. POSIX `rename` replaces an
+ * empty directory, so the final name is first claimed with `mkdir` (which
+ * fails if it exists) and only that empty directory of ours is replaced;
+ * Windows `rename` never replaces a directory.
+ */
+async function finishBackup(building: string, directory: string, isDefault: boolean) {
+  const claim = process.platform !== 'win32';
+  if (claim) {
+    try {
+      await mkdir(directory, { mode: 0o700 });
+    } catch (error) {
+      throw isAlreadyExists(error)
+        ? new Error(describeExistingDestination(directory, isDefault))
+        : error;
+    }
+  }
+  try {
+    await rename(building, directory);
+  } catch (error) {
+    throw claim
+      ? await explainClaimedRenameFailure(error, building, directory)
+      : await explainRenameFailure(error, directory, isDefault);
+  }
+}
+
+/** POSIX: the rename onto our claimed directory failed. */
+async function explainClaimedRenameFailure(
+  error: unknown,
+  building: string,
+  directory: string
+): Promise<unknown> {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined;
+  if (code === 'ENOTEMPTY' || code === 'EEXIST') {
+    // Someone wrote into the claim: the finished backup stays where it is.
+    return new UnrenamedBackupError(
+      `The backup is complete in ${building}, but another process wrote into ${directory} ` +
+        `before it could be renamed there. Rename ${building} to a new path without ` +
+        `${BACKUP_PARTIAL_SUFFIX} to use it.`,
+      { cause: error }
+    );
+  }
+  // Only our claim, and only while it is still empty.
+  await rmdir(directory).catch(() => undefined);
+  return error;
+}
+
+/** Windows: `rename` refuses an existing directory, which is the usual cause. */
+async function explainRenameFailure(
+  error: unknown,
+  directory: string,
+  isDefault: boolean
+): Promise<unknown> {
+  return (await lstatIfExists(directory).catch(() => null))
+    ? new Error(describeExistingDestination(directory, isDefault), { cause: error })
+    : error;
+}
+
+const DEFAULT_PARTIAL_NAME = /^backup-\d{8}T\d{9}Z\.partial$/;
+
+/**
+ * Unfinished default backups other than this run's, left by an interrupted (or
+ * a running) backup, and the empty final directories an interrupted rename left.
+ */
+async function findLeftoverBackups(parent: string, building: string): Promise<string[]> {
+  const partials = (await readdir(parent))
+    .filter((name) => DEFAULT_PARTIAL_NAME.test(name))
+    .map((name) => join(parent, name))
+    .filter((path) => path !== building);
+  const emptyClaims: string[] = [];
+  for (const partial of partials) {
+    const claimed = partial.slice(0, -BACKUP_PARTIAL_SUFFIX.length);
+    if (await isInterruptedRename(claimed, partial)) {
+      emptyClaims.push(claimed);
+    }
+  }
+  return [...partials, ...emptyClaims].sort();
+}
+
+/**
  * A warning when the database is not inside the data directory, where the key
  * and accounts come from. `DATABASE_PATH` and `BASE_DIR` are independent, so
  * this can pair one install's database with another's key, which leaves the
- * database's stored secrets undecryptable after a restore.
+ * database's stored secrets undecryptable after a restore. Never throws: a
+ * path whose real location cannot be read is compared as given.
  */
 export async function describeMismatchedSources(options: {
   databasePath: string;
@@ -168,9 +323,12 @@ export async function describeMismatchedSources(options: {
 }): Promise<string | undefined> {
   const databasePath = resolve(options.databasePath);
   const baseDir = resolve(options.baseDir);
-  // SQLite opens the link's target, so compare where each path really lives.
-  const realDatabasePath = await realpathIfExists(databasePath);
-  const realBaseDir = await realpathIfExists(baseDir);
+  // SQLite opens the link's target, so compare where each path really lives;
+  // when either cannot be resolved, compare both as given.
+  const [realDatabasePath, realBaseDir] = await Promise.all([
+    realPathAllowingMissing(databasePath),
+    realPathAllowingMissing(baseDir),
+  ]).catch(() => [databasePath, baseDir]);
   if (isInside(realDatabasePath, realBaseDir)) {
     return undefined;
   }
@@ -186,29 +344,47 @@ export async function describeMismatchedSources(options: {
  * Write one self-contained backup directory: a consistent SQLite snapshot,
  * `encryption.key` and `codex-accounts/` when they exist, and a manifest. The
  * snapshot uses SQLite's online backup API, so a running backend is neither
- * stopped nor blocked. The manifest is written last and a failed backup removes
- * its directory, so nothing that looks complete is ever left half written.
+ * stopped nor blocked. Everything is written into `<directory>.partial`, the
+ * manifest last, which is renamed to `<directory>` only when complete. A failed
+ * backup removes its `.partial` directory; one a killed run leaves behind keeps
+ * the suffix, which `readBackup` refuses.
  */
 export async function createBackup(options: CreateBackupOptions): Promise<BackupResult> {
   const now = (options.now ?? (() => new Date()))();
   const databasePath = resolve(options.databasePath);
   const baseDir = resolve(options.baseDir);
+  const isDefault = options.destination === undefined;
   const directory = resolve(
     options.destination ??
       join(getPreMigrationBackupDirectory(databasePath), `backup-${timestampForName(now)}`)
   );
+  const building = `${directory}${BACKUP_PARTIAL_SUFFIX}`;
 
   if (!(await lstatIfExists(databasePath))) {
     throw new Error(`No database found at ${databasePath}; nothing to back up.`);
   }
-  if (isInside(directory, join(baseDir, 'codex-accounts'))) {
+  if (directory.endsWith(BACKUP_PARTIAL_SUFFIX)) {
+    throw new Error(
+      `${directory} ends in ${BACKUP_PARTIAL_SUFFIX}, which marks an unfinished backup; ` +
+        'choose another path.'
+    );
+  }
+  // Compared by real path, so a link cannot place the backup inside what it copies.
+  const accounts = await realPathAllowingMissing(join(baseDir, 'codex-accounts'));
+  const realDirectory = await realPathAllowingMissing(directory);
+  // Equal counts too: a backup created as an absent codex-accounts/ would become the account
+  // source. Case is ignored, because on a case-insensitive disk Codex-Accounts is the same.
+  const lowerAccounts = accounts.toLowerCase();
+  const lowerDirectory = realDirectory.toLowerCase();
+  if (lowerDirectory === lowerAccounts || isInside(lowerDirectory, lowerAccounts)) {
     throw new Error(`${directory} is inside the Codex accounts directory it would copy.`);
   }
 
-  await reserveDirectory(directory, options.destination === undefined);
+  await reserveDirectory(directory, building, isDefault);
   const skipped: string[] = [];
   try {
-    await snapshotSqliteDatabase(databasePath, join(directory, BACKUP_DATABASE_FILE));
+    const leftovers = isDefault ? await findLeftoverBackups(dirname(directory), building) : [];
+    await snapshotSqliteDatabase(databasePath, join(building, BACKUP_DATABASE_FILE));
     const manifest = BackupManifestSchema.parse({
       formatVersion: BACKUP_FORMAT_VERSION,
       applicationVersion: options.applicationVersion,
@@ -217,21 +393,38 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
       sourceDataDirectory: baseDir,
       contents: {
         database: true,
-        encryptionKey: await copyEncryptionKey(baseDir, directory),
-        codexAccounts: await copyCodexAccounts(baseDir, directory, skipped),
+        encryptionKey: await copyEncryptionKey(baseDir, building),
+        codexAccounts: await copyCodexAccounts(baseDir, building, skipped),
       },
     });
-    // Written last: a directory without a manifest is never a usable backup.
     await writeFile(
-      join(directory, BACKUP_MANIFEST_FILE),
+      join(building, BACKUP_MANIFEST_FILE),
       `${JSON.stringify(manifest, null, 2)}\n`,
       { mode: 0o600 }
     );
-    return { directory, manifest, skipped };
+    await finishBackup(building, directory, isDefault);
+    return { directory, manifest, skipped, leftovers };
   } catch (error) {
-    await rm(directory, { recursive: true, force: true });
+    if (!(error instanceof UnrenamedBackupError)) {
+      await rm(building, { recursive: true, force: true });
+    }
     throw error;
   }
+}
+
+function describeLeftover(path: string): string {
+  if (!path.endsWith(BACKUP_PARTIAL_SUFFIX)) {
+    return (
+      `Found ${path}, an empty directory a backup left when it was interrupted while ` +
+      'finishing; delete it.'
+    );
+  }
+  return (
+    `Found ${path}, left by a backup that was interrupted (or is still running). It is not ` +
+    'usable under that name. First make sure no `ff backup` is running. Then, if it ' +
+    `contains ${BACKUP_MANIFEST_FILE}, the backup finished but was not renamed: rename it ` +
+    `without ${BACKUP_PARTIAL_SUFFIX}. Otherwise delete it.`
+  );
 }
 
 export const BACKUP_CREDENTIALS_WARNING =
@@ -276,6 +469,9 @@ export function registerBackupCommand(program: Command, applicationVersion: stri
         );
         for (const entry of result.skipped) {
           console.warn(chalk.yellow(`  Skipped (not a regular file or directory): ${entry}`));
+        }
+        for (const leftover of result.leftovers) {
+          console.warn(chalk.yellow(`  ${describeLeftover(leftover)}`));
         }
         console.log(chalk.yellow(BACKUP_CREDENTIALS_WARNING));
       } catch (error) {

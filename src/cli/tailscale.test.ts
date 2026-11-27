@@ -1,17 +1,23 @@
 import { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
+import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MigrationBackupError, runMigrationsWithBackup } from '@/backend/migrate-with-backup';
+import { describeMigrationFailure } from './migration-policy';
 import { findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
-import { runTailscaleSession } from './tailscale';
+import { registerTailscaleCommand, runTailscaleSession } from './tailscale';
 import { discoverTailscale } from './tailscale-client';
 
 vi.mock('node:child_process', async (original) => ({
   ...(await original<typeof import('node:child_process')>()),
   spawn: vi.fn(),
 }));
-vi.mock('@/backend/migrate-with-backup', () => ({ runMigrationsWithBackup: vi.fn() }));
+vi.mock('@/backend/migrate-with-backup', async (original) => ({
+  ...(await original<typeof import('@/backend/migrate-with-backup')>()),
+  runMigrationsWithBackup: vi.fn(),
+}));
 vi.mock('./server-startup', () => ({ startFactoryFactoryServer: vi.fn() }));
 vi.mock('./tailscale-client', () => ({ discoverTailscale: vi.fn(), parsePort: Number }));
 vi.mock('./runtime-utils', () => ({
@@ -147,5 +153,30 @@ describe('owned Tailscale session', () => {
     await runTailscaleSession({ projectRoot: '/project', options, signal: controller.signal });
     expect(spawn).not.toHaveBeenCalled();
     expect(treeKillAsync).toHaveBeenCalledWith(1234, 'SIGTERM');
+  });
+});
+
+describe('tailscale command', () => {
+  it('reports a failed pre-migration backup the way the other commands do', async () => {
+    const failure = new MigrationBackupError('ENOSPC: no space left on device', '/data/db-backups');
+    vi.mocked(runMigrationsWithBackup).mockRejectedValue(failure);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const program = new Command().exitOverride();
+    registerTailscaleCommand(program, '/project');
+    const previousExitCode = process.exitCode;
+
+    try {
+      await program.parseAsync(['tailscale', '--database-path', '/nonexistent/ff/data.db'], {
+        from: 'user',
+      });
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+
+    const printed = error.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(printed).toContain(describeMigrationFailure(failure));
+    expect(printed).not.toContain('MigrationBackupError');
+    expect(startFactoryFactoryServer).not.toHaveBeenCalled();
   });
 });

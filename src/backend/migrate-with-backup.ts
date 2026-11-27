@@ -25,16 +25,22 @@ export const ALLOW_MIGRATION_WITHOUT_BACKUP_ENV = 'FF_ALLOW_MIGRATION_WITHOUT_BA
 
 /** The backup before pending migrations failed, so no migration was applied. */
 export class MigrationBackupError extends Error {
-  constructor(reason: string) {
+  /** The directory the backup could not be written to. */
+  readonly backupDirectory: string;
+
+  constructor(reason: string, backupDirectory: string) {
     super(
-      `Could not back up the database before migrating: ${reason}. No migration was applied ` +
-        'and the database is unchanged. Fix the cause (for example free disk space or make ' +
-        'the db-backups directory beside the database writable) and start again, or set ' +
+      `Could not back up the database to ${backupDirectory} before migrating: ${reason}. ` +
+        'No migration was applied and the database is unchanged. Fix the cause (for example ' +
+        'free disk space or make that directory writable) and start again, or set ' +
         `${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1 to migrate without a backup.`
     );
     this.name = 'MigrationBackupError';
+    this.backupDirectory = backupDirectory;
   }
 }
+
+const MIGRATION_WITHOUT_BACKUP_WARNING = '[migrate] Warning: migrating without a backup';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -54,6 +60,51 @@ const BACKUP_SUFFIX = /^\d{8}T\d{9}Z\.db$/;
 const PARTIAL_SUFFIX = /^\d{8}T\d{9}Z\.db\.partial$/;
 /** A partial copy this old was left by an interrupted process, not one still writing. */
 const STALE_PARTIAL_MS = 60 * 60 * 1000;
+
+/**
+ * The name a pre-migration backup of this database taken at `date` gets, which
+ * retention counts among the backups it keeps.
+ */
+export function preMigrationBackupName(databasePath: string, date: Date): string {
+  return `${backupPrefix(databasePath)}${backupTimestamp(date)}.db`;
+}
+
+/** The finished pre-migration backups of this database in `directory`; none when it is missing. */
+export async function listPreMigrationBackups(
+  databasePath: string,
+  directory = getPreMigrationBackupDirectory(databasePath)
+): Promise<string[]> {
+  const prefix = backupPrefix(databasePath);
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+  return names
+    .filter((name) => name.startsWith(prefix) && BACKUP_SUFFIX.test(name.slice(prefix.length)))
+    .sort();
+}
+
+/**
+ * Apply the per-database retention to finished backups after `added` was put
+ * in `directory` by other means: `added` always stays, and with it the newest
+ * others up to {@link PRE_MIGRATION_BACKUPS_TO_KEEP} in all.
+ */
+export async function prunePreMigrationBackupsKeeping(
+  databasePath: string,
+  directory: string,
+  added: string
+): Promise<void> {
+  const surplus = (await listPreMigrationBackups(databasePath, directory))
+    .filter((name) => name !== added)
+    .reverse()
+    .slice(PRE_MIGRATION_BACKUPS_TO_KEEP - 1);
+  await Promise.all(surplus.map((name) => rm(join(directory, name), { force: true })));
+}
 
 function retainedCount(requested: number | undefined): number {
   return requested !== undefined && Number.isFinite(requested)
@@ -175,11 +226,12 @@ export async function runMigrationsWithBackup(options: MigrateWithBackupOptions)
       );
     } catch (error) {
       if (!configService.getAllowMigrationWithoutBackup()) {
-        throw new MigrationBackupError(errorMessage(error));
+        throw new MigrationBackupError(errorMessage(error), backupDirectory);
       }
       warn(
-        `[migrate] Warning: could not back up the database before migrating: ${errorMessage(error)}. ` +
-          `Continuing without a backup because ${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1.`
+        `${MIGRATION_WITHOUT_BACKUP_WARNING}: could not back up the database to ` +
+          `${backupDirectory}: ${errorMessage(error)}. Continuing because ` +
+          `${ALLOW_MIGRATION_WITHOUT_BACKUP_ENV}=1.`
       );
     }
   }

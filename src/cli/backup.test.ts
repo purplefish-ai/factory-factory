@@ -1,10 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import {
   chmod,
   mkdir,
   mkdtemp,
   readdir,
   realpath,
+  rename,
   rm,
   stat,
   symlink,
@@ -17,6 +18,21 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBackup, describeMismatchedSources, registerBackupCommand } from './backup';
 import { readBackup } from './backup-manifest';
+
+/** Runs just before each `rename`, so a test can make another process act in that window. */
+const renameHook = vi.hoisted(() => ({
+  before: undefined as ((from: string, to: string) => void) | undefined,
+}));
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    rename: (from: string, to: string) => {
+      renameHook.before?.(from, to);
+      return actual.rename(from, to);
+    },
+  };
+});
 
 const FIXED_NOW = new Date('2026-11-27T10:15:00.123Z');
 const IS_POSIX = process.platform !== 'win32';
@@ -44,6 +60,7 @@ describe('ff backup', () => {
   });
 
   afterEach(async () => {
+    renameHook.before = undefined;
     writer.close();
     await rm(root, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -169,6 +186,238 @@ describe('ff backup', () => {
       })
     ).rejects.toThrow('inside the Codex accounts');
     expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
+  });
+
+  it('refuses a destination that reaches the Codex accounts through a link or a dotted name', async () => {
+    await mkdir(join(baseDir, 'codex-accounts'));
+    if (IS_POSIX) {
+      const link = join(root, 'accounts-link');
+      await symlink(join(baseDir, 'codex-accounts'), link);
+      await expect(
+        createBackup({
+          databasePath,
+          baseDir,
+          applicationVersion: '1.2.3',
+          destination: join(link, 'backup'),
+        })
+      ).rejects.toThrow('inside the Codex accounts');
+    }
+    // `..backup` is a child of codex-accounts, not a way out of it.
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'codex-accounts', '..backup'),
+      })
+    ).rejects.toThrow('inside the Codex accounts');
+    expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
+  });
+
+  it('refuses to create the backup as an absent codex-accounts directory', async () => {
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'codex-accounts'),
+      })
+    ).rejects.toThrow('Codex accounts');
+    expect(existsSync(join(baseDir, 'codex-accounts'))).toBe(false);
+  });
+
+  it('never replaces a directory another process creates at the final name', async () => {
+    const destination = join(root, 'out');
+    // Someone creates the (empty) final directory while the backup is being built.
+    let watching = true;
+    const intruder = () => {
+      if (!watching) {
+        return;
+      }
+      if (existsSync(`${destination}.partial`) && !existsSync(destination)) {
+        mkdirSync(destination);
+        return;
+      }
+      setImmediate(intruder);
+    };
+    setImmediate(intruder);
+
+    try {
+      await expect(
+        createBackup({ databasePath, baseDir, applicationVersion: '1.2.3', destination })
+      ).rejects.toThrow('already exists');
+    } finally {
+      watching = false;
+    }
+
+    // Theirs is left as it was: still there, still empty, not replaced by the backup.
+    expect(await readdir(destination)).toEqual([]);
+    expect(existsSync(`${destination}.partial`)).toBe(false);
+  });
+
+  it('refuses a destination that is the absent accounts directory in another case', async () => {
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'Codex-Accounts'),
+      })
+    ).rejects.toThrow('Codex accounts');
+    expect(await readdir(baseDir)).not.toContain('Codex-Accounts');
+  });
+
+  it('keeps a finished backup, and says where, when another process writes into its final name', async () => {
+    if (!IS_POSIX) {
+      return;
+    }
+    const destination = join(root, 'out');
+    renameHook.before = (_from, to) => {
+      if (to === destination) {
+        writeFileSync(join(destination, 'theirs'), 'written by someone else');
+      }
+    };
+
+    const failure = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination,
+    });
+
+    await expect(failure).rejects.toThrow(`The backup is complete in ${destination}.partial`);
+    expect((await readdir(`${destination}.partial`)).sort()).toEqual([
+      'database.db',
+      'manifest.json',
+    ]);
+    expect(await readdir(destination)).toEqual(['theirs']);
+  });
+
+  it('explains an empty final directory an interrupted rename left beside a finished backup', async () => {
+    const { directory } = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'complete'),
+    });
+    // Killed after claiming the final name and before the rename.
+    await rename(directory, join(root, 'out.partial'));
+    await mkdir(join(root, 'out'));
+
+    const retry = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'out'),
+    });
+    await expect(retry).rejects.toThrow('interrupted while finishing');
+    await expect(retry).rejects.toThrow(`rename ${join(root, 'out.partial')}`);
+
+    // In db-backups, the next default run lists both.
+    const backups = join(baseDir, 'db-backups');
+    await mkdir(join(backups, 'backup-20261127T090000000Z'), { recursive: true });
+    await rename(join(root, 'out.partial'), join(backups, 'backup-20261127T090000000Z.partial'));
+    const result = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+    expect(result.leftovers).toEqual([
+      join(backups, 'backup-20261127T090000000Z'),
+      join(backups, 'backup-20261127T090000000Z.partial'),
+    ]);
+  });
+
+  it('builds the backup under a .partial name and renames it only when complete', async () => {
+    const destination = join(root, 'out');
+    // What the destination's parent holds at each event-loop turn while the backup runs.
+    const observed: string[][] = [];
+    let watching = true;
+    const watch = () => {
+      if (watching) {
+        observed.push(readdirSync(root).sort());
+        setImmediate(watch);
+      }
+    };
+    setImmediate(watch);
+
+    let result: Awaited<ReturnType<typeof createBackup>>;
+    try {
+      result = await createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination,
+      });
+    } finally {
+      watching = false;
+    }
+
+    expect(observed).toContainEqual(['base', 'out.partial']);
+    expect(result.directory).toBe(destination);
+    expect((await readdir(root)).sort()).toEqual(['base', 'out']);
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(root, 'chosen.partial'),
+      })
+    ).rejects.toThrow('.partial');
+  });
+
+  it('reports a backup an interrupted run left behind and never reads it as a backup', async () => {
+    // Interrupted after the manifest was written but before the rename: it looks complete.
+    const { directory } = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      destination: join(root, 'complete'),
+    });
+    await mkdir(join(baseDir, 'db-backups'));
+    const leftover = join(baseDir, 'db-backups', 'backup-20261127T090000000Z.partial');
+    await rename(directory, leftover);
+
+    await expect(readBackup(leftover)).rejects.toThrow('unfinished backup');
+
+    const result = await createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+    expect(result.leftovers).toEqual([leftover]);
+    expect((await readdir(join(baseDir, 'db-backups'))).sort()).toEqual([
+      'backup-20261127T090000000Z.partial',
+      'backup-20261127T101500123Z',
+    ]);
+
+    // A rerun to a chosen path that was interrupted says so instead of "already exists".
+    await mkdir(join(root, 'again.partial'));
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(root, 'again'),
+      })
+    ).rejects.toThrow('interrupted');
+  });
+
+  it('says what happened and what to run when the default name is taken', async () => {
+    await mkdir(join(baseDir, 'db-backups', 'backup-20261127T101500123Z'), { recursive: true });
+
+    const failure = createBackup({
+      databasePath,
+      baseDir,
+      applicationVersion: '1.2.3',
+      now: () => FIXED_NOW,
+    });
+
+    await expect(failure).rejects.toThrow('already exists');
+    await expect(failure).rejects.toThrow('Run `ff backup` again');
+    await expect(failure).rejects.not.toThrow('choose a path that does not exist');
   });
 
   it('does not prune earlier manual backups', async () => {
@@ -313,6 +562,37 @@ describe('ff backup', () => {
 
     it('does not warn when the database is inside the data directory', async () => {
       expect(await describeMismatchedSources({ databasePath, baseDir })).toBeUndefined();
+      // A directory whose name starts with two dots is still inside.
+      expect(
+        await describeMismatchedSources({
+          databasePath: join(baseDir, '..data', 'data.db'),
+          baseDir,
+        })
+      ).toBeUndefined();
+    });
+
+    it('falls back to the paths as given when a real path cannot be read', async () => {
+      // A path through a file fails with ENOTDIR, not "not found".
+      expect(
+        await describeMismatchedSources({ databasePath: join(databasePath, 'nested.db'), baseDir })
+      ).toBeUndefined();
+    });
+
+    it('reports a backup an interrupted run left in db-backups', async () => {
+      vi.stubEnv('BASE_DIR', baseDir);
+      vi.stubEnv('DATABASE_PATH', '');
+      const leftover = join(baseDir, 'db-backups', 'backup-20261127T090000000Z.partial');
+      await mkdir(leftover, { recursive: true });
+      vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const program = new Command().exitOverride();
+      registerBackupCommand(program, '9.9.9');
+
+      await program.parseAsync(['backup'], { from: 'user' });
+
+      const warnings = warn.mock.calls.map((call) => String(call[0])).join('\n');
+      expect(warnings).toContain(leftover);
+      expect(warnings).toContain('interrupted');
     });
 
     it('warns when a link inside the data directory leads to a database elsewhere', async () => {

@@ -16,6 +16,23 @@ interface Options {
   persist(status: ApplicationUpdateStatus): Promise<void>;
 }
 
+/** Longest failure message kept in the status, which the journal persists and must stay small. */
+const MAX_STATUS_ERROR_LENGTH = 4096;
+const STATUS_ERROR_HEAD = 1024;
+
+/**
+ * A failure message short enough to persist. Its start (which carries the
+ * cause) and its end are kept; the full text belongs in the log.
+ */
+function boundStatusError(message: string): string {
+  if (message.length <= MAX_STATUS_ERROR_LENGTH) {
+    return message;
+  }
+  const marker = '\n[…]\n';
+  const tail = MAX_STATUS_ERROR_LENGTH - STATUS_ERROR_HEAD - marker.length;
+  return `${message.slice(0, STATUS_ERROR_HEAD)}${marker}${message.slice(-tail)}`;
+}
+
 /** The CLI owns status while the backend is stopped or replaced. */
 export class ApplicationUpdateSupervisor {
   status: ApplicationUpdateStatus = { phase: 'idle' };
@@ -131,7 +148,7 @@ export class ApplicationUpdateSupervisor {
       }
     }
     this.restartRequired = stopped;
-    const message = error instanceof Error ? error.message : String(error);
+    const message = boundStatusError(error instanceof Error ? error.message : String(error));
     this.setStatus({
       phase: 'failed',
       targetVersion: version,

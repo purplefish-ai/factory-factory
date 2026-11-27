@@ -1,4 +1,7 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -7,6 +10,30 @@ import { snapshotSqliteDatabase } from './sqlite-snapshot';
 
 /** Far longer than a single-step copy of the fixture takes; a stepped copy that restarts never finishes. */
 const SNAPSHOT_BOUND_MS = 8000;
+
+/**
+ * Another process, like a running backend: commits in every event-loop turn
+ * until SIGTERM, prints `writing` after its first commit and its commit count on exit.
+ */
+const WRITER_SCRIPT = `
+const Database = require(process.argv[1]);
+const db = new Database(process.argv[2]);
+db.pragma('busy_timeout = 5000');
+const insert = db.prepare('INSERT INTO note (body) VALUES (?)');
+let commits = 0;
+process.on('SIGTERM', () => {
+  db.close();
+  process.stdout.write('commits ' + commits + '\\n');
+  process.exit(0);
+});
+const keepWriting = () => {
+  insert.run('concurrent');
+  commits += 1;
+  if (commits === 1) process.stdout.write('writing\\n');
+  setImmediate(keepWriting);
+};
+keepWriting();
+`;
 
 describe('snapshotSqliteDatabase', () => {
   let directory: string;
@@ -34,25 +61,30 @@ describe('snapshotSqliteDatabase', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('finishes while another connection commits continuously', async () => {
-    const insert = writer.prepare('INSERT INTO note (body) VALUES (?)');
-    let writing = true;
-    let commits = 0;
-    // A commit in every event-loop turn, which is when a stepped copy would resume.
-    const keepWriting = () => {
-      if (!writing) {
-        return;
-      }
-      insert.run('concurrent');
-      commits += 1;
-      setImmediate(keepWriting);
-    };
-    setImmediate(keepWriting);
-
+  it('finishes while another process commits continuously', async () => {
+    const child = spawn(
+      process.execPath,
+      ['-e', WRITER_SCRIPT, createRequire(import.meta.url).resolve('better-sqlite3'), databasePath],
+      { stdio: ['ignore', 'pipe', 'inherit'] }
+    );
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      output += chunk;
+    });
+    const exited = once(child, 'exit');
     const destination = join(directory, 'snapshot.db');
     let timer: NodeJS.Timeout | undefined;
-    const snapshotting = snapshotSqliteDatabase(databasePath, destination);
+    let snapshotting: Promise<void> | undefined;
     try {
+      // The writer is committing before the snapshot starts; bounded so `finally` always runs.
+      const deadline = Date.now() + SNAPSHOT_BOUND_MS;
+      while (!output.includes('writing') && child.exitCode === null && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(output).toContain('writing');
+
+      snapshotting = snapshotSqliteDatabase(databasePath, destination);
       const outcome = await Promise.race([
         snapshotting.then(() => 'finished'),
         new Promise<string>((resolve) => {
@@ -61,13 +93,14 @@ describe('snapshotSqliteDatabase', () => {
       ]);
       expect(outcome).toBe('finished');
     } finally {
-      writing = false;
+      child.kill('SIGTERM');
+      await exited;
       clearTimeout(timer);
       // Let a copy that did not finish settle before the directory is removed.
-      await snapshotting.catch(() => undefined);
+      await snapshotting?.catch(() => undefined);
     }
 
-    expect(commits).toBeGreaterThan(0);
+    expect(Number(/commits (\d+)/.exec(output)?.[1])).toBeGreaterThan(1);
     const snapshot = new Database(destination, { readonly: true });
     try {
       expect(snapshot.pragma('integrity_check', { simple: true })).toBe('ok');
