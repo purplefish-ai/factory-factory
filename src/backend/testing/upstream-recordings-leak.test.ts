@@ -67,10 +67,40 @@ function keyedStrings(value: unknown, key: string): [string, string][] {
   return [];
 }
 
-function ghAccountFindings(key: string, value: string): string[] {
+const FAKE_REPOSITORY = 'example-owner/example-repo';
+// Where recorded arguments name a repository: `--repo o/r`, `repos/o/r/...`,
+// `repo:o/r` in a search, and `owner:`/`name:` in a GraphQL query.
+const ARGUMENT_REPOSITORY = [
+  /^([\w.-]+\/[\w.-]+)$/g,
+  /\brepos\/([\w.-]+\/[\w.-]+)/g,
+  /\brepo:([\w.-]+\/[\w.-]+)/g,
+];
+
+/** Repository names in one recorded `gh` argument that are not the fake one. */
+function argumentFindings(value: string): string[] {
   const findings: string[] = [];
+  for (const pattern of ARGUMENT_REPOSITORY) {
+    for (const [, repository] of value.matchAll(pattern)) {
+      if (repository !== FAKE_REPOSITORY) {
+        findings.push('argument naming a repository that is not the fake one');
+      }
+    }
+  }
+  for (const [, field, name] of value.matchAll(/\b(owner|name): "([^"]*)"/g)) {
+    if (name !== (field === 'owner' ? 'example-owner' : 'example-repo')) {
+      findings.push('GraphQL argument naming a repository that is not the fake one');
+    }
+  }
+  return findings;
+}
+
+function ghAccountFindings(key: string, value: string): string[] {
+  const findings: string[] = key === 'args' ? argumentFindings(value) : [];
   if (key === 'login' && !FAKE_LOGIN.test(value)) {
     findings.push('login that is not a fake');
+  }
+  if ((key === 'nameWithOwner' || key === 'full_name') && value !== FAKE_REPOSITORY) {
+    findings.push(`${key} that is not the fake repository`);
   }
   for (const [, account = ''] of value.matchAll(/github\.com account (\S+)/g)) {
     if (!FAKE_LOGIN.test(account)) {
@@ -105,11 +135,26 @@ describe('upstream recordings', () => {
   it('name only fake accounts and the fake repository in gh recordings', () => {
     const findings = files
       .filter((path) => relative(recordingsRoot, path).startsWith('gh'))
-      .flatMap((file) =>
-        keyedStrings(JSON.parse(readFileSync(file, 'utf8')), '').flatMap(([key, value]) =>
-          ghAccountFindings(key, value).map((rule) => `${relative(recordingsRoot, file)} ${rule}`)
-        )
-      );
+      .flatMap((file) => {
+        const recording: unknown = JSON.parse(readFileSync(file, 'utf8'));
+        const where = relative(recordingsRoot, file);
+        // `gh api user --jq .login` prints the login alone.
+        const login = z
+          .object({ args: z.array(z.string()), stdout: z.string() })
+          .safeParse(recording);
+        const loginFindings =
+          login.success &&
+          login.data.args.includes('.login') &&
+          !FAKE_LOGIN.test(login.data.stdout.trim())
+            ? [`${where} --jq .login output that is not a fake`]
+            : [];
+        return [
+          ...loginFindings,
+          ...keyedStrings(recording, '').flatMap(([key, value]) =>
+            ghAccountFindings(key, value).map((rule) => `${where} ${rule}`)
+          ),
+        ];
+      });
     expect(findings).toEqual([]);
   });
 

@@ -14,6 +14,7 @@ import {
   TEXT,
   trimOutput,
 } from './gh-scrub.mjs';
+import { assertPublicRepository } from './gh.mjs';
 
 // Every value here is invented for the test.
 const REPOSITORY = 'some-org/some-repo';
@@ -98,6 +99,19 @@ describe('scrubJson', () => {
     expect(scrubbed).toEqual({ t: ['2026-01-01T00:01:00Z', '2026-01-01T00:00:00Z'] });
   });
 
+  it("keeps a timestamp's fraction digits and its Z or offset, never the zone itself", () => {
+    const times = [
+      '2025-05-01T10:00:00.123Z',
+      '2025-05-02T10:00:00+02:00',
+      '2025-05-03T10:00:00.5-07:00',
+    ];
+    const facts = { logins: [], times: [] as string[] };
+    collectScrubFacts({ t: times }, { t: 'time' }, facts);
+    expect(scrubJson({ t: times }, { t: 'time' }, context(facts))).toEqual({
+      t: ['2026-01-01T00:00:00.000Z', '2026-01-01T00:01:00+00:00', '2026-01-01T00:02:00.0+00:00'],
+    });
+  });
+
   it('gives bots and apps fakes that stay bots and apps', () => {
     const shared = context();
     const fields = { a: 'login', b: 'login', c: 'login' };
@@ -180,8 +194,27 @@ describe('scrubText', () => {
         '  - Token: gho_************************************',
         "  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'",
         '',
-        '',
         LINE,
+        '',
+      ].join('\n')
+    );
+  });
+
+  it('leaves no trailing blank line where the last account block was dropped', () => {
+    const output = [
+      'github.com',
+      '  ✓ Logged in to github.com account jane-doe (keyring)',
+      '  - Active account: true',
+      '',
+      '  ✓ Logged in to github.com account jane-alt (keyring)',
+      '  - Active account: false',
+      '',
+    ].join('\n');
+    expect(scrubText('authStatus', output, context())).toBe(
+      [
+        'github.com',
+        '  ✓ Logged in to github.com account user-1 (keyring)',
+        '  - Active account: true',
         '',
       ].join('\n')
     );
@@ -245,6 +278,20 @@ describe('GH_SHAPES', () => {
       const args = shape.args(fake).join(' ');
       expect(args, shape.file).not.toContain(owner);
       expect(args, shape.file).not.toContain(`"${name}"`);
+    }
+  });
+});
+
+describe('assertPublicRepository', () => {
+  it('records only a repository whose visibility read says it is not private', () => {
+    expect(() => assertPublicRepository({ status: 0, stdout: 'false\n' })).not.toThrow();
+    for (const result of [
+      { status: 0, stdout: 'true\n' },
+      { status: 1, stdout: '' },
+      { status: 0, stdout: '' },
+      { status: null, stdout: '', error: new Error('spawn gh ENOENT') },
+    ]) {
+      expect(() => assertPublicRepository(result)).toThrow(/not public/);
     }
   });
 });

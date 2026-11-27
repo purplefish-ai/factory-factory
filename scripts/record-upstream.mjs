@@ -313,11 +313,11 @@ async function record(tool, keepRaw) {
   }
 }
 
-assertSupportedPlatform();
 if (process.argv[2] === 'gh') {
   recordGitHubCli(process.argv.slice(3), { fixturesRoot: FIXTURES, checkout: checkoutRoot() });
   process.exit(0);
 }
+assertSupportedPlatform();
 const options = parseArguments(process.argv.slice(2));
 if (options.rescrub) {
   if (!existsSync(join(options.rescrub, 'run.json'))) {

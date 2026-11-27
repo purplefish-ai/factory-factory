@@ -101,6 +101,19 @@ function threadFromRecording(raw) {
   return thread ? { threadId: thread.id, threadCursor: thread.comments.pageInfo.endCursor } : {};
 }
 
+/**
+ * Throws unless `gh api repos/<repo> --jq .private` answered `false`: a
+ * recording keeps check, label and workflow names, which are free text, and
+ * that is only acceptable for a repository anyone can read.
+ */
+export function assertPublicRepository(result) {
+  if (result.error || result.status !== 0 || result.stdout?.trim() !== 'false') {
+    throw new Error(
+      'The repository to record is not public, or its visibility could not be read; nothing was recorded.'
+    );
+  }
+}
+
 function oneLine(args) {
   return args.map((arg) => arg.replace(/\s+/g, ' ').trim()).join(' ');
 }
@@ -116,6 +129,10 @@ function runShapes(rawDir) {
     if (version.status !== 0 || !ghVersion) {
       throw new Error('gh --version did not report a version; is gh installed?');
     }
+    // Kept strings may be free text, which is only acceptable from a public repository.
+    const visibility = ['api', `repos/${values.repo}`, '--jq', '.private'];
+    console.log(`gh ${oneLine(visibility)}`);
+    assertPublicRepository(spawnSync('gh', visibility, { cwd, env, encoding: 'utf8' }));
     for (const shape of GH_SHAPES) {
       if (shape.needs?.some((name) => values[name] === undefined)) {
         console.log(`gh: skipped ${shape.file}: no ${shape.needs.join(' or ')} to read`);
@@ -254,7 +271,7 @@ function writeVersionDirectory(rawDir, run, target) {
   };
   writeFileSync(join(target, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
   const format = spawnSync(
-    join(process.cwd(), 'node_modules', '.bin', 'oxfmt'),
+    join(import.meta.dirname, '..', '..', 'node_modules', '.bin', 'oxfmt'),
     ['--write', target],
     {
       stdio: 'ignore',

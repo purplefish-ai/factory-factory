@@ -74,9 +74,9 @@ review-activity helpers and `classifyGitHubCLIError`.
   `service/github-cli/issue-search.test.ts`.
 - Every schema that reads `gh` output parses a scrubbed recording of the real
   call, which the production code must ask for with the recorded arguments; a
-  new parse site fails until it is mapped to a recording or listed with a
-  reason. Record with `node scripts/record-upstream.mjs gh`.
-  `gh-recordings.test.ts`.
+  new `gh` call or parse in this capsule, found from the syntax tree, fails
+  until it is mapped to a recording or listed with a reason. Record with
+  `node scripts/record-upstream.mjs gh`. `gh-recordings.test.ts`.
 - A PR refresh writes nothing itself: it runs the injected observation and then
   returns the association's committed fields. `pr-snapshot.service.test.ts`,
   `pr-snapshot-collection.service.test.ts`.

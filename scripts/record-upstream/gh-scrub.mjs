@@ -8,7 +8,10 @@
 // - `keep`: enums, check and label names, booleans and numbers. A string
 //   survives only when it is short, single-line and carries nothing that
 //   looks private, no login seen anywhere in the recording and no term from
-//   the leak test's forbidden list; otherwise it becomes "<string>".
+//   the leak test's forbidden list; otherwise it becomes "<string>". The
+//   pattern still admits free text ("Deploy by Jane Doe"), which is acceptable
+//   only because these names come from a public repository, where anyone can
+//   read them; the recorder refuses a repository that is not public.
 // - `number`: a number a parser reads (object numbers, line counts).
 // - `id`: a fixed fake. Numeric ids (also numeric strings) become 1000001,
 //   1000002, … and node ids `fake-node-N`; the same id always gets the same
@@ -21,7 +24,9 @@
 //   any other number becomes a fake id, the query keeps only `page` and
 //   `per_page`, and a comment anchor keeps its kind. Any other host becomes
 //   example.invalid.
-// - `time`: fake timestamps from 2026-01-01 that keep the real order.
+// - `time`: fake timestamps from 2026-01-01 that keep the real order and the
+//   original's shape: the same number of fraction digits, and `Z` or an offset
+//   (always `+00:00`, so no time zone is kept).
 // - `sha`, `branch`, `cursor`: fixed fakes (`main` stays `main`).
 // - `repo`, `repo-name`: the fake repository; any other one `other-owner/repo-N`.
 // - `present`: an object becomes `{}`; only its presence is kept.
@@ -36,7 +41,7 @@ export const PLACEHOLDER = '<string>';
 export const TEXT = '<text>';
 export const LINE = '<line>';
 const ZERO_TIME = '0001-01-01T00:00:00Z';
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 const FAKE_EPOCH = Date.parse('2026-01-01T00:00:00Z');
 const KEEPABLE = /^[\p{L}\p{N} _.,:;()/'&+#@·|[\]-]{0,120}$/u;
 const URL_WORDS = new Set([
@@ -137,7 +142,9 @@ function fakeTime(context, value) {
   if (index === undefined) {
     return PLACEHOLDER;
   }
-  return new Date(FAKE_EPOCH + index * 60_000).toISOString().replace('.000Z', 'Z');
+  const [, fraction = '', zone = 'Z'] = ISO_TIME.exec(value) ?? [];
+  const seconds = new Date(FAKE_EPOCH + index * 60_000).toISOString().slice(0, 19);
+  return `${seconds}${fraction.replace(/\d/g, '0')}${zone === 'Z' ? 'Z' : '+00:00'}`;
 }
 
 function replaceRepository(value, context) {
@@ -436,12 +443,18 @@ function activeAccountOnly(lines) {
       blocks.push([line]);
     }
   }
-  return blocks
-    .filter(
-      (block) =>
-        !ACCOUNT_LINE.test(block[0]) || block.some((line) => /- Active account: true$/.test(line))
-    )
-    .flat();
+  const kept = [];
+  for (const block of blocks) {
+    const inactive =
+      ACCOUNT_LINE.test(block[0]) && !block.some((line) => /- Active account: true$/.test(line));
+    if (!inactive) {
+      kept.push(block);
+    } else if (kept.at(-1)?.join('') === '') {
+      // The blank line that separated the dropped block goes with it.
+      kept.pop();
+    }
+  }
+  return kept.flat();
 }
 
 const TEXT_SCRUBBERS = {

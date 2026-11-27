@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import ts from 'typescript';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -87,10 +88,18 @@ const callKey = (args: readonly string[]) =>
 /**
  * The recording drops `review-requested:@me` from the review-request search so
  * it reads no account data (see the fixture's `deviation`); the application's
- * call matches it once the qualifier is removed.
+ * call matches it once the qualifier is removed from that search's query.
  */
 const recordedCallKey = (args: readonly string[]) =>
-  callKey(args.map((arg) => arg.replace(' review-requested:@me', '')));
+  callKey(
+    args[0] === 'api' && args[1] === 'graphql'
+      ? args.map((arg) =>
+          /^query=\s*query\s*\{\s*search\(query:/.test(arg)
+            ? arg.replace(' review-requested:@me', '')
+            : arg
+        )
+      : args
+  );
 
 function loadVersion(directory: string): Fixture[] {
   return readdirSync(directory)
@@ -101,105 +110,256 @@ function loadVersion(directory: string): Fixture[] {
     });
 }
 
-/** Parse sites of `gh` output in this capsule, by `parseGhJson` context or `file:schema`. */
-function parseSites(): string[] {
-  const sources = readdirSync(import.meta.dirname, { recursive: true, encoding: 'utf8' })
-    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
-    .map((file) => ({
-      name: basename(file),
-      text: readFileSync(join(import.meta.dirname, file), 'utf8'),
-    }));
-  const sites = new Set<string>();
-  for (const { name, text } of sources) {
-    for (const match of text.matchAll(/parseGhJson\(\s*[^,]+?,\s*\w+,\s*'([^']+)'/g)) {
-      sites.add(`parseGhJson:${match[1]}`);
+// The first word of every `gh` argument list this capsule builds.
+const GH_COMMANDS = new Set([
+  '--version',
+  'api',
+  'auth',
+  'issue',
+  'label',
+  'pr',
+  'release',
+  'repo',
+  'run',
+  'search',
+  'workflow',
+]);
+const PARSE_METHODS = new Set(['parse', 'safeParse', 'parseAsync', 'safeParseAsync']);
+const PARSE_FUNCTIONS = new Set(['parseGhJson', 'parseProviderJson']);
+
+/** The name of the function, method or named arrow function `node` is in. */
+function enclosingFunction(node: ts.Node): string {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if ((ts.isFunctionDeclaration(parent) || ts.isMethodDeclaration(parent)) && parent.name) {
+      return parent.name.getText();
     }
-    for (const match of text.matchAll(/\b(\w+Schema)(?:\.\w+)*\s*\.(?:safeParse|parse)\(/g)) {
-      sites.add(`${name}:${match[1]}`);
-    }
-    // An inline schema: `z.object({...}).parse(parseProviderJson(...))`.
-    for (const match of text.matchAll(
-      /\)\s*\.parse\(\s*((?:parseProviderJson|JSON\.parse)\([^;]*)\);/g
-    )) {
-      sites.add(`${name}:${match[1]?.replace(/\s+/g, ' ')}`);
+    if (
+      (ts.isVariableDeclaration(parent) ||
+        ts.isPropertyAssignment(parent) ||
+        ts.isPropertyDeclaration(parent)) &&
+      parent.initializer &&
+      (ts.isArrowFunction(parent.initializer) || ts.isFunctionExpression(parent.initializer))
+    ) {
+      return parent.name.getText();
     }
   }
-  return [...sites].sort();
+  return '<module>';
 }
 
-/** Each parse site of `gh` output and the recording it parses. */
-const RECORDED: Record<string, string> = {
-  'parseGhJson:getPRPreview': 'pr-view-preview.json',
-  'parseGhJson:getPRStatusDetails': 'pr-view-status.json',
-  'parseGhJson:getPRObservationDetails': 'pr-view-observation.json',
-  'parseGhJson:getPRFullDetails': 'pr-view-full.json',
-  'parseGhJson:getChronologicalReviews': 'api-pr-reviews.json',
-  'parseGhJson:getReviewComments': 'api-pr-review-comments.json',
-  'parseGhJson:getResolvedReviewCommentIds': 'graphql-review-threads.json',
-  'parseGhJson:fetchThreadCommentsPage': 'graphql-thread-comments.json',
-  'parseGhJson:listOpenPRs': 'graphql-open-prs.json',
-  'review-requests.ts:reviewRequestedPRGraphQLSchema': 'graphql-review-requests.json',
-  'parseGhJson:getIssuePreview': 'issue-view-preview.json',
-  'parseGhJson:getIssue': 'issue-view.json',
-  'parseGhJson:listIssues': 'issue-list.json',
-  'parseGhJson:searchIssues': 'issue-list-search.json',
-  'parseGhJson:searchIssueNumber': 'api-issue.json',
-  'agent-sources.ts:repositorySchema': 'api-repo.json',
-  'agent-issue-events.ts:parseProviderJson(result.stdout)': 'api-repo.json',
-  'agent-sources.ts:labelsSchema': 'api-repo-labels.json',
-  'agent-issue-events.ts:parseProviderJson(result.stdout.slice(separator.index + separator[0].length))':
+/** A schema named by an identifier chain keeps its name; any other expression is `<inline>`. */
+function receiverName(node: ts.Expression): string {
+  if (ts.isIdentifier(node)) {
+    return node.text;
+  }
+  if (ts.isPropertyAccessExpression(node)) {
+    const object = receiverName(node.expression);
+    return object === '<inline>' ? object : `${object}.${node.name.text}`;
+  }
+  return '<inline>';
+}
+
+/** The leading string literals of a `gh` argument list, up to three. */
+function ghArgumentPrefix(node: ts.ArrayLiteralExpression): string | null {
+  const prefix: string[] = [];
+  for (const element of node.elements.slice(0, 3)) {
+    if (!ts.isStringLiteral(element)) {
+      break;
+    }
+    prefix.push(element.text);
+  }
+  return prefix[0] !== undefined && GH_COMMANDS.has(prefix[0]) ? prefix.join(' ') : null;
+}
+
+/** What a call parses with, when it is a parse: a parse function, or a parse method (not `Date.parse`). */
+function parseName(node: ts.CallExpression): string | null {
+  const callee = node.expression;
+  if (ts.isIdentifier(callee) && PARSE_FUNCTIONS.has(callee.text)) {
+    return callee.text;
+  }
+  if (!(ts.isPropertyAccessExpression(callee) && PARSE_METHODS.has(callee.name.text))) {
+    return null;
+  }
+  const receiver = receiverName(callee.expression);
+  return receiver === 'Date' ? null : `${receiver}.${callee.name.text}`;
+}
+
+/**
+ * Every `gh` call (an argument list whose first element is a `gh` command) and
+ * every parse (`parseGhJson`, `parseProviderJson`, `JSON.parse` and a Zod
+ * `parse`/`safeParse` on any receiver) in this capsule's sources, read from
+ * the syntax tree, so the way a call is written does not hide it. Keys are
+ * `<file> <function>: <what>`, with ` #n` for the nth such site in a function.
+ */
+function capsuleSites(): { calls: string[]; parses: string[] } {
+  const calls: string[] = [];
+  const parses: string[] = [];
+  const files = readdirSync(import.meta.dirname, { recursive: true, encoding: 'utf8' }).filter(
+    (file) => file.endsWith('.ts') && !file.endsWith('.test.ts')
+  );
+  for (const file of files) {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(join(import.meta.dirname, file), 'utf8'),
+      ts.ScriptTarget.Latest,
+      true
+    );
+    const counts = new Map<string, number>();
+    const add = (list: string[], node: ts.Node, what: string) => {
+      const key = `${basename(file)} ${enclosingFunction(node)}: ${what}`;
+      const n = (counts.get(key) ?? 0) + 1;
+      counts.set(key, n);
+      list.push(n === 1 ? key : `${key} #${n}`);
+    };
+    const visit = (node: ts.Node) => {
+      const prefix = ts.isArrayLiteralExpression(node) ? ghArgumentPrefix(node) : null;
+      if (prefix) {
+        add(calls, node, prefix);
+      }
+      const parse = ts.isCallExpression(node) ? parseName(node) : null;
+      if (parse) {
+        add(parses, node, parse);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return { calls: calls.sort(), parses: parses.sort() };
+}
+
+const WRITES = 'not recorded: writes';
+const INPUT = 'validates an input, not gh output';
+
+/** Every `gh` call in the capsule: the recording of its output, or why there is none. */
+const GH_CALLS: Record<string, string> = {
+  'github-cli.service.ts runCheckHealth: --version': 'version.json',
+  'github-cli.service.ts runCheckHealth: auth status': 'auth-status.json',
+  'auth-check.ts checkGithubAuth: auth status': 'auth-status.json',
+  'github-cli.service.ts getAuthenticatedUsername: api user --jq': 'api-user-login.json',
+  'github-cli.service.ts getPRPreview: pr view': 'pr-view-preview.json',
+  'pr-details.ts getPRStatusDetails: pr view': 'pr-view-status.json',
+  'pr-details.ts getPRObservationDetails: pr view': 'pr-view-observation.json',
+  'pr-details.ts getPRFullDetails: pr view': 'pr-view-full.json',
+  'code-review.ts getPRDescription: pr view': 'pr-view-body.json',
+  'code-review.ts getPRHeadCommitSha: pr view': 'pr-view-head-sha.json',
+  'reviews.ts getChronologicalReviews: api': 'api-pr-reviews.json',
+  'github-cli.service.ts getReviewComments: api': 'api-pr-review-comments.json',
+  'github-cli.service.ts fetchReviewThreadsPage: api graphql -f': 'graphql-review-threads.json',
+  'github-cli.service.ts fetchThreadCommentsPage: api graphql -f': 'graphql-thread-comments.json',
+  'github-cli.service.ts listOpenPRs: api graphql -f': 'graphql-open-prs.json',
+  'review-requests.ts listReviewRequests: api graphql -f': 'graphql-review-requests.json',
+  'github-cli.service.ts getIssuePreview: issue view': 'issue-view-preview.json',
+  'github-cli.service.ts getIssue: issue view': 'issue-view.json',
+  'github-cli.service.ts fetchIssues: issue list --repo': 'issue-list.json',
+  'issue-search.ts listMatchingIssues: issue list --repo': 'issue-list-search.json',
+  'issue-search.ts lookupIssueNumber: api': 'api-issue.json',
+  'agent-sources.ts getAgentRepository: api': 'api-repo.json',
+  'agent-sources.ts getAgentRepository: api #2': 'api-repo-labels.json',
+  'agent-issue-events.ts getAgentRepositoryIdentity: api': 'api-repo.json',
+  'agent-issue-events.ts listAgentIssueEvents: api': 'api-issue-events.json',
+  'pr-details.ts getPRDiff: pr diff':
+    'not recorded: no schema reads it; the diff is passed on as text, and an allowlist of its lines keeps nothing',
+  'github-cli.service.ts submitReview: pr review': WRITES,
+  'github-cli.service.ts addPRComment: pr comment': WRITES,
+  'github-cli.service.ts addIssueComment: issue comment': WRITES,
+  'code-review.ts submitCodeReview: api --method POST': WRITES,
+  'code-review.ts createReviewComment: api --method POST': WRITES,
+};
+
+/** Every parse in the capsule: the recording it parses, or why it reads no recording. */
+const PARSE_SITES: Record<string, string> = {
+  'github-cli.service.ts getPRPreview: parseGhJson': 'pr-view-preview.json',
+  'pr-details.ts getPRStatusDetails: parseGhJson': 'pr-view-status.json',
+  'pr-details.ts getPRObservationDetails: parseGhJson': 'pr-view-observation.json',
+  'pr-observation.service.ts fetch: prObservationSchema.parse': 'pr-view-observation.json',
+  'pr-details.ts getPRFullDetails: parseGhJson': 'pr-view-full.json',
+  'reviews.ts getChronologicalReviews: parseGhJson': 'api-pr-reviews.json',
+  'github-cli.service.ts getReviewComments: parseGhJson': 'api-pr-review-comments.json',
+  'github-cli.service.ts fetchReviewThreadsPage: parseGhJson': 'graphql-review-threads.json',
+  'github-cli.service.ts fetchThreadCommentsPage: parseGhJson': 'graphql-thread-comments.json',
+  'github-cli.service.ts listOpenPRs: parseGhJson': 'graphql-open-prs.json',
+  'review-requests.ts listReviewRequests: JSON.parse': 'graphql-review-requests.json',
+  'review-requests.ts listReviewRequests: reviewRequestedPRGraphQLSchema.safeParse':
+    'graphql-review-requests.json',
+  'review-requests.ts listReviewRequests: githubPRPreviewInputSchema.shape.repo.safeParse': INPUT,
+  'github-cli.service.ts getIssuePreview: parseGhJson': 'issue-view-preview.json',
+  'github-cli.service.ts getIssue: parseGhJson': 'issue-view.json',
+  'github-cli.service.ts fetchIssues: parseGhJson': 'issue-list.json',
+  'issue-search.ts listMatchingIssues: parseGhJson': 'issue-list-search.json',
+  'issue-search.ts lookupIssueNumber: parseGhJson': 'api-issue.json',
+  'agent-sources.ts getAgentRepository: JSON.parse': 'api-repo.json',
+  'agent-sources.ts getAgentRepository: repositorySchema.parse': 'api-repo.json',
+  'agent-sources.ts getAgentRepository: JSON.parse #2': 'api-repo-labels.json',
+  'agent-sources.ts getAgentRepository: labelsSchema.parse': 'api-repo-labels.json',
+  'agent-sources.ts getAgentRepository: githubIssuePreviewInputSchema.shape.repo.safeParse': INPUT,
+  'agent-issue-events.ts getAgentRepositoryIdentity: parseProviderJson': 'api-repo.json',
+  'agent-issue-events.ts getAgentRepositoryIdentity: <inline>.parse': 'api-repo.json',
+  'agent-issue-events.ts getAgentRepositoryIdentity: githubIssuePreviewInputSchema.shape.repo.parse':
+    INPUT,
+  'agent-issue-events.ts listAgentIssueEvents: parseProviderJson': 'api-issue-events.json',
+  'agent-issue-events.ts listAgentIssueEvents: <inline>.parse #2': 'api-issue-events.json',
+  'agent-issue-events.ts listAgentIssueEvents: controlSchema.parse': 'api-issue-events.json',
+  'agent-issue-events.ts listAgentIssueEvents: executableSchema.parse': 'api-issue-events.json',
+  'agent-issue-events.ts listAgentIssueEvents: agentIssueEventPageSchema.parse':
     'api-issue-events.json',
-  'agent-issue-events.ts:controlSchema': 'api-issue-events.json',
-  'agent-issue-events.ts:executableSchema': 'api-issue-events.json',
-  'agent-issue-events.ts:agentIssueEventPageSchema': 'api-issue-events.json',
-  'pr-observation.service.ts:prObservationSchema': 'pr-view-observation.json',
+  'agent-issue-events.ts listAgentIssueEvents: <inline>.parse': `${INPUT} (z.literal(100), the page size)`,
+  'agent-issue-events.ts listAgentIssueEvents: id.parse': INPUT,
+  'agent-issue-events.ts listAgentIssueEvents: githubIssuePreviewInputSchema.shape.repo.parse':
+    INPUT,
+  'agent-issue-events.ts listAgentIssueEvents: agentSourcePageNumberSchema.parse': INPUT,
+  'agent-issue-events.ts parseProviderJson: JSON.parse':
+    'the reader inside parseProviderJson, whose calls are mapped above',
+  'utils.ts parseGhJson: JSON.parse': 'the reader inside parseGhJson, whose calls are mapped above',
+  'utils.ts parseGhJson: schema.parse':
+    'the reader inside parseGhJson, whose calls are mapped above',
 };
 
-/** Parse sites that read no `gh` output. */
-const NOT_GH_OUTPUT: Record<string, string> = {
-  'agent-sources.ts:githubIssuePreviewInputSchema': 'validates the repository name passed in',
-  'review-requests.ts:githubPRPreviewInputSchema': 'validates the repository name passed in',
-  'agent-issue-events.ts:githubIssuePreviewInputSchema': 'validates the repository name passed in',
-  'agent-issue-events.ts:agentSourcePageNumberSchema': 'validates the page number passed in',
-};
-
-/** Recordings of calls whose output no schema reads; their readers are driven below. */
-const RECORDED_WITHOUT_SCHEMA: Record<string, string> = {
-  'version.json': 'the health check reads the version with a regular expression',
-  'auth-status.json': 'the health check reads the exit code; the badge a regular expression',
-  'api-user-login.json': '`--jq .login` prints the login, read as trimmed text',
-  'pr-view-body.json': '`--jq .body` prints the description, read as trimmed text',
-  'pr-view-head-sha.json': '`--jq .headRefOid` prints the commit, read as trimmed text',
-};
-
-/** Read-only call shapes with no recording, and why. Writes are never recorded. */
+/** Variants of recorded calls with no recording of their own, and why. */
 const NOT_RECORDED: Record<string, string> = {
-  'gh pr diff <n> --repo <repo>':
-    'no schema reads it: the diff is passed on as text, and an allowlist of its lines keeps nothing',
+  'listReviewRequests() with no repository: search `is:pr is:open review-requested:@me archived:false`':
+    "reads the recording account's review requests across all repositories, which is account data",
   'gh issue list ... --assignee @me':
     "reads the recording account's assignments; output and schema are those of issue-list.json",
   'gh api repos/<repo>/pulls/<n>/comments?...&since=<time>&...':
     'the same output and schema as api-pr-review-comments.json, filtered by time',
-  'gh auth status --active (ff setup)':
+  'later pages: open pull requests and review requests (`after: <cursor>`), review comments (`page=2` and on)':
+    'the same output shape and schema as the recorded first page',
+  'gh auth status --active (ff setup, src/cli/setup-prerequisites.mjs)':
     'reads only the exit code; auth-status.json is the same call',
-  'gh pr review <n> --repo <repo> --approve|--request-changes|--comment': 'writes',
-  'gh pr comment <n> --repo <repo> --body <text>': 'writes',
-  'gh issue comment <n> --repo <repo> --body <text>': 'writes',
-  'gh api --method POST repos/<repo>/pulls/<n>/reviews --input <file>': 'writes',
-  'gh api --method POST repos/<repo>/pulls/<n>/comments --input <file>': 'writes',
 };
+
+/**
+ * What the recordings do not exercise: schema branches no recorded value
+ * reaches. The next recording should pick objects that widen this list's
+ * coverage.
+ */
+const NOT_EXERCISED = [
+  'reviewDecision APPROVED, CHANGES_REQUESTED or REVIEW_REQUIRED: only "" and null were recorded',
+  'statusCheckRollup entries with __typename StatusContext (context, state, targetUrl)',
+  'a check conclusion of null: running checks recorded ""',
+  'a non-empty labels list on a pull request',
+  'pull request or issue state CLOSED in a pr view or issue view read',
+  'a null author, user or actor (a deleted account)',
+  'review states other than COMMENTED',
+  'a review thread with isResolved false',
+  'the reopened issue event',
+  'issue labels given as plain strings rather than objects',
+  'gh timestamps as gh prints them: every recorded timestamp is the scrubber\'s whole-second "…Z" fake, so z.iso.datetime() is checked against that form only',
+];
 
 const versions = readdirSync(recordingsRoot, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+$/.test(entry.name))
   .map((entry) => entry.name);
 
-it('has a recording of gh output', () => {
+it('has a recording of gh output, and lists what it leaves out', () => {
   expect(versions.length).toBeGreaterThan(0);
   expect(Object.keys(NOT_RECORDED).length).toBeGreaterThan(0);
+  expect(NOT_EXERCISED.length).toBeGreaterThan(0);
 });
 
-it('maps every parse site of gh output to a recording or a reason', () => {
-  expect(parseSites()).toEqual(Object.keys({ ...RECORDED, ...NOT_GH_OUTPUT }).sort());
+it('maps every gh call and every parse in the capsule to a recording or a reason', () => {
+  const sites = capsuleSites();
+  expect(sites.calls).toEqual(Object.keys(GH_CALLS).sort());
+  expect(sites.parses).toEqual(Object.keys(PARSE_SITES).sort());
 });
 
 describe.each(versions)('gh %s recordings', (version) => {
@@ -254,7 +414,11 @@ describe.each(versions)('gh %s recordings', (version) => {
   });
 
   it('holds one recording per shape, each mapped to its reader', () => {
-    const mapped = new Set([...Object.values(RECORDED), ...Object.keys(RECORDED_WITHOUT_SCHEMA)]);
+    const mapped = new Set(
+      [...Object.values(GH_CALLS), ...Object.values(PARSE_SITES)].filter((value) =>
+        value.endsWith('.json')
+      )
+    );
     expect([...byFile.keys()].sort()).toEqual([...mapped].sort());
   });
 
