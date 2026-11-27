@@ -1,0 +1,31 @@
+{
+  "tool": "codex",
+  "runtime": {
+    "package": "@openai/codex",
+    "version": "0.166.0"
+  },
+  "adapter": {
+    "package": "@agentclientprotocol/codex-acp",
+    "version": "2.6.0"
+  },
+  "cliVersion": "0.166.0",
+  "recordedOn": "2026-11-27",
+  "platform": "darwin-arm64",
+  "scenarios": ["plain-reply", "approved-command"],
+  "repository": {
+    "README.md": "# Lighthouse Notes\n\nAn invented project used only to record a synthetic agent session.\nIt keeps short notes about imaginary lighthouses.\n",
+    "notes.txt": "Cape Example lighthouse: red and white stripes.\nPoint Sample lighthouse: a green lamp.\n",
+    "count-words.sh": "#!/bin/sh\n# Prints the word count of the two text files.\nwc -w README.md notes.txt\n"
+  },
+  "files": {
+    "app-server.jsonl": "Codex app-server requests and responses read outside a turn.",
+    "acp.jsonl": "Every ACP JSON-RPC message between client and adapter, in order.",
+    "history.jsonl": "The history file the CLI wrote for the session, line by line.",
+    "prompts.json": "The prompts sent, one per turn."
+  },
+  "notes": [
+    "CODEX_HOME starts with only a copy of auth.json and HOME is empty, so no user config.toml, AGENTS.md or skills are loaded; Codex installs its bundled system skills there itself.",
+    "The session is switched to the read-only mode before the first prompt."
+  ],
+  "scrubbing": "Allowlist per stream (scripts/record-upstream/scrub.mjs): unlisted strings are \"<string>\", unlisted numbers 0, ids and timestamps are fixed fakes; the repository is /workspace."
+}

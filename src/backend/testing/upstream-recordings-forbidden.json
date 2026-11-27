@@ -1,0 +1,42 @@
+{
+  "description": "Data for upstream-recordings-leak.test.ts. Terms match case-insensitively as substrings; patterns are JavaScript regular expressions (flags i). The runner's own account and machine names are added at run time unless they are in genericAccountNames. Extend any list when a new kind of private value is found.",
+  "terms": ["martin", "macbook", "purplefish", ".ts.net", "tailscale", "/Users/", "/home/"],
+  "genericAccountNames": [
+    "root",
+    "user",
+    "users",
+    "runner",
+    "vscode",
+    "node",
+    "ubuntu",
+    "admin",
+    "codespace",
+    "codespaces",
+    "github",
+    "build",
+    "ci",
+    "docker",
+    "localhost"
+  ],
+  "patterns": [
+    {
+      "name": "email address",
+      "source": "[\\w.+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}"
+    },
+    { "name": "API key", "source": "\\bsk-[A-Za-z0-9_-]{8,}" },
+    { "name": "bearer token", "source": "\\bBearer\\s" },
+    { "name": "JWT", "source": "eyJ[\\w-]{5,}\\.[\\w-]{5,}\\.[\\w-]{5,}" },
+    {
+      "name": "GitHub token",
+      "source": "\\bgh[pousr]_[A-Za-z0-9]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}"
+    },
+    { "name": "Slack token", "source": "\\bxox[abpr]-[A-Za-z0-9-]{10,}" },
+    { "name": "AWS access key", "source": "\\bAKIA[0-9A-Z]{16}\\b" },
+    { "name": "npm token", "source": "\\bnpm_[A-Za-z0-9]{20,}" },
+    { "name": "long base64 run", "source": "[A-Za-z0-9+/]{40,}" },
+    { "name": "long hex run", "source": "[0-9a-f]{32,}" },
+    { "name": "URL-encoded home directory", "source": "%2F(?:Users|home)%2F" },
+    { "name": "macOS temp directory", "source": "/var/folders/" },
+    { "name": "private temp directory", "source": "/private/(?:tmp|var)/" }
+  ]
+}
