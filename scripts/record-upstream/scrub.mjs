@@ -21,6 +21,7 @@
 //   with known roots rewritten and any other home directory made
 //   `/user-home`; text that still looks private becomes "<redacted>".
 import { createRequire } from 'node:module';
+import { posix } from 'node:path';
 import { POLICIES } from './policies.mjs';
 
 export { POLICIES };
@@ -84,7 +85,7 @@ const PATH_SURVIVORS = [
   /^\/recording-tmp(?:\/|$)/,
   /^\/user-home\/\.claude(?:\/projects(?:\/-workspace(?:\/[^/]*)*\/?)?)?\/?$/,
 ];
-// Discriminators an opaque record keeps at any depth, when they look like one.
+// Discriminators an opaque record keeps at its top level, when they look like one.
 const OPAQUE_KEEP = new Set(['type', 'subtype', 'role', 'kind', 'status', 'operation']);
 const DISCRIMINATOR = /^[A-Za-z0-9_.:/-]{1,64}$/;
 const MAP_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -115,6 +116,7 @@ function compile(policy, kind) {
   return {
     opaque: !own,
     keep: matcher(join('keep')),
+    ids: matcher(join('ids')),
     text: matcher(join('text')),
     numbers: matcher(join('numbers')),
     maps: matcher(join('maps')),
@@ -233,14 +235,34 @@ export function looksPrivate(value) {
   );
 }
 
+// An absolute path survives only when, once normalised (so `..` cannot step
+// out), it lies inside a known root and its placeholder is an approved one.
 function survivingPath(value, context) {
-  if (!(value.startsWith('/') && context.roots.some(([from]) => value.startsWith(from)))) {
+  if (!value.startsWith('/')) {
     return null;
   }
-  const path = rewritePaths(value, context);
+  const normal = posix.normalize(value);
+  const inRoot = context.roots.some(
+    ([from]) => from.startsWith('/') && (normal === from || normal.startsWith(`${from}/`))
+  );
+  if (!inRoot) {
+    return null;
+  }
+  const path = rewritePaths(normal, context);
   return PATH_SURVIVORS.some((survivor) => survivor.test(path)) && !looksPrivate(path)
     ? path
     : null;
+}
+
+/** A random identifier (an SDK request id, a chunk id) becomes a stable fake. */
+function fakeOpaqueId(context, value) {
+  const original = `opaque:${value}`;
+  let fake = context.ids.get(original);
+  if (!fake) {
+    fake = `fake-${context.ids.size + 1}`;
+    context.ids.set(original, fake);
+  }
+  return fake;
 }
 
 function childPath(path, key) {
@@ -280,14 +302,28 @@ function scrubString(value, path, key, rules, context) {
   if (ISO_TIMESTAMP.test(value)) {
     return fakeTimestamp(context, value);
   }
+  if (rules.ids(path)) {
+    return fakeOpaqueId(context, value);
+  }
   if (rules.text(path)) {
     return scrubText(value, path, rules, context);
   }
   if (rules.keep(path)) {
+    if (value.startsWith('/')) {
+      return survivingPath(value, context) ?? PLACEHOLDER_STRING;
+    }
     const kept = rewritePaths(value, context);
     return kept.length <= MAX_KEPT_LENGTH && !looksPrivate(kept) ? kept : PLACEHOLDER_STRING;
   }
-  if (rules.opaque && OPAQUE_KEEP.has(key) && DISCRIMINATOR.test(value) && !looksPrivate(value)) {
+  // An opaque record keeps its own discriminators, at the top level only.
+  const topLevel = !path.includes('.') && !path.includes('>');
+  if (
+    rules.opaque &&
+    topLevel &&
+    OPAQUE_KEEP.has(key) &&
+    DISCRIMINATOR.test(value) &&
+    !looksPrivate(value)
+  ) {
     return value;
   }
   return survivingPath(value, context) ?? PLACEHOLDER_STRING;

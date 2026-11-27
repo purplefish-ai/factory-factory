@@ -1,6 +1,5 @@
 // Records one synthetic Codex session through codex-acp, and the app-server
 // reads the backend makes outside a turn.
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -9,8 +8,8 @@ import { startAcpSession } from './acp-session.mjs';
 import {
   cleanEnvironment,
   lineSplitter,
+  spawnTool,
   stopChild,
-  trackChild,
   writeJsonLines,
 } from './environment.mjs';
 
@@ -66,13 +65,11 @@ const APP_SERVER_REQUESTS = [
 
 async function recordAppServer({ versions, env, cwd }) {
   const records = [];
-  const child = trackChild(
-    spawn(process.execPath, [versions.adapterEntrypoint, 'cli', 'app-server'], {
-      cwd,
-      env: { ...env, DOTENV_CONFIG_QUIET: 'true' },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-  );
+  const child = spawnTool(process.execPath, [versions.adapterEntrypoint, 'cli', 'app-server'], {
+    cwd,
+    env: { ...env, DOTENV_CONFIG_QUIET: 'true' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
   // Native stderr may carry account details; it is never kept.
   child.stderr.resume();
   const exited = new Promise((resolve) => child.once('close', resolve));
@@ -184,5 +181,4 @@ export async function recordCodex({ versions, repository, tmp, rawDir }) {
     }
     rmSync(codexHome, { recursive: true, force: true });
   }
-  return { leftovers: [], notes: [] };
 }

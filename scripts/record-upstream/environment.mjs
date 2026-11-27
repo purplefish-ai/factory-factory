@@ -1,9 +1,19 @@
 // Shared plumbing for the upstream recorder: versions, clean environments,
 // the throwaway repository and line capture.
-import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 
 const appRequire = createRequire(join(process.cwd(), 'package.json'));
@@ -104,28 +114,134 @@ export function cleanEnvironment({ home, tmp, user = 'user', extra = {} }) {
   };
 }
 
-const children = new Set();
+// Process groups the recorder owns: each tool runs as the leader of its own
+// group, so its descendants (the Claude CLI under the adapter, Codex under
+// codex-acp) are signalled with it. A group stays here until it is empty.
+const groups = new Set();
+const GROUP_STOP_MS = 2000;
 
-/** Registers a child process so an interrupted run can kill it. */
-export function trackChild(child) {
-  children.add(child);
-  child.once('close', () => children.delete(child));
+function signalGroup(pgid, signal) {
+  try {
+    process.kill(-pgid, signal);
+    return true;
+  } catch {
+    return false; // ESRCH: nothing left in the group.
+  }
+}
+
+function groupAlive(pgid) {
+  return signalGroup(pgid, 0);
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Spawns a tool as the leader of a new process group the recorder owns, so a
+ * stop or an abort reaches everything the tool started.
+ */
+export function spawnTool(command, args, options) {
+  const child = spawn(command, args, { ...options, detached: true });
+  if (child.pid !== undefined) {
+    groups.add(child.pid);
+  }
   return child;
+}
+
+/**
+ * Ends a tool: closes its stdin and waits `graceMs` for it to exit, then
+ * signals its whole group with SIGTERM and, after as long again, SIGKILL.
+ * Once the leader has gone, anything left in the group gets the same.
+ */
+export async function stopChild(child, exited, graceMs) {
+  const pgid = child.pid;
+  child.stdin?.end();
+  const term = setTimeout(() => signalGroup(pgid, 'SIGTERM'), graceMs);
+  const kill = setTimeout(() => signalGroup(pgid, 'SIGKILL'), graceMs * 2);
+  await exited;
+  clearTimeout(term);
+  clearTimeout(kill);
+  if (groupAlive(pgid)) {
+    signalGroup(pgid, 'SIGTERM');
+    for (let waited = 0; waited < graceMs && groupAlive(pgid); waited += 50) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    signalGroup(pgid, 'SIGKILL');
+  }
+  groups.delete(pgid);
+}
+
+function isInside(child, parent) {
+  const path = relative(parent, child);
+  return path === '' || !(path.startsWith('..') || isAbsolute(path));
+}
+
+/**
+ * Prepares the `--keep-raw` directory. Raw captures hold account details, so
+ * the directory must be outside `checkout`, and either not exist yet (it is
+ * created 0700) or be empty and private already. An existing directory is
+ * never changed, so every capture is a new 0600 file and nothing is appended
+ * to an older one.
+ */
+export function prepareRawDirectory(directory, checkout) {
+  const realCheckout = realpathSync(checkout);
+  // Resolve symlinks in the part of the path that exists before creating anything.
+  let existing = resolve(directory);
+  const missing = [];
+  while (!existsSync(existing)) {
+    missing.unshift(basename(existing));
+    existing = dirname(existing);
+  }
+  if (isInside(join(realpathSync(existing), ...missing), realCheckout)) {
+    throw new Error('--keep-raw must name a directory outside this repository');
+  }
+  if (!existsSync(directory)) {
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+  } else {
+    if (!statSync(directory).isDirectory()) {
+      throw new Error('--keep-raw must name a directory');
+    }
+    if (readdirSync(directory).length > 0) {
+      throw new Error(
+        '--keep-raw needs an empty directory; delete the old captures or name a new directory'
+      );
+    }
+    if ((statSync(directory).mode & 0o077) !== 0) {
+      throw new Error(
+        '--keep-raw directory is readable by others; run chmod 700 on it or name a new directory'
+      );
+    }
+  }
+  // A symlink can still lead into the checkout.
+  const real = realpathSync(directory);
+  if (isInside(real, realCheckout)) {
+    throw new Error('--keep-raw must name a directory outside this repository');
+  }
+  return real;
 }
 
 /** Paths an interrupted run removes: the temp directory (sign-in copy, raw captures), a half-written fixture directory. */
 export const removeOnAbort = new Set();
 
 /**
- * On SIGINT, SIGTERM, SIGHUP or an uncaught error: kills the tracked tools,
- * removes every path in `removeOnAbort` synchronously, then exits. Returns a
- * function that uninstalls the handlers.
+ * On SIGINT, SIGTERM, SIGHUP or an uncaught error: signals every owned
+ * process group with SIGTERM and then SIGKILL, removes every path in
+ * `removeOnAbort` synchronously, then exits. Returns a function that
+ * uninstalls the handlers.
  */
 export function installAbortCleanup() {
   const abort = (code) => {
-    for (const child of children) {
-      child.kill('SIGKILL');
+    for (const pgid of groups) {
+      signalGroup(pgid, 'SIGTERM');
     }
+    for (let waited = 0; waited < GROUP_STOP_MS && [...groups].some(groupAlive); waited += 50) {
+      sleepSync(50);
+    }
+    for (const pgid of groups) {
+      signalGroup(pgid, 'SIGKILL');
+    }
+    // The tools are gone before the sign-in copy and captures are removed.
     for (const path of removeOnAbort) {
       rmSync(path, { recursive: true, force: true });
     }
@@ -150,19 +266,6 @@ export function installAbortCleanup() {
       process.off(event, handler);
     }
   };
-}
-
-/**
- * Ends a child: closes its stdin, sends SIGTERM after `graceMs`, and SIGKILL
- * after as long again, so a child that ignores SIGTERM cannot hang the run.
- */
-export async function stopChild(child, exited, graceMs) {
-  child.stdin?.end();
-  const term = setTimeout(() => child.kill('SIGTERM'), graceMs);
-  const kill = setTimeout(() => child.kill('SIGKILL'), graceMs * 2);
-  await exited;
-  clearTimeout(term);
-  clearTimeout(kill);
 }
 
 export const REPOSITORY_FILES = {

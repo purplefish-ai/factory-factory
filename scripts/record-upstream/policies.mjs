@@ -6,6 +6,9 @@
 // values only. Within a listed kind, a value survives only at a listed path:
 //
 // - `keep`: short structural strings (types, names of modes, options, tools).
+//   An absolute path survives only under an approved root.
+// - `ids`: random identifiers (SDK request ids); each becomes a stable fake, the
+//   same one wherever it appears.
 // - `text`: conversation text (prompts, replies, tool input and output in the
 //   throwaway repository). Text that parses as JSON is scrubbed again, with
 //   its keys under `<path>>`.
@@ -16,10 +19,10 @@
 //
 // Paths join object keys with `.` and skip array levels; `*` matches one key.
 // Each stream's `common` rules apply to every kind of that stream, opaque ones
-// included.
+// included; otherwise an opaque record keeps only its top-level discriminators.
 
-function rules({ keep = [], text = [], numbers = [], maps = [] } = {}) {
-  return { keep, text, numbers, maps };
+function rules({ keep = [], ids = [], text = [], numbers = [], maps = [] } = {}) {
+  return { keep, ids, text, numbers, maps };
 }
 
 const OPPOSITE = {
@@ -254,15 +257,9 @@ const MESSAGE_TEXT = [
 
 const claudeStdio = {
   common: rules({
+    keep: ['type', 'subtype', 'request.subtype', 'response.subtype', 'event.type'],
     // Request ids are random strings the SDK makes; they pair a response with its request.
-    keep: [
-      'type',
-      'subtype',
-      'request_id',
-      'request.subtype',
-      'response.subtype',
-      'response.request_id',
-    ],
+    ids: ['request_id', 'response.request_id'],
   }),
   kindOf(message, { requests }) {
     if (message.type === undefined) {
@@ -384,10 +381,12 @@ const claudeStdio = {
 const HISTORY_ENVELOPE = ['userType', 'entrypoint', 'gitBranch', 'version'];
 
 const claudeHistory = {
-  common: rules({ keep: ['type'] }),
+  common: rules({ keep: ['type', 'attachment.type'] }),
   kindOf: (record) =>
     record.type === 'attachment' ? `attachment:${record.attachment?.type}` : record.type,
   kinds: {
+    // Cost totals stay zero; the model names keep the shape of the map.
+    'cost-state': rules({ maps: ['modelUsage'] }),
     'queue-operation': rules({ keep: ['operation'] }),
     'last-prompt': rules({ text: ['lastPrompt'] }),
     'ai-title': rules({ keep: ['aiTitle'] }),
@@ -531,8 +530,13 @@ const codexRollout = {
     }),
     'response_item:custom_tool_call_output': rules({
       keep: ['payload.output.type'],
+      ids: ['payload.output.text>chunk_id'],
       text: ['payload.output.text', 'payload.output.text>output'],
-      numbers: ['payload.output.text>exit_code'],
+      numbers: [
+        'payload.output.text>exit_code',
+        'payload.output.text>wall_time_seconds',
+        'payload.output.text>original_token_count',
+      ],
     }),
     'response_item:function_call': rules({
       keep: [...under('payload', ['name', 'status']), 'payload.arguments>sandbox_permissions'],

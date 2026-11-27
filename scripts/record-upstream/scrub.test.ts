@@ -302,7 +302,7 @@ describe('POLICIES', () => {
     for (const policy of Object.values(POLICIES)) {
       expect(typeof policy.kindOf).toBe('function');
       for (const kind of [policy.common, ...Object.values(policy.kinds)]) {
-        expect(Object.keys(kind).sort()).toEqual(['keep', 'maps', 'numbers', 'text']);
+        expect(Object.keys(kind).sort()).toEqual(['ids', 'keep', 'maps', 'numbers', 'text']);
       }
     }
   });
@@ -311,7 +311,13 @@ describe('POLICIES', () => {
     const known = new Set(knownKeys);
     for (const policy of Object.values(POLICIES)) {
       for (const kind of [policy.common, ...Object.values(policy.kinds)]) {
-        const paths: string[] = [...kind.keep, ...kind.text, ...kind.numbers, ...kind.maps];
+        const paths: string[] = [
+          ...kind.keep,
+          ...kind.ids,
+          ...kind.text,
+          ...kind.numbers,
+          ...kind.maps,
+        ];
         for (const path of paths) {
           for (const segment of path.split(/[.>]/).filter((part) => part && part !== '*')) {
             expect(known.has(segment), `${path}: ${segment}`).toBe(true);
@@ -477,6 +483,147 @@ describe('values that are not allowlisted', () => {
       context()
     );
     expect(asJson(scrubbed)).not.toContain('janedoe');
+  });
+});
+
+// Inputs from the second review round.
+describe('paths, opaque discriminators and random ids', () => {
+  const commandsUpdate = (skillPath: string) => ({
+    jsonrpc: '2.0',
+    method: 'session/update',
+    params: {
+      sessionId: 'abc',
+      update: {
+        sessionUpdate: 'available_commands_update',
+        availableCommands: [
+          { name: 'x', _meta: { jetbrains: { air: { version: 1, skillPath } } } },
+        ],
+      },
+    },
+  });
+  const skillPathOf = (record: ReturnType<typeof commandsUpdate>) =>
+    record.params.update.availableCommands[0]?._meta.jetbrains.air.skillPath;
+
+  it('drops a kept absolute path outside the approved roots', () => {
+    const scrubbed = scrubRecord(
+      commandsUpdate('/opt/acme/skills/SKILL.md'),
+      POLICIES.acp,
+      context()
+    );
+    expect(skillPathOf(scrubbed)).toBe(PLACEHOLDER_STRING);
+  });
+
+  it('keeps a kept path inside an approved root after normalising it', () => {
+    const scrubbed = scrubRecord(
+      commandsUpdate(`${REPOSITORY}/sub/../skills/SKILL.md`),
+      POLICIES.acp,
+      context()
+    );
+    expect(skillPathOf(scrubbed)).toBe('/workspace/skills/SKILL.md');
+  });
+
+  it('rejects a path that escapes an approved root with ..', () => {
+    const escaped = scrubRecord(
+      commandsUpdate(`${REPOSITORY}/../../../etc/passwd`),
+      POLICIES.acp,
+      context()
+    );
+    const cwd = scrubRecord(
+      {
+        type: 'user',
+        cwd: `${REPOSITORY}/../../../etc/secret`,
+        message: { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(skillPathOf(escaped)).toBe(PLACEHOLDER_STRING);
+    expect(cwd.cwd).toBe(PLACEHOLDER_STRING);
+  });
+
+  it('keeps discriminators of an opaque record at its top level only', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'account_snapshot',
+        profile: {
+          status: 'jdoe-acme-laptop',
+          kind: 'acme.corp/team-red',
+          role: 'org:acme-admin',
+        },
+      },
+      POLICIES.claudeStdio,
+      context()
+    );
+    expect(scrubbed.type).toBe('account_snapshot');
+    expect(JSON.stringify(scrubbed)).not.toMatch(/jdoe|acme/);
+  });
+
+  it('maps a request id to the same stable fake in the request and its response', () => {
+    const scrubbed = scrubCapturedLines(
+      [
+        {
+          dir: 'sdk->cli',
+          line: JSON.stringify({
+            type: 'control_request',
+            request_id: 'q7x2k9w1',
+            request: { subtype: 'interrupt' },
+          }),
+        },
+        {
+          dir: 'cli->sdk',
+          line: JSON.stringify({
+            type: 'control_response',
+            response: { subtype: 'success', request_id: 'q7x2k9w1' },
+          }),
+        },
+      ],
+      POLICIES.claudeStdio,
+      context()
+    );
+    expect(JSON.stringify(scrubbed)).not.toContain('q7x2k9w1');
+    expect(scrubbed[0]?.message.request_id).toMatch(/^fake-\d+$/);
+    expect(scrubbed[1]?.message.response.request_id).toBe(scrubbed[0]?.message.request_id);
+  });
+
+  it('keeps the model names of Claude cost totals and zeroes the figures', () => {
+    const scrubbed = scrubRecord(
+      { type: 'cost-state', modelUsage: { 'claude-model-1': { inputTokens: 12, costUSD: 3 } } },
+      POLICIES.claudeHistory,
+      context()
+    );
+    expect(scrubbed.modelUsage).toEqual({
+      'claude-model-1': { inputTokens: 0, costUSD: 0 },
+    });
+  });
+
+  it('keeps the shape of Codex tool output with a fake chunk id', () => {
+    const scrubbed = scrubRecord(
+      {
+        type: 'response_item',
+        payload: {
+          type: 'custom_tool_call_output',
+          output: [
+            {
+              type: 'input_text',
+              text: JSON.stringify({
+                chunk_id: '126bb7',
+                wall_time_seconds: 0.25,
+                original_token_count: 14,
+                output: 'ok',
+              }),
+            },
+          ],
+        },
+      },
+      POLICIES.codexRollout,
+      context()
+    );
+    expect(JSON.parse(scrubbed.payload.output[0].text)).toEqual({
+      chunk_id: expect.stringMatching(/^fake-\d+$/),
+      wall_time_seconds: 0.25,
+      original_token_count: 14,
+      output: 'ok',
+    });
   });
 });
 

@@ -35,20 +35,22 @@
 // Credentials and side effects:
 // - Codex: auth.json is copied (mode 0600) into a temp CODEX_HOME, with a temp
 //   HOME; the copy is deleted when the run ends, also on Ctrl-C, SIGTERM,
-//   SIGHUP or a crash. The run refuses to start if the sign-in is due for a
-//   refresh, so the copy never rotates your token. Nothing is written under
-//   ~/.codex.
+//   SIGHUP or a crash. Every tool runs in its own process group, which is
+//   stopped (SIGTERM, then SIGKILL) before the copy is removed. The run
+//   refuses to start if the sign-in is due for a refresh, so the copy never
+//   rotates your token. Nothing is written under ~/.codex.
 // - Claude: the sign-in lives in the macOS keychain under the default config
 //   directory and does not follow CLAUDE_CONFIG_DIR or a temp HOME, so the CLI
 //   runs with your real HOME. Its user settings are not loaded
-//   (settingSources: []). It leaves, and the run prints:
+//   (settingSources: []). It leaves, and the run prints even when it fails:
 //   ~/.claude/projects/<encoded temp path>/ (the session file), an empty
 //   ~/.claude/session-env/<session id>/, and any new file in
 //   ~/.claude/shell-snapshots/. It also rewrites ~/.claude.json, rotates its
 //   backups under ~/.claude/backups/ and may rewrite a built-in plugin record
 //   under ~/.claude/plugins/store/, as any Claude run does.
 // - The Bash tool snapshots the user's shell setup. The Claude run sets an
-//   empty ZDOTDIR and SHELL=/bin/zsh so the snapshot holds no aliases or
+//   empty ZDOTDIR and SHELL to /bin/zsh (or /bin/sh where there is no zsh)
+//   so the snapshot holds no aliases or
 //   functions of yours. This isolation is unverified until the next
 //   recording: read the snapshot the run lists before trusting it.
 //
@@ -60,13 +62,13 @@
 // four app-server reads that start no turn. Run each provider once; if a run
 // fails twice, stop and look rather than retrying.
 //
-// `--keep-raw <dir>` keeps the unscrubbed captures (files 0600 in a 0700
-// directory, which must be outside this repository; they hold account details,
-// so delete them when done); `--rescrub <dir>` rewrites the fixtures from kept
+// `--keep-raw <dir>` keeps the unscrubbed captures as new 0600 files. The
+// directory must be outside this repository and either not exist (it is
+// created 0700) or be empty and private; the captures hold account details,
+// so delete them when done. `--rescrub <dir>` rewrites the fixtures from kept
 // captures without running any session.
 import { spawnSync } from 'node:child_process';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -77,13 +79,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { CLAUDE_SCENARIOS, recordClaude } from './record-upstream/claude.mjs';
 import { CODEX_SCENARIOS, recordCodex } from './record-upstream/codex.mjs';
 import {
   assertSupportedPlatform,
   createThrowawayRepository,
   installAbortCleanup,
+  prepareRawDirectory,
   readJsonLines,
   removeOnAbort,
   REPOSITORY_FILES,
@@ -162,29 +165,9 @@ function parseArguments(argv) {
   return options;
 }
 
-function isInside(child, parent) {
-  const path = relative(parent, child);
-  return path === '' || !(path.startsWith('..') || isAbsolute(path));
-}
-
-// Raw captures hold account details: never inside the checkout, never readable by others.
-function prepareRawDirectory(directory) {
+function checkoutRoot() {
   const toplevel = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
-  const checkout = realpathSync(toplevel.stdout?.trim() || process.cwd());
-  const refuse = () => {
-    throw new Error('--keep-raw must name a directory outside this repository');
-  };
-  if (isInside(resolve(directory), checkout)) {
-    refuse();
-  }
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  // A symlink can still lead into the checkout.
-  const real = realpathSync(directory);
-  if (isInside(real, checkout)) {
-    refuse();
-  }
-  chmodSync(real, 0o700);
-  return real;
+  return toplevel.stdout?.trim() || process.cwd();
 }
 
 function scrubStream(name, rawPath, policy, context) {
@@ -296,7 +279,7 @@ function writeFixtures(tool, rawDir) {
 
 async function record(tool, keepRaw) {
   const versions = resolveVersions(tool);
-  const rawKept = keepRaw ? prepareRawDirectory(keepRaw) : undefined;
+  const rawKept = keepRaw ? prepareRawDirectory(keepRaw, checkoutRoot()) : undefined;
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'ff-upstream-')));
   // Ctrl-C, SIGTERM, SIGHUP or a crash must not leave the sign-in copy or raw captures behind.
   removeOnAbort.add(tmp);
@@ -317,14 +300,9 @@ async function record(tool, keepRaw) {
       roots: { [repository]: '/workspace', [tmp]: '/recording-tmp', [homedir()]: '/user-home' },
     };
     writeFileSync(join(rawDir, 'run.json'), JSON.stringify(run), { mode: 0o600 });
-    const { leftovers, notes } = await TOOLS[tool].record({ versions, repository, tmp, rawDir });
+    // The provider module prints what it left outside the temp directory, also when it fails.
+    await TOOLS[tool].record({ versions, repository, tmp, rawDir });
     writeFixtures(tool, rawDir);
-    for (const path of leftovers) {
-      console.log(`${tool}: left outside the temp directory: ${path}`);
-    }
-    for (const note of notes) {
-      console.log(`${tool}: ${note}`);
-    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
     removeOnAbort.delete(tmp);
@@ -338,7 +316,13 @@ if (options.rescrub) {
   if (!existsSync(join(options.rescrub, 'run.json'))) {
     throw new Error('--rescrub needs a directory written with --keep-raw');
   }
-  writeFixtures(options.tool, options.rescrub);
+  // A signal while rescrubbing removes the half-written staging directory.
+  const uninstallAbortCleanup = installAbortCleanup();
+  try {
+    writeFixtures(options.tool, options.rescrub);
+  } finally {
+    uninstallAbortCleanup();
+  }
 } else {
   await record(options.tool, options.keepRaw);
 }

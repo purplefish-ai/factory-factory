@@ -96,10 +96,36 @@ function listOrEmpty(directory) {
   return existsSync(directory) ? readdirSync(directory) : [];
 }
 
+function printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snapshotsBefore }) {
+  const leftovers = [];
+  if (existsSync(projectDir)) {
+    leftovers.push(`${projectDir}/ (${readdirSync(projectDir).join(', ')})`);
+  }
+  const sessionEnv = sessionId && join(claudeHome, 'session-env', sessionId);
+  if (sessionEnv && existsSync(sessionEnv)) {
+    leftovers.push(`${sessionEnv}/`);
+  }
+  for (const name of listOrEmpty(snapshotsDir).filter((entry) => !snapshotsBefore.has(entry))) {
+    leftovers.push(
+      `${join(snapshotsDir, name)} (a shell snapshot; check it holds no own functions)`
+    );
+  }
+  for (const path of leftovers) {
+    console.log(`claude: left outside the temp directory: ${path}`);
+  }
+  console.log(
+    `claude: ${join(homedir(), '.claude.json')} and its backups under ${join(claudeHome, 'backups')} were rewritten, as on any Claude run`
+  );
+  console.log(
+    `claude: ${join(claudeHome, 'plugins', 'store')} may have had a built-in plugin record rewritten`
+  );
+}
+
 /**
  * Runs the scenarios and writes raw captures into `rawDir`. The Claude sign-in
  * cannot be isolated (see the script header), so the CLI runs with the real
- * HOME and writes under ~/.claude. Returns what it left there.
+ * HOME and writes under ~/.claude; what it left there is printed, also when
+ * the run fails.
  */
 export async function recordClaude({ versions, repository, tmp, rawDir }) {
   const claudeHome = join(homedir(), '.claude');
@@ -109,8 +135,9 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
   const stdioLog = join(rawDir, 'cli-stdio.raw.jsonl');
   writeFileSync(wrapper, stdioWrapperSource(claudeCliPath(versions.fromAdapter), stdioLog));
   chmodSync(wrapper, 0o700);
-  // An empty ZDOTDIR and an explicit SHELL keep the owner's zsh setup
-  // (aliases, functions, options) out of the Bash tool's shell snapshot.
+  // An empty ZDOTDIR and an explicit SHELL (zsh, or sh where there is none)
+  // keep the owner's shell setup (aliases, functions, options) out of the
+  // Bash tool's shell snapshot.
   // Unverified until the next recording; the run lists any snapshot it made.
   const zdotdir = join(tmp, 'zdotdir');
   mkdirSync(zdotdir);
@@ -121,72 +148,61 @@ export async function recordClaude({ versions, repository, tmp, rawDir }) {
     user: process.env.USER ?? 'user',
     extra: {
       CLAUDE_CODE_EXECUTABLE: wrapper,
-      SHELL: '/bin/zsh',
+      SHELL: existsSync('/bin/zsh') ? '/bin/zsh' : '/bin/sh',
       ZDOTDIR: zdotdir,
       // Keep the account's claude.ai connectors out of the synthetic session.
       ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
     },
   });
-  const session = startAcpSession({ entrypoint: versions.adapterEntrypoint, env, cwd: repository });
+  const projectDir = join(claudeHome, 'projects', repository.replace(/[^A-Za-z0-9]/g, '-'));
   let sessionId;
   try {
-    await session.initialize();
-    const created = await session.newSession({
+    const session = startAcpSession({
+      entrypoint: versions.adapterEntrypoint,
+      env,
       cwd: repository,
-      mcpServers: [],
-      // Not sent by Factory Factory: keeps the owner's user settings (hooks,
-      // plugins, CLAUDE.md) and MCP configuration out of the synthetic session.
-      _meta: { claudeCode: { options: { settingSources: [], strictMcpConfig: true } } },
     });
-    sessionId = created.sessionId;
-    for (const { scenario, text } of CLAUDE_SCENARIOS) {
-      let chunks = 0;
-      const result = await session.prompt(
-        { sessionId, prompt: [{ type: 'text', text }] },
-        (notification) => {
-          if (
-            scenario === 'interrupted-reply' &&
-            notification.update.sessionUpdate === 'agent_message_chunk' &&
-            ++chunks === 3
-          ) {
-            void session.cancel({ sessionId });
+    try {
+      await session.initialize();
+      const created = await session.newSession({
+        cwd: repository,
+        mcpServers: [],
+        // Not sent by Factory Factory: keeps the owner's user settings (hooks,
+        // plugins, CLAUDE.md) and MCP configuration out of the synthetic session.
+        _meta: { claudeCode: { options: { settingSources: [], strictMcpConfig: true } } },
+      });
+      sessionId = created.sessionId;
+      for (const { scenario, text } of CLAUDE_SCENARIOS) {
+        let chunks = 0;
+        const result = await session.prompt(
+          { sessionId, prompt: [{ type: 'text', text }] },
+          (notification) => {
+            if (
+              scenario === 'interrupted-reply' &&
+              notification.update.sessionUpdate === 'agent_message_chunk' &&
+              ++chunks === 3
+            ) {
+              void session.cancel({ sessionId });
+            }
           }
-        }
-      );
-      console.log(`claude ${scenario}: stopReason=${result.stopReason}`);
+        );
+        console.log(`claude ${scenario}: stopReason=${result.stopReason}`);
+      }
+    } finally {
+      await session.stop();
+      writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records, 0o600);
     }
+    if (session.permissions.length === 0) {
+      throw new Error('claude: the approved-command scenario raised no permission request');
+    }
+    const historyFile = join(projectDir, `${sessionId}.jsonl`);
+    if (!existsSync(historyFile)) {
+      throw new Error('The Claude history file for the recorded session was not found');
+    }
+    copyFileSync(historyFile, join(rawDir, 'history.raw.jsonl'));
+    chmodSync(join(rawDir, 'history.raw.jsonl'), 0o600);
   } finally {
-    await session.stop();
-    writeJsonLines(join(rawDir, 'acp.raw.jsonl'), session.records, 0o600);
+    // Also after a failure: whatever the CLI wrote under ~/.claude is the owner's to remove.
+    printLeftovers({ claudeHome, projectDir, sessionId, snapshotsDir, snapshotsBefore });
   }
-  const leftovers = [];
-  const projectDir = join(claudeHome, 'projects', repository.replace(/[^A-Za-z0-9]/g, '-'));
-  if (existsSync(projectDir)) {
-    leftovers.push(`${projectDir}/ (${readdirSync(projectDir).join(', ')})`);
-  }
-  const sessionEnv = join(claudeHome, 'session-env', String(sessionId));
-  if (existsSync(sessionEnv)) {
-    leftovers.push(`${sessionEnv}/`);
-  }
-  for (const name of listOrEmpty(snapshotsDir).filter((entry) => !snapshotsBefore.has(entry))) {
-    leftovers.push(
-      `${join(snapshotsDir, name)} (a shell snapshot; check it holds no own functions)`
-    );
-  }
-  if (session.permissions.length === 0) {
-    throw new Error('claude: the approved-command scenario raised no permission request');
-  }
-  const historyFile = join(projectDir, `${sessionId}.jsonl`);
-  if (!existsSync(historyFile)) {
-    throw new Error('The Claude history file for the recorded session was not found');
-  }
-  copyFileSync(historyFile, join(rawDir, 'history.raw.jsonl'));
-  chmodSync(join(rawDir, 'history.raw.jsonl'), 0o600);
-  return {
-    leftovers,
-    notes: [
-      `${join(homedir(), '.claude.json')} and its backups under ${join(claudeHome, 'backups')} were rewritten, as on any Claude run`,
-      `${join(claudeHome, 'plugins', 'store')} may have had a built-in plugin record rewritten`,
-    ],
-  };
 }
