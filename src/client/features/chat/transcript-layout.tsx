@@ -10,7 +10,6 @@ import {
 } from '@/lib/chat-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import { GroupedMessageItemRenderer } from './agent-activity';
-import { CompactingIndicator } from './compacting-indicator';
 import { SessionActivityIndicator } from './session-activity-indicator';
 import { TodoPanel } from './todo-panel';
 import type { TranscriptDisplayProps } from './transcript-display.types';
@@ -153,7 +152,6 @@ export function TranscriptTail({
         </div>
       )}
       {!loadingSession && <TodoPanel todoState={todoState} />}
-      <CompactingIndicator isCompacting={props.isCompacting ?? false} className="mb-4" />
       {(initializing || loadingSession || starting) && (
         <div className="flex items-center gap-2 text-muted-foreground py-4">
           <Spinner aria-hidden="true" />

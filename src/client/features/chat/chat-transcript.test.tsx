@@ -189,6 +189,40 @@ it('keeps the thinking footer outside the viewport and mounted when work stops',
   expect(footer?.querySelector('button')?.disabled).toBe(true);
 });
 
+it('shows compaction only in the reserved footer, including while the agent is idle', () => {
+  const host = document.createElement('div');
+  const root = mountRoot(host);
+  const render = (isCompacting: boolean) =>
+    flushSync(() =>
+      root.render(
+        <ChatTranscript
+          {...display}
+          thinkingInFooter
+          loadingSession={false}
+          isCompacting={isCompacting}
+          scroll={{
+            identity: 'compaction',
+            active: true,
+            ready: true,
+            initialIntent: 'following',
+            initialPosition: null,
+          }}
+        />
+      )
+    );
+
+  render(false);
+  const footer = host.querySelector('[data-testid="thinking-footer"]');
+  render(true);
+  expect(host.querySelector('[data-testid="thinking-footer"]')).toBe(footer);
+  expect(footer?.textContent).toBe('Compacting');
+  expect(footer?.querySelector('[data-slot="spinner"]')).not.toBeNull();
+  expect(host.querySelector('[role="log"]')?.textContent).not.toContain('Compacting');
+  render(false);
+  expect(host.querySelector('[data-testid="thinking-footer"]')).toBe(footer);
+  expect(footer?.querySelector('[role="status"]')?.textContent).toBe('');
+});
+
 it.each([
   { running: true, promptInFlight: true, turn: false, active: true },
   { running: true, promptInFlight: false, turn: false, active: false },

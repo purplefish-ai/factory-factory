@@ -16,6 +16,8 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
   scroll: TranscriptScrollOptions;
   /** Reserve a thinking preview outside the scroller, directly above the composer. */
   thinkingInFooter?: boolean;
+  /** Show context compaction in the thinking footer. */
+  isCompacting?: boolean;
   /** A request blocking the agent on the user; the footer says so instead of "working". */
   pendingRequestType?: PendingRequestType | null;
   header?: ReactNode;
@@ -27,6 +29,7 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
 function TranscriptInstance({
   scroll,
   thinkingInFooter = false,
+  isCompacting = false,
   pendingRequestType = null,
   header: banner,
   history,
@@ -127,6 +130,7 @@ function TranscriptInstance({
       {thinkingInFooter && (
         <ThinkingFooter
           active={thinkingActive}
+          isCompacting={isCompacting && !display.loadingSession}
           latestThinking={props.latestThinking}
           waitingFor={pendingRequestType}
         />
