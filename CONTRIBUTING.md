@@ -65,6 +65,14 @@ warning naming the unknown migrations and starts anyway. Use a separate
 `DATABASE_PATH` when branch schemas diverge in ways the other branch's code
 cannot tolerate.
 
+Users upgrade the package in place, and migrations are one-way. A test in the
+normal suite (`src/backend/upgrade-from-last-release.integration.test.ts`)
+therefore starts from a database the last published release left, with seeded
+rows in every table, runs the current migrations and reads what the board and
+automations pages read; a migration that cannot cope with real rows fails there.
+Maintainers re-pin it after each release
+([npm release security](docs/npm-release-security.md#after-a-release-is-published)).
+
 ## Verification
 
 This is the shared verification policy for contributors and agents. Command

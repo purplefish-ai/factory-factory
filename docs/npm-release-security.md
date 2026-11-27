@@ -31,6 +31,28 @@ provenance identity; they do not independently validate Sigstore signatures or
 establish that the source code is safe. Provenance complements code review,
 dependency review, and npm's staged approval.
 
+## After a release is published
+
+Pin the upgrade check to the version that just shipped. The check
+(`src/backend/upgrade-from-last-release.integration.test.ts`, run by the Test
+shards on every pull request) builds a database the way that release left it,
+loads a seed with a row in every table and every enum value in use, then runs
+the current migrations and application over it. Once npm serves the new version:
+
+```sh
+node scripts/update-last-release-migrations.mjs <version>
+pnpm exec tsx scripts/generate-upgrade-seed.ts
+```
+
+The first command downloads the published tarball (a read-only registry request)
+and rewrites `src/backend/testing/fixtures/upgrade/last-release.json` with its
+migration list and Prisma enums; it refuses a release whose migrations this
+checkout lacks. The second regenerates `last-release-seed.sql` and fails if the
+rows no longer cover every table and enum value. Commit both files, and the seed
+rows in `src/backend/testing/upgrade/` when the generator asks for them. CI
+never runs either script; a stale pin only makes the check start from an older
+release.
+
 ## Account controls
 
 Workflow YAML alone cannot enforce account controls. Verify on npm that the
