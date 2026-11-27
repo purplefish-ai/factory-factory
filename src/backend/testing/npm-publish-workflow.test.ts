@@ -108,8 +108,8 @@ describe('npm publish workflow', () => {
   });
 
   it('leaves tagging to the scheduled workflow, which runs after approval on npm', () => {
-    expect(Object.keys(workflow.on.workflow_dispatch.inputs)).toEqual(['dry_run']);
-    expect(Object.keys(workflow.jobs)).toEqual(['verify', 'consumer', 'stage']);
+    expect(Object.keys(workflow.on.workflow_dispatch.inputs).toSorted()).toEqual(['dry_run']);
+    expect(Object.keys(workflow.jobs).toSorted()).toEqual(['consumer', 'stage', 'verify']);
     expect(getStep(getJob('stage'), 'Record what happens after approval').if).toBe(
       githubExpression("github.event_name == 'workflow_dispatch'")
     );

@@ -263,8 +263,27 @@ export async function tagPublishedVersions(
   return { exitCode: skipped === 0 && created ? 0 : 1, lines };
 }
 
-/** The version's provenance source, once its commit and published bytes check out. */
+/**
+ * The version's provenance source, once its commit and published bytes check out. A
+ * failed request skips this version only, so the others are still released this run.
+ */
 async function verifiedSource(
+  environment: ReleaseEnvironment,
+  version: string,
+  head: string,
+  repository: string
+): Promise<Source> {
+  try {
+    return await checkVersion(environment, version, head, repository);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `could not check: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function checkVersion(
   environment: ReleaseEnvironment,
   version: string,
   head: string,

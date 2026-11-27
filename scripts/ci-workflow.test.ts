@@ -564,6 +564,10 @@ describe('npm release tagging workflow', () => {
     ['false', ['--repository', 'owner/name']],
     ['', ['--repository', 'owner/name']],
   ])('passes the dry_run input %j to the script', (dryRun, expected) => {
+    // Without the declared input, a requested manual dry run would run for real.
+    expect(workflow.on.workflow_dispatch).toMatchObject({
+      inputs: { dry_run: { required: false, default: false, type: 'boolean' } },
+    });
     expect(tagStep?.env?.DRY_RUN).toBe('${{ inputs.dry_run }}');
     const directory = mkdtempSync(join(tmpdir(), 'ff-release-tags-'));
     try {

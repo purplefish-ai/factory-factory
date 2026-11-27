@@ -30,12 +30,14 @@ staging run from the version's npm-hosted SLSA provenance and checks:
 Only then does it create the tag at that commit and the GitHub Release, oldest
 version first, marking the npm `latest` version as the latest release. A version
 that fails a check is reported in the job summary and skipped, and the run
-fails; tag it by hand once its commit is known. The job writes with the workflow
-token, so the releases it creates start no other workflow. These checks
-authenticate registry responses through HTTPS and compare provenance identity;
-they do not independently validate Sigstore signatures or establish that the
-source code is safe. Provenance complements code review, dependency review, and
-npm's staged approval.
+fails; resolve the reported reason and run the workflow again. A version tagged
+by hand is no longer a candidate, so whoever tags it must make the same checks
+and create its release too. The job writes with the workflow token, so the
+releases it creates start no other workflow. These checks authenticate registry
+responses through HTTPS and compare provenance identity; they do not
+independently validate Sigstore signatures or establish that the source code is
+safe. Provenance complements code review, dependency review, and npm's staged
+approval.
 
 ## Account controls
 

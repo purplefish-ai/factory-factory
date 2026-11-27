@@ -232,11 +232,13 @@ function fakeEnvironment(options: {
   missing?: string[];
   manifestVersion?: Record<string, string>;
   unverified?: string[];
+  latest?: string;
 }) {
   const created: ReleaseRequest[] = [];
   const pauses: number[] = [];
+  const verified: [string, string, string][] = [];
   const tags = new Set(options.tags);
-  const latest = options.versions.at(-1);
+  const latest = options.latest ?? options.versions.at(-1);
   const environment: ReleaseEnvironment = {
     packument: () =>
       Promise.resolve({
@@ -259,12 +261,14 @@ function fakeEnvironment(options: {
         version: options.manifestVersion?.[version] ?? version,
       });
     },
-    verifyPublished: (version) =>
-      Promise.resolve(
+    verifyPublished: (version, commit, runId) => {
+      verified.push([version, commit, runId]);
+      return Promise.resolve(
         options.unverified?.includes(version)
           ? { ok: false, reason: 'Published npm package differs from the staged tarball' }
           : { ok: true }
-      ),
+      );
+    },
     createRelease: (release) => {
       created.push(release);
       tags.add(release.tag);
@@ -275,12 +279,12 @@ function fakeEnvironment(options: {
     },
     changelog: '## [1.0.2] - 2026-11-01\n\n- Two\n',
   };
-  return { environment, created, pauses };
+  return { environment, created, pauses, verified };
 }
 
 describe('tagging published versions', () => {
   it('releases the backlog oldest first and marks only the npm latest version as latest', async () => {
-    const { environment, created, pauses } = fakeEnvironment({
+    const { environment, created, pauses, verified } = fakeEnvironment({
       versions: ['1.0.0', '1.0.1', '1.0.2', '1.0.10'],
       tags: ['v1.0.0'],
     });
@@ -290,12 +294,43 @@ describe('tagging published versions', () => {
       ['v1.0.2', commitFor('1.0.2'), false],
       ['v1.0.10', commitFor('1.0.10'), true],
     ]);
+    // The published bytes are verified against the commit and run the provenance names.
+    expect(verified).toEqual([
+      ['1.0.1', commitFor('1.0.1'), '42'],
+      ['1.0.2', commitFor('1.0.2'), '42'],
+      ['1.0.10', commitFor('1.0.10'), '42'],
+    ]);
     expect(created[1]?.body).toBe(
       `- Two\n\nPublished to npm as factory-factory@1.0.2, built from ${commitFor('1.0.2')}.`
     );
     expect(pauses).toHaveLength(2);
     expect(report.exitCode).toBe(0);
     expect(report.lines).toContain(`released v1.0.10 at ${commitFor('1.0.10')} (latest)`);
+  });
+
+  it('follows the npm latest dist-tag rather than the highest version', async () => {
+    const { environment, created } = fakeEnvironment({
+      versions: ['1.0.0', '1.0.1', '1.1.0'],
+      tags: [],
+      latest: '1.0.1',
+    });
+    await tagPublishedVersions(environment, { repository, dryRun: false });
+    expect(created.map(({ tag, latest }) => [tag, latest])).toEqual([
+      ['v1.0.0', false],
+      ['v1.0.1', true],
+      ['v1.1.0', false],
+    ]);
+  });
+
+  it('skips a version whose registry request fails and still releases the others', async () => {
+    const { environment, created } = fakeEnvironment({ versions: ['1.0.0', '1.0.1'], tags: [] });
+    const attestationsFor = environment.attestations;
+    environment.attestations = (version) =>
+      version === '1.0.0' ? Promise.reject(new Error('HTTP 503')) : attestationsFor(version);
+    const report = await tagPublishedVersions(environment, { repository, dryRun: false });
+    expect(created.map((release) => release.tag)).toEqual(['v1.0.1']);
+    expect(report.exitCode).toBe(1);
+    expect(report.lines[0]).toBe('skipped v1.0.0: could not check: HTTP 503');
   });
 
   it('creates nothing on a second run', async () => {
