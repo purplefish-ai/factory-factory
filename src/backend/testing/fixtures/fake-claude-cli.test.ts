@@ -59,7 +59,10 @@ function sandboxEnv(extra: Record<string, string> = {}) {
     log: join(dir, 'claude-calls.log'),
     env: {
       PATH: process.env.PATH ?? '',
+      // os.tmpdir() reads TMPDIR on POSIX and TEMP or TMP on Windows.
       TMPDIR: tmpdir(),
+      TEMP: tmpdir(),
+      TMP: tmpdir(),
       CLAUDE_CONFIG_DIR: join(dir, 'claude-config'),
       FF_SANDBOX_CLAUDE_LOG: join(dir, 'claude-calls.log'),
       ...extra,
@@ -182,16 +185,27 @@ describe('the command line', () => {
 
   it('refuses to run unless the config directory and call log are in the temp directory', async () => {
     const { env } = sandboxEnv();
+    const outsideLog = join(homedir(), `ff-fake-claude-refused-${process.pid}-${Date.now()}.log`);
     for (const unsafe of [
       { CLAUDE_CONFIG_DIR: '' },
       { CLAUDE_CONFIG_DIR: join(homedir(), '.claude') },
-      { FF_SANDBOX_CLAUDE_LOG: join(homedir(), 'claude-calls.log') },
+      { FF_SANDBOX_CLAUDE_LOG: outsideLog },
     ]) {
       await expect(
         run(process.execPath, [fakePath, '--version'], { env: { ...env, ...unsafe } })
       ).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('fake Claude CLI') });
     }
-    expect(existsSync(join(homedir(), 'claude-calls.log'))).toBe(false);
+    expect(existsSync(outsideLog)).toBe(false);
+    // A file not made yet directly in the temp directory is inside it.
+    const direct = join(tmpdir(), `ff-fake-claude-direct-${process.pid}-${Date.now()}.log`);
+    try {
+      await run(process.execPath, [fakePath, '--version'], {
+        env: { ...env, FF_SANDBOX_CLAUDE_LOG: direct },
+      });
+      expect(existsSync(direct)).toBe(true);
+    } finally {
+      rmSync(direct, { force: true });
+    }
   });
 
   it('fails other command lines and a resume at once', async () => {

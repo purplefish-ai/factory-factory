@@ -68,6 +68,8 @@ async function playScenario(prompt: string, optionId = 'allow-once') {
     childProcessEnvProvider: () => ({
       PATH: process.env.PATH,
       TMPDIR: tmpdir(),
+      TEMP: tmpdir(),
+      TMP: tmpdir(),
       HOME: home.home,
       CLAUDE_CONFIG_DIR: join(home.dir, 'claude-config'),
       CLAUDE_CODE_EXECUTABLE: home.fake,

@@ -47,20 +47,24 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const CLI_VERSION = '2.1.312';
 const scenarioToken = /\bff-scenario:([a-z][a-z-]*)(?::([\w-]+))?/;
 
-/** True when `path` (or, for a file not made yet, its directory) is inside the OS temp dir. */
+/** True when `path`, or where it would be made, is strictly inside the OS temp dir. */
 function insideTempDir(path) {
-  let target = path;
-  while (!existsSync(target) && dirname(target) !== target) {
-    target = dirname(target);
+  // The real path of the nearest existing ancestor, with the parts not made yet appended.
+  let existing = resolve(path);
+  const missing = [];
+  while (!existsSync(existing) && dirname(existing) !== existing) {
+    missing.unshift(basename(existing));
+    existing = dirname(existing);
   }
   try {
-    const rel = relative(realpathSync(tmpdir()), realpathSync(target));
+    const target = join(realpathSync(existing), ...missing);
+    const rel = relative(realpathSync(tmpdir()), target);
     return rel !== '' && !isAbsolute(rel) && rel.split(sep)[0] !== '..';
   } catch {
     return false;

@@ -78,7 +78,9 @@ here directly.
   adapter reads it for its sessions and its `--cli` passthrough, and the direct
   SDK queries (plan usage here, disposable inference in `../inference/`) pass it
   as `pathToClaudeCodeExecutable`. `claude-plan-usage-loader.test.ts`,
-  `../metadata/workspace-metadata-generator.test.ts`.
+  `../metadata/workspace-metadata-generator.test.ts`,
+  `fake-claude-scenarios.integration.test.ts`, and `scripts/sandbox/env.test.ts`
+  for the `--cli` passthrough.
 - A catalog loader or the probe reports its child drained only on the child's
   `close` (its pipes closed), the probe also only after its ACP connection
   closes, whatever happened to the caller.
