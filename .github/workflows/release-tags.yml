@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       backlog:
-        description: 'Versions up to 0.5.14: none lists them, tags creates only tags (no notifications), releases creates tags and Releases'
+        description: 'Versions up to 0.5.14: none lists them; tags creates only the missing tags (no notifications); releases creates a Release for every one without, including old versions that already have tags'
         required: false
         default: none
         type: choice
@@ -35,7 +35,8 @@ concurrency:
 jobs:
   tag:
     name: Tag and release published versions
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # Forks with schedules enabled skip this rather than fail every six hours.
+    if: ${{ github.repository == 'purplefish-ai/factory-factory' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Creating a release creates its tag. Releases created with the workflow

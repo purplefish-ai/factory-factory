@@ -1,23 +1,27 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BACKLOG_CUTOFF,
   type Backlog,
   gitEnvironment,
+  mayCreate,
   provenanceSource,
   publishedVersions,
   type ReleaseEnvironment,
   type ReleaseRequest,
   releaseBody,
+  releaseRequestBody,
   tagPublishedVersions,
 } from './tag-npm-releases';
 
 const repository = 'purplefish-ai/factory-factory';
 // A distinct, valid 40-character commit for each test version.
 const commitFor = (version: string) => version.replaceAll('.', '').padStart(40, 'c');
+// A distinct staging run for each test version.
+const runFor = (version: string) => `9${version.replaceAll('.', '')}`;
 
 function statement(version: string, overrides: { commit?: string; run?: string } = {}) {
   return {
@@ -236,6 +240,8 @@ function fakeEnvironment(options: {
   manifestVersion?: Record<string, string>;
   unverified?: string[];
   latest?: string;
+  /** Overrides of a version's staging run as GitHub reports it; null when it is gone. */
+  runs?: Record<string, Record<string, unknown> | null>;
 }) {
   const created: ReleaseRequest[] = [];
   const tagged: [string, string][] = [];
@@ -252,8 +258,27 @@ function fakeEnvironment(options: {
       }),
     attestations: (version) =>
       Promise.resolve(
-        options.withoutAttestation?.includes(version) ? null : attestations(statement(version))
+        options.withoutAttestation?.includes(version)
+          ? null
+          : attestations(statement(version, { run: runFor(version) }))
       ),
+    stagingRun: (runId) => {
+      const version = options.versions.find((candidate) => runFor(candidate) === runId);
+      const override = version === undefined ? null : options.runs?.[version];
+      return Promise.resolve(
+        version === undefined || override === null
+          ? null
+          : {
+              id: Number(runId),
+              path: '.github/workflows/npm-publish.yml',
+              event: 'workflow_dispatch',
+              head_branch: 'main',
+              conclusion: 'success',
+              head_sha: commitFor(version),
+              ...override,
+            }
+      );
+    },
     remoteTags: () => new Map(tags),
     releasedTags: () => new Set(released),
     mainHead: () => 'f'.repeat(40),
@@ -312,9 +337,9 @@ describe('tagging published versions', () => {
     ]);
     // The published bytes are verified against the commit and run the provenance names.
     expect(verified).toEqual([
-      ['1.0.1', commitFor('1.0.1'), '42'],
-      ['1.0.2', commitFor('1.0.2'), '42'],
-      ['1.0.10', commitFor('1.0.10'), '42'],
+      ['1.0.1', commitFor('1.0.1'), runFor('1.0.1')],
+      ['1.0.2', commitFor('1.0.2'), runFor('1.0.2')],
+      ['1.0.10', commitFor('1.0.10'), runFor('1.0.10')],
     ]);
     expect(created[1]?.body).toBe(
       `- Two\n\nPublished to npm as factory-factory@1.0.2, built from ${commitFor('1.0.2')}.`
@@ -368,6 +393,7 @@ describe('tagging published versions', () => {
       'mode: backlog none, dry run',
       `would release v1.0.0 at ${commitFor('1.0.0')}`,
       `would release v1.0.1 at ${commitFor('1.0.1')} (latest)`,
+      'would create 2 Releases and 2 tags',
     ]);
   });
 
@@ -389,6 +415,35 @@ describe('tagging published versions', () => {
       `skipped v1.0.2: commit ${commitFor('1.0.2')} is not reachable from main`,
       `skipped v1.0.3: package.json at ${commitFor('1.0.3')} is version 1.0.2`,
       'skipped v1.0.4: Published npm package differs from the staged tarball',
+    ]);
+  });
+
+  it('skips a version whose staging run GitHub does not confirm', async () => {
+    const versions = ['1.0.0', '1.0.1', '1.0.2', '1.0.3', '1.0.4', '1.0.5', '1.0.6', '1.0.7'];
+    const { environment, created, verified } = fakeEnvironment({
+      versions,
+      runs: {
+        '1.0.0': { head_sha: commitFor('1.0.7') },
+        '1.0.1': { conclusion: 'cancelled' },
+        '1.0.2': { event: 'push' },
+        '1.0.3': { head_branch: 'feature' },
+        '1.0.4': { path: '.github/workflows/other.yml' },
+        '1.0.5': null,
+        '1.0.6': { head_sha: 42 },
+      },
+    });
+    const report = await run(environment);
+    expect(created.map((release) => release.tag)).toEqual(['v1.0.7']);
+    expect(verified.map(([version]) => version)).toEqual(['1.0.7']);
+    expect(report.exitCode).toBe(1);
+    expect(report.lines.filter((line) => line.startsWith('skipped'))).toEqual([
+      `skipped v1.0.0: staging run ${runFor('1.0.0')} built ${commitFor('1.0.7')}, not ${commitFor('1.0.0')}`,
+      `skipped v1.0.1: staging run ${runFor('1.0.1')} concluded cancelled, not success`,
+      `skipped v1.0.2: staging run ${runFor('1.0.2')} was started by push, not workflow_dispatch`,
+      `skipped v1.0.3: staging run ${runFor('1.0.3')} ran on feature, not main`,
+      `skipped v1.0.4: staging run ${runFor('1.0.4')} ran .github/workflows/other.yml`,
+      `skipped v1.0.5: staging run ${runFor('1.0.5')} is not on GitHub`,
+      `skipped v1.0.6: staging run ${runFor('1.0.6')} is unreadable`,
     ]);
   });
 
@@ -509,14 +564,63 @@ describe('the backlog', () => {
   );
 
   it.each([
-    ['tags', 'would tag v0.5.14 at'],
-    ['releases', 'would release v0.5.14 at'],
-  ] as const)('names %s mode in a dry run', async (backlog, action) => {
-    const { environment, created, tagged } = fakeEnvironment({ versions: ['0.5.14'] });
-    const report = await run(environment, backlog, true);
-    expect(report.lines[0]).toBe(`mode: backlog ${backlog}, dry run`);
-    expect(report.lines[1]).toContain(action);
-    expect([created, tagged]).toEqual([[], []]);
+    ['tags', 'would tag v0.5.14 at', 'would create 0 Releases and 1 tags'],
+    ['releases', 'would release v0.5.14 at', 'would create 2 Releases and 1 tags'],
+  ] as const)(
+    'names %s mode and counts what it would create in a dry run',
+    async (backlog, action, count) => {
+      // v0.5.13 is already tagged at its commit, without a Release.
+      const { environment, created, tagged } = fakeEnvironment({
+        versions: ['0.5.13', '0.5.14'],
+        tags: { 'v0.5.13': commitFor('0.5.13') },
+      });
+      const report = await run(environment, backlog, true);
+      expect(report.lines[0]).toBe(`mode: backlog ${backlog}, dry run`);
+      expect(report.lines.some((line) => line.startsWith(action))).toBe(true);
+      expect(report.lines.at(-1)).toBe(count);
+      expect([created, tagged]).toEqual([[], []]);
+    }
+  );
+});
+
+describe('creating on GitHub', () => {
+  const release = {
+    tag: 'v1.2.3',
+    commit: 'a'.repeat(40),
+    name: 'v1.2.3',
+    body: 'Notes',
+    latest: false,
+  };
+
+  it('sends make_latest as the string false for every Release but the npm latest', () => {
+    // GitHub marks a new release latest when make_latest is absent.
+    expect(releaseRequestBody(release)).toEqual({
+      tag_name: 'v1.2.3',
+      target_commitish: 'a'.repeat(40),
+      name: 'v1.2.3',
+      body: 'Notes',
+      draft: false,
+      prerelease: false,
+      make_latest: 'false',
+    });
+    expect(releaseRequestBody({ ...release, latest: true }).make_latest).toBe('true');
+  });
+
+  it('refuses to create anything outside GitHub Actions without the named override', () => {
+    const script = resolve('scripts/tag-npm-releases.ts');
+    const environment = { ...process.env, GITHUB_ACTIONS: '' };
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', script, '--repository', 'owner/name', '--backlog', 'releases'],
+      { encoding: 'utf8', env: environment }
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('refusing to create tags or Releases outside GitHub Actions');
+    expect(mayCreate({ dryRun: true, inActions: false, override: false })).toBe(true);
+    expect(mayCreate({ dryRun: false, inActions: true, override: false })).toBe(true);
+    expect(mayCreate({ dryRun: false, inActions: false, override: true })).toBe(true);
+    expect(mayCreate({ dryRun: false, inActions: false, override: false })).toBe(false);
   });
 });
 

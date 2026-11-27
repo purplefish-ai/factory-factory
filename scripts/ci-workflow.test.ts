@@ -520,14 +520,15 @@ describe('npm release tagging workflow', () => {
   const actionName = (uses: string | undefined) => uses?.split('@')[0];
   const tagStep = steps.find((step) => step.run?.includes('scripts/tag-npm-releases.ts'));
 
-  it('runs every six hours and on demand, one run at a time, only from main', () => {
+  it('runs every six hours and on demand, one run at a time, only from main of this repository', () => {
     expect(Object.keys(workflow.on).toSorted()).toEqual(['schedule', 'workflow_dispatch']);
     expect(z.array(z.object({ cron: z.string() })).parse(workflow.on.schedule)).toEqual([
       { cron: '41 */6 * * *' },
     ]);
     expect(workflow.concurrency['cancel-in-progress']).toBe(false);
+    // A fork with schedules enabled skips the job instead of failing it.
     expect(Object.values(workflow.jobs).map((job) => job.if)).toEqual([
-      "${{ github.ref == 'refs/heads/main' }}",
+      "${{ github.repository == 'purplefish-ai/factory-factory' && github.ref == 'refs/heads/main' }}",
     ]);
   });
 

@@ -7,14 +7,21 @@
  * Release. Older versions are the backlog, handled only when a maintainer asks with
  * `--backlog tags` (tags alone, which notify nobody) or `--backlog releases`.
  *
- * Published versions carry no `gitHead`; the commit each was built from is read from its
- * npm provenance attestation, which must name this repository's publish workflow on
- * `main`. The commit must exist here, be reachable from `main` and declare that version,
- * and `scripts/verify-npm-release.sh` must accept the published tarball, before anything
- * is created. Anything else is reported and skipped, never guessed.
+ * Versions from 0.4.7 on carry no `gitHead`, so the commit each was built from is read
+ * from its npm provenance attestation, which must name this repository's publish workflow
+ * on `main`. Before anything is created, the commit must exist here, be reachable from
+ * `main` and declare that version; GitHub must confirm the staging run the provenance
+ * names (the publish workflow, dispatched on `main`, successful, at that commit); and
+ * `scripts/verify-npm-release.sh` must accept the published tarball. Anything else is
+ * reported and skipped, never guessed.
  *
  * Usage: tsx scripts/tag-npm-releases.ts --repository <owner/name>
  *          [--backlog none|tags|releases] [--dry-run]
+ *
+ * Without --dry-run it refuses to run outside GitHub Actions: only the workflow token
+ * creates Releases that start no other workflow, and a personal `gh` login would start
+ * `npm-publish.yml` for each Release. --outside-actions-starts-release-workflows
+ * overrides that, for someone who means it.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -70,6 +77,8 @@ export interface ReleaseEnvironment {
   isAncestor(commit: string, head: string): boolean;
   /** `package.json` at a commit, or null when it has none. */
   packageJsonAt(commit: string): string | null;
+  /** The GitHub Actions run as GitHub reports it, or null when GitHub has no such run. */
+  stagingRun(runId: string): Promise<unknown>;
   verifyPublished(version: string, commit: string, runId: string): Promise<Outcome>;
   /** Creates a tag alone; a tag notifies nobody. */
   createTag(tag: string, commit: string): void;
@@ -355,7 +364,17 @@ export async function tagPublishedVersions(
     });
   }
   const created = await createAll(environment, creations, options.dryRun, lines);
+  if (options.dryRun) {
+    lines.push(countLine(creations));
+  }
   return { exitCode: skipped === 0 && created ? 0 : 1, lines };
+}
+
+/** How many Releases and new tags a run would create; a Release creates its missing tag. */
+function countLine(creations: Creation[]): string {
+  const releases = creations.filter((creation) => creation.kind === 'release').length;
+  const tags = creations.filter((creation) => !creation.existingTag).length;
+  return `would create ${releases} Releases and ${tags} tags`;
 }
 
 /**
@@ -389,10 +408,54 @@ async function checkVersion(
     return source;
   }
   const checked = checkCommit(environment, version, source.commit, head, repository);
-  const verified = checked.ok
-    ? await environment.verifyPublished(version, source.commit, source.runId)
+  const confirmed = checked.ok
+    ? checkStagingRun(await environment.stagingRun(source.runId), source.runId, source.commit)
     : checked;
+  const verified = confirmed.ok
+    ? await environment.verifyPublished(version, source.commit, source.runId)
+    : confirmed;
   return verified.ok ? source : verified;
+}
+
+const runSchema = z.object({
+  path: z.string(),
+  event: z.string(),
+  head_branch: z.string().nullable(),
+  conclusion: z.string().nullable(),
+  head_sha: z.string(),
+});
+
+/**
+ * GitHub's own record of the staging run named by the provenance: the publish workflow,
+ * dispatched on `main`, successful, at the provenance commit. This is the one check that
+ * does not rest on what the npm registry returns.
+ */
+export function checkStagingRun(document: unknown, runId: string, commit: string): Outcome {
+  const prefix = `staging run ${runId}`;
+  if (document === null) {
+    return { ok: false, reason: `${prefix} is not on GitHub` };
+  }
+  const parsed = runSchema.safeParse(document);
+  if (!parsed.success) {
+    return { ok: false, reason: `${prefix} is unreadable` };
+  }
+  const run = parsed.data;
+  if (run.path !== PUBLISH_WORKFLOW) {
+    return { ok: false, reason: `${prefix} ran ${run.path}` };
+  }
+  if (run.event !== 'workflow_dispatch') {
+    return { ok: false, reason: `${prefix} was started by ${run.event}, not workflow_dispatch` };
+  }
+  if (run.head_branch !== 'main') {
+    return { ok: false, reason: `${prefix} ran on ${run.head_branch ?? 'no branch'}, not main` };
+  }
+  if (run.conclusion !== 'success') {
+    return { ok: false, reason: `${prefix} concluded ${run.conclusion ?? 'nothing'}, not success` };
+  }
+  if (run.head_sha !== commit) {
+    return { ok: false, reason: `${prefix} built ${run.head_sha}, not ${commit}` };
+  }
+  return { ok: true };
 }
 
 function summarize({ kind, release, existingTag }: Creation): string {
@@ -526,12 +589,57 @@ async function registryJson(url: string): Promise<unknown> {
   return response.json();
 }
 
+/** The body of `POST /repos/{repository}/releases`. */
+export function releaseRequestBody(release: ReleaseRequest) {
+  return {
+    tag_name: release.tag,
+    // GitHub creates a missing tag at this commit; an existing tag is used as is, and
+    // was checked to point at this commit.
+    target_commitish: release.commit,
+    name: release.name,
+    body: release.body,
+    draft: false,
+    prerelease: false,
+    // GitHub marks a new release latest unless told otherwise, as the string 'false'.
+    make_latest: release.latest ? 'true' : 'false',
+  };
+}
+
+/**
+ * GitHub's record of a run. It tries the workflow token, then the public API, because
+ * run records of a public repository are public and the job does not ask for
+ * `actions: read`.
+ */
+async function readStagingRun(root: string, repository: string, runId: string): Promise<unknown> {
+  const path = `repos/${repository}/actions/runs/${runId}`;
+  const viaToken = spawnSync('gh', ['api', path], { cwd: root, encoding: 'utf8' });
+  if (viaToken.status === 0) {
+    const parsed: unknown = JSON.parse(viaToken.stdout);
+    return parsed;
+  }
+  const response = await fetch(`https://api.github.com/${path}`, {
+    headers: {
+      accept: 'application/vnd.github+json',
+      'user-agent': 'factory-factory-release-tags',
+    },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`${path} returned HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
 function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
   return {
     ...gitEnvironment(root),
     packument: () => registryJson(`${REGISTRY}/${PACKAGE}`),
     attestations: (version) =>
       registryJson(`${REGISTRY}/-/npm/v1/attestations/${PACKAGE}@${version}`),
+    stagingRun: (runId) => readStagingRun(root, repository, runId),
     verifyPublished: async (version, commit, runId) => {
       const directory = mkdtempSync(join(tmpdir(), 'ff-release-'));
       try {
@@ -589,17 +697,7 @@ function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
         ['api', '--method', 'POST', `repos/${repository}/releases`, '--input', '-'],
         {
           cwd: root,
-          input: JSON.stringify({
-            tag_name: release.tag,
-            // GitHub creates a missing tag at this commit; an existing tag is used as is,
-            // and was checked to point at this commit.
-            target_commitish: release.commit,
-            name: release.name,
-            body: release.body,
-            draft: false,
-            prerelease: false,
-            make_latest: release.latest ? 'true' : 'false',
-          }),
+          input: JSON.stringify(releaseRequestBody(release)),
           stdio: ['pipe', 'ignore', 'pipe'],
         }
       );
@@ -609,12 +707,23 @@ function liveEnvironment(root: string, repository: string): ReleaseEnvironment {
   };
 }
 
+const OUTSIDE_ACTIONS_OVERRIDE = 'outside-actions-starts-release-workflows';
+
+/**
+ * Only the workflow token creates Releases that start no other workflow. Anywhere else, a
+ * personal `gh` login would start `npm-publish.yml` for every Release created.
+ */
+export function mayCreate(run: { dryRun: boolean; inActions: boolean; override: boolean }) {
+  return run.dryRun || run.inActions || run.override;
+}
+
 async function main(): Promise<number> {
   const { values } = parseArgs({
     options: {
       repository: { type: 'string' },
       backlog: { type: 'string', default: 'none' },
       'dry-run': { type: 'boolean', default: false },
+      [OUTSIDE_ACTIONS_OVERRIDE]: { type: 'boolean', default: false },
     },
   });
   const repository = z
@@ -622,6 +731,17 @@ async function main(): Promise<number> {
     .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/)
     .parse(values.repository);
   const backlog = z.enum(BACKLOG_MODES).parse(values.backlog);
+  if (
+    !mayCreate({
+      dryRun: values['dry-run'],
+      inActions: process.env.GITHUB_ACTIONS === 'true',
+      override: values[OUTSIDE_ACTIONS_OVERRIDE],
+    })
+  ) {
+    throw new Error(
+      `refusing to create tags or Releases outside GitHub Actions: with a personal gh login each Release starts npm-publish.yml. Use --dry-run, or --${OUTSIDE_ACTIONS_OVERRIDE} if that is intended.`
+    );
+  }
   const root = git(process.cwd(), ['rev-parse', '--show-toplevel']).trim();
   const report = await tagPublishedVersions(liveEnvironment(root, repository), {
     repository,
