@@ -325,6 +325,15 @@ it('a restarted client replays a recorded command with its output', async () => 
       title: 'cat README.md',
     })
   );
+  // The adapter's own shape for a replayed command's output; only its text is checked here.
+  const commandUpdates = replayed.filter(
+    (update) =>
+      (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') &&
+      update.toolCallId === 'tool-call-command'
+  );
+  expect(JSON.stringify(commandUpdates)).toContain(
+    JSON.stringify('Scripted README.md contents from the fake provider.\n').slice(1, -1)
+  );
   expect(textOf(replayed, 'agent_message_chunk')).toEqual([
     'I ran cat README.md; it printed one line of scripted text.',
   ]);
