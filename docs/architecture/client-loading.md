@@ -192,19 +192,17 @@ Unmatched URLs render `routes/not-found.tsx` inside the shell; the root route's
 
 ## Live connection
 
-Every WebSocket goes through `useWebSocketTransport`
-(`src/hooks/use-websocket-transport.ts`). It never stops retrying, with the
-delay capped by `getReconnectDelay`, and it drops a connection that stops
-answering its pings. The frames it shares with the server, a version hello and a
-ping and pong, are defined in `src/shared/websocket-transport.ts`, whose header
-says how each side stays compatible with the previous release; channel schemas
-never see them.
+The app's server channels (`/chat`, `/snapshots`, the terminals, logs and voice)
+go through `useWebSocketTransport`, which never stops retrying. The version
+hello and the ping and pong it shares with the server are defined in
+`src/shared/websocket-transport.ts`: a server sends them only to a client that
+opts in, and a client pings only after a hello, so neither side sends a peer
+from the previous release a frame it does not know. Channel schemas never see
+them.
 
-The shell's `ConnectionBanner` shows "Reconnecting…" while `/snapshots`, or
-`/chat` with a chat open, is retrying, and "Reload to update" when the server's
-version differs from the bundle's. It never reloads by itself. A transport joins
-the banner with `announceConnectionLoss`; channels with their own disconnect UI,
-such as the terminals, do not.
+`ConnectionBanner` in the shell never reloads by itself; the user may be typing.
+A channel joins it with `announceConnectionLoss` only when every page depends on
+it; channels with their own disconnect UI, such as the terminals, do not.
 
 ## Pending controls
 

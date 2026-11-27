@@ -111,6 +111,11 @@ describe('SetupTerminalModal', () => {
     await render();
 
     expect(document.body.textContent).toContain('Connecting…');
+    const signIns = [...document.querySelectorAll('button')].filter((button) =>
+      /Sign in to (Claude|Codex)/.test(button.textContent ?? '')
+    );
+    expect(signIns).toHaveLength(2);
+    expect(signIns.every((button) => button.disabled)).toBe(true);
     // The transport never stops retrying, so there is no manual retry.
     expect(findRetryButton()).toBeNull();
   });

@@ -26,11 +26,15 @@ function Snapshots() {
   return null;
 }
 
+// Roots still mounted, so a failed assertion cannot leak a live transport.
+const mounted = new Set<ReturnType<typeof createRoot>>();
+
 async function renderApp(clientVersion: string, onReload: () => void) {
   const store = new ConnectionHealthStore();
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  mounted.add(root);
   const tree: ReactNode = createElement(
     ConnectionHealthContext.Provider,
     { value: store },
@@ -43,7 +47,11 @@ async function renderApp(clientVersion: string, onReload: () => void) {
   });
   return {
     container,
-    unmount: () => act(() => root.unmount()),
+    unmount: () =>
+      act(() => {
+        mounted.delete(root);
+        root.unmount();
+      }),
   };
 }
 
@@ -62,6 +70,10 @@ describe('ConnectionBanner', () => {
   });
 
   afterEach(() => {
+    for (const root of mounted) {
+      act(() => root.unmount());
+    }
+    mounted.clear();
     vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllGlobals();

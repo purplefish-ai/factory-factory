@@ -20,7 +20,10 @@ export type ChannelConnectionState = 'connecting' | 'connected' | 'reconnecting'
 export interface ConnectionHealth {
   /** At least one announced channel is reconnecting. */
   reconnecting: boolean;
-  /** The version the server last reported in a hello; null before any, or from an older server. */
+  /**
+   * The version the server last reported in a hello; null until one arrives.
+   * An older server sends none, so the last reported version is kept.
+   */
   serverVersion: string | null;
 }
 

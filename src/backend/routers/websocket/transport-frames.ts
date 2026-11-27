@@ -10,25 +10,34 @@ import {
 
 /** Longest ping frame the server inspects; a real one is about 30 bytes. */
 const MAX_PING_FRAME_BYTES = 64;
+const PING_PREFIX_BYTES = Buffer.from(TRANSPORT_PING_PREFIX, 'utf8');
 
 /** Whether the client asked for transport frames in its upgrade URL. */
 export function wantsTransportFrames(url: URL): boolean {
   return url.searchParams.get(TRANSPORT_QUERY_PARAM) === TRANSPORT_PROTOCOL;
 }
 
-function readPing(data: unknown, isBinary: unknown): number | null {
-  if (isBinary === true || !Buffer.isBuffer(data) || data.length > MAX_PING_FRAME_BYTES) {
+/**
+ * `null` when the frame belongs to the channel; otherwise the ping's id, or
+ * `'malformed'` for a frame with the ping prefix that does not parse, which is
+ * dropped so that no channel handler sees a transport frame.
+ */
+function readPing(data: unknown, isBinary: unknown): number | 'malformed' | null {
+  if (isBinary === true || !Buffer.isBuffer(data)) {
     return null;
   }
-  const text = data.toString('utf8');
-  if (!text.startsWith(TRANSPORT_PING_PREFIX)) {
+  // A channel frame is never mistaken for one: none has the transport key.
+  if (!data.subarray(0, TRANSPORT_PING_PREFIX.length).equals(PING_PREFIX_BYTES)) {
     return null;
+  }
+  if (data.length > MAX_PING_FRAME_BYTES) {
+    return 'malformed';
   }
   try {
-    const ping = TransportPingSchema.safeParse(JSON.parse(text));
-    return ping.success ? ping.data.id : null;
+    const ping = TransportPingSchema.safeParse(JSON.parse(data.toString('utf8')));
+    return ping.success ? ping.data.id : 'malformed';
   } catch {
-    return null;
+    return 'malformed';
   }
 }
 
@@ -46,7 +55,7 @@ export function acceptTransportFrames(ws: WebSocket, serverVersion: string): voi
     if (event === 'message') {
       const id = readPing(args[0], args[1]);
       if (id !== null) {
-        if (ws.readyState === ws.OPEN) {
+        if (id !== 'malformed' && ws.readyState === ws.OPEN) {
           const pong: TransportPong = { ffTransport: 'pong', id };
           ws.send(JSON.stringify(pong));
         }

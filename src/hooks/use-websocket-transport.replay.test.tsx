@@ -4,8 +4,10 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RECONNECT_BASE_DELAY_MS } from '@/lib/websocket-config';
 import type { UseWebSocketTransportReturn } from './use-websocket-transport';
 import { useWebSocketTransport } from './use-websocket-transport';
+import { LIVENESS_PING_INTERVAL_MS, LIVENESS_REPLY_TIMEOUT_MS } from './websocket-liveness';
 
 const WS_CONNECTING = 0;
 const WS_OPEN = 1;
@@ -477,9 +479,9 @@ describe('useWebSocketTransport replay queue', () => {
     });
     // The ping goes unanswered, so the transport abandons the socket and
     // reconnects to the same URL after the first backoff delay.
-    await vi.advanceTimersByTimeAsync(8000);
+    await vi.advanceTimersByTimeAsync(LIVENESS_PING_INTERVAL_MS + LIVENESS_REPLY_TIMEOUT_MS);
     expect(close).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(RECONNECT_BASE_DELAY_MS);
     const current = getLastSocket();
     expect(current).not.toBe(retired);
     flushSync(() => current.simulateOpen());

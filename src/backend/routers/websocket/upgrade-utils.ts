@@ -126,19 +126,6 @@ export interface WebSocketUpgradeOpenContext<TAuth, TParam extends string = neve
   auth: TAuth;
 }
 
-/**
- * Build a WebSocket upgrade handler with the preamble shared by every
- * channel: origin validation, trusted-local validation, required query
- * params, an optional authorization hook, then `handleUpgrade` +
- * `markWebSocketAlive` and, for a client that opted in, the transport hello
- * and ping answers (`transport-frames.ts`) before handing the socket to
- * `onOpen`.
- *
- * The `authorize` hook runs after validation and before the upgrade. It may
- * return (or resolve) `null` to reject the upgrade, in which case it is
- * responsible for writing a response to the raw socket; any thrown error is
- * logged and answered with a generic 400.
- */
 function extractRequiredParams<TParam extends string>(
   url: URL,
   requiredParams: readonly TParam[],
@@ -197,6 +184,19 @@ function runAuthorize<TAuth>(
   }
 }
 
+/**
+ * Build a WebSocket upgrade handler with the preamble shared by every
+ * channel: origin validation, trusted-local validation, required query
+ * params, an optional authorization hook, then `handleUpgrade` +
+ * `markWebSocketAlive` and, for a client that opted in, the transport hello
+ * and ping answers (`transport-frames.ts`) before handing the socket to
+ * `onOpen`.
+ *
+ * The `authorize` hook runs after validation and before the upgrade. It may
+ * return (or resolve) `null` to reject the upgrade, in which case it is
+ * responsible for writing a response to the raw socket; any thrown error is
+ * logged and answered with a generic 400.
+ */
 export function createWebSocketUpgradeHandler<
   TAuth = undefined,
   TParam extends string = never,

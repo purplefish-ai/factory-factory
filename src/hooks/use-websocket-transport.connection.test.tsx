@@ -34,7 +34,7 @@ function mount(options: { url?: string; announceConnectionLoss?: boolean } = {})
   const root = createRoot(container);
   const connectedRef = { current: false };
   const onMessage = vi.fn();
-  const render = (url: string | null) =>
+  const render = (url: string | null, announceConnectionLoss = options.announceConnectionLoss) =>
     flushSync(() =>
       root.render(
         createElement(
@@ -42,7 +42,7 @@ function mount(options: { url?: string; announceConnectionLoss?: boolean } = {})
           { value: store },
           createElement(Harness, {
             url,
-            announceConnectionLoss: options.announceConnectionLoss ?? true,
+            announceConnectionLoss: announceConnectionLoss ?? true,
             onMessage,
             connectedRef,
           })
@@ -240,6 +240,20 @@ describe('useWebSocketTransport connection health', () => {
     flushSync(() => lastSocket().drop());
     expect(terminal.store.getSnapshot().reconnecting).toBe(false);
     terminal.unmount();
+  });
+
+  it('publishes or withdraws its current state when the banner opt-in changes', () => {
+    const url = '/chat?sessionId=s1';
+    const view = mount({ url, announceConnectionLoss: false });
+    openWithHello();
+    flushSync(() => lastSocket().drop());
+    expect(view.store.getSnapshot().reconnecting).toBe(false);
+
+    view.render(url, true);
+    expect(view.store.getSnapshot().reconnecting).toBe(true);
+    view.render(url, false);
+    expect(view.store.getSnapshot().reconnecting).toBe(false);
+    view.unmount();
   });
 
   it('withdraws its state when it unmounts', () => {

@@ -221,9 +221,19 @@ export function useWebSocketTransport(
     onMessageRef.current = onMessage;
     onConnectedRef.current = onConnected;
     onDisconnectedRef.current = onDisconnected;
+  }, [onMessage, onConnected, onDisconnected]);
+
+  // Joining or leaving the banner mid-connection publishes or withdraws the
+  // current state, so the banner never keeps a state the channel moved past.
+  useEffect(() => {
     healthRef.current = health;
     announceRef.current = announceConnectionLoss;
-  }, [onMessage, onConnected, onDisconnected, health, announceConnectionLoss]);
+    const state = connectionStateRef.current;
+    if (announceConnectionLoss && state !== null) {
+      health?.setChannelState(channelId, state);
+    }
+    return () => health?.removeChannel(channelId);
+  }, [health, announceConnectionLoss, channelId]);
 
   const reportState = useCallback(
     (state: ChannelConnectionState) => {

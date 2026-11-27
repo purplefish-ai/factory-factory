@@ -76,6 +76,8 @@ describe('transport frames', () => {
     const { ws, frames } = await connect('?ffTransport=1');
 
     ws.send(JSON.stringify({ ffTransport: 'ping', id: 7 }));
+    // Malformed, but still a transport frame: dropped rather than passed on.
+    ws.send('{"ffTransport":"ping","id":"x"}');
     ws.send(JSON.stringify({ type: 'echo', value: 'after the ping' }));
     await waitForWebSocketMessage(ws, 2000, isEcho);
 
@@ -91,9 +93,16 @@ describe('transport frames', () => {
     server = await createStrictChannelServer();
     const { ws, frames } = await connect('');
 
+    const ping = JSON.stringify({ ffTransport: 'ping', id: 7 });
+    ws.send(ping);
     ws.send(JSON.stringify({ type: 'echo', value: 'old client' }));
     await waitForWebSocketMessage(ws, 2000, isEcho);
 
-    expect(frames).toEqual([{ type: 'ready' }, { type: 'echo', value: 'old client' }]);
+    // Without the opt-in a ping is channel data: no hello, no pong.
+    expect(frames).toEqual([
+      { type: 'ready' },
+      { type: 'error', received: ping },
+      { type: 'echo', value: 'old client' },
+    ]);
   });
 });
