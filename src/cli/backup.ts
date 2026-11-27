@@ -228,7 +228,7 @@ async function finishBackup(building: string, directory: string, isDefault: bool
     if (claim) {
       // Only our claim, and only while it is still empty.
       await rmdir(directory).catch(() => undefined);
-    } else if (await lstatIfExists(directory)) {
+    } else if (await lstatIfExists(directory).catch(() => null)) {
       throw new Error(describeExistingDestination(directory, isDefault), { cause: error });
     }
     throw error;
