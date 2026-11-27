@@ -125,11 +125,15 @@ function processEnvironment(pid: number): string {
 }
 
 /** Runs the application's managed Claude runtime once, non-interactively. */
-function runClaude(env: NodeJS.ProcessEnv, cwd: string): Promise<string> {
-  const { command, args } = getBundledClaudeCommand(['-p', 'Reply with OK.']);
+/** The application's managed Claude command (the adapter's `--cli` passthrough) in `env`. */
+function runClaude(env: NodeJS.ProcessEnv, cwd: string, args: string[]): Promise<string> {
+  const { command, args: commandArgs } = getBundledClaudeCommand(args);
   return new Promise((resolve) => {
-    const child = execFile(command, args, { env, cwd, timeout: 150_000 }, (_error, out, err) =>
-      resolve(`${out}${err}`)
+    const child = execFile(
+      command,
+      commandArgs,
+      { env, cwd, timeout: 150_000 },
+      (_error, out, err) => resolve(`${out}${err}`)
     );
     child.stdin?.end();
   });
@@ -332,29 +336,22 @@ describe('a sandbox that calls out', () => {
         env.includes(`ANTHROPIC_BASE_URL=http://127.0.0.1:${other.egressPort}`)
       )
     ).toBe(true);
-    // The application's managed Claude runtime, with exactly the server's
-    // environment, finds no credential, so it has nothing to send ...
+    // Every Claude launch, the managed runtime included, runs the sandbox's fake Claude CLI
+    // (CLAUDE_CODE_EXECUTABLE), never the bundled one: with exactly the server's environment it
+    // answers as the fake, and it logged the server's own launches too.
     const serverEnv = buildServerEnv({
       parentEnv: other.env,
       baseDir: other.baseDir,
       scenario: other.scenario,
       egressPort: other.egressPort,
     });
-    expect(await runClaude(serverEnv, other.repoPath)).toContain('Not logged in');
+    expect(serverEnv.CLAUDE_CODE_EXECUTABLE).toBe(join(other.baseDir, 'bin', 'claude'));
+    expect(await runClaude(serverEnv, other.repoPath, ['--version'])).toBe(
+      '2.1.312 (Claude Code)\n'
+    );
+    const claudeCalls = readFileSync(join(other.baseDir, 'claude-calls.log'), 'utf8');
+    expect(claudeCalls).toContain('"stream-json"');
     expect(egressCalls(other.baseDir)).toEqual([]);
-    // ... and given one (a placeholder), its request is refused locally and recorded.
-    const placeholder = 'sandbox-placeholder-not-a-key';
-    const refused = await runClaude(
-      { ...serverEnv, ANTHROPIC_API_KEY: placeholder },
-      other.repoPath
-    );
-    expect(refused).toContain('403 sandbox: outbound request refused');
-    const calls = egressCalls(other.baseDir);
-    expect(calls.length).toBeGreaterThan(0);
-    expect(new Set(calls)).toEqual(new Set([`POST 127.0.0.1:${other.egressPort}`]));
-    expect(readFileSync(join(other.baseDir, 'egress-calls.log'), 'utf8')).not.toContain(
-      placeholder
-    );
   }, 300_000);
 
   it('--clean after the launcher is killed stops its descendants before removing baseDir', async () => {
