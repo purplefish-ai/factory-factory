@@ -331,6 +331,9 @@ export async function tagPublishedVersions(
   const candidates = wanted(environment, tags, versions, options.backlog, lines);
   if (candidates.length === 0) {
     lines.push('nothing to create');
+    if (options.dryRun) {
+      lines.push(countLine([]));
+    }
     return { exitCode: 0, lines };
   }
   const head = environment.mainHead();

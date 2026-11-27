@@ -563,6 +563,16 @@ describe('the backlog', () => {
     }
   );
 
+  it('ends a dry run with nothing to do with a zero count', async () => {
+    const { environment } = fakeEnvironment({ versions: ['0.5.14'] });
+    expect((await run(environment, 'none', true)).lines).toEqual([
+      'mode: backlog none, dry run',
+      'backlog v0.5.14: not released automatically',
+      'nothing to create',
+      'would create 0 Releases and 0 tags',
+    ]);
+  });
+
   it.each([
     ['tags', 'would tag v0.5.14 at', 'would create 0 Releases and 1 tags'],
     ['releases', 'would release v0.5.14 at', 'would create 2 Releases and 1 tags'],

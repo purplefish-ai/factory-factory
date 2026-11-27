@@ -27,8 +27,9 @@ version's npm-hosted SLSA provenance and checks, against these sources:
   `package.json` declares that version.
 - GitHub Actions: GitHub's own record of the staging run is `npm-publish.yml`,
   started by `workflow_dispatch` on `main`, concluded `success`, at that commit.
-  This is the one check that does not rest on the registry. The job reads it
-  with its token, or from the public API when the token lacks `actions: read`.
+  This is the one check that does not rest on the registry. The job's token has
+  no `actions: read`, so the record normally comes from the public API (run
+  records of a public repository are public); the script tries the token first.
 - npm registry again: `scripts/verify-npm-release.sh` accepts the tarball the
   registry serves. It compares that tarball with the registry's SHA-512
   integrity and the provenance subject, so it shows the registry is consistent
