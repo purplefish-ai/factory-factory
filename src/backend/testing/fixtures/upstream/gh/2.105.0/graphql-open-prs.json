@@ -1,0 +1,44 @@
+{
+  "description": "Open pull requests, for local branch matching.",
+  "args": [
+    "api",
+    "graphql",
+    "-f",
+    "query=\n        query {\n          repository(owner: \"example-owner\", name: \"example-repo\") {\n            pullRequests(\n              states: OPEN\n              first: 100\n              orderBy: { field: CREATED_AT, direction: DESC }\n            ) {\n              pageInfo { hasNextPage endCursor }\n              nodes { number url createdAt headRefName }\n            }\n          }\n        }\n      "
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "data": {
+      "repository": {
+        "pullRequests": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": "fake-cursor-5"
+          },
+          "nodes": [
+            {
+              "number": 3366,
+              "url": "https://github.com/example-owner/example-repo/pull/3366",
+              "createdAt": "2026-01-01T00:28:00Z",
+              "headRefName": "branch-3"
+            },
+            {
+              "number": 3365,
+              "url": "https://github.com/example-owner/example-repo/pull/3365",
+              "createdAt": "2026-01-01T00:27:00Z",
+              "headRefName": "branch-1"
+            },
+            {
+              "number": 3364,
+              "url": "https://github.com/example-owner/example-repo/pull/3364",
+              "createdAt": "2026-01-01T00:26:00Z",
+              "headRefName": "branch-4"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "stderr": ""
+}

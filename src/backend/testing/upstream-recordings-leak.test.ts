@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-// Recordings of the real Claude and Codex tools are published with the
+// Recordings of the real Claude, Codex and gh tools are published with the
 // repository. This test fails when one carries a home directory, an account or
 // machine name, an email address, a token-shaped string or a UUID that is not
 // one of the scrubber's fixed fakes. Failures name the file, line and rule,
@@ -48,6 +48,44 @@ const rules = [
   },
 ];
 
+const FAKE_LOGIN = /^(?:user-\d+|bot-\d+\[bot\]|app\/bot-\d+)$/;
+// The fake repository, and the gh release page `gh --version` prints.
+const GH_REPOSITORY_PATHS = new Set(['example-owner/example-repo', 'cli/cli']);
+const GITHUB_PATH = /github\.com\/(?:repos\/|repositories\/)?([^/\s"<>]+\/[^/\s"<>?#]+)/g;
+
+/** Every string in a parsed JSON value, with the key it sits under. */
+function keyedStrings(value: unknown, key: string): [string, string][] {
+  if (typeof value === 'string') {
+    return [[key, value]];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => keyedStrings(item, key));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.entries(value).flatMap(([childKey, child]) => keyedStrings(child, childKey));
+  }
+  return [];
+}
+
+function ghAccountFindings(key: string, value: string): string[] {
+  const findings: string[] = [];
+  if (key === 'login' && !FAKE_LOGIN.test(value)) {
+    findings.push('login that is not a fake');
+  }
+  for (const [, account = ''] of value.matchAll(/github\.com account (\S+)/g)) {
+    if (!FAKE_LOGIN.test(account)) {
+      findings.push('auth status account that is not a fake');
+    }
+  }
+  for (const [, path = ''] of value.matchAll(GITHUB_PATH)) {
+    // `repositories/<fake id>/issues/events` names the repository by its fake id.
+    if (!(GH_REPOSITORY_PATHS.has(path) || /^\d+\/issues$/.test(path))) {
+      findings.push('repository path that is not the fake one');
+    }
+  }
+  return findings;
+}
+
 function listFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory() ? listFiles(join(directory, entry.name)) : [join(directory, entry.name)]
@@ -57,9 +95,22 @@ function listFiles(directory: string): string[] {
 describe('upstream recordings', () => {
   const files = listFiles(recordingsRoot);
 
-  it('exist for both providers', () => {
+  it('exist for both providers and gh', () => {
     const tools = new Set(files.map((file) => relative(recordingsRoot, file).split(/[\\/]/)[0]));
-    expect([...tools].sort()).toEqual(['claude', 'codex']);
+    expect([...tools].sort()).toEqual(['claude', 'codex', 'gh']);
+  });
+
+  // gh recordings carry pull requests and issues of a public repository: every
+  // account in them must be a scrubber fake and every repository the fake one.
+  it('name only fake accounts and the fake repository in gh recordings', () => {
+    const findings = files
+      .filter((path) => relative(recordingsRoot, path).startsWith('gh'))
+      .flatMap((file) =>
+        keyedStrings(JSON.parse(readFileSync(file, 'utf8')), '').flatMap(([key, value]) =>
+          ghAccountFindings(key, value).map((rule) => `${relative(recordingsRoot, file)} ${rule}`)
+        )
+      );
+    expect(findings).toEqual([]);
   });
 
   it('carry no private values', () => {

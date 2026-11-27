@@ -1,0 +1,50 @@
+{
+  "description": "Open issues for the Kanban board, without bodies (no assignee filter).",
+  "args": [
+    "issue",
+    "list",
+    "--repo",
+    "example-owner/example-repo",
+    "--state",
+    "open",
+    "--json",
+    "number,title,url,createdAt,author",
+    "--limit",
+    "50"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": [
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:31:00Z",
+      "number": 3370,
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/3370"
+    },
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:30:00Z",
+      "number": 3369,
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/3369"
+    },
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:29:00Z",
+      "number": 3368,
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/3368"
+    }
+  ],
+  "stderr": ""
+}

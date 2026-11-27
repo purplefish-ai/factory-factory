@@ -1,0 +1,73 @@
+{
+  "description": "Review threads and the database ids of their comments (merged pull request).",
+  "args": [
+    "api",
+    "graphql",
+    "-f",
+    "query=\n      query {\n        repository(owner: \"example-owner\", name: \"example-repo\") {\n          pullRequest(number: 3349) {\n            reviewThreads(first: 100) {\n              pageInfo { hasNextPage endCursor }\n              nodes {\n                id\n                isResolved\n                comments(first: 100) {\n                  pageInfo { hasNextPage endCursor }\n                  nodes { fullDatabaseId }\n                }\n              }\n            }\n          }\n        }\n      }\n    "
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "reviewThreads": {
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "fake-cursor-2"
+            },
+            "nodes": [
+              {
+                "id": "fake-node-1",
+                "isResolved": true,
+                "comments": {
+                  "pageInfo": {
+                    "hasNextPage": false,
+                    "endCursor": "fake-cursor-1"
+                  },
+                  "nodes": [
+                    {
+                      "fullDatabaseId": "1000019"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "fake-node-9",
+                "isResolved": true,
+                "comments": {
+                  "pageInfo": {
+                    "hasNextPage": false,
+                    "endCursor": "fake-cursor-3"
+                  },
+                  "nodes": [
+                    {
+                      "fullDatabaseId": "1000018"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "fake-node-10",
+                "isResolved": true,
+                "comments": {
+                  "pageInfo": {
+                    "hasNextPage": false,
+                    "endCursor": "fake-cursor-4"
+                  },
+                  "nodes": [
+                    {
+                      "fullDatabaseId": "1000017"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "stderr": ""
+}

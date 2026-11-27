@@ -1,0 +1,76 @@
+{
+  "description": "Review-request search, without the review-requested:@me qualifier (see deviation).",
+  "deviation": "The application searches `is:pr is:open review-requested:@me archived:false repo:<repo>`; the recording drops `review-requested:@me` so it reads no account data. Query, response shape and schema are otherwise the same.",
+  "args": [
+    "api",
+    "graphql",
+    "-f",
+    "query=\n        query {\n          search(query: \"is:pr is:open archived:false repo:example-owner/example-repo\", type: ISSUE, first: 50) {\n            pageInfo {\n              hasNextPage\n              endCursor\n            }\n            nodes {\n              ... on PullRequest {\n                number title url isDraft createdAt\n                author { login }\n                repository { nameWithOwner }\n                reviewDecision\n                additions deletions changedFiles\n              }\n            }\n          }\n        }\n      "
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "data": {
+      "search": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "fake-cursor-6"
+        },
+        "nodes": [
+          {
+            "number": 3366,
+            "title": "<text>",
+            "url": "https://github.com/example-owner/example-repo/pull/3366",
+            "isDraft": false,
+            "createdAt": "2026-01-01T00:28:00Z",
+            "author": {
+              "login": "user-1"
+            },
+            "repository": {
+              "nameWithOwner": "example-owner/example-repo"
+            },
+            "reviewDecision": null,
+            "additions": 55,
+            "deletions": 37,
+            "changedFiles": 2
+          },
+          {
+            "number": 3365,
+            "title": "<text>",
+            "url": "https://github.com/example-owner/example-repo/pull/3365",
+            "isDraft": false,
+            "createdAt": "2026-01-01T00:27:00Z",
+            "author": {
+              "login": "user-1"
+            },
+            "repository": {
+              "nameWithOwner": "example-owner/example-repo"
+            },
+            "reviewDecision": null,
+            "additions": 1644,
+            "deletions": 52,
+            "changedFiles": 24
+          },
+          {
+            "number": 3364,
+            "title": "<text>",
+            "url": "https://github.com/example-owner/example-repo/pull/3364",
+            "isDraft": false,
+            "createdAt": "2026-01-01T00:26:00Z",
+            "author": {
+              "login": "user-1"
+            },
+            "repository": {
+              "nameWithOwner": "example-owner/example-repo"
+            },
+            "reviewDecision": null,
+            "additions": 1681,
+            "deletions": 17,
+            "changedFiles": 12
+          }
+        ]
+      }
+    }
+  },
+  "stderr": ""
+}

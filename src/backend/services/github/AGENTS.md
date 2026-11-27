@@ -72,6 +72,11 @@ review-activity helpers and `classifyGitHubCLIError`.
   the body its REST read receives. The Kanban board polls the list from phones,
   where 50 bodies were about 185 KB a minute. `github-cli-issue-list.test.ts`,
   `service/github-cli/issue-search.test.ts`.
+- Every schema that reads `gh` output parses a scrubbed recording of the real
+  call, which the production code must ask for with the recorded arguments; a
+  new parse site fails until it is mapped to a recording or listed with a
+  reason. Record with `node scripts/record-upstream.mjs gh`.
+  `gh-recordings.test.ts`.
 - A PR refresh writes nothing itself: it runs the injected observation and then
   returns the association's committed fields. `pr-snapshot.service.test.ts`,
   `pr-snapshot-collection.service.test.ts`.

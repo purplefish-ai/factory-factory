@@ -1,0 +1,121 @@
+{
+  "tool": "gh",
+  "version": "2.105.0",
+  "recordedOn": "2026-11-27",
+  "platform": "darwin-arm64",
+  "repository": "This repository, named example-owner/example-repo in every fixture; only public objects were read.",
+  "objects": {
+    "mergedPullRequest": 3349,
+    "openPullRequest": 3365,
+    "issue": 3340,
+    "issueSearch": "agent",
+    "issueEventsPage": 18
+  },
+  "notRecorded": [],
+  "files": {
+    "version.json": {
+      "description": "`gh --version`; the health check reads the version with a regular expression.",
+      "droppedKeys": 0
+    },
+    "auth-status.json": {
+      "description": "`gh auth status`; the health check reads the exit code and the New Project badge the \"Logged in\" line.",
+      "droppedKeys": 0
+    },
+    "api-user-login.json": {
+      "description": "`gh api user --jq .login`: the authenticated login.",
+      "droppedKeys": 0
+    },
+    "pr-view-preview.json": {
+      "description": "Pull request link preview (open pull request).",
+      "droppedKeys": 2
+    },
+    "pr-view-status.json": {
+      "description": "Core monitoring facts (open pull request).",
+      "trimmed": "kept 7 of 19 items",
+      "droppedKeys": 0
+    },
+    "pr-view-observation.json": {
+      "description": "Core facts plus conversation comments (merged pull request).",
+      "trimmed": "kept 5 of 22 items",
+      "droppedKeys": 2
+    },
+    "pr-view-full.json": {
+      "description": "Full pull request details (merged pull request; it has no labels).",
+      "trimmed": "kept 5 of 22 items",
+      "droppedKeys": 4
+    },
+    "pr-view-body.json": {
+      "description": "The pull request description, for adversarial review (merged pull request).",
+      "droppedKeys": 0
+    },
+    "pr-view-head-sha.json": {
+      "description": "The head commit, to anchor a review comment (open pull request).",
+      "droppedKeys": 0
+    },
+    "api-pr-reviews.json": {
+      "description": "REST reviews, every page (merged pull request).",
+      "droppedKeys": 66
+    },
+    "api-pr-review-comments.json": {
+      "description": "REST inline review comments, first page, newest update first (merged pull request).",
+      "trimmed": "kept 3 of 36 items",
+      "droppedKeys": 99
+    },
+    "graphql-review-threads.json": {
+      "description": "Review threads and the database ids of their comments (merged pull request).",
+      "trimmed": "kept 3 of 36 items",
+      "droppedKeys": 0
+    },
+    "graphql-thread-comments.json": {
+      "description": "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: no thread on the pull request has more than 100 comments).",
+      "droppedKeys": 0
+    },
+    "graphql-open-prs.json": {
+      "description": "Open pull requests, for local branch matching.",
+      "trimmed": "kept 3 of 5 items",
+      "droppedKeys": 0
+    },
+    "graphql-review-requests.json": {
+      "description": "Review-request search, without the review-requested:@me qualifier (see deviation).",
+      "trimmed": "kept 3 of 5 items",
+      "droppedKeys": 0
+    },
+    "issue-view-preview.json": {
+      "description": "Issue link preview.",
+      "droppedKeys": 2
+    },
+    "issue-view.json": {
+      "description": "One issue with its body.",
+      "droppedKeys": 2
+    },
+    "issue-list.json": {
+      "description": "Open issues for the Kanban board, without bodies (no assignee filter).",
+      "trimmed": "kept 3 of 33 items",
+      "droppedKeys": 6
+    },
+    "issue-list-search.json": {
+      "description": "Issue text search.",
+      "trimmed": "kept 3 of 19 items",
+      "droppedKeys": 6
+    },
+    "api-issue.json": {
+      "description": "REST issue, for an exact-number issue search.",
+      "droppedKeys": 45
+    },
+    "api-repo.json": {
+      "description": "REST repository, for event-automation sources.",
+      "droppedKeys": 94
+    },
+    "api-repo-labels.json": {
+      "description": "REST repository labels, every page, for event-automation sources.",
+      "trimmed": "kept 5 of 13 items",
+      "droppedKeys": 20
+    },
+    "api-issue-events.json": {
+      "description": "REST issue events, one page with response headers, for event automations (see issueEventsPage in meta.json).",
+      "trimmed": "kept 6 of 100 items",
+      "droppedKeys": 408
+    }
+  },
+  "scrubbing": "Allowlist by call shape and key path (scripts/record-upstream/gh-policies.mjs, treatments in gh-scrub.mjs): unlisted keys and headers are dropped (counted in droppedKeys); free text is \"<text>\"; logins are user-N, bot-N[bot] or app/bot-N; ids, commits, branches and cursors are fixed fakes; timestamps are fakes from 2026-01-01 in their real order; URLs keep github.com path words and pull request and issue numbers, every other number is a fake id and other hosts are example.invalid; auth status keeps only the active account, with a fake login, token and scopes."
+}

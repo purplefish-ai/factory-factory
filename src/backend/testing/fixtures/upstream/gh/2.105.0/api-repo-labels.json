@@ -1,0 +1,46 @@
+{
+  "description": "REST repository labels, every page, for event-automation sources.",
+  "args": ["api", "repos/example-owner/example-repo/labels?per_page=100", "--paginate", "--slurp"],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": [
+    [
+      {
+        "id": 1000022,
+        "name": "bug",
+        "color": "d73a4a",
+        "default": true,
+        "description": "<text>"
+      },
+      {
+        "id": 1000023,
+        "name": "dependencies",
+        "color": "0366d6",
+        "default": false,
+        "description": "<text>"
+      },
+      {
+        "id": 1000024,
+        "name": "documentation",
+        "color": "0075ca",
+        "default": true,
+        "description": "<text>"
+      },
+      {
+        "id": 1000025,
+        "name": "duplicate",
+        "color": "cfd3d7",
+        "default": true,
+        "description": "<text>"
+      },
+      {
+        "id": 1000026,
+        "name": "enhancement",
+        "color": "a2eeef",
+        "default": true,
+        "description": "<text>"
+      }
+    ]
+  ],
+  "stderr": ""
+}

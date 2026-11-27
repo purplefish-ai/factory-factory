@@ -66,6 +66,9 @@
 // created 0700) or be empty and private; the captures hold account details,
 // so delete them when done. `--rescrub <dir>` rewrites the fixtures from kept
 // captures without running any session.
+//
+// `node scripts/record-upstream.mjs gh` records the real `gh` CLI's read-only
+// calls instead; see scripts/record-upstream/gh.mjs.
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -92,6 +95,7 @@ import {
   resolveVersions,
   writeJsonLines,
 } from './record-upstream/environment.mjs';
+import { recordGitHubCli } from './record-upstream/gh.mjs';
 import {
   createScrubContext,
   POLICIES,
@@ -310,6 +314,10 @@ async function record(tool, keepRaw) {
 }
 
 assertSupportedPlatform();
+if (process.argv[2] === 'gh') {
+  recordGitHubCli(process.argv.slice(3), { fixturesRoot: FIXTURES, checkout: checkoutRoot() });
+  process.exit(0);
+}
 const options = parseArguments(process.argv.slice(2));
 if (options.rescrub) {
   if (!existsSync(join(options.rescrub, 'run.json'))) {

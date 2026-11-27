@@ -1,0 +1,8 @@
+{
+  "description": "`gh auth status`; the health check reads the exit code and the New Project badge the \"Logged in\" line.",
+  "args": ["auth", "status"],
+  "exitCode": 0,
+  "stdoutFormat": "text",
+  "stdout": "github.com\n  ✓ Logged in to github.com account user-1 (keyring)\n  - Active account: true\n  - Git operations protocol: https\n  - Token: gho_************************************\n  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'\n\n",
+  "stderr": ""
+}

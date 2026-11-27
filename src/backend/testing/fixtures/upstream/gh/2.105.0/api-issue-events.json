@@ -1,0 +1,227 @@
+{
+  "description": "REST issue events, one page with response headers, for event automations (see issueEventsPage in meta.json).",
+  "args": [
+    "api",
+    "repos/example-owner/example-repo/issues/events?per_page=100&page=18",
+    "--include",
+    "-H",
+    "X-GitHub-Api-Version: 2022-11-28"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "http-json",
+  "stdout": {
+    "head": {
+      "status": "HTTP/2.0 200 OK",
+      "headers": [
+        ["Content-Type", "application/json; charset=utf-8"],
+        [
+          "Link",
+          "<https://api.github.com/repositories/1000021/issues/events?per_page=100&page=17>; rel=\"prev\", <https://api.github.com/repositories/1000021/issues/events?per_page=100&page=19>; rel=\"next\", <https://api.github.com/repositories/1000021/issues/events?per_page=100&page=169>; rel=\"last\", <https://api.github.com/repositories/1000021/issues/events?per_page=100&page=1>; rel=\"first\""
+        ],
+        ["X-Github-Api-Version-Selected", "2022-11-28"]
+      ],
+      "lineEnding": "\r\n"
+    },
+    "body": [
+      {
+        "id": 1000027,
+        "node_id": "fake-node-11",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "referenced",
+        "commit_id": "fake-sha-6",
+        "created_at": "2026-01-01T00:08:00Z",
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/issues/2935",
+          "id": 1000029,
+          "number": 2935,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [
+            {
+              "id": 1000026,
+              "name": "enhancement",
+              "color": "a2eeef",
+              "default": true,
+              "description": "<text>"
+            }
+          ],
+          "state": "closed",
+          "body": "<text>"
+        }
+      },
+      {
+        "id": 1000030,
+        "node_id": "fake-node-12",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "head_ref_force_pushed",
+        "commit_id": "fake-sha-7",
+        "created_at": "2026-01-01T00:07:00Z",
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/pull/2948",
+          "id": 1000031,
+          "number": 2948,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [],
+          "state": "closed",
+          "pull_request": {},
+          "body": "<text>"
+        }
+      },
+      {
+        "id": 1000032,
+        "node_id": "fake-node-13",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "closed",
+        "commit_id": null,
+        "created_at": "2026-01-01T00:06:00Z",
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/issues/2941",
+          "id": 1000033,
+          "number": 2941,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [
+            {
+              "id": 1000022,
+              "name": "bug",
+              "color": "d73a4a",
+              "default": true,
+              "description": "<text>"
+            }
+          ],
+          "state": "closed",
+          "body": "<text>"
+        }
+      },
+      {
+        "id": 1000034,
+        "node_id": "fake-node-14",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "head_ref_deleted",
+        "commit_id": null,
+        "created_at": "2026-01-01T00:05:00Z",
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/pull/2946",
+          "id": 1000035,
+          "number": 2946,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [],
+          "state": "closed",
+          "pull_request": {},
+          "body": "<text>"
+        }
+      },
+      {
+        "id": 1000036,
+        "node_id": "fake-node-15",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "labeled",
+        "commit_id": null,
+        "created_at": "2026-01-01T00:04:00Z",
+        "label": {
+          "name": "bug",
+          "color": "d73a4a"
+        },
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/issues/2941",
+          "id": 1000033,
+          "number": 2941,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [
+            {
+              "id": 1000022,
+              "name": "bug",
+              "color": "d73a4a",
+              "default": true,
+              "description": "<text>"
+            }
+          ],
+          "state": "closed",
+          "body": "<text>"
+        }
+      },
+      {
+        "id": 1000037,
+        "node_id": "fake-node-16",
+        "actor": {
+          "login": "user-1",
+          "id": 1000028,
+          "type": "User"
+        },
+        "event": "labeled",
+        "commit_id": null,
+        "created_at": "2026-01-01T00:03:00Z",
+        "label": {
+          "name": "enhancement",
+          "color": "a2eeef"
+        },
+        "issue": {
+          "html_url": "https://github.com/example-owner/example-repo/issues/2935",
+          "id": 1000029,
+          "number": 2935,
+          "title": "<text>",
+          "user": {
+            "login": "user-1",
+            "id": 1000028,
+            "type": "User"
+          },
+          "labels": [
+            {
+              "id": 1000026,
+              "name": "enhancement",
+              "color": "a2eeef",
+              "default": true,
+              "description": "<text>"
+            }
+          ],
+          "state": "closed",
+          "body": "<text>"
+        }
+      }
+    ]
+  },
+  "stderr": ""
+}

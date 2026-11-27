@@ -1,0 +1,18 @@
+{
+  "description": "The head commit, to anchor a review comment (open pull request).",
+  "args": [
+    "pr",
+    "view",
+    "3365",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "headRefOid",
+    "--jq",
+    ".headRefOid"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "text",
+  "stdout": "fake-sha-1\n",
+  "stderr": ""
+}

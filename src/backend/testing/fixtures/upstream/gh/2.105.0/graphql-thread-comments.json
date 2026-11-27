@@ -1,0 +1,25 @@
+{
+  "description": "The next page of one review thread's comments, after the end cursor of the first recorded thread (an empty page: no thread on the pull request has more than 100 comments).",
+  "args": [
+    "api",
+    "graphql",
+    "-f",
+    "query=\n      query {\n        node(id: \"fake-node-1\") {\n          ... on PullRequestReviewThread {\n            comments(first: 100, after: \"fake-cursor-1\") {\n              pageInfo { hasNextPage endCursor }\n              nodes { fullDatabaseId }\n            }\n          }\n        }\n      }\n    "
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "data": {
+      "node": {
+        "comments": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        }
+      }
+    }
+  },
+  "stderr": ""
+}

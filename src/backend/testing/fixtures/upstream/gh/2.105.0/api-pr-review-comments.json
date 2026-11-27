@@ -1,0 +1,66 @@
+{
+  "description": "REST inline review comments, first page, newest update first (merged pull request).",
+  "args": [
+    "api",
+    "repos/example-owner/example-repo/pulls/3349/comments?per_page=100&page=1&sort=updated&direction=desc"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": [
+    {
+      "pull_request_review_id": 1000014,
+      "id": 1000017,
+      "node_id": "fake-node-6",
+      "path": "<text>",
+      "user": {
+        "login": "bot-3[bot]",
+        "type": "Bot"
+      },
+      "body": "<text>",
+      "created_at": "2026-01-01T00:11:00Z",
+      "updated_at": "2026-01-01T00:12:00Z",
+      "html_url": "https://github.com/example-owner/example-repo/pull/3349#discussion_r1000017",
+      "line": null,
+      "original_line": 116,
+      "side": "RIGHT",
+      "author_association": "CONTRIBUTOR"
+    },
+    {
+      "pull_request_review_id": 1000014,
+      "id": 1000018,
+      "node_id": "fake-node-7",
+      "path": "<text>",
+      "user": {
+        "login": "bot-3[bot]",
+        "type": "Bot"
+      },
+      "body": "<text>",
+      "created_at": "2026-01-01T00:11:00Z",
+      "updated_at": "2026-01-01T00:12:00Z",
+      "html_url": "https://github.com/example-owner/example-repo/pull/3349#discussion_r1000018",
+      "line": 182,
+      "original_line": 175,
+      "side": "RIGHT",
+      "author_association": "CONTRIBUTOR"
+    },
+    {
+      "pull_request_review_id": 1000014,
+      "id": 1000019,
+      "node_id": "fake-node-8",
+      "path": "<text>",
+      "user": {
+        "login": "bot-3[bot]",
+        "type": "Bot"
+      },
+      "body": "<text>",
+      "created_at": "2026-01-01T00:11:00Z",
+      "updated_at": "2026-01-01T00:12:00Z",
+      "html_url": "https://github.com/example-owner/example-repo/pull/3349#discussion_r1000019",
+      "line": null,
+      "original_line": 48,
+      "side": "RIGHT",
+      "author_association": "CONTRIBUTOR"
+    }
+  ],
+  "stderr": "<string>"
+}

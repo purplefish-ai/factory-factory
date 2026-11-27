@@ -1,0 +1,28 @@
+{
+  "description": "Pull request link preview (open pull request).",
+  "args": [
+    "pr",
+    "view",
+    "3365",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "title,state,isDraft,author,createdAt,additions,deletions,changedFiles"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "additions": 1644,
+    "author": {
+      "is_bot": false,
+      "login": "user-1"
+    },
+    "changedFiles": 24,
+    "createdAt": "2026-01-01T00:27:00Z",
+    "deletions": 52,
+    "isDraft": false,
+    "state": "OPEN",
+    "title": "<text>"
+  },
+  "stderr": "<string>"
+}

@@ -1,0 +1,55 @@
+{
+  "description": "Issue text search.",
+  "args": [
+    "issue",
+    "list",
+    "--repo",
+    "example-owner/example-repo",
+    "--state",
+    "open",
+    "--search",
+    "agent",
+    "--limit",
+    "30",
+    "--json",
+    "number,title,url,state,createdAt,author"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": [
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:02:00Z",
+      "number": 2833,
+      "state": "OPEN",
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/2833"
+    },
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:01:00Z",
+      "number": 2772,
+      "state": "OPEN",
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/2772"
+    },
+    {
+      "author": {
+        "is_bot": false,
+        "login": "user-1"
+      },
+      "createdAt": "2026-01-01T00:00:00Z",
+      "number": 2763,
+      "state": "OPEN",
+      "title": "<text>",
+      "url": "https://github.com/example-owner/example-repo/issues/2763"
+    }
+  ],
+  "stderr": ""
+}

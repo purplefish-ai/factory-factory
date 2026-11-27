@@ -1,0 +1,27 @@
+{
+  "description": "One issue with its body.",
+  "args": [
+    "issue",
+    "view",
+    "3340",
+    "--repo",
+    "example-owner/example-repo",
+    "--json",
+    "number,title,body,url,state,createdAt,author"
+  ],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "author": {
+      "is_bot": false,
+      "login": "user-1"
+    },
+    "body": "<text>",
+    "createdAt": "2026-01-01T00:09:00Z",
+    "number": 3340,
+    "state": "OPEN",
+    "title": "<text>",
+    "url": "https://github.com/example-owner/example-repo/issues/3340"
+  },
+  "stderr": ""
+}

@@ -1,0 +1,14 @@
+{
+  "description": "REST repository, for event-automation sources.",
+  "args": ["api", "repos/example-owner/example-repo"],
+  "exitCode": 0,
+  "stdoutFormat": "json",
+  "stdout": {
+    "id": 1000021,
+    "name": "example-repo",
+    "full_name": "example-owner/example-repo",
+    "private": false,
+    "has_issues": true
+  },
+  "stderr": ""
+}
