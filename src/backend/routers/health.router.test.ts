@@ -9,6 +9,7 @@ const mockQueryRaw = vi.fn();
 const mockGetEnvironment = vi.fn();
 const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
+const mockGetRuntimeCombinationReport = vi.fn();
 
 import { createHealthRouter } from './health.router';
 
@@ -35,6 +36,9 @@ describe('healthRouter', () => {
         }),
         rateLimiter: {
           getApiUsageStats: () => mockGetApiUsageStats(),
+        },
+        sessionDomainService: {
+          runtimeCombinations: { counts: () => mockGetRuntimeCombinationReport() },
         },
       },
     });
@@ -182,6 +186,28 @@ describe('healthRouter', () => {
       } finally {
         eventLoopMonitor.stop();
       }
+    });
+
+    it('reports session runtime combination counts without affecting the overall status', async () => {
+      const counts = {
+        combinations: { 'error/alive/WORKING': 1 },
+        transitions: { 'running/alive/WORKING -> error/alive/WORKING': 1 },
+        flagged: [
+          {
+            combination: 'error/alive/WORKING',
+            verdict: 'meaningless',
+            caller: 'markError',
+            count: 1,
+          },
+        ],
+      };
+      mockGetRuntimeCombinationReport.mockReturnValue(counts);
+
+      const response = await request(app).get('/health/all');
+
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe('ok');
+      expect(response.body.sessionRuntimeCombinations).toEqual(counts);
     });
 
     it('returns status degraded when rate limited', async () => {

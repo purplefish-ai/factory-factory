@@ -38,6 +38,29 @@ const TTL_MINUTES = 20;
 const STOPPED_BY_SIGTERM = 143;
 
 const recordSchema = z.object({ pid: z.number() });
+// Reading the session runtime combination counts is informational: it never fails the run.
+const COMBINATIONS_TIMEOUT_MS = 10_000;
+const backendSchema = z.object({ backendUrl: z.url() });
+const healthSchema = z.object({ sessionRuntimeCombinations: z.record(z.string(), z.unknown()) });
+
+/**
+ * Prints the sandbox server's session runtime combination counts to the job output, for the
+ * runtime state redesign decision. Best effort: any failure prints a note and the run goes on.
+ */
+async function printRuntimeCombinations(sandboxJson: string) {
+  try {
+    const { backendUrl } = backendSchema.parse(JSON.parse(readFileSync(sandboxJson, 'utf8')));
+    const response = await fetch(`${backendUrl}/health/all`, {
+      signal: AbortSignal.timeout(COMBINATIONS_TIMEOUT_MS),
+    });
+    const { sessionRuntimeCombinations } = healthSchema.parse(await response.json());
+    process.stdout.write(
+      `session runtime combinations: ${JSON.stringify(sessionRuntimeCombinations)}\n`
+    );
+  } catch (error) {
+    process.stdout.write(`session runtime combinations: unavailable (${String(error)})\n`);
+  }
+}
 
 /**
  * Keeps the server's output from a start that fails. The launcher deletes the sandbox directory
@@ -179,6 +202,7 @@ export default async function globalSetup() {
 
   return async () => {
     try {
+      await printRuntimeCombinations(sandboxJson);
       // Copied while the sandbox still exists: stopping deletes its directory.
       for (const file of evidenceFiles) {
         if (existsSync(join(sandboxDir, file))) {

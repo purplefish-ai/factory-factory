@@ -54,6 +54,15 @@ directly.
   `session-runtime-machine.test.ts`.
 - A runtime transition that changes nothing but the timestamp stores it without
   publishing a runtime delta. `session-runtime-machine.test.ts`.
+- Every runtime write is counted by its (phase, process state, activity)
+  combination and its writer, and never rejected or changed. A combination the
+  table in `session-runtime-combinations.ts` marks meaningless or undecided, or
+  does not list, is logged at most once per combination and writer every 10
+  minutes. The counts are in `/health/all` and in a
+  `session runtime combinations` log line, written when they changed at shutdown
+  and by the first write 30 minutes after the last one. The table is evidence
+  for a runtime redesign decision, not a rule.
+  `session-runtime-combinations.test.ts`.
 - Live provider notices keep the same transcript ID and ignore stale revisions.
   `../events/acp-event-processor.notices.test.ts`.
 - A human submission ID identifies one payload while it is queued, preparing for
@@ -94,7 +103,8 @@ directly.
   `session-submission.ts`: matching human retries to their retained outcomes;
   `session-pr-update.ts`: PR update outcomes.
 - `session-runtime-machine.ts`: runtime snapshots, including the initial launch;
-  `session-process-exit.ts`: a process exit.
+  `session-process-exit.ts`: a process exit; `session-runtime-combinations.ts`:
+  the table of runtime combinations and their counts.
 - `session-publisher.ts`: snapshots and deltas; `session-replay-builder.ts`: the
   replay a load sends.
 - `session-resume-fence.ts`: resume authorization that survives eviction.

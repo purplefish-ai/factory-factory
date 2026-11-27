@@ -36,6 +36,7 @@ import {
 } from './session-queue';
 import { buildReplayEvents } from './session-replay-builder';
 import { sessionResumeFences } from './session-resume-fence';
+import type { SessionRuntimeWriter } from './session-runtime-combinations';
 import { SessionRuntimeMachine } from './session-runtime-machine';
 import { SessionStoreRegistry } from './session-store-registry';
 import { type RetainedStoreClaim, SessionStoreRetention } from './session-store-retention';
@@ -185,7 +186,10 @@ export class SessionDomainService extends EventEmitter {
     }
   );
 
+  readonly runtimeCombinations = this.runtimeMachine.combinationReport;
+
   private transitionRuntime(
+    caller: SessionRuntimeWriter,
     sessionId: string,
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
@@ -194,7 +198,7 @@ export class SessionDomainService extends EventEmitter {
     }
   ): void {
     const store = this.registry.getOrCreateActive(sessionId);
-    this.runtimeMachine.markRuntime(store, updates);
+    this.runtimeMachine.markRuntime(store, updates, { caller });
   }
 
   prepareLoad(sessionId: string, sessionRuntime: SessionRuntimeState) {
@@ -216,7 +220,7 @@ export class SessionDomainService extends EventEmitter {
           : {}),
         updatedAt: sessionRuntime.updatedAt,
       },
-      { emitDelta: false, replace: true }
+      { emitDelta: false, replace: true, caller: 'prepareLoad' }
     );
 
     logger.info('Session load prepared', {
@@ -234,7 +238,7 @@ export class SessionDomainService extends EventEmitter {
     // out of 'loading' phase. If still in 'loading' after hydration (brand new session),
     // transition to 'idle'. Otherwise, emit the current runtime state.
     if (store.runtime.phase === 'loading') {
-      this.runtimeMachine.markRuntime(store, {
+      this.transitionRuntime('finishLoad', sessionId, {
         phase: 'idle',
         processState: store.runtime.processState,
         activity: store.runtime.activity,
@@ -335,7 +339,7 @@ export class SessionDomainService extends EventEmitter {
         ...(Object.hasOwn(runtime, 'errorMessage') ? { errorMessage: runtime.errorMessage } : {}),
         updatedAt: runtime.updatedAt,
       },
-      { emitDelta, replace: true }
+      { emitDelta, replace: true, caller: 'setRuntimeSnapshot' }
     );
   }
 
@@ -684,7 +688,7 @@ export class SessionDomainService extends EventEmitter {
       preserveQueuedInput: options?.preserveQueuedInput,
       nowIso: this.nowIso,
       markRuntime: (targetStore, updates) => {
-        this.runtimeMachine.markRuntime(targetStore, updates);
+        this.runtimeMachine.markRuntime(targetStore, updates, { caller: 'markProcessExit' });
       },
       forwardSnapshot: (targetStore, options) => {
         this.publisher.forwardSnapshot(targetStore, options);
@@ -734,7 +738,7 @@ export class SessionDomainService extends EventEmitter {
 
   markRunning(sessionId: string, work?: SessionRuntimeState['work']): void {
     const previousWork = this.registry.getOrCreate(sessionId).runtime.work;
-    this.transitionRuntime(sessionId, {
+    this.transitionRuntime('markRunning', sessionId, {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
@@ -743,7 +747,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   markIdle(sessionId: string, processState: 'alive' | 'stopped'): void {
-    this.transitionRuntime(sessionId, {
+    this.transitionRuntime('markIdle', sessionId, {
       phase: 'idle',
       processState,
       activity: 'IDLE',
@@ -752,7 +756,7 @@ export class SessionDomainService extends EventEmitter {
 
   markError(sessionId: string, errorMessage?: string): void {
     const store = this.registry.getOrCreateActive(sessionId);
-    this.transitionRuntime(sessionId, {
+    this.transitionRuntime('markError', sessionId, {
       phase: 'error',
       processState: store.runtime.processState,
       activity: store.runtime.activity,
@@ -800,6 +804,7 @@ export class SessionDomainService extends EventEmitter {
 
   stopStoreRetention(): void {
     this.retention.stop();
+    this.runtimeCombinations.writeSummary('shutdown');
   }
 
   /** Clears a session's store; `clearAllSessions` is the only other way to clear one. */
