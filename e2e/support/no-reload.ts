@@ -46,5 +46,8 @@ export function trackSockets(page: Page) {
       sockets.filter((socket) => path === undefined || socket.path === path).length,
     /** The sockets on `path` that are still open. */
     open: (path: string) => sockets.filter((socket) => socket.path === path && !socket.closed),
+    /** The sockets on `path` opened after the first `skip` of them, in order. */
+    openedAfter: (path: string, skip: number) =>
+      sockets.filter((socket) => socket.path === path).slice(skip),
   };
 }
