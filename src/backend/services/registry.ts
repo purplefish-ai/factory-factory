@@ -56,6 +56,10 @@ export const infrastructureServiceRegistry = {
     fileName: 'config.service.ts',
     description: 'Environment and application configuration',
   },
+  'crash-point': {
+    fileName: 'crash-point.ts',
+    description: 'Points where the dev sandbox can crash the process; inert elsewhere',
+  },
   constants: {
     fileName: 'constants.ts',
     description: 'Shared backend service timing and retry constants',

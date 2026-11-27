@@ -117,6 +117,9 @@ export const ConfigEnvSchema = z.object({
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   REPOS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FF_PROJECT_ROOT: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  // Set by the dev sandbox (`pnpm dev:sandbox`) for its fake Codex: marks a sandboxed server.
+  FF_SANDBOX_SCENARIO: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  FF_SANDBOX_CRASH_POINT_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
   WS_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FRONTEND_STATIC_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

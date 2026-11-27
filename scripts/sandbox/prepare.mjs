@@ -38,6 +38,7 @@ export function prepareSandbox(baseDir) {
     paths.codexHome,
     paths.claudeConfigDir,
     paths.gateDir,
+    paths.crashPointDir,
   ]) {
     mkdirSync(dir, { recursive: true });
   }

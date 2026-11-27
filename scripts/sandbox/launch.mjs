@@ -1,6 +1,8 @@
 // Starts one sandbox: creates and records its directory, starts the egress
-// recorder, runs `ff serve --dev` in its own process group, seeds it, and tears
-// everything down on a signal, server exit, owner exit or time-out.
+// recorder, runs `ff serve --dev` (or, in restart mode, restartable-server.mjs)
+// in its own process group, seeds it, and tears everything down on a signal,
+// server exit, owner exit or time-out. In restart mode a backend exit is not a
+// server exit: the server process lives on and restarts the backend on request.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,7 +11,13 @@ import { buildServerEnv } from './env.mjs';
 import { assertInsideTempDir, sandboxPaths, sandboxRoot } from './paths.mjs';
 import { findFreePort } from './ports.mjs';
 import { checkScenario, createSeedRepository, prepareSandbox } from './prepare.mjs';
-import { findProcess, ownIdentity, realSystem } from './process-group.mjs';
+import {
+  findProcess,
+  ownIdentity,
+  realSystem,
+  sandboxEnvironmentEntry,
+  stopProcessesWithEnvironment,
+} from './process-group.mjs';
 import { createSandboxDirectory, readSandboxRecord, writeSandboxRecord } from './record.mjs';
 import { seed } from './seed.mjs';
 import { signalOwnServerGroup, startServer, stopServer, tail, waitForServer } from './server.mjs';
@@ -39,12 +47,12 @@ const message = (error) => (error instanceof Error ? error.message : String(erro
  * Runs one sandbox until it stops; resolves with the launcher's exit code.
  * Every effect on the outside world is injectable for tests.
  *
- * @param {{ scenario: string, keep: boolean, ownerPid?: number | null, ttlMinutes?: number }} options
+ * @param {{ scenario: string, keep: boolean, ownerPid?: number | null, ttlMinutes?: number, restartable?: boolean }} options
  * @param {LaunchDependencies} [dependencies]
  * @returns {Promise<number>}
  */
 export async function run(
-  { scenario, keep, ownerPid = null, ttlMinutes = 0 },
+  { scenario, keep, ownerPid = null, ttlMinutes = 0, restartable = false },
   {
     root = sandboxRoot(),
     tempDir = tmpdir(),
@@ -111,6 +119,15 @@ export async function run(
           );
           signalledBlind = true;
           code = 1;
+        }
+        if (restartable && state.baseDir && !signalledBlind) {
+          // A killed backend's children outlive it outside the server's group.
+          const left = await stopProcessesWithEnvironment(sandboxEnvironmentEntry(state.baseDir), {
+            system: watched,
+          });
+          if (left.length > 0) {
+            log(`stopped ${left.length} processes a killed backend left: ${left.join(', ')}`);
+          }
         }
         await state.recorder?.close();
         if (state.baseDir && signalledBlind) {
@@ -216,6 +233,7 @@ export async function run(
         env,
         ports: { frontend, backend },
         spawnImpl,
+        restartable,
         onExit: (code, signal) => {
           if (!server.retiring) {
             void stop(`server exited with ${signal ?? `code ${code}`}`, 1);

@@ -108,6 +108,14 @@ function processesWithEnvironment(entry, pids) {
     }
     output = error.stdout;
   }
+  const found = matchingRows(output, entry);
+  // The row holds the arguments too: a process given the entry as an argument (a `grep`, say)
+  // matches without carrying it. Drop any whose arguments alone, without -E, match.
+  return found.length === 0 ? [] : found.filter((pid) => !argumentMatches(entry, found).has(pid));
+}
+
+/** Pids of `ps -o pid=,command=` rows that hold `entry` between spaces. */
+function matchingRows(output, entry) {
   const found = [];
   for (const line of output.split('\n')) {
     const match = /^\s*(\d+) (.*)$/.exec(line);
@@ -116,6 +124,24 @@ function processesWithEnvironment(entry, pids) {
     }
   }
   return found;
+}
+
+/** Those of `pids` whose command line alone holds `entry`. */
+function argumentMatches(entry, pids) {
+  let output;
+  try {
+    output = execFileSync('ps', ['-ww', '-o', 'pid=,command=', '-p', pids.join(',')], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, LC_ALL: 'C' },
+    });
+  } catch (error) {
+    if (error?.status !== 1 || typeof error.stdout !== 'string') {
+      throw error;
+    }
+    output = error.stdout;
+  }
+  return new Set(matchingRows(output, entry));
 }
 
 /** @type {ProcessSystem} */
@@ -180,6 +206,74 @@ export function isOwnGroup(processes, pgid, { leaderStartedAt, baseDir }, system
     members.length > 0 &&
     system.processesWithEnvironment(sandboxEnvironmentEntry(baseDir), members).length > 0
   );
+}
+
+/**
+ * Stops every live process whose environment holds `entry` exactly (a sandbox's
+ * `BASE_DIR=…`), other than those in `exclude`: SIGTERM, then SIGKILL after
+ * `graceMs`. A backend killed in restart mode leaves its children running
+ * outside the server's process group, reparented, so only their environment
+ * still ties them to the sandbox. Each is tracked by pid and start time from
+ * the listing that found it, and the table is read again before each signal;
+ * only those still matching are signalled or waited for.
+ * Resolves with the pids it stopped; rejects if any survives SIGKILL.
+ *
+ * @param {string} entry
+ * @param {{ system?: ProcessSystem, exclude?: number[], graceMs?: number, killGraceMs?: number, pollMs?: number }} [options]
+ * @returns {Promise<number[]>}
+ */
+export async function stopProcessesWithEnvironment(
+  entry,
+  {
+    system = realSystem,
+    exclude = [process.pid],
+    graceMs = STOP_GRACE_MS,
+    killGraceMs = 5000,
+    pollMs = 200,
+  } = {}
+) {
+  const tracked = new Map();
+  const stopped = new Set();
+  // Before each signal: a process can fork while the others wait out their grace period.
+  const scan = () => {
+    const listed = system.listProcesses();
+    for (const pid of system.processesWithEnvironment(entry, null)) {
+      const found = findProcess(listed, pid);
+      if (found && !exclude.includes(pid) && !tracked.has(pid)) {
+        tracked.set(pid, found.startedAt);
+        stopped.add(pid);
+      }
+    }
+  };
+  const remaining = () => {
+    const processes = system.listProcesses();
+    for (const [pid, startedAt] of tracked) {
+      if (!isSameProcess(processes, { pid, startedAt })) {
+        tracked.delete(pid);
+      }
+    }
+    return [...tracked.keys()];
+  };
+  const waitForExit = async (timeoutMs) => {
+    const deadline = system.now() + timeoutMs;
+    while (remaining().length > 0) {
+      if (system.now() >= deadline) {
+        return false;
+      }
+      await system.sleep(pollMs);
+    }
+    return true;
+  };
+  for (const signal of ['SIGTERM', 'SIGKILL']) {
+    scan();
+    for (const pid of remaining()) {
+      system.signal(pid, signal);
+    }
+    if (await waitForExit(signal === 'SIGTERM' ? graceMs : killGraceMs)) {
+      return [...stopped];
+    }
+  }
+  throw new Error(`Processes still running after SIGKILL: ${remaining().join(', ')}`);
 }
 
 /**

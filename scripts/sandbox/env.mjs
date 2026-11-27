@@ -107,5 +107,6 @@ export function buildServerEnv({
     AGENT_SLACK_INTAKE_ENABLED: 'false',
     FF_SANDBOX_SCENARIO: scenario,
     FF_SANDBOX_GATE_DIR: paths.gateDir,
+    FF_SANDBOX_CRASH_POINT_DIR: paths.crashPointDir,
   };
 }

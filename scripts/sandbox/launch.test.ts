@@ -108,6 +108,20 @@ describe('launcher setup and shutdown', () => {
     expect(h.sandboxDirs()).toEqual([]);
   }, 60_000);
 
+  it('runs the restartable server in restart mode, and ff serve --dev otherwise', async () => {
+    const h = harness();
+    await run({ scenario: 'echo', keep: false }, { ...h.deps, spawnImpl: failingSpawn(h.spawned) });
+    await run(
+      { scenario: 'echo', keep: false, restartable: true },
+      { ...h.deps, spawnImpl: failingSpawn(h.spawned) }
+    );
+    const [serve, restartable] = h.spawned;
+    expect(serve).toEqual(expect.arrayContaining(['serve', '--dev']));
+    expect(restartable?.[0]).toMatch(/scripts\/sandbox\/restartable-server\.mjs$/);
+    expect(restartable).toEqual(expect.arrayContaining(['--frontend-port', '--backend-port']));
+    expect(h.sandboxDirs()).toEqual([]);
+  }, 60_000);
+
   it('records the server group before reading the process table, then its start time', async () => {
     const h = harness();
     // Stands in for the server: a real process group, so stopping it is real.

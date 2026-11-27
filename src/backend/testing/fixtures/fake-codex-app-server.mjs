@@ -17,7 +17,8 @@
 // History. Each thread/start issues a new UUIDv7 thread id. With CODEX_HOME set, a conversation is
 // appended, from its first prompt as Codex does, to
 // `CODEX_HOME/sessions/YYYY/MM/DD/rollout-<UTC time>-<thread id>.jsonl`, and thread/resume and
-// thread/read find it there after a restart. The line shapes are copied from the fixtures in
+// thread/read find it there after a restart. A turn on a thread this process neither started nor
+// resumed fails, as in Codex; without CODEX_HOME such a thread is adopted. The line shapes are copied from the fixtures in
 // codex-session-history-loader.service.test.ts until a recorded Codex session replaces them.
 import { randomBytes } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -41,7 +42,8 @@ function uuidV7(timeMs) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// Every thread this process knows: { id, cwd, ephemeral, rollout (a path, or null) }.
+// Every thread this process started, resumed or (without CODEX_HOME) adopted:
+// { id, cwd, ephemeral, rollout (a path, or null) }.
 const threads = new Map();
 
 function rolloutPath(id, timeMs) {
@@ -63,8 +65,11 @@ function addThread(id, cwd, ephemeral = false) {
   return record;
 }
 
-/** A thread from this process, or one an earlier process wrote a rollout for. */
-function findThread(id) {
+/**
+ * A thread from this process, or one an earlier process wrote a rollout for. Only `load` (a
+ * resume) makes the latter a thread of this process: reading one does not, as in Codex.
+ */
+function findThread(id, { load = false } = {}) {
   const known = threads.get(id);
   if (known || !codexHome || !existsSync(join(codexHome, 'sessions'))) {
     return known ?? null;
@@ -79,7 +84,9 @@ function findThread(id) {
   const rollout = join(sessions, file);
   const meta = JSON.parse(readFileSync(rollout, 'utf8').split('\n')[0]);
   const record = { id, cwd: meta.payload.cwd, ephemeral: false, rollout };
-  threads.set(id, record);
+  if (load) {
+    threads.set(id, record);
+  }
   return record;
 }
 
@@ -552,7 +559,7 @@ appServerInput?.on('line', (line) => {
     }
     case 'thread/resume': {
       // As Codex: a thread resumes from its rollout, so one that was never prompted cannot.
-      const thread = findThread(request.params.threadId);
+      const thread = findThread(request.params.threadId, { load: true });
       if (!(thread?.rollout && existsSync(thread.rollout))) {
         const message = `no rollout found for thread id ${request.params.threadId}`;
         send({ id: request.id, error: { code: -32_600, message } });
@@ -600,9 +607,19 @@ appServerInput?.on('line', (line) => {
     case 'turn/start': {
       const turn = { id: `turn-${request.id}`, status: 'inProgress', items: [], error: null };
       const threadId = request.params.threadId;
-      // A thread this process did not start (the tests send turn/start alone) is adopted.
-      const thread =
-        findThread(threadId) ?? addThread(threadId, request.params.cwd ?? process.cwd());
+      // As Codex: with a history (CODEX_HOME), a turn needs a thread this process started or
+      // resumed, so a restart that skipped thread/resume fails here. Without one, a thread this
+      // process does not know (the tests send turn/start alone) is adopted.
+      const thread = codexHome
+        ? threads.get(threadId)
+        : (threads.get(threadId) ?? addThread(threadId, request.params.cwd ?? process.cwd()));
+      if (!thread) {
+        send({
+          id: request.id,
+          error: { code: -32_600, message: `thread not found: ${threadId}` },
+        });
+        return;
+      }
       send({ id: request.id, result: { turn } });
       const text = promptText(request.params.input);
       // Request ids, and so turn ids, start again in each process: the rollout's carry this

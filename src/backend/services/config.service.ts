@@ -388,6 +388,16 @@ function loadProjectRoot(): string | null {
   return ConfigEnvSchema.parse(process.env).FF_PROJECT_ROOT ?? null;
 }
 
+/**
+ * `FF_SANDBOX_CRASH_POINT_DIR`: where the dev sandbox arms crash points (see crash-point.ts).
+ * Honoured only together with `FF_SANDBOX_SCENARIO`, which the sandbox always sets, so the
+ * variable alone, set by accident in a normal install, arms nothing.
+ */
+function loadSandboxCrashPointDir(): string | null {
+  const env = ConfigEnvSchema.parse(process.env);
+  return env.FF_SANDBOX_SCENARIO ? (env.FF_SANDBOX_CRASH_POINT_DIR ?? null) : null;
+}
+
 /** Event-agent limits are separate from the public application configuration shape. */
 function loadAgentRuntimeLimits() {
   const env = ConfigEnvSchema.parse(process.env);
@@ -433,6 +443,7 @@ class ConfigService {
   private agentRuntimeLimits = loadAgentRuntimeLimits();
   private releaseCheck = loadReleaseCheckConfig();
   private projectRoot = loadProjectRoot();
+  private sandboxCrashPointDir = loadSandboxCrashPointDir();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -710,6 +721,11 @@ class ConfigService {
     return this.projectRoot;
   }
 
+  /** The directory whose files arm crash points, or null outside the dev sandbox. */
+  getSandboxCrashPointDir(): string | null {
+    return this.sandboxCrashPointDir;
+  }
+
   /** The `ff tailscale` origin used to share loopback ports, if any. */
   getTailscaleConfig(): TailscaleConfig | null {
     return this.config.tailscale;
@@ -770,6 +786,7 @@ class ConfigService {
     this.agentRuntimeLimits = loadAgentRuntimeLimits();
     this.releaseCheck = loadReleaseCheckConfig();
     this.projectRoot = loadProjectRoot();
+    this.sandboxCrashPointDir = loadSandboxCrashPointDir();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }

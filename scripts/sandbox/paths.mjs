@@ -53,6 +53,13 @@ export function sandboxPaths(baseDir) {
     repoPath: join(baseDir, 'repo'),
     // The fake Codex's gate files (FF_SANDBOX_GATE_DIR): a spec creates one to release a turn.
     gateDir: join(baseDir, 'gates'),
+    // Armed crash points (FF_SANDBOX_CRASH_POINT_DIR): see scripts/sandbox/crash-points.mjs.
+    crashPointDir: join(baseDir, 'crash-points'),
+    // Restart mode: how a spec reaches the server's control endpoint (restartable-server.mjs).
+    backendControl: join(baseDir, 'backend-control.json'),
+    // The backend's structured log, one JSON record per line.
+    serverLog: join(baseDir, 'logs', 'server.log'),
+    databasePath: join(baseDir, 'data.db'),
     ghLog: join(baseDir, 'gh-calls.log'),
     sshLog: join(baseDir, 'ssh-calls.log'),
     egressLog: join(baseDir, 'egress-calls.log'),
