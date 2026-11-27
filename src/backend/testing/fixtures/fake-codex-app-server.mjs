@@ -42,7 +42,8 @@ function uuidV7(timeMs) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// Every thread this process started or resumed: { id, cwd, ephemeral, rollout (a path, or null) }.
+// Every thread this process started, resumed or (without CODEX_HOME) adopted:
+// { id, cwd, ephemeral, rollout (a path, or null) }.
 const threads = new Map();
 
 function rolloutPath(id, timeMs) {

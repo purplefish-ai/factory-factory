@@ -23,8 +23,10 @@ export async function expectNoReload(page: Page, marker: string) {
 
 /**
  * Counts the WebSockets the page opens from now on, by URL path (`/snapshots`, `/chat`, …), and
- * the frames they receive, to tell a recovery on the same socket from one through a new
- * connection, and to know a socket is live (the server's first frame arrived).
+ * the frames all of them have received, by path, to tell a recovery on the same socket from one
+ * through a new connection. `received(path)` says a frame arrived on some socket of that path
+ * since tracking began: start tracking before the page opens its first one to know that one is
+ * live.
  */
 export function trackSockets(page: Page) {
   const opened: string[] = [];
