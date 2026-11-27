@@ -164,10 +164,13 @@ Unused shadcn primitives and their exclusive dependencies were removed in
 September 2026. The UI directory has no file exclusions: keep components with
 application or Storybook consumers, and add others when needed.
 
-The only dependency exclusion is `@prisma/client`, imported by generated Prisma
-runtime code; it must remain a production dependency. Knip follows
-`tw-animate-css` and `@tailwindcss/typography` in `src/client/globals.css`, and
-detects the `@agentclientprotocol/claude-agent-acp` executable dependency. These
-packages remain in dependency analysis.
+The dependency exclusions are `@prisma/client`, imported by generated Prisma
+runtime code, and `@openai/codex`, which nothing imports: it pins the runtime
+the Codex adapter resolves to the recorded version
+(`src/backend/testing/upstream-recordings-versions.test.ts`). Both must remain
+production dependencies. Knip follows `tw-animate-css` and
+`@tailwindcss/typography` in `src/client/globals.css`, and detects the
+`@agentclientprotocol/claude-agent-acp` executable dependency. These packages
+remain in dependency analysis.
 
 See [shadcn maintenance](shadcn.md) for component refresh and local adaptations.

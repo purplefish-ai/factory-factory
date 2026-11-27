@@ -16,6 +16,7 @@ import {
 import { createRequire } from 'node:module';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { runtimeManifestPath } from '../runtime-manifest-path.mjs';
 
 const appRequire = createRequire(join(process.cwd(), 'package.json'));
 
@@ -34,31 +35,6 @@ export const PROVIDERS = {
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
-}
-
-// Mirrors scripts/prepare-runtime-metadata.mjs, which cannot be imported
-// because it rewrites package.json when loaded.
-function runtimeManifestPath(fromAdapter, runtime) {
-  try {
-    return fromAdapter.resolve(`${runtime}/package.json`);
-  } catch {
-    let directory = dirname(fromAdapter.resolve(runtime));
-    while (true) {
-      const path = join(directory, 'package.json');
-      try {
-        if (readJson(path).name === runtime) {
-          return path;
-        }
-      } catch {
-        /* The exported entrypoint may be nested inside its package. */
-      }
-      const parent = dirname(directory);
-      if (parent === directory) {
-        throw new Error(`Unable to locate ${runtime} package metadata`);
-      }
-      directory = parent;
-    }
-  }
 }
 
 /** Adapter and runtime versions, the runtime resolved from the adapter as shipped. */

@@ -18,3 +18,4 @@ npm --version
 npm exec --yes --cache "$consumer/npm-cache" --package "${archive[0]}" -- \
   node "$root/scripts/check-packed-serve.mjs" "$consumer/npm-cache" "$1"
 node "$root/scripts/check-installed-native-runtime.mjs" "$(cat installed-package.txt)"
+node "$root/scripts/check-installed-runtime-versions.mjs" "$(cat installed-package.txt)"

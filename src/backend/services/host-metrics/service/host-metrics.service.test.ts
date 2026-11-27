@@ -4,7 +4,6 @@ import {
   type CpuTimes,
   cpuPercentBetween,
   HostMetricsService,
-  parseMemoryStatusLevel,
   readMemoryPercent,
 } from './host-metrics.service';
 
@@ -52,15 +51,15 @@ describe('cpuPercentBetween', () => {
   });
 });
 
-describe('parseMemoryStatusLevel', () => {
-  it('turns the available-memory level into a used percentage', () => {
-    expect(parseMemoryStatusLevel('80\n')).toBe(20);
-  });
-
-  it.each(['', 'abc', '-1', '101'])('rejects %j', (stdout) => {
-    expect(parseMemoryStatusLevel(stdout)).toBeNull();
-  });
-});
+const macVmStat = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                              900000.
+Pages wired down:                        250000.
+Pages purgeable:                          50000.
+File-backed pages:                       950000.
+Anonymous pages:                        2000000.
+Pages stored in compressor:              400000.
+Pages occupied by compressor:            100000.
+`;
 
 describe('readMemoryPercent', () => {
   afterEach(() => {
@@ -73,29 +72,40 @@ describe('readMemoryPercent', () => {
   }
 
   it.each(['linux', 'win32'] as const)(
-    'uses available memory on %s without sysctl',
+    'uses free memory on %s without running vm_stat',
     async (platform) => {
       mockFreeMemory(25, 100);
-      const readStatusLevel = vi.fn(async () => '90');
+      const readVmStat = vi.fn(async () => macVmStat);
 
-      await expect(readMemoryPercent(platform, readStatusLevel)).resolves.toBe(75);
-      expect(readStatusLevel).not.toHaveBeenCalled();
+      await expect(readMemoryPercent(platform, readVmStat)).resolves.toBe(75);
+      expect(readVmStat).not.toHaveBeenCalled();
     }
   );
 
-  it('uses the memory-pressure level on macOS', async () => {
-    mockFreeMemory(5, 100);
+  it('reports physical memory used on macOS, excluding reclaimable pages', async () => {
+    mockFreeMemory(900_000 * 16_384, 64 * 1024 ** 3);
 
-    await expect(readMemoryPercent('darwin', async () => '72\n')).resolves.toBe(28);
+    await expect(readMemoryPercent('darwin', async () => macVmStat)).resolves.toBe(55);
   });
 
-  it('falls back to free memory on macOS when sysctl fails or is unreadable', async () => {
+  it('falls back to free memory on macOS when vm_stat fails', async () => {
     mockFreeMemory(40, 100);
 
     await expect(
-      readMemoryPercent('darwin', () => Promise.reject(new Error('sysctl missing')))
+      readMemoryPercent('darwin', () => Promise.reject(new Error('vm_stat missing')))
     ).resolves.toBe(60);
-    await expect(readMemoryPercent('darwin', async () => 'n/a')).resolves.toBe(60);
+  });
+
+  it.each([
+    '94\n',
+    macVmStat.replace('16384', '0'),
+    macVmStat.replace('250000.', 'n/a'),
+    macVmStat.replace(/^Anonymous pages:.*$/m, ''),
+    macVmStat.replace(/^Pages purgeable:.*$/m, 'Pages purgeable: 3000000.'),
+  ])('falls back to free memory on macOS when vm_stat output is invalid (%#)', async (stdout) => {
+    mockFreeMemory(40, 100);
+
+    await expect(readMemoryPercent('darwin', async () => stdout)).resolves.toBe(60);
   });
 });
 

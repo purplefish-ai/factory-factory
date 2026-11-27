@@ -5,6 +5,16 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # A provider adapter or the runtime it resolves changes only in a pull
+    # request with a new recording of a real session
+    # (node scripts/record-upstream.mjs), which Dependabot cannot make; see
+    # src/backend/testing/upstream-recordings-versions.test.ts. The Claude
+    # adapter pins its runtime itself, so the application's own
+    # @anthropic-ai/claude-agent-sdk is not that runtime and still updates.
+    ignore:
+      - dependency-name: '@agentclientprotocol/claude-agent-acp'
+      - dependency-name: '@agentclientprotocol/codex-acp'
+      - dependency-name: '@openai/codex'
     groups:
       prisma:
         patterns:

@@ -2,6 +2,7 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { toError } from '@/backend/lib/error-utils';
 import { sweepWorktreeProcesses } from '@/backend/lib/worktree-process-sweep';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
+import { crashAt } from '@/backend/services/crash-point';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
@@ -252,6 +253,9 @@ async function completeArchive(
       await worktreeLifecycleService.snapshotWorkspaceWorktree(workspace, options);
     }
     progress.removalStarted = true;
+    // Sandbox only: a crash here leaves the row ARCHIVING with its snapshot taken and its
+    // worktree in place (e2e/sandbox/restart-archive.spec.ts).
+    crashAt('archive-before-worktree-removal');
     await worktreeLifecycleService.removeWorkspaceWorktree(workspace);
   } catch (error) {
     logger.error('Failed to cleanup workspace worktree before archive', {

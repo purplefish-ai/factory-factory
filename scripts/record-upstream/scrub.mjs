@@ -120,6 +120,10 @@ function compile(policy, kind) {
     text: matcher(join('text')),
     numbers: matcher(join('numbers')),
     maps: matcher(join('maps')),
+    words: join('words').map(({ paths, allowed }) => ({
+      match: matcher(paths),
+      allowed: new Set(allowed),
+    })),
   };
 }
 
@@ -304,6 +308,10 @@ function scrubString(value, path, key, rules, context) {
   }
   if (rules.ids(path)) {
     return fakeOpaqueId(context, value);
+  }
+  const words = rules.words.find(({ match }) => match(path));
+  if (words) {
+    return words.allowed.has(value) ? value : PLACEHOLDER_STRING;
   }
   if (rules.text(path)) {
     return scrubText(value, path, rules, context);
