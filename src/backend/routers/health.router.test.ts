@@ -201,7 +201,7 @@ describe('healthRouter', () => {
           },
         ],
       };
-      mockGetRuntimeCombinationReport.mockReturnValue(counts);
+      mockGetRuntimeCombinationReport.mockReturnValueOnce(counts);
 
       const response = await request(app).get('/health/all');
 

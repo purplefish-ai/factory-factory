@@ -55,10 +55,10 @@ directly.
 - A runtime transition that changes nothing but the timestamp stores it without
   publishing a runtime delta. `session-runtime-machine.test.ts`.
 - Every runtime write is counted by its (phase, process state, activity)
-  combination and its writer, and never rejected or changed. A combination the
-  table in `session-runtime-combinations.ts` marks meaningless or undecided, or
-  does not list, is logged at most once per combination and writer every 10
-  minutes. The counts are in `/health/all` and in a
+  combination and by its change of combination, and never rejected or changed. A
+  combination the table in `session-runtime-combinations.ts` marks meaningless
+  or undecided, or does not list, is logged at most once per combination and
+  writer every 10 minutes. The counts are in `/health/all` and in a
   `session runtime combinations` log line, written when they changed at shutdown
   and by the first write 30 minutes after the last one. The table is evidence
   for a runtime redesign decision, not a rule.

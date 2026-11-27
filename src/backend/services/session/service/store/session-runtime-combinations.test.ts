@@ -130,6 +130,34 @@ describe('session runtime combination report', () => {
     ]);
   });
 
+  it('attributes load writes to prepareLoad and finishLoad', () => {
+    const domain = new SessionDomainService();
+
+    // No writer produces a loading phase today, so both combinations are unlisted.
+    domain.prepareLoad('s1', snapshot('loading', 'stopped', 'IDLE'));
+    domain.finishLoad('s1');
+
+    expect(domain.getRuntimeSnapshot('s1')).toMatchObject({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+    });
+    expect(domain.runtimeCombinations.counts()).toMatchObject({
+      transitions: {
+        'idle/stopped/IDLE -> loading/stopped/IDLE': 1,
+        'loading/stopped/IDLE -> idle/stopped/IDLE': 1,
+      },
+      flagged: [
+        {
+          combination: 'loading/stopped/IDLE',
+          verdict: 'unlisted',
+          caller: 'prepareLoad',
+          count: 1,
+        },
+      ],
+    });
+  });
+
   it('does not log meaningful combinations from the real writers', () => {
     const domain = new SessionDomainService();
 
@@ -200,7 +228,8 @@ describe('session runtime combination table', () => {
    * combination, each writer whose result depends on the previous state lands
    * on a listed combination that names that writer. Writers that forward a
    * caller's snapshot (setRuntimeSnapshot, prepareLoad) are covered at run time
-   * by the unlisted report instead.
+   * by the unlisted report instead. `finishLoad` writes only from a loading
+   * phase, which no writer produces; its own test is above.
    */
   const storeWriters: [SessionRuntimeWriter, (domain: SessionDomainService) => void][] = [
     ['markRunning', (domain) => domain.markRunning('s1')],
@@ -209,7 +238,6 @@ describe('session runtime combination table', () => {
     ['markError', (domain) => domain.markError('s1', 'failed')],
     ['markProcessExit', (domain) => domain.markProcessExit('s1', 0)],
     ['markProcessExit', (domain) => domain.markProcessExit('s1', 1)],
-    ['finishLoad', (domain) => domain.finishLoad('s1')],
     ['beginInitialLaunch', (domain) => domain.beginInitialLaunch('s1')],
   ];
 
