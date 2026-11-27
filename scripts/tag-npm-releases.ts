@@ -299,8 +299,12 @@ function wantedKind(
   if (compareVersions(version, BACKLOG_CUTOFF) > 0) {
     return tags.has(tag) ? null : 'release';
   }
+  if (backlog === 'releases' && released.has(tag)) {
+    // A Release whose tag was deleted gets its tag back.
+    return tags.has(tag) ? null : 'tag';
+  }
   if (backlog === 'releases') {
-    return released.has(tag) ? null : 'release';
+    return 'release';
   }
   if (tags.has(tag)) {
     return null;

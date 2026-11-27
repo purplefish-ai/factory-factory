@@ -468,6 +468,18 @@ describe('the backlog', () => {
     });
   });
 
+  it('restores the tag of a Release whose tag was deleted, in releases mode', async () => {
+    const { environment, created, tagged } = fakeEnvironment({
+      versions,
+      tags: { 'v0.5.12': commitFor('0.5.12'), 'v0.5.14': commitFor('0.5.14') },
+      released: ['v0.5.12', 'v0.5.13', 'v0.5.14'],
+    });
+    const report = await run(environment, 'releases');
+    expect(tagged).toEqual([['v0.5.13', commitFor('0.5.13')]]);
+    expect(created).toEqual([]);
+    expect(report.exitCode).toBe(0);
+  });
+
   it('skips a Release for a tag that points at another commit', async () => {
     const { environment, created } = fakeEnvironment({
       versions,
