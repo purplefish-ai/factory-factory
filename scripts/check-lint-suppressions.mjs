@@ -6,7 +6,6 @@ import { cssComments, htmlComments, markdownComments, yamlComments } from './lin
 
 const SCAN_ROOTS = [
   'src',
-  'electron',
   'e2e',
   'prompts',
   'scripts',
@@ -18,7 +17,7 @@ const SCAN_ROOTS = [
   '.storybook',
   '.vscode',
 ];
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', 'release']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next']);
 const ALLOWED_SUPPRESSION_PREFIXES = ['prisma/generated/'];
 
 function toPosixPath(filePath) {

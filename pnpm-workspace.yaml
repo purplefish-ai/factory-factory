@@ -16,29 +16,22 @@ trustPolicy: no-downgrade
 # releases; dependency maintainers re-review by 2026-12-05 (see security docs).
 trustPolicyExclude:
   - prisma@7.10.1
-  - semver@5.7.2
   - semver@6.3.1
 
 allowBuilds:
   '@prisma/engines@7.10.1': true
-  electron@45.2.1: true
   esbuild@0.28.2: true
   node-pty@1.1.0: true
   prisma@7.10.1: true
-  electron-winstaller: false
-
-packageExtensions:
-  'electron-builder@26.18.0':
-    dependencies:
-      electron-builder-squirrel-windows: 26.18.0
 
 overrides:
   # Prisma 7 still pins versions affected by GHSA-ggr8-5vv4-36mx and MySQL2 advisories.
   '@prisma/config>deepmerge-ts': 8.0.2
   # Prisma 7 pins Effect 3.20.0, which is affected by GHSA-7589-6fvf-x4pw.
   '@prisma/config>effect': 3.22.1
-  # Prisma 7's v12 driver cannot build against Electron 45's V8 headers.
-  # Keep Prisma and the app on one native SQLite build so they share file locks.
+  # Prisma 7's adapter requests better-sqlite3 v12. Keep it on the app's driver:
+  # two SQLite builds in one process release each other's POSIX locks on the
+  # database file, and v12 needs an install-time native build allowBuilds denies.
   '@prisma/adapter-better-sqlite3>better-sqlite3': 13.2.0
   'prisma>mysql2': 3.24.6
   '@isaacs/brace-expansion': '>=5.0.1'
@@ -47,19 +40,12 @@ overrides:
   # Storybook's react-docgen still requires Babel 7's APIs and companion packages.
   '@babel/core': 7.29.7
   '@hono/node-server': 2.1.6
-  '@xmldom/xmldom': 0.9.12
-  # v4 accepts xmldom 0.9 and remains loadable by Electron-builder's CJS callers.
-  # v5 exposes import-only package exports, which those callers cannot resolve.
-  plist: 4.0.0
-  axios: 1.21.0
   body-parser: 2.4.0
   fast-uri: 4.2.3
   brace-expansion: 5.0.12
   braces: '>=3.0.3'
-  follow-redirects: 1.16.2
   micromatch: '>=4.0.8'
   postcss: 8.5.32
-  tar: 7.5.22
   hono: 4.13.16
   ip-address: 10.7.5
   lodash: 4.18.1
@@ -73,17 +59,12 @@ overrides:
   smol-toml: 1.9.1
   dompurify: 3.4.17
   esbuild: 0.28.2
-  electron-builder-squirrel-windows: 26.18.0
   find-my-way: 9.10.0
   qs: 6.17.1
   sharp: 0.35.5
-  tmp: 0.2.7
   form-data: 4.0.6
-  js-yaml: 5.5.0
-  shell-quote: 1.12.0
-  # Keep each consumer on its supported, patched major: node-gyp 6, Electron 7,
-  # and jsdom 8. A global pin would force incompatible APIs across those tools.
-  'undici@^6': 6.29.1
+  # Keep each consumer on its supported, patched major: Slack 7 and jsdom 8.
+  # A global pin would force incompatible APIs across those tools.
   'undici@^7': 7.30.1
   'undici@^8': 8.12.3
   tough-cookie: '>=4.1.3'
@@ -94,24 +75,16 @@ overrides:
 
   # Security fixes pending upstream dependency range updates.
   minimatch: 11.0.3
-  # ASAR 4 uses the promise-based glob API; rimraf's callback is patched below.
-  '@electron/asar': 4.3.1
   glob: 14.0.2
-  joi: 18.3.1
-  http-cache-semantics: 4.3.0
   # Mermaid 12 still requests the older vulnerable KaTeX line.
   katex: 0.19.1
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
   postcss-selector-parser: 7.1.7
   '@modelcontextprotocol/sdk': 1.32.2
-  '@electron/get>global-agent': 4.1.6
 
 # Remove these local mitigations once upstream publishes fixed releases.
 patchedDependencies:
   # Keep selector-error snapshots stable; remove after the upstream timestamp fix.
   '@tanstack/query-core@5.106.0': patches/@tanstack__query-core@5.106.0.patch
   braces@3.0.3: patches/braces@3.0.3.patch
-  # Adapt legacy callers to the patched minimatch/glob export and promise APIs.
-  dir-compare@4.2.0: patches/dir-compare@4.2.0.patch
-  rimraf@2.6.3: patches/rimraf@2.6.3.patch

@@ -218,11 +218,10 @@ describe('sandbox smoke test', () => {
     }
   });
 
-  it('runs the spec, leaves the native build to the launcher and keeps its evidence on failure', () => {
+  it('runs the spec and keeps its evidence on failure', () => {
     const scripts = z
       .object({ scripts: z.record(z.string(), z.string()) })
       .parse(JSON.parse(readFileSync('package.json', 'utf8'))).scripts;
-    // The launcher builds the native modules itself, outside its startup timer.
     expect(scripts['test:e2e:sandbox']).toBe(
       'playwright test --config=playwright.sandbox.config.ts'
     );

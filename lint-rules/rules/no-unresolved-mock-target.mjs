@@ -8,7 +8,7 @@
 // Vitest resolves through `__mocks__` directories or `{ virtual: true }`, which
 // the repository does not use. Existence is cached for the life of the process, so the editor
 // language server needs a restart after a mocked file is created. Enabled for
-// test files and test support under src/, scripts/, electron/ and lint-rules/.
+// test files and test support under src/, scripts/ and lint-rules/.
 import {
   isModuleMockCall,
   moduleMockTarget,

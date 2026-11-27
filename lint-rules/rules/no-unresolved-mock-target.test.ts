@@ -12,8 +12,8 @@ describe('unresolved mock targets', () => {
   it('are rejected in test files and test support under the source directories', () => {
     expect(scopes.map((override) => override.rules[RULE])).toEqual(['error']);
     expect(files).toEqual([
-      '{src,scripts,electron,lint-rules}/**/*.{test,test-helpers,test-support,test-harness}.*',
-      '{src,scripts,electron,lint-rules}/**/{testing,test-utils}/**',
+      '{src,scripts,lint-rules}/**/*.{test,test-helpers,test-support,test-harness}.*',
+      '{src,scripts,lint-rules}/**/{testing,test-utils}/**',
     ]);
   });
 

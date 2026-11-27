@@ -90,7 +90,6 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'src/**/*.test.tsx',
-            'electron/**/*.test.ts',
             'scripts/**/*.test.ts',
             'lint-rules/**/*.test.ts',
           ],

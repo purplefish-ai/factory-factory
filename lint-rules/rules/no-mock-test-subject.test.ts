@@ -4,7 +4,7 @@ import plugin from '../factory.mjs';
 import { describeRuleFixtures, readProjectConfig, repositoryRoot } from '../testing/rule-fixtures';
 
 const RULE = 'factory/no-mock-test-subject';
-const files = ['{src,scripts,electron,lint-rules}/**/*.test.{ts,tsx}'];
+const files = ['{src,scripts,lint-rules}/**/*.test.{ts,tsx}'];
 
 describe('test subject mocks', () => {
   it('rejects subject replacements in test files', () => {
@@ -58,7 +58,7 @@ describeRuleFixtures('no-mock-test-subject', {
       file: 'src/view.test.tsx',
       source: "vi.mock(import('./view.tsx'), () => ({}));",
     },
-    { file: 'electron/start.test.ts', source: 'vi.mock(`./start`);' },
+    { file: 'lint-rules/start.test.ts', source: 'vi.mock(`./start`);' },
     { file: 'scripts/run.test.ts', source: "vi.mock('./run.mjs', { spy: false });" },
     { file: 'src/nested/index.test.ts', source: "vi.mock('./');" },
   ],
@@ -66,7 +66,7 @@ describeRuleFixtures('no-mock-test-subject', {
     { file: 'src/cache.ts', source: 'export const cache = new Map();' },
     { file: 'src/view.tsx', source: 'export const view = null;' },
     { file: 'scripts/run.mts', source: 'export const run = true;' },
-    { file: 'electron/start.ts', source: 'export const start = true;' },
+    { file: 'lint-rules/start.ts', source: 'export const start = true;' },
     { file: 'src/nested/index.ts', source: 'export const subject = true;' },
     { file: 'src/cache.test.tsx', source: "vi.mock('./cache-storage');" },
     { file: 'src/sub/cache.test.ts', source: "vi.mock('../cache');" },

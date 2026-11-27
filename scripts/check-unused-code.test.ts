@@ -54,7 +54,7 @@ function fixture() {
     })
   );
   // Use the real configured production roots. No implicit index fallback can
-  // keep the standalone CLI, Electron, MCP or browser worker dependencies alive.
+  // keep the standalone CLI, MCP or browser worker dependencies alive.
   for (const entry of config.workspaces['.'].entry) {
     write(entry.replace(/!$/, ''), 'export {};');
   }
@@ -110,9 +110,6 @@ it('keeps each configured runtime and a lazy frontend dependency reachable', () 
   expect(config.workspaces['.'].entry).toEqual(
     expect.arrayContaining([
       'src/cli/index.ts!',
-      'electron/main/index.ts!',
-      'electron/preload/index.cts!',
-      'src/backend/electron-utility-entry.ts!',
       'src/backend/mcp/workspace-mcp-server.ts!',
       'src/client/main.tsx!',
       'src/client/features/workspace/diff-highlight.worker.ts!',
@@ -173,11 +170,8 @@ it('keeps known live previews, lazy viewers and critical runtime modules out of 
     'src/client/features/workspace/diff-viewer.tsx',
     'src/client/features/workspace/diff-highlight.worker.ts',
     'src/backend/services/session/service/acp/acp-runtime-manager.ts',
-    'src/backend/electron-utility-entry.ts',
     'src/backend/mcp/workspace-mcp-server.ts',
     'src/cli/index.ts',
-    'electron/main/index.ts',
-    'electron/preload/index.cts',
   ]) {
     expect(readFileSync(resolve(file), 'utf8').length).toBeGreaterThan(0);
     expect(candidates).not.toContain(file);
@@ -367,7 +361,7 @@ describe('location conventions', () => {
     [
       'test-support file name',
       'production',
-      'electron/main/lifecycle.test-support.ts',
+      'src/backend/lifecycle.test-support.ts',
       'src/backend/test-support.ts',
     ],
     [

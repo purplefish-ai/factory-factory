@@ -232,7 +232,7 @@ jobs:
           key: ff-storybook-pnpm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install browser-test dependencies
-        # Browser stories do not use node-pty, SQLite or Electron. The official
+        # Browser stories do not use node-pty or SQLite. The official
         # browser image has no native compiler; rebuild only browser prerequisites.
         run: |
           pnpm install --frozen-lockfile --ignore-scripts --store-dir /__w/.pnpm-store
@@ -299,23 +299,10 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Resolve native module ABI and OS version
-        id: native-abi
-        run: |
-          echo "version=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
-          . /etc/os-release
-          echo "distribution=$ID-$VERSION_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Node native modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .native-cache/node-abi${{ steps.native-abi.outputs.version }}/
-          key: ff-native-v1-${{ runner.os }}-${{ steps.native-abi.outputs.distribution }}-${{ runner.arch }}-node-abi${{ steps.native-abi.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/ensure-native-modules.mjs') }}
-
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps --only-shell chromium
 
-      # Starts the sandbox (which builds the native modules first), runs the spec and stops it.
+      # Starts the sandbox, runs the spec and stops it.
       - name: Run sandbox smoke test
         run: pnpm test:e2e:sandbox
 
@@ -360,21 +347,6 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
-
-      - name: Resolve native module ABI and OS version
-        id: native-abi
-        run: |
-          echo "version=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
-          . /etc/os-release
-          echo "distribution=$ID-$VERSION_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Node native modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Do not cache .current-target: a fresh install still needs the cached
-          # binaries copied into node_modules by ensure-native-modules.mjs.
-          path: .native-cache/node-abi${{ steps.native-abi.outputs.version }}/
-          key: ff-native-v1-${{ runner.os }}-${{ steps.native-abi.outputs.distribution }}-${{ runner.arch }}-node-abi${{ steps.native-abi.outputs.version }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/ensure-native-modules.mjs') }}
 
       - name: Restore shared test duration snapshot
         id: shard-timings
