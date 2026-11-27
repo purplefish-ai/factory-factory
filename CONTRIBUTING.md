@@ -235,10 +235,11 @@ change decision. Failed selection, missing outputs, unexpected skips and failed
 workers fail the gates. The `Smoke` gate over the sandbox shards works the same
 way and is not yet required.
 
-New pushes to each PR cancel older revisions of that PR in CI and CodeQL; new
-pushes to `main` cancel older main-push runs. Cancellation groups include the
-workflow and PR number, while merge-queue and scheduled runs stay independent.
-npm publishing workflows are excluded from this cancellation policy.
+New pushes to each PR cancel older revisions of that PR in CI and CodeQL; pushes
+to `main` are never cancelled, so each commit on `main` gets a verdict.
+Cancellation groups include the workflow and PR number, while main-push,
+merge-queue and scheduled runs stay independent. npm publishing workflows are
+excluded from this cancellation policy.
 
 ### Repository checks
 

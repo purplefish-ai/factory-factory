@@ -1,7 +1,8 @@
 import { defineConfig } from '@playwright/test';
 
-// The restart and crash specs, which kill, stop or crash the backend. CI runs this project and
-// `general` (every other spec, new files included) as parallel shards, each with its own sandbox.
+// The file name decides the shard: restart-*.spec.ts and crash-points.spec.ts run in `restart`,
+// every other spec (new files included) in `general`. CI runs the two projects as parallel
+// shards, each with its own sandbox.
 const restartSpecs = /(?:^|[\\/])(?:restart-[^\\/]*|crash-points)\.spec\.ts$/;
 
 // The real application in `pnpm dev:sandbox`, which the global setup starts once and stops; the

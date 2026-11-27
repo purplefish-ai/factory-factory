@@ -558,10 +558,10 @@ jobs:
             *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
           esac
 
-  # Not yet a required check. The bar for requiring it: 20 consecutive
-  # completed runs of `Smoke` on main, counted from the merge that added this
-  # job. Runs dispatched by hand on the head of main count; cancelled runs count
-  # neither way.
+  # Not yet a required check. The bar for requiring it: 20 consecutive push
+  # runs of CI on main, counted from the merge that added this job, whose
+  # `Smoke` passed. A run whose conclusion is cancelled counts neither way (its
+  # `Smoke` job concludes failure, so read the run's conclusion, not the job's).
   require-smoke:
     name: Smoke
     if: always()
