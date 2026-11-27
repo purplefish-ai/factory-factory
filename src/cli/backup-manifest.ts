@@ -67,8 +67,10 @@ async function requireEntry(
 }
 
 async function readManifestText(directory: string): Promise<string> {
+  const path = join(directory, BACKUP_MANIFEST_FILE);
+  let stats: Stats;
   try {
-    return await readFile(join(directory, BACKUP_MANIFEST_FILE), 'utf8');
+    stats = await lstat(path);
   } catch (error) {
     if (isNotFound(error)) {
       throw new Error(
@@ -77,6 +79,11 @@ async function readManifestText(directory: string): Promise<string> {
     }
     throw error;
   }
+  // A link could lead outside the directory, which would make the backup not self-contained.
+  if (!stats.isFile()) {
+    throw new Error(`${BACKUP_MANIFEST_FILE} in ${directory} is not a regular file.`);
+  }
+  return await readFile(path, 'utf8');
 }
 
 function parseManifest(text: string, directory: string): BackupManifest {

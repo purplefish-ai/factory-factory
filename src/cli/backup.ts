@@ -1,6 +1,6 @@
 import type { Stats } from 'node:fs';
-import { copyFile, chmod, lstat, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { chmod, copyFile, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
@@ -21,7 +21,7 @@ export interface CreateBackupOptions {
   /** The data directory holding `encryption.key` and `codex-accounts/`. */
   baseDir: string;
   applicationVersion: string;
-  /** The backup directory to create; it must not exist. Defaults beside `db-backups/` snapshots. */
+  /** The backup directory to create; it must not exist. Defaults to a new one in `db-backups/`. */
   destination?: string;
   now?: () => Date;
 }
@@ -84,7 +84,7 @@ async function copyTree(source: string, destination: string, skipped: string[]):
   await chmod(destination, sourceStats.mode & 0o777);
 }
 
-async function copyEncryptionKey(baseDir: string, stagingDir: string): Promise<boolean> {
+async function copyEncryptionKey(baseDir: string, directory: string): Promise<boolean> {
   const source = join(baseDir, 'encryption.key');
   const stats = await lstatIfExists(source);
   if (!stats) {
@@ -93,13 +93,13 @@ async function copyEncryptionKey(baseDir: string, stagingDir: string): Promise<b
   if (!stats.isFile()) {
     throw new Error(`${source} is not a regular file; refusing to back it up.`);
   }
-  await copySecretFile(source, join(stagingDir, BACKUP_ENCRYPTION_KEY_FILE), stats.mode & 0o777);
+  await copySecretFile(source, join(directory, BACKUP_ENCRYPTION_KEY_FILE), stats.mode & 0o777);
   return true;
 }
 
 async function copyCodexAccounts(
   baseDir: string,
-  stagingDir: string,
+  directory: string,
   skipped: string[]
 ): Promise<boolean> {
   const source = join(baseDir, 'codex-accounts');
@@ -110,16 +110,47 @@ async function copyCodexAccounts(
   if (!stats.isDirectory()) {
     throw new Error(`${source} is not a directory; refusing to back it up.`);
   }
-  await copyTree(source, join(stagingDir, BACKUP_CODEX_ACCOUNTS_DIRECTORY), skipped);
+  await copyTree(source, join(directory, BACKUP_CODEX_ACCOUNTS_DIRECTORY), skipped);
   return true;
+}
+
+function isInside(path: string, directory: string): boolean {
+  const relation = relative(directory, path);
+  return relation !== '' && !relation.startsWith('..') && !isAbsolute(relation);
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/**
+ * Create the backup directory, failing if anything already exists at that path:
+ * `mkdir` is the atomic claim, so two backups never share a directory. The
+ * default parent is made owner-only even when it already existed with a wider
+ * mode; a parent the user chose is left alone.
+ */
+async function reserveDirectory(directory: string, restrictParent: boolean): Promise<void> {
+  const parent = dirname(directory);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  if (restrictParent) {
+    await chmod(parent, 0o700);
+  }
+  try {
+    await mkdir(directory, { mode: 0o700 });
+  } catch (error) {
+    if (isAlreadyExists(error)) {
+      throw new Error(`${directory} already exists; choose a path that does not exist.`);
+    }
+    throw error;
+  }
 }
 
 /**
  * Write one self-contained backup directory: a consistent SQLite snapshot,
  * `encryption.key` and `codex-accounts/` when they exist, and a manifest. The
  * snapshot uses SQLite's online backup API, so a running backend is neither
- * stopped nor blocked. The directory is built beside its final name and renamed
- * into place, so a failed backup never leaves something that looks complete.
+ * stopped nor blocked. The manifest is written last and a failed backup removes
+ * its directory, so nothing that looks complete is ever left half written.
  */
 export async function createBackup(options: CreateBackupOptions): Promise<BackupResult> {
   const now = (options.now ?? (() => new Date()))();
@@ -133,18 +164,14 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
   if (!(await lstatIfExists(databasePath))) {
     throw new Error(`No database found at ${databasePath}; nothing to back up.`);
   }
-  if (await lstatIfExists(directory)) {
-    throw new Error(`${directory} already exists; choose a path that does not exist.`);
+  if (isInside(directory, join(baseDir, 'codex-accounts'))) {
+    throw new Error(`${directory} is inside the Codex accounts directory it would copy.`);
   }
 
-  const parent = dirname(directory);
-  await mkdir(parent, { recursive: true, mode: 0o700 });
-  const stagingDir = join(parent, `.${basename(directory)}.partial-${process.pid}`);
-  await rm(stagingDir, { recursive: true, force: true });
-  await mkdir(stagingDir, { mode: 0o700 });
+  await reserveDirectory(directory, options.destination === undefined);
   const skipped: string[] = [];
   try {
-    await snapshotSqliteDatabase(databasePath, join(stagingDir, BACKUP_DATABASE_FILE));
+    await snapshotSqliteDatabase(databasePath, join(directory, BACKUP_DATABASE_FILE));
     const manifest = BackupManifestSchema.parse({
       formatVersion: BACKUP_FORMAT_VERSION,
       applicationVersion: options.applicationVersion,
@@ -152,20 +179,19 @@ export async function createBackup(options: CreateBackupOptions): Promise<Backup
       sourceDatabaseFile: basename(databasePath),
       contents: {
         database: true,
-        encryptionKey: await copyEncryptionKey(baseDir, stagingDir),
-        codexAccounts: await copyCodexAccounts(baseDir, stagingDir, skipped),
+        encryptionKey: await copyEncryptionKey(baseDir, directory),
+        codexAccounts: await copyCodexAccounts(baseDir, directory, skipped),
       },
     });
     // Written last: a directory without a manifest is never a usable backup.
     await writeFile(
-      join(stagingDir, BACKUP_MANIFEST_FILE),
+      join(directory, BACKUP_MANIFEST_FILE),
       `${JSON.stringify(manifest, null, 2)}\n`,
       { mode: 0o600 }
     );
-    await rename(stagingDir, directory);
     return { directory, manifest, skipped };
   } catch (error) {
-    await rm(stagingDir, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
     throw error;
   }
 }

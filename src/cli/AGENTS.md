@@ -1,10 +1,10 @@
 # CLI
 
 The `ff` command, and the supervisor that a production `ff serve` runs around
-the backend process. The invariants and map below cover only the production
-update path; the other commands and helpers here have no guide yet. Bare file
-names below are in this directory; paths that start with `src/` are from the
-repository root.
+the backend process. The invariants and map below cover the production update
+path and `backup`; the other commands and helpers here have no guide yet. Bare
+file names below are in this directory; paths that start with `src/` are from
+the repository root.
 
 ## Owns, and does not own
 
@@ -94,9 +94,10 @@ does not own:
   to SIGKILL after two minutes.
 - `backup.ts`, `backup-manifest.ts`: `ff backup` writes one backup directory (an
   online SQLite snapshot through `src/backend/lib/sqlite-snapshot.ts`, the key,
-  `codex-accounts/` and a Zod-validated manifest) beside `db-backups/`, never
-  pruned, built under a `.partial` name and renamed so an interrupted backup is
-  never mistaken for a complete one. A restore reads one only through
-  `readBackup`. `backup.test.ts`.
+  `codex-accounts/` and a Zod-validated manifest), by default in `db-backups/`
+  beside the database and never pruned. The directory is claimed atomically, the
+  manifest is written last and a failed backup removes its directory, so a
+  directory without a manifest is never a complete backup. A restore reads one
+  only through `readBackup`. `backup.test.ts`.
 - `proxy-mode.ts`, `tailscale.ts`, `studio.ts`, `build-command.ts`, `claude.ts`
   and `codex.ts` register the other commands.

@@ -86,7 +86,9 @@ describe('ff backup', () => {
     await chmod(join(baseDir, 'codex-accounts'), 0o700);
     await writeFile(join(accountDir, 'auth.json'), '{"token":"secret"}', { mode: 0o600 });
     await writeFile(join(accountDir, 'config.toml'), 'x = 1\n', { mode: 0o400 });
-    await symlink('/etc/hosts', join(accountDir, 'link'));
+    if (IS_POSIX) {
+      await symlink('/etc/hosts', join(accountDir, 'link'));
+    }
 
     const result = await createBackup({
       databasePath,
@@ -104,8 +106,8 @@ describe('ff backup', () => {
     expect(await stat(backup.encryptionKeyPath ?? '')).toMatchObject({ size: 32 });
     const copiedAccount = join(backup.codexAccountsPath ?? '', 'acct_1');
     expect((await readdir(copiedAccount)).sort()).toEqual(['auth.json', 'config.toml']);
-    expect(result.skipped).toEqual([join(accountDir, 'link')]);
     if (IS_POSIX) {
+      expect(result.skipped).toEqual([join(accountDir, 'link')]);
       expect(await modeOf(result.directory)).toBe(0o700);
       expect(await modeOf(backup.databasePath)).toBe(0o600);
       expect(await modeOf(backup.encryptionKeyPath ?? '')).toBe(0o600);
@@ -130,6 +132,32 @@ describe('ff backup', () => {
     if (IS_POSIX) {
       expect(await modeOf(join(baseDir, 'db-backups'))).toBe(0o700);
     }
+  });
+
+  it('makes an existing default db-backups directory owner-only', async () => {
+    const backups = join(baseDir, 'db-backups');
+    await mkdir(backups, { mode: 0o755 });
+    await chmod(backups, 0o755);
+
+    await createBackup({ databasePath, baseDir, applicationVersion: '1.2.3' });
+
+    if (IS_POSIX) {
+      expect(await modeOf(backups)).toBe(0o700);
+    }
+  });
+
+  it('refuses a destination inside the Codex accounts it would copy', async () => {
+    await mkdir(join(baseDir, 'codex-accounts'));
+
+    await expect(
+      createBackup({
+        databasePath,
+        baseDir,
+        applicationVersion: '1.2.3',
+        destination: join(baseDir, 'codex-accounts', 'backup'),
+      })
+    ).rejects.toThrow('inside the Codex accounts');
+    expect(await readdir(join(baseDir, 'codex-accounts'))).toEqual([]);
   });
 
   it('does not prune earlier manual backups', async () => {
@@ -203,6 +231,14 @@ describe('ff backup', () => {
 
       await writeFile(manifestPath, valid.replace('"encryptionKey":false', '"encryptionKey":true'));
       await expect(readBackup(directory)).rejects.toThrow('encryption.key is missing');
+
+      if (IS_POSIX) {
+        const elsewhere = join(root, 'elsewhere.json');
+        await writeFile(elsewhere, valid);
+        await rm(manifestPath);
+        await symlink(elsewhere, manifestPath);
+        await expect(readBackup(directory)).rejects.toThrow('not a regular file');
+      }
     });
   });
 
