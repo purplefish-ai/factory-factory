@@ -531,3 +531,118 @@ describe('weekly agent metrics workflow', () => {
     });
   });
 });
+
+describe('npm release tagging workflow', () => {
+  const source = readFileSync('.github/workflows/release-tags.yml', 'utf8');
+  const workflow = z
+    .object({
+      on: z.record(z.string(), z.unknown()),
+      permissions: z.record(z.string(), z.string()).optional(),
+      env: z.record(z.string(), z.string()).optional(),
+      concurrency: z.object({ group: z.string(), 'cancel-in-progress': z.boolean() }),
+      jobs: z.record(
+        z.string(),
+        z.object({
+          if: z.string().optional(),
+          permissions: z.record(z.string(), z.string()).optional(),
+          env: z.record(z.string(), z.string()).optional(),
+          steps: z.array(stepSchema),
+        })
+      ),
+    })
+    .parse(parse(source));
+  const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+  const actionName = (uses: string | undefined) => uses?.split('@')[0];
+  const tagStep = steps.find((step) => step.run?.includes('scripts/tag-npm-releases.ts'));
+
+  it('runs every six hours and on demand, one run at a time, only from main of this repository', () => {
+    expect(Object.keys(workflow.on).toSorted()).toEqual(['schedule', 'workflow_dispatch']);
+    expect(z.array(z.object({ cron: z.string() })).parse(workflow.on.schedule)).toEqual([
+      { cron: '41 */6 * * *' },
+    ]);
+    expect(workflow.concurrency['cancel-in-progress']).toBe(false);
+    // A fork with schedules enabled skips the job instead of failing it.
+    expect(Object.values(workflow.jobs).map((job) => job.if)).toEqual([
+      "${{ github.repository == 'purplefish-ai/factory-factory' && github.ref == 'refs/heads/main' }}",
+    ]);
+  });
+
+  it('can write contents and nothing else, with the workflow token on the one step that writes', () => {
+    expect(workflow.permissions).toBeUndefined();
+    expect(Object.values(workflow.jobs).map((job) => job.permissions)).toEqual([
+      { contents: 'write' },
+    ]);
+    expect(source).not.toContain('secrets.');
+    expect(workflow.env).toBeUndefined();
+    expect(Object.values(workflow.jobs).map((job) => job.env)).toEqual([undefined]);
+    // A release created with any other token would start the npm publish workflow.
+    expect(steps.filter((step) => step.env?.GH_TOKEN !== undefined)).toEqual([tagStep]);
+    expect(tagStep?.env?.GH_TOKEN).toBe('${{ github.token }}');
+    const checkout = steps.find((step) => actionName(step.uses) === 'actions/checkout');
+    expect(checkout?.with).toEqual({ 'fetch-depth': 0, 'persist-credentials': false });
+    expect(steps.map((step) => step.run).filter(Boolean)).toContain(
+      'pnpm install --frozen-lockfile --ignore-scripts'
+    );
+  });
+
+  it('pins every action to the commit and version that ci.yml pins', () => {
+    const pins = (text: string) =>
+      [...text.matchAll(/\buses: (\S+@[0-9a-f]{40} # v\d.*)$/gm)].map((match) => match[1] ?? '');
+    const ciPins = pins(readFileSync('.github/workflows/ci.yml', 'utf8'));
+    expect(pins(source)).toHaveLength(steps.filter((step) => step.uses).length);
+    for (const pin of pins(source)) {
+      expect(ciPins, pin).toContain(pin);
+    }
+  });
+
+  it('declares the dry_run input and a backlog choice that defaults to leaving it alone', () => {
+    // Without the declared input, a requested manual dry run would run for real.
+    expect(workflow.on.workflow_dispatch).toMatchObject({
+      inputs: {
+        dry_run: { required: false, default: false, type: 'boolean' },
+        backlog: {
+          required: false,
+          default: 'none',
+          type: 'choice',
+          options: ['none', 'tags', 'releases'],
+        },
+      },
+    });
+    expect(tagStep?.env?.DRY_RUN).toBe('${{ inputs.dry_run }}');
+    expect(tagStep?.env?.BACKLOG).toBe('${{ inputs.backlog }}');
+  });
+
+  const base = ['--repository', 'owner/name', '--backlog'];
+  it.each([
+    // A scheduled run has no inputs.
+    ['', '', [...base, 'none']],
+    ['none', 'false', [...base, 'none']],
+    ['none', 'true', [...base, 'none', '--dry-run']],
+    ['tags', 'true', [...base, 'tags', '--dry-run']],
+    ['releases', 'false', [...base, 'releases']],
+  ])('passes backlog %j and dry_run %j to the script', (backlog, dryRun, expected) => {
+    const directory = mkdtempSync(join(tmpdir(), 'ff-release-tags-'));
+    try {
+      // A stand-in pnpm prints the script arguments, one per line.
+      writeFileSync(join(directory, 'pnpm'), '#!/bin/sh\nshift 3\nprintf "%s\\n" "$@"\n', {
+        mode: 0o755,
+      });
+      const summary = join(directory, 'summary.md');
+      const result = spawnSync('bash', ['-c', z.string().parse(tagStep?.run)], {
+        encoding: 'utf8',
+        env: {
+          PATH: `${directory}:${process.env.PATH}`,
+          DRY_RUN: dryRun,
+          BACKLOG: backlog,
+          GITHUB_REPOSITORY: 'owner/name',
+          GITHUB_STEP_SUMMARY: summary,
+        },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim().split('\n')).toEqual(expected);
+      expect(readFileSync(summary, 'utf8')).toBe(result.stdout);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});

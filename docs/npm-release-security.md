@@ -12,24 +12,66 @@ branches, because they cannot stage or publish artifacts. The separate staging
 job has OIDC permission and stages the tested tarball without checking out or
 installing application code.
 
-After a maintainer approves the staged package on npm, finalization downloads
-the original staging artifact and checks:
+Approval happens on npm, outside GitHub, so the publish workflow cannot tag. The
+scheduled Tag npm releases workflow (`.github/workflows/release-tags.yml`) finds
+every stable published version newer than `BACKLOG_CUTOFF` (0.5.14, in
+`scripts/tag-npm-releases.ts`) without a `v<version>` tag. Versions from 0.4.7
+on carry no `gitHead`, so the script reads the commit and staging run from the
+version's npm-hosted SLSA provenance and checks, against these sources:
 
-- Exactly one tarball exists, containing the expected package name and a stable
-  semantic version.
-- The npm registry reports the same version and SHA-512 integrity as those
-  bytes.
-- npm-hosted SLSA provenance identifies the same package digest, repository,
-  `main` workflow, commit, and staging run.
-- The version matches the checked-out staging commit, which must still belong to
-  current `main` history. Existing release tags must resolve to that same
-  commit.
+- npm registry: exactly one provenance statement names the version, built by
+  `npm-publish.yml` on `main` of this repository, with one source commit and a
+  staging run in this repository. The attestation's Sigstore signature is not
+  verified; the response is trusted as HTTPS from the registry.
+- This repository: the commit exists, is reachable from current `main`, and its
+  `package.json` declares that version.
+- GitHub Actions: GitHub's own record of the staging run is `npm-publish.yml`,
+  started by `workflow_dispatch` on `main`, concluded `success`, at that commit.
+  This is the one check that does not rest on the registry. The job's token has
+  no `actions: read`, so the record normally comes from the public API (run
+  records of a public repository are public); the script tries the token first.
+- npm registry again: `scripts/verify-npm-release.sh` accepts the tarball the
+  registry serves. It compares that tarball with the registry's SHA-512
+  integrity and the provenance subject, so it shows the registry is consistent
+  with itself, not that the bytes match what GitHub built.
 
-Missing or mismatched metadata fails finalization before tags or releases are
-created. These checks authenticate registry responses through HTTPS and compare
-provenance identity; they do not independently validate Sigstore signatures or
-establish that the source code is safe. Provenance complements code review,
-dependency review, and npm's staged approval.
+The removed manual finalization also compared the registry tarball with the
+artifact the staging run uploaded, the bytes GitHub built and tested. That
+comparison is not made any more: it needs `actions: read` and only works within
+the artifact's 7-day retention, and approval often comes later. This is a known
+difference, not equivalent verification. The repository owner accepts it, or
+reverses it by granting `actions: read` and adding the comparison for versions
+still inside the window.
+
+Only then does it create the tag at that commit and the GitHub Release, oldest
+version first, marking the npm `latest` version as the latest release. A version
+that fails a check is reported in the job summary and skipped, and the run
+fails; resolve the reported reason and run the workflow again. A version tagged
+by hand is no longer a candidate, so whoever tags it must make the same checks
+and create its release too. The job writes with the workflow token, so the
+releases it creates start no other workflow. Outside GitHub Actions the script
+refuses to create anything unless given an explicitly named override, because a
+personal `gh` login would start `npm-publish.yml` for each Release. These checks
+do not establish that the source code is safe. Provenance complements code
+review, dependency review, and npm's staged approval.
+
+Versions up to and including 0.5.14 are the backlog: they were published before
+tagging was automatic. Every GitHub Release notifies everyone watching the
+repository, so the repository owner decides whether and when the backlog is
+released. A scheduled run only lists untagged backlog versions and does not fail
+for them. To handle them, run the workflow by hand from `main`, first with
+`dry_run` to see the plan:
+
+- `backlog: tags` creates only the verified tags, which notify nobody.
+- `backlog: releases` creates a Release for every backlog version that has none,
+  oldest first, creating the tag when it is missing. That includes old versions
+  that were tagged long ago and never had a Release. An existing tag gets its
+  Release only when it points at the verified commit; otherwise the version is
+  skipped. A `tags` run followed later by a `releases` run is safe. The dry run
+  ends with how many Releases and tags it would create.
+
+The same checks apply in every mode, and newer versions are always tagged and
+released together.
 
 ## Account controls
 

@@ -10,21 +10,10 @@ on:
         required: false
         default: 'false'
         type: boolean
-      finalize_release:
-        description: 'Finalize after approving the staged package on npm'
-        required: false
-        default: 'false'
-        type: boolean
-      staging_run_id:
-        description: 'Run ID that staged the approved npm package'
-        required: false
-        default: ''
-        type: string
 
 jobs:
   verify:
     name: Build release tarball
-    if: ${{ github.event_name == 'release' || github.event.inputs.finalize_release != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -160,7 +149,7 @@ jobs:
   stage:
     name: Stage package on npm
     needs: [verify, consumer]
-    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release != 'true') }}
+    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true') }}
     runs-on: ubuntu-latest
     environment: npm-publish
     permissions:
@@ -186,110 +175,8 @@ jobs:
         # The ./ prefix prevents npm from treating the path as GitHub owner/repo shorthand.
         run: npm stage publish ./npm-package/factory-factory-*.tgz --access public
 
-      - name: Record finalization details
+      - name: Record what happens after approval
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          echo "After npm approval, finalize this package with:" >> "$GITHUB_STEP_SUMMARY"
-          echo "staging_run_id: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
-          echo "staged commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-
-  finalize-release:
-    name: Finalize GitHub release
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.dry_run != 'true' && github.event.inputs.finalize_release == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - name: Resolve staged commit
-        id: staging_run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          STAGING_RUN_ID: ${{ github.event.inputs.staging_run_id }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$STAGING_RUN_ID" =~ ^[0-9]+$ ]]; then
-            echo "staging_run_id must be a GitHub Actions run ID" >&2
-            exit 1
-          fi
-          RUN_JSON=$(gh api "repos/${{ github.repository }}/actions/runs/$STAGING_RUN_ID")
-          WORKFLOW_PATH=$(jq -r '.path' <<< "$RUN_JSON")
-          EVENT=$(jq -r '.event' <<< "$RUN_JSON")
-          HEAD_BRANCH=$(jq -r '.head_branch' <<< "$RUN_JSON")
-          CONCLUSION=$(jq -r '.conclusion' <<< "$RUN_JSON")
-          COMMIT=$(jq -r '.head_sha' <<< "$RUN_JSON")
-          if [ "$WORKFLOW_PATH" != ".github/workflows/npm-publish.yml" ] ||
-            [ "$EVENT" != "workflow_dispatch" ] ||
-            [ "$HEAD_BRANCH" != "main" ] ||
-            [ "$CONCLUSION" != "success" ] ||
-            [[ ! "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Run $STAGING_RUN_ID is not a successful main-branch staging run" >&2
-            exit 1
-          fi
-          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout staged commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ steps.staging_run.outputs.commit }}
-          fetch-depth: 0
-
-      - name: Verify staged commit remains on main
-        env:
-          STAGED_COMMIT: ${{ steps.staging_run.outputs.commit }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$STAGED_COMMIT" FETCH_HEAD
-
-      - name: Download staged npm package
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: npm-package
-          path: npm-package
-          github-token: ${{ github.token }}
-          run-id: ${{ github.event.inputs.staging_run_id }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '26.12.1'
-          package-manager-cache: false
-
-      - name: Verify package is published on npm
-        id: release_version
-        env:
-          STAGED_COMMIT: ${{ steps.staging_run.outputs.commit }}
-          STAGING_RUN_ID: ${{ github.event.inputs.staging_run_id }}
-          RELEASE_REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          VERSION=$(bash scripts/verify-npm-release.sh npm-package "$STAGED_COMMIT" "$STAGING_RUN_ID" "$RELEASE_REPOSITORY")
-          CHECKOUT_VERSION=$(jq -er '.version' package.json)
-          test "$VERSION" = "$CHECKOUT_VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Create and push tag
-        env:
-          STAGED_COMMIT: ${{ steps.staging_run.outputs.commit }}
-        run: |
-          VERSION="${{ steps.release_version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git ls-remote --tags origin "refs/tags/v$VERSION")" ]; then
-            git fetch --no-tags origin "refs/tags/v$VERSION"
-            test "$(git rev-parse 'FETCH_HEAD^{commit}')" = "$STAGED_COMMIT" || {
-              echo "Existing tag does not match the staged commit" >&2
-              exit 1
-            }
-          else
-            git tag -a "v$VERSION" -m "Release v$VERSION"
-            git push origin "v$VERSION"
-          fi
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
-        with:
-          tag_name: v${{ steps.release_version.outputs.version }}
-          name: v${{ steps.release_version.outputs.version }}
-          generate_release_notes: true
+          echo "After the staged package is approved on npm, the Tag npm releases workflow" >> "$GITHUB_STEP_SUMMARY"
+          echo "tags commit $GITHUB_SHA and creates the GitHub Release on its next run." >> "$GITHUB_STEP_SUMMARY"
