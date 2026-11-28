@@ -298,6 +298,10 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     await expect(
       page.getByRole('combobox', { name: 'Search metadata', exact: true })
     ).toBeFocused();
+    // Closing the PR menu returns focus to its trigger, which opens that button's tooltip.
+    // Radix keeps a closing tooltip as the topmost dismissable layer until its exit animation
+    // ends, so an Escape sent before then is consumed by the tooltip, not the dialog.
+    await expect(page.locator('[data-slot="tooltip-content"]')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.keyboard.press('Control+k');
