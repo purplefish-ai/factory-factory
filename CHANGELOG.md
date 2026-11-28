@@ -8,6 +8,53 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.15] - 2026-11-28
+
+### Added
+
+- Run `ff backup` to back up the SQLite database, encryption key and Codex
+  accounts while the server is running (#3341).
+- Search workspace files by fuzzy filename or path (#3328).
+- See when the agent is compacting context above the chat input (#3355).
+
+### Changed
+
+- Support Node.js 24 alongside Node.js 26.8.1 and later, recover stale `npx`
+  installations on first launch, and bundle the Prisma adapter against the
+  packaged SQLite driver (#3331, #3332).
+- Match workspace logs to the active theme, compact the terminal tabs, and
+  remove the first-workspace prompt from the board (#3329, #3333).
+- Update the Slack Socket Mode and Linear SDKs, resizable panels, Vite,
+  Storybook and CodeQL (#3373, #3374, #3375, #3376, #3377, #3378).
+- Verify packed CLI startup and workspace turns, test upgrades from the last
+  published database, and generate GitHub releases from verified npm provenance
+  (#3330, #3337, #3346, #3347, #3350).
+- Expand sandbox smoke coverage for chat, permissions, archiving and server
+  restarts, run it in two CI shards, keep a CI verdict for each push to `main`,
+  and check Claude, Codex and GitHub CLI parsers against recorded output (#3335,
+  #3342, #3349, #3353, #3356, #3362, #3364, #3365, #3371, #3379, #3380, #3381).
+- Record the architecture consolidation plan, document repository checks, and
+  tighten runtime and service boundary checks (#3334, #3348, #3351, #3352,
+  #3354).
+
+### Fixed
+
+- Keep retrying lost connections and show their status in one app-wide banner
+  (#3345).
+- Stop database migrations when the pre-migration backup fails unless explicitly
+  overridden. For in-app updates started from this release onward, keep the
+  updater's database snapshot if migrations were pending and the migration
+  produced no backup (#3336, #3382).
+- Forward live child tool results after a session resumes and link workspace PRs
+  created through the GitHub connector or compound shell commands (#3338,
+  #3339).
+- Report physical RAM usage on macOS (#3366).
+
+### Removed
+
+- Retire the desktop app and Docker image. Use
+  `npx factory-factory@latest serve` to run Factory Factory (#3343, #3344).
+
 ## [0.5.14] - 2026-11-26
 
 ### Added
